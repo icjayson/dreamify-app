@@ -27,39 +27,41 @@ const Index = () => {
   if (isStarted) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="grid grid-cols-1 lg:grid-cols-2 h-screen">
-          {/* Chat Interface */}
-          <div className="border-r border-border/50 flex flex-col">
-            <header className="p-6 border-b border-border/50 glass-panel">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-primary" />
-                </div>
-                <div>
-                  <h1 className="text-lg font-semibold">Vibe Analytics</h1>
-                  <p className="text-sm text-muted-foreground">AI Dashboard Builder</p>
-                </div>
+        {/* Top Navigation */}
+        <header className="h-14 border-b border-border/50 glass-panel flex items-center justify-between px-6">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                <Bot className="w-4 h-4 text-primary" />
               </div>
-            </header>
-            
+              <div>
+                <h1 className="text-lg font-semibold">Vibe Analytics Studio</h1>
+              </div>
+            </div>
+            <Badge variant="secondary" className="bg-accent/20 text-accent border-accent/30">
+              <Sparkles className="w-3 h-3 mr-1" />
+              AI Powered
+            </Badge>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" className="border-border/50">
+              Save Dashboard
+            </Button>
+            <Button variant="outline" size="sm" className="border-border/50">
+              Export
+            </Button>
+          </div>
+        </header>
+
+        <div className="flex h-[calc(100vh-3.5rem)]">
+          {/* Chat Sidebar */}
+          <div className="w-80 border-r border-border/50 flex flex-col bg-card/50">
             <ChatInterface messages={messages} onMessagesChange={setMessages} />
           </div>
 
-          {/* Dashboard Preview */}
-          <div className="flex flex-col">
-            <header className="p-6 border-b border-border/50 glass-panel">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">Live Preview</h2>
-                  <p className="text-sm text-muted-foreground">Your dashboard updates in real-time</p>
-                </div>
-                <Badge variant="secondary" className="bg-accent/20 text-accent border-accent/30">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  AI Powered
-                </Badge>
-              </div>
-            </header>
-            
+          {/* Main Dashboard */}
+          <div className="flex-1 overflow-hidden">
             <DashboardPreview />
           </div>
         </div>

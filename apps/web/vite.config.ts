@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      "/ollama": {
+        target: "http://127.0.0.1:11434",
+        changeOrigin: true,
+        rewrite: (pathStr) => pathStr.replace(/^\/ollama/, ""),
+      },
+    },
   },
   plugins: [
     react(),

@@ -15,8 +15,38 @@ interface ChatInterfaceProps {
 const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [attachedCsvName, setAttachedCsvName] = useState<string | null>(null);
+  const [attachedCsvSummary, setAttachedCsvSummary] = useState<string | null>(null);
+  const [attachedCsvRaw, setAttachedCsvRaw] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const escapeHtml = (unsafe: string): string =>
+    unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const parseMessageToHtml = (raw: string): string => {
+    let html = escapeHtml(raw);
+    // <https://example.com>
+    html = html.replace(/&lt;(https?:\/\/[^\s>]+)&gt;/g, (_m, url) => {
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="underline">${url}</a>`;
+    });
+    // [text](url)
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, text, url) => {
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="underline">${text}</a>`;
+    });
+    // **bold**
+    html = html.replace(/\*\*([^*]+)\*\*/g, (_m, text) => `<strong>${text}</strong>`);
+    // Autolink bare URLs
+    html = html.replace(/(^|\s)(https?:\/\/[^\s<]+)(?![^<]*>|[^<>]*<\/_a>)/g, (_m, lead, url) => {
+      return `${lead}<a href="${url}" target="_blank" rel="noopener noreferrer" class="underline">${url}</a>`;
+    });
+    return html;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -26,34 +56,112 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async () => {
+  const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content: inputValue.trim(),
-      timestamp: new Date()
+      timestamp: new Date(),
+      attachment: attachedCsvName ? { kind: "csv", name: attachedCsvName } : undefined,
     };
 
     onMessagesChange([...messages, userMessage]);
     setInputValue("");
     setIsTyping(true);
+    
+    // Stream response from local Ollama (proxied via /ollama)
+    try {
+      const controller = new AbortController();
+      const signal = controller.signal;
+      const response = await fetch("/ollama/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "qwen2.5:3b",
+          stream: true,
+          messages: [
+            ...((csvSummaryOverride || attachedCsvSummary)
+              ? [{ role: "system", content: `You have access to a user-provided CSV summary. Use it to answer questions.\n${csvSummaryOverride || attachedCsvSummary}` }]
+              : []),
+            ...(attachedCsvRaw ? [{ role: "system", content: `CSV_CONTENT_BEGIN\n${attachedCsvRaw}\nCSV_CONTENT_END` }] : []),
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+            { role: "user", content: userMessage.content }
+          ],
+        }),
+        signal,
+      });
 
-    // Enhanced AI responses based on user stories
-    setTimeout(() => {
-      const responses = getContextualResponse(inputValue.trim());
-      
+      if (!response.body) {
+        throw new Error("No response body from Ollama");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let assistantId = (Date.now() + 1).toString();
+      let assistantContent = "";
+
+      // Establish a stable base array to avoid jittery re-renders
+      const baseMessages = [...messages, userMessage];
+      // Add placeholder assistant message once
+      onMessagesChange([
+        ...baseMessages,
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          timestamp: new Date(),
+        },
+      ]);
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse server-sent lines (each line is a JSON object)
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.message && event.message.content) {
+              assistantContent += event.message.content;
+              // Update the last assistant message progressively based on the stable base
+              onMessagesChange([
+                ...baseMessages,
+                {
+                  id: assistantId,
+                  role: "assistant",
+                  content: assistantContent,
+                  timestamp: new Date(),
+                },
+              ]);
+            }
+            if (event.done) {
+              break;
+            }
+          } catch (_e) {
+            // Ignore malformed lines
+          }
+        }
+      }
+    } catch (_error) {
       const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant", 
-        content: responses,
-        timestamp: new Date()
+        id: (Date.now() + 2).toString(),
+        role: "assistant",
+        content: "There was an error contacting the local model. Ensure Ollama is running on 127.0.0.1:11434 and the model qwen2.5:3b is pulled (ollama pull qwen2.5:3b).",
+        timestamp: new Date(),
       };
-
       onMessagesChange([...messages, userMessage, aiMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+      // Keep the attached-file badge visible until the user removes it manually
+    }
   };
 
   const getContextualResponse = (input: string): string => {
@@ -101,6 +209,72 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
     fileInputRef.current?.click();
   };
 
+  const parseCsvToSummary = async (file: File): Promise<string> => {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    const maxPreviewRows = 20;
+    const previewLines = lines.slice(0, maxPreviewRows + 1);
+    const splitCsvLine = (line: string): string[] => {
+      const result: string[] = [];
+      let curr = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            curr += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === ',' && !inQuotes) {
+          result.push(curr);
+          curr = "";
+        } else {
+          curr += ch;
+        }
+      }
+      result.push(curr);
+      return result.map(s => s.trim());
+    };
+
+    const rows = previewLines.map(splitCsvLine);
+    const header = rows[0] || [];
+    const sampleRows = rows.slice(1);
+    const totalRows = lines.length > 0 ? lines.length - 1 : 0;
+
+    const sampleRendered = sampleRows
+      .slice(0, maxPreviewRows)
+      .map(r => r.join(" | "))
+      .join("\n");
+
+    const summary = [
+      "[CSV SUMMARY]",
+      `File: ${file.name}`,
+      `Total rows (excluding header): ${totalRows}`,
+      `Columns (${header.length}): ${header.join(", ")}`,
+      "Sample (first rows):",
+      sampleRendered,
+    ].join("\n");
+
+    return summary;
+  };
+
+  const readCsvRawPreview = async (file: File): Promise<string> => {
+    const maxChars = 200_000;
+    const text = await file.text();
+    return text.slice(0, maxChars);
+  };
+
+  const clearAttachment = () => {
+    setAttachedCsvName(null);
+    setAttachedCsvSummary(null);
+    setAttachedCsvRaw(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const suggestedPrompts = [
     { text: "Upload my sales data and create MRR dashboard", icon: Database },
     { text: "Show revenue trends with smooth animations", icon: TrendingUp },
@@ -144,12 +318,20 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
                 )}
               </div>
               
-              <Card className={`p-3 glass-panel text-sm ${
+              <Card className={`p-3 glass-panel text-sm whitespace-pre-wrap break-words ${
                 message.role === "user" 
                   ? "bg-primary/10 border-primary/20" 
                   : "bg-card/80 border-border/50"
               }`}>
-                <p className="leading-relaxed">{message.content}</p>
+                {message.attachment && message.attachment.kind === "csv" && (
+                  <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Attached CSV: {message.attachment.name}
+                  </div>
+                )}
+                <div
+                  className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
+                  dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
+                />
                 <span className="text-xs text-muted-foreground mt-1 block">
                   {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -201,6 +383,16 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
         </div>
       )}
 
+      {/* Attached CSV indicator */}
+      {attachedCsvName && (
+        <div className="px-4 pb-2">
+          <Badge variant="secondary" className="text-xs flex items-center gap-2">
+            <span>Attached: {attachedCsvName}</span>
+            <button onClick={clearAttachment} className="hover:underline">remove</button>
+          </Badge>
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="p-4 border-t border-border/50 bg-card/30">
         <div className="flex gap-2">
@@ -223,7 +415,7 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
           </div>
           
           <Button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             className="btn-primary-gradient h-9 px-3"
             disabled={!inputValue.trim() || isTyping}
           >
@@ -234,12 +426,80 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,.json,.xlsx"
+          accept=".csv,.json,.xlsx,.png,.jpg,.jpeg,.gif,.webp"
           className="hidden"
-          onChange={(e) => {
-            if (e.target.files?.[0]) {
-              const fileName = e.target.files[0].name;
-              setInputValue(`I want to upload and analyze: ${fileName}`);
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            if (file.size > 50 * 1024 * 1024) {
+              setInputValue("File too large. Please upload a file under 50MB.");
+              return;
+            }
+            try {
+              const ext = file.name.split('.').pop()?.toLowerCase();
+              const isCsv = ext === 'csv' || ext === 'xlsx';
+              const isJson = ext === 'json';
+              const isTextLike = ['txt','md','log'].includes(ext || '');
+              const isImage = ['png','jpg','jpeg','gif','webp'].includes(ext || '');
+
+              if (isCsv) {
+                const [summary, rawPreview] = await Promise.all([
+                  parseCsvToSummary(file),
+                  readCsvRawPreview(file),
+                ]);
+                setAttachedCsvName(file.name);
+                setAttachedCsvSummary(summary);
+                setAttachedCsvRaw(rawPreview);
+                if (inputValue.trim()) {
+                  void handleSend(summary);
+                } else {
+                  setInputValue(`CSV '${file.name}' attached. Ask a question about it.`);
+                }
+              } else if (isJson || isTextLike) {
+                const text = await file.text();
+                const capped = text.slice(0, 200_000);
+                const summary = [
+                  '[FILE SUMMARY]',
+                  `File: ${file.name}`,
+                  `Type: ${isJson ? 'JSON' : 'Text'}`,
+                  'Preview (truncated):',
+                  capped.slice(0, 2000)
+                ].join('\n');
+                setAttachedCsvName(file.name);
+                setAttachedCsvSummary(summary);
+                setAttachedCsvRaw(capped);
+                if (inputValue.trim()) {
+                  void handleSend(summary);
+                } else {
+                  setInputValue(`File '${file.name}' attached. Ask a question about it.`);
+                }
+              } else if (isImage) {
+                // Show as attached but do not send binary to a text-only model
+                setAttachedCsvName(file.name);
+                setAttachedCsvSummary(null);
+                setAttachedCsvRaw(null);
+                setInputValue("Image attached. Current model cannot analyze images. Describe it or use a vision model.");
+              } else {
+                // Fallback: try reading as text
+                const text = await file.text();
+                const capped = text.slice(0, 200_000);
+                const summary = [
+                  '[FILE SUMMARY]',
+                  `File: ${file.name}`,
+                  'Preview (truncated):',
+                  capped.slice(0, 2000)
+                ].join('\n');
+                setAttachedCsvName(file.name);
+                setAttachedCsvSummary(summary);
+                setAttachedCsvRaw(capped);
+                if (inputValue.trim()) {
+                  void handleSend(summary);
+                } else {
+                  setInputValue(`File '${file.name}' attached. Ask a question about it.`);
+                }
+              }
+            } catch (_e) {
+              setInputValue("Failed to read file. Please try another file.");
             }
           }}
         />

@@ -12,6 +12,7 @@ from typing import Dict, List, Any, Optional
 import io
 import time
 import os
+import json
 
 # Configuration constants
 ENCODINGS_TO_TRY = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
@@ -28,6 +29,22 @@ BUSINESS_KEYWORDS = {
     'dates': ['date', 'time', 'created', 'updated', 'timestamp'],
     'products': ['product', 'item', 'sku', 'category', 'type']
 }
+
+def convert_numpy_types(obj):
+    """Convert numpy types to Python native types for JSON serialization."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif pd.isna(obj):
+        return None
+    return obj
 
 class CSVProcessor:
     """Advanced CSV processor for handling real-world messy data."""
@@ -85,9 +102,12 @@ class CSVProcessor:
             
             processing_time = time.time() - start_time
             
-            return {
+            # Convert DataFrame to serializable preview
+            data_preview = df.head(10).to_dict('records') if not df.empty else []
+            
+            result = {
                 'success': True,
-                'data': df,
+                'data_preview': data_preview,
                 'metadata': {
                     'encoding': self.processing_stats.get('encoding', 'unknown'),
                     'separator': self.processing_stats.get('separator', 'unknown'),
@@ -103,6 +123,11 @@ class CSVProcessor:
                 'errors': errors,
                 'warnings': warnings
             }
+            
+            # Convert numpy types to Python native types for JSON serialization
+            result = convert_numpy_types(result)
+            
+            return result
             
         except Exception as e:
             error_info = self._handle_processing_errors(e, "process_upload")

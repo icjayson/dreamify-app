@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Sparkles, Upload, Database, Send } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Sparkles, Upload, Database, Send, Plus, Mic, ChevronDown } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useFileUpload } from "@/hooks/use-file-upload";
 
 interface HeroSectionProps {
   onGetStarted: () => void;
@@ -12,6 +13,13 @@ const HeroSection = ({ onGetStarted }: HeroSectionProps) => {
   const [chatInput, setChatInput] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [selectedDataSource, setSelectedDataSource] = useState("");
+  
+  // File upload integration
+  const { uploadState, uploadCSVFile, uploadExcelFile } = useFileUpload();
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
 
   const placeholders = [
     "Tell me about your data or describe the dashboard you want...",
@@ -35,6 +43,20 @@ const HeroSection = ({ onGetStarted }: HeroSectionProps) => {
     }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownOpen) {
+        const target = event.target as Element;
+        if (!target.closest('.data-source-dropdown')) {
+          setDropdownOpen(false);
+        }
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [dropdownOpen]);
 
   const handleChatSubmit = () => {
     if (chatInput.trim()) {
@@ -63,6 +85,52 @@ const HeroSection = ({ onGetStarted }: HeroSectionProps) => {
     e.preventDefault();
     setDragOver(false);
     handleFileUpload(e.dataTransfer.files);
+  };
+
+  const handlePlusClick = () => {
+    console.log('Plus button clicked');
+  };
+
+  const handleCSVClick = () => {
+    csvInputRef.current?.click();
+  };
+
+  const handleExcelClick = () => {
+    excelInputRef.current?.click();
+  };
+
+  const handleCSVFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await uploadCSVFile(file);
+      if (uploadState.uploadSuccess) {
+        onGetStarted();
+      }
+    }
+    // Reset input
+    event.target.value = '';
+  };
+
+  const handleExcelFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await uploadExcelFile(file);
+      if (uploadState.uploadSuccess) {
+        onGetStarted();
+      }
+    }
+    // Reset input
+    event.target.value = '';
+  };
+
+  const handleDataSourceSelect = (source: string) => {
+    setSelectedDataSource(source);
+    setDropdownOpen(false);
+    console.log('Data source selected:', source);
+  };
+
+  const handleMicClick = () => {
+    console.log('Microphone button clicked');
   };
 
   return (
@@ -115,58 +183,102 @@ const HeroSection = ({ onGetStarted }: HeroSectionProps) => {
                 }}
                 autoFocus
               />
-              <Button
-                onClick={handleChatSubmit}
-                disabled={!chatInput.trim()}
-                className="absolute right-3 bottom-3 btn-primary-gradient p-3 disabled:opacity-50"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
+              <div className="absolute right-3 bottom-3 flex gap-2">
+                <Button
+                  onClick={handleMicClick}
+                  className="btn-primary-gradient p-3"
+                  aria-label="Voice input"
+                >
+                  <Mic className="w-4 h-4" />
+                </Button>
+                <Button
+                  onClick={handleChatSubmit}
+                  disabled={!chatInput.trim()}
+                  className="btn-primary-gradient p-3 disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
-          {/* Quick Upload Zone */}
-          <div
-            className={`relative mb-6 transition-all duration-300 ${
-              dragOver ? 'border-primary/70 bg-primary/5' : 'border-border/30'
-            }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <label className="block">
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls,.json"
-                onChange={(e) => handleFileUpload(e.target.files)}
-                className="hidden"
-                multiple
-              />
-              <div className="glass-panel border-2 border-dashed border-border/30 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all duration-300">
-                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-muted-foreground">
-                  Drop CSV/Excel files here or <span className="text-primary">browse</span>
-                </p>
-              </div>
-            </label>
-          </div>
+          {/* Action Buttons Row */}
+          <div className="flex items-center gap-2 mb-6 flex-wrap">
+            {/* Hidden file inputs */}
+            <input
+              type="file"
+              ref={csvInputRef}
+              accept=".csv"
+              onChange={handleCSVFileSelect}
+              className="hidden"
+              aria-label="Select CSV file"
+            />
+            <input
+              type="file"
+              ref={excelInputRef}
+              accept=".xlsx,.xls"
+              onChange={handleExcelFileSelect}
+              className="hidden"
+              aria-label="Select Excel file"
+            />
+            
+            {/* Plus Button */}
+            <button
+              onClick={handlePlusClick}
+              className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center hover:bg-primary/20 transition-all duration-200 group"
+              aria-label="Add new item"
+            >
+              <Plus className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+            </button>
 
-          {/* Data Connectors */}
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-4">Or connect your data source</p>
-            <div className="flex justify-center gap-3 flex-wrap">
-              {connectors.map((connector, index) => (
-                <button
-                  key={connector.name}
-                  className="glass-panel p-3 rounded-lg hover:bg-primary/10 hover:scale-105 transition-all duration-200 group"
-                  style={{ animationDelay: `${0.6 + index * 0.1}s` }}
-                  title={connector.name}
-                >
-                  <span className="text-2xl block group-hover:scale-110 transition-transform">
-                    {connector.icon}
-                  </span>
-                </button>
-              ))}
+            {/* CSV Button */}
+            <button
+              onClick={handleCSVClick}
+              disabled={uploadState.isUploading}
+              className="px-3 py-1.5 text-sm bg-primary/10 border border-primary/20 text-primary rounded-md hover:bg-primary/20 transition-all duration-200 disabled:opacity-50"
+            >
+              {uploadState.isUploading ? 'Uploading...' : 'CSV'}
+            </button>
+
+            {/* Excel Button */}
+            <button
+              onClick={handleExcelClick}
+              disabled={uploadState.isUploading}
+              className="px-3 py-1.5 text-sm bg-primary/10 border border-primary/20 text-primary rounded-md hover:bg-primary/20 transition-all duration-200 disabled:opacity-50"
+            >
+              {uploadState.isUploading ? 'Uploading...' : 'Excel'}
+            </button>
+
+            {/* Connect Data Source Dropdown */}
+            <div className="relative data-source-dropdown">
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="px-4 py-1.5 text-sm bg-primary/10 border border-primary/20 text-primary rounded-md hover:bg-primary/20 transition-all duration-200 flex items-center gap-2"
+                aria-expanded={dropdownOpen}
+                aria-haspopup="true"
+              >
+                {selectedDataSource || "Connect your data source"}
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${
+                  dropdownOpen ? 'rotate-180' : ''
+                }`} />
+              </button>
+              
+              {dropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
+                  <div className="py-1">
+                    {connectors.map((connector) => (
+                      <button
+                        key={connector.name}
+                        onClick={() => handleDataSourceSelect(connector.name)}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10 transition-colors duration-200 flex items-center gap-2"
+                      >
+                        <span>{connector.icon}</span>
+                        {connector.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

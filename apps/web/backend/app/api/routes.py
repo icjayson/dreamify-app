@@ -41,14 +41,46 @@ def upload_data():
                 'status': 'error'
             }), 400
         
-        # TODO: Implement file processing logic
+        # Validate file using FileHandler
+        file_info = FileHandler.validate_file(file)
+        
+        # Read file content
+        file_content = file.read()
+        
+        # Process file with CSVProcessor
+        from app.core.analytics import CSVProcessor
+        processor = CSVProcessor()
+        result = processor.process_upload(file_content, file_info['filename'])
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'filename': file_info['filename'],
+                    'metadata': result['metadata'],
+                    'column_analysis': result['column_analysis'],
+                    'data_quality': result['data_quality'],
+                    'visualization_suggestions': result['visualization_suggestions'],
+                    'business_insights': result['business_insights']
+                },
+                'message': 'File processed successfully'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': result['errors'][0] if result['errors'] else 'Processing failed',
+                'status': 'error'
+            }), 400
+            
+    except ValueError as e:
         return jsonify({
-            'message': 'File upload endpoint',
-            'filename': file.filename,
-            'status': 'success'
-        }), 200
+            'success': False,
+            'error': str(e),
+            'status': 'error'
+        }), 400
     except Exception as e:
         return jsonify({
+            'success': False,
             'error': str(e),
             'status': 'error'
         }), 500

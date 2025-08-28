@@ -1,4 +1,5 @@
 import { API_CONFIG, API_ENDPOINTS, HTTP_METHODS, CONTENT_TYPES } from '@/api/config';
+import type { UploadResponse } from '@/types/analytics';
 
 // API Response Types
 export interface ApiResponse<T = any> {
@@ -36,7 +37,6 @@ class ApiClient {
         'Content-Type': CONTENT_TYPES.JSON,
         ...options.headers,
       },
-      timeout: this.timeout,
     };
 
     const config = { ...defaultOptions, ...options };
@@ -95,14 +95,27 @@ class ApiClient {
     const formData = new FormData();
     formData.append('file', file);
 
-    return this.request<T>(endpoint, {
-      method: HTTP_METHODS.POST,
-      body: formData,
-      headers: {
-        // Don't set Content-Type for FormData, let browser set it with boundary
-      },
-      ...options,
-    });
+    const url = `${this.baseURL}${endpoint}`;
+    
+    try {
+      const { headers, ...restOptions } = options || {};
+      const response = await fetch(url, {
+        method: HTTP_METHODS.POST,
+        body: formData,
+        // Don't set Content-Type header for FormData - let browser handle it
+        ...restOptions,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      return { success: false, error: errorMessage };
+    }
   }
 }
 
@@ -116,4 +129,5 @@ export const api = {
   put: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.put<T>(endpoint, data, options),
   delete: <T>(endpoint: string, options?: RequestInit) => apiClient.delete<T>(endpoint, options),
   uploadFile: <T>(endpoint: string, file: File, options?: RequestInit) => apiClient.uploadFile<T>(endpoint, file, options),
+  uploadAnalyticsFile: (file: File, options?: RequestInit) => apiClient.uploadFile<UploadResponse>('/api/v1/analytics/data', file, options),
 };

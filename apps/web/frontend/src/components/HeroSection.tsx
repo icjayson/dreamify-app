@@ -1,12 +1,70 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, ArrowRight, Play, Database } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Sparkles, Upload, Database, Send } from "lucide-react";
+import { useState, useEffect } from "react";
 
 interface HeroSectionProps {
   onGetStarted: () => void;
 }
 
 const HeroSection = ({ onGetStarted }: HeroSectionProps) => {
+  const [chatInput, setChatInput] = useState("");
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+
+  const placeholders = [
+    "Tell me about your data or describe the dashboard you want...",
+    "Upload your CSV and I'll suggest visualizations...",
+    "Connect Stripe data and create a revenue dashboard...",
+    "Show me customer acquisition trends with animated charts..."
+  ];
+
+  const connectors = [
+    { name: "Google Sheets", icon: "📊" },
+    { name: "Airtable", icon: "🗃️" },
+    { name: "Stripe", icon: "💳" },
+    { name: "Shopify", icon: "🛍️" },
+    { name: "HubSpot", icon: "📈" },
+    { name: "PostgreSQL", icon: "🐘" }
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleChatSubmit = () => {
+    if (chatInput.trim()) {
+      onGetStarted();
+    }
+  };
+
+  const handleFileUpload = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      // Process file upload
+      onGetStarted();
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFileUpload(e.dataTransfer.files);
+  };
+
   return (
     <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
       {/* Animated background elements */}
@@ -23,14 +81,14 @@ const HeroSection = ({ onGetStarted }: HeroSectionProps) => {
         </Badge>
         
         <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-slide-up">
-          Create{" "}
+          Build{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary animate-pulse-glow">
-            Superior
+            Interactive
           </span>
           <br />
-          Dashboards with{" "}
+          Dashboards in{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-primary">
-            Motion
+            Minutes
           </span>
         </h1>
         
@@ -39,25 +97,91 @@ const HeroSection = ({ onGetStarted }: HeroSectionProps) => {
           natural conversation with AI. No technical skills required.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12 animate-scale-in" style={{ animationDelay: '0.4s' }}>
-          <Button 
-            onClick={onGetStarted}
-            size="lg" 
-            className="btn-primary-gradient text-lg px-8 py-6 group"
+        {/* Chat-First Interface */}
+        <div className="max-w-4xl mx-auto mb-12 animate-scale-in" style={{ animationDelay: '0.4s' }}>
+          {/* Main Chat Input */}
+          <div className="relative mb-6">
+            <div className="relative">
+              <Textarea
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder={placeholders[placeholderIndex]}
+                className="w-full min-h-[80px] text-lg p-6 glass-panel border-border/30 focus:border-primary/50 focus:glow-primary resize-none transition-all duration-300"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleChatSubmit();
+                  }
+                }}
+                autoFocus
+              />
+              <Button
+                onClick={handleChatSubmit}
+                disabled={!chatInput.trim()}
+                className="absolute right-3 bottom-3 btn-primary-gradient p-3 disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Quick Upload Zone */}
+          <div
+            className={`relative mb-6 transition-all duration-300 ${
+              dragOver ? 'border-primary/70 bg-primary/5' : 'border-border/30'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
-            <Database className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
-            Start Building Now
-            <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            size="lg" 
-            className="text-lg px-8 py-6 border-border/50 hover:bg-primary/10 group"
-          >
-            <Play className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
-            Watch Demo
-          </Button>
+            <label className="block">
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls,.json"
+                onChange={(e) => handleFileUpload(e.target.files)}
+                className="hidden"
+                multiple
+              />
+              <div className="glass-panel border-2 border-dashed border-border/30 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all duration-300">
+                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-muted-foreground">
+                  Drop CSV/Excel files here or <span className="text-primary">browse</span>
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* Data Connectors */}
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-4">Or connect your data source</p>
+            <div className="flex justify-center gap-3 flex-wrap">
+              {connectors.map((connector, index) => (
+                <button
+                  key={connector.name}
+                  className="glass-panel p-3 rounded-lg hover:bg-primary/10 hover:scale-105 transition-all duration-200 group"
+                  style={{ animationDelay: `${0.6 + index * 0.1}s` }}
+                  title={connector.name}
+                >
+                  <span className="text-2xl block group-hover:scale-110 transition-transform">
+                    {connector.icon}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Start Prompts */}
+          <div className="flex justify-center gap-2 mt-6 flex-wrap animate-fade-in" style={{ animationDelay: '0.8s' }}>
+            {["Monthly Revenue Trends", "Customer Funnel Analysis", "SaaS Metrics Dashboard", "E-commerce Analytics"].map((prompt) => (
+              <button
+                key={prompt}
+                onClick={() => setChatInput(prompt)}
+                className="px-4 py-2 text-sm bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all duration-200"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Stats */}

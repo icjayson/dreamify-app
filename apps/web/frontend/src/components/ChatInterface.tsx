@@ -79,7 +79,7 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "qwen2.5:3b",
+          model: "qwen2.5-coder:7b",
           stream: true,
           messages: [
             ...((csvSummaryOverride || attachedCsvSummary)
@@ -154,7 +154,7 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
       const aiMessage: Message = {
         id: (Date.now() + 2).toString(),
         role: "assistant",
-        content: "There was an error contacting the local model. Ensure Ollama is running on 127.0.0.1:11434 and the model qwen2.5:3b is pulled (ollama pull qwen2.5:3b).",
+        content: "There was an error contacting the local model. Ensure Ollama is running on 127.0.0.1:11434 and the model qwen2.5-coder:7b is pulled (ollama pull qwen2.5-coder:7b).",
         timestamp: new Date(),
       };
       onMessagesChange([...messages, userMessage, aiMessage]);

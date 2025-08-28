@@ -1,0 +1,31 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["frontend/src/*"],
+      "@/components/*": ["frontend/src/components/*"],
+      "@/pages/*": ["frontend/src/pages/*"],
+      "@/services/*": ["frontend/src/services/*"],
+      "@/api/*": ["frontend/src/api/*"],
+      "@/hooks/*": ["frontend/src/hooks/*"],
+      "@/context/*": ["frontend/src/context/*"],
+      "@/types/*": ["frontend/src/types/*"],
+      "@/utils/*": ["frontend/src/utils/*"],
+      "@/constants/*": ["frontend/src/constants/*"],
+      "@/styles/*": ["frontend/src/styles/*"],
+      "@/assets/*": ["frontend/src/assets/*"],
+      "@/lib/*": ["frontend/src/lib/*"]
+    },
+    "noImplicitAny": false,
+    "noUnusedParameters": false,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "noUnusedLocals": false,
+    "strictNullChecks": false
+  }
+}

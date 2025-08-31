@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, Upload, Bot, User, Sparkles, BarChart3, FileText, Database, TrendingUp, Users, DollarSign } from "lucide-react";
+import { CornerRightUp, Upload, Bot, User, Sparkles, BarChart3, FileText, Database, TrendingUp, Users, DollarSign } from "lucide-react";
 
 import { Message } from "@/types/message";
 
@@ -419,7 +419,7 @@ const ChatInterface = ({ messages, onMessagesChange }: ChatInterfaceProps) => {
             className="btn-primary-gradient h-9 px-3"
             disabled={!inputValue.trim() || isTyping}
           >
-            <Send className="w-3 h-3" />
+            <CornerRightUp className="w-3 h-3" />
           </Button>
         </div>
 

@@ -29,5 +29,8 @@
     "flask"
   ],
   "author": "Animato Data Team",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "react-textarea-autosize": "^8.5.9"
+  }
 }

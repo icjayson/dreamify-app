@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import ChatInterface from "@/components/ChatInterface";
 import DashboardPreview from "@/components/DashboardPreview";
-import HeroSection from "@/components/HeroSection";
+import HomePage from "@/components/HomePage";
 import { Message } from "@/types/message";
 
 const Index = () => {
@@ -71,60 +71,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">
-      <HeroSection onGetStarted={handleGetStarted} />
-      
-      {/* Features Section */}
-      <section className="relative py-24 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <Badge variant="secondary" className="mb-4 bg-primary/10 text-primary border-primary/20">
-              <Sparkles className="w-3 h-3 mr-1" />
-              Powered by AI
-            </Badge>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Create Superior Dashboards in
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
-                Minutes, Not Hours
-              </span>
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Transform raw data into stunning, interactive visualizations through natural conversation with AI
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card className="glass-panel p-8 group hover:scale-105 transition-all duration-300">
-              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center mb-6 group-hover:bg-primary/30 transition-colors">
-                <MessageSquare className="w-6 h-6 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">Chat-First Creation</h3>
-              <p className="text-muted-foreground">
-                "Create a funnel chart with smooth animations" → Instant beautiful dashboard
-              </p>
-            </Card>
-
-            <Card className="glass-panel p-8 group hover:scale-105 transition-all duration-300">
-              <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center mb-6 group-hover:bg-accent/30 transition-colors">
-                <TrendingUp className="w-6 h-6 text-accent" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">Motion-Rich Design</h3>
-              <p className="text-muted-foreground">
-                Every chart comes alive with cinematic animations and smooth transitions
-              </p>
-            </Card>
-
-            <Card className="glass-panel p-8 group hover:scale-105 transition-all duration-300">
-              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center mb-6 group-hover:bg-primary/30 transition-colors">
-                <BarChart3 className="w-6 h-6 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">AI-Powered Insights</h3>
-              <p className="text-muted-foreground">
-                Get contextual explanations and recommendations as you explore your data
-              </p>
-            </Card>
-          </div>
-        </div>
-      </section>
+      <HomePage onGetStarted={handleGetStarted} />
     </div>
   );
 };

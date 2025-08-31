@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Moon, Sun, Bell, User } from "lucide-react";
+import { Moon, Sun, Bell, LogIn } from "lucide-react";
 import { useState } from "react";
 
 const Header = () => {
@@ -79,11 +79,16 @@ const Header = () => {
 
           {/* Login button */}
           <Button
-            variant="default"
             size="sm"
-            className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium px-4"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 20px hsl(261 83% 58% / 0.6), 10px 10px 30px -5px hsl(261 83% 58% / 0.4), 0 0 0 1px hsl(261 83% 58% / 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = '';
+            }}
+            className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium px-4 transition-all duration-200"
           >
-            <User className="w-4 h-4 mr-2" />
+            <LogIn className="w-4 h-4 mr-2" />
             Login
           </Button>
         </div>

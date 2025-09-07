@@ -1,7 +1,34 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 
-const ProjectionsChart = () => {
+interface ProjectionsChartProps {
+  title?: string;
+  description?: string;
+  datasets?: Array<{
+    label: string;
+    data: Array<{
+      label: string;
+      value: number | string;
+      metadata?: Record<string, any>;
+    }>;
+    color?: string;
+    metadata?: Record<string, any>;
+  }>;
+  config?: Record<string, any>;
+  layout?: Record<string, any>;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+const ProjectionsChart = ({ 
+  title = "Projections vs Actuals",
+  description = "30M projected target",
+  datasets = [],
+  config = {},
+  layout = {},
+  className = "",
+  style = {}
+}: ProjectionsChartProps) => {
   const [animationStep, setAnimationStep] = useState(0);
 
   useEffect(() => {
@@ -11,20 +38,29 @@ const ProjectionsChart = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  const data = [
-    { month: "Jan", actual: 20, projected: 30 },
-    { month: "Feb", actual: 25, projected: 30 },
-    { month: "Mar", actual: 30, projected: 30 },
-    { month: "Apr", actual: 28, projected: 30 },
-    { month: "May", actual: 32, projected: 30 },
-    { month: "Jun", actual: 35, projected: 30 }
-  ];
+  // Use provided datasets or fallback to default data
+  const data = datasets.length > 0 ? 
+    datasets.map(dataset => ({
+      month: dataset.data[0]?.label || "Jan",
+      actual: typeof dataset.data[0]?.value === 'number' ? dataset.data[0].value : 20,
+      projected: typeof dataset.data[1]?.value === 'number' ? dataset.data[1].value : 30
+    })) :
+    [
+      { month: "Jan", actual: 20, projected: 30 },
+      { month: "Feb", actual: 25, projected: 30 },
+      { month: "Mar", actual: 30, projected: 30 },
+      { month: "Apr", actual: 28, projected: 30 },
+      { month: "May", actual: 32, projected: 30 },
+      { month: "Jun", actual: 35, projected: 30 }
+    ];
 
   return (
-    <Card className="glass-panel p-6 animate-fade-in">
+    <Card className={`glass-panel p-6 animate-fade-in ${className}`} style={style}>
       <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-1">Projections vs Actuals</h3>
-        <p className="text-sm text-muted-foreground">30M projected target</p>
+        <h3 className="text-lg font-semibold mb-1">{title}</h3>
+        {description && (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        )}
       </div>
 
       {/* Bar Chart */}

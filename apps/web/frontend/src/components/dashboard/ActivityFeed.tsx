@@ -1,8 +1,27 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-const ActivityFeed = () => {
-  const activities = [
+interface ActivityFeedProps {
+  title?: string;
+  description?: string;
+  activities?: Array<{
+    type: string;
+    message: string;
+    time: string;
+    color: string;
+  }>;
+  contacts?: Array<{
+    name: string;
+    avatar: string;
+  }>;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+const ActivityFeed = ({ 
+  title = "Activities",
+  description = "Recent system events",
+  activities = [
     { 
       type: "bug", 
       message: "You fixed a bug.", 
@@ -27,22 +46,26 @@ const ActivityFeed = () => {
       time: "Today, 11:59 AM",
       color: "bg-accent/20 text-accent"
     }
-  ];
-
-  const contacts = [
+  ],
+  contacts = [
     { name: "Natali Craig", avatar: "NC" },
     { name: "Drew Cano", avatar: "DC" },
     { name: "Andi Lane", avatar: "AL" },
     { name: "Koray Okumus", avatar: "KO" },
     { name: "Kate Morrison", avatar: "KM" },
     { name: "Melody Macy", avatar: "MM" }
-  ];
+  ],
+  className = "",
+  style = {}
+}: ActivityFeedProps) => {
 
   return (
-    <Card className="glass-panel p-6 animate-fade-in">
+    <Card className={`glass-panel p-6 animate-fade-in ${className}`} style={style}>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold mb-1">Activities</h3>
-        <p className="text-sm text-muted-foreground">Recent system events</p>
+        <h3 className="text-lg font-semibold mb-1">{title}</h3>
+        {description && (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        )}
       </div>
 
       {/* Activities */}

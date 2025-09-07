@@ -1,12 +1,46 @@
 import { Card } from "@/components/ui/card";
 
-const GeographicChart = () => {
-  const locations = [
-    { city: "New York", percentage: 72, amount: "$300.56" },
-    { city: "San Francisco", percentage: 39, amount: "$135.18" },
-    { city: "Sydney", percentage: 25, amount: "$48.96" },
-    { city: "Singapore", percentage: 61, amount: "$101.45" }
-  ];
+interface GeographicChartProps {
+  title?: string;
+  description?: string;
+  datasets?: Array<{
+    label: string;
+    data: Array<{
+      label: string;
+      value: number | string;
+      metadata?: Record<string, any>;
+    }>;
+    color?: string;
+    metadata?: Record<string, any>;
+  }>;
+  config?: Record<string, any>;
+  layout?: Record<string, any>;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+const GeographicChart = ({ 
+  title = "Revenue by Location",
+  description = "Geographic distribution",
+  datasets = [],
+  config = {},
+  layout = {},
+  className = "",
+  style = {}
+}: GeographicChartProps) => {
+  // Use provided datasets or fallback to default data
+  const locations = datasets.length > 0 ? 
+    datasets[0]?.data.map(item => ({
+      city: item.label,
+      percentage: typeof item.value === 'number' ? item.value : 72,
+      amount: `$${(typeof item.value === 'number' ? item.value * 4.17 : 300.56).toFixed(2)}`
+    })) :
+    [
+      { city: "New York", percentage: 72, amount: "$300.56" },
+      { city: "San Francisco", percentage: 39, amount: "$135.18" },
+      { city: "Sydney", percentage: 25, amount: "$48.96" },
+      { city: "Singapore", percentage: 61, amount: "$101.45" }
+    ];
 
   const salesData = [
     { type: "Direct", percentage: 38.6, color: "bg-primary" },
@@ -15,10 +49,12 @@ const GeographicChart = () => {
   ];
 
   return (
-    <Card className="glass-panel p-6 animate-fade-in">
+    <Card className={`glass-panel p-6 animate-fade-in ${className}`} style={style}>
       <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-1">Revenue by Location</h3>
-        <p className="text-sm text-muted-foreground">Geographic distribution</p>
+        <h3 className="text-lg font-semibold mb-1">{title}</h3>
+        {description && (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        )}
       </div>
 
       {/* Location List */}

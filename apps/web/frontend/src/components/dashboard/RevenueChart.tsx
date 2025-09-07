@@ -2,7 +2,34 @@ import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-const RevenueChart = () => {
+interface RevenueChartProps {
+  title?: string;
+  description?: string;
+  datasets?: Array<{
+    label: string;
+    data: Array<{
+      label: string;
+      value: number | string;
+      metadata?: Record<string, any>;
+    }>;
+    color?: string;
+    metadata?: Record<string, any>;
+  }>;
+  config?: Record<string, any>;
+  layout?: Record<string, any>;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+const RevenueChart = ({ 
+  title = "Revenue",
+  description,
+  datasets = [],
+  config = {},
+  layout = {},
+  className = "",
+  style = {}
+}: RevenueChartProps) => {
   const [animationStep, setAnimationStep] = useState(0);
 
   useEffect(() => {
@@ -12,22 +39,32 @@ const RevenueChart = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const revenueData = [
-    { month: "Jan", current: 58211, previous: 45000 },
-    { month: "Feb", current: 62000, previous: 48000 },
-    { month: "Mar", current: 59000, previous: 52000 },
-    { month: "Apr", current: 71000, previous: 55000 },
-    { month: "May", current: 68000, previous: 58000 },
-    { month: "Jun", current: 88768, previous: 62000 }
-  ];
+  // Use provided datasets or fallback to default data
+  const revenueData = datasets.length > 0 ? 
+    datasets.map(dataset => ({
+      month: dataset.data[0]?.label || "Jan",
+      current: typeof dataset.data[0]?.value === 'number' ? dataset.data[0].value : 58211,
+      previous: typeof dataset.data[1]?.value === 'number' ? dataset.data[1].value : 45000
+    })) :
+    [
+      { month: "Jan", current: 58211, previous: 45000 },
+      { month: "Feb", current: 62000, previous: 48000 },
+      { month: "Mar", current: 59000, previous: 52000 },
+      { month: "Apr", current: 71000, previous: 55000 },
+      { month: "May", current: 68000, previous: 58000 },
+      { month: "Jun", current: 88768, previous: 62000 }
+    ];
 
   const maxValue = Math.max(...revenueData.map(d => d.current));
 
   return (
-    <Card className="glass-panel p-6 animate-fade-in">
+    <Card className={`glass-panel p-6 animate-fade-in ${className}`} style={style}>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-semibold mb-1">Revenue</h3>
+          <h3 className="text-lg font-semibold mb-1">{title}</h3>
+          {description && (
+            <p className="text-sm text-muted-foreground mb-2">{description}</p>
+          )}
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-primary"></div>

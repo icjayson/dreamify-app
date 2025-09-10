@@ -13,32 +13,103 @@ interface DashboardPreviewProps {
   dashboardId?: string;
   className?: string;
   style?: React.CSSProperties;
+  processedData?: any;
 }
 
 const DashboardPreview = ({ 
   dataSource = "sample_data",
   dashboardId,
   className = "",
-  style = {}
+  style = {},
+  processedData
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard } = useDashboard(dashboardId);
 
-  // Generate dashboard on mount if no dashboardId provided
-  useEffect(() => {
-    if (!dashboardId && !dashboardState.configuration && !dashboardState.loading) {
-      const request: DashboardGenerationRequest = {
-        data_source: dataSource,
-        layout_preference: LayoutType.GRID,
-        chart_types: [ChartType.LINE, ChartType.BAR, ChartType.METRIC, ChartType.TABLE, ChartType.GEOGRAPHIC],
-        metadata: {
-          title: "eCommerce Sales Dashboard",
-          description: "Real-time analytics with AI insights"
-        }
-      };
-      generateDashboard(request);
+  // No automatic dashboard generation on mount
+
+  // Transform processed data to dashboard configuration
+  const transformProcessedDataToDashboard = (data: any) => {
+    if (!data) return null;
+
+    const components: any[] = [];
+    let componentId = 1;
+
+    // Transform metrics
+    if (data.metrics && Array.isArray(data.metrics)) {
+      data.metrics.forEach((metric: any, index: number) => {
+        components.push({
+          id: `metric_${componentId++}`,
+          type: 'metric',
+          position: {
+            x: (index % 4) * 3,
+            y: Math.floor(index / 4) * 2,
+            width: 3,
+            height: 2
+          },
+          component_config: {
+            title: metric.title || 'Metric',
+            value: metric.value || '0',
+            change: metric.change || '0%',
+            trend: metric.trend || 'NEUTRAL'
+          }
+        });
+      });
     }
-  }, [dashboardId, dataSource, dashboardState.configuration, dashboardState.loading, generateDashboard]);
+
+    // Transform charts
+    if (data.charts && Array.isArray(data.charts)) {
+      data.charts.forEach((chart: any, index: number) => {
+        components.push({
+          id: `chart_${componentId++}`,
+          type: 'chart',
+          position: {
+            x: (index % 2) * 6,
+            y: Math.floor(index / 2) * 4 + 2,
+            width: 6,
+            height: 4
+          },
+          component_config: {
+            type: chart.type || 'line',
+            title: chart.title || 'Chart',
+            description: chart.description || '',
+            datasets: chart.datasets || []
+          }
+        });
+      });
+    }
+
+    // Transform tables
+    if (data.tables && Array.isArray(data.tables)) {
+      data.tables.forEach((table: any, index: number) => {
+        components.push({
+          id: `table_${componentId++}`,
+          type: 'table',
+          position: {
+            x: 0,
+            y: Math.floor(index / 2) * 6 + 6,
+            width: 12,
+            height: 3
+          },
+          component_config: {
+            title: table.title || 'Table',
+            columns: table.columns || [],
+            data: table.data || []
+          }
+        });
+      });
+    }
+
+    return {
+      id: 'processed_dashboard',
+      layout: {
+        type: 'grid',
+        grid_columns: 12,
+        grid_rows: 20
+      },
+      components
+    };
+  };
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -150,8 +221,47 @@ const DashboardPreview = ({
           </Alert>
         )}
 
+        {/* Processed Data Dashboard */}
+        {processedData && transformProcessedDataToDashboard(processedData) && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Processed Data Dashboard</h2>
+              <Badge variant="secondary" className="bg-green-100 text-green-800">
+                AI Generated
+              </Badge>
+            </div>
+            
+            {/* Dynamic Grid Layout for Processed Data */}
+            <div 
+              className="grid gap-6"
+              style={{
+                gridTemplateColumns: `repeat(${transformProcessedDataToDashboard(processedData)?.layout.grid_columns || 12}, 1fr)`
+              }}
+            >
+              {transformProcessedDataToDashboard(processedData)?.components.map((component) => (
+                <div
+                  key={component.id}
+                  className="animate-fade-in"
+                  style={{
+                    gridColumn: `span ${component.position.width}`,
+                    gridRow: `span ${component.position.height}`
+                  }}
+                >
+                  <ChartRenderer
+                    component={component}
+                    onRefresh={handleComponentRefresh}
+                    onError={handleComponentError}
+                    showRefreshButton={true}
+                    autoRefresh={false}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Dynamic Dashboard Grid */}
-        {dashboardState.configuration && (
+        {!processedData && dashboardState.configuration && (
           <div className="space-y-6">
             {/* Dynamic Grid Layout */}
             <div 
@@ -183,7 +293,7 @@ const DashboardPreview = ({
         )}
 
         {/* Fallback to hardcoded dashboard if no configuration */}
-        {!dashboardState.configuration && !dashboardState.loading && !dashboardState.error && (
+        {!processedData && !dashboardState.configuration && !dashboardState.loading && !dashboardState.error && (
           <div className="space-y-6">
             <Alert>
               <AlertCircle className="h-4 w-4" />

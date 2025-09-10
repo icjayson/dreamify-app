@@ -11,6 +11,7 @@ import { Message } from "@/types/message";
 
 const Index = () => {
   const [isStarted, setIsStarted] = useState(false);
+  const [processedData, setProcessedData] = useState<any>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -57,12 +58,16 @@ const Index = () => {
         <div className="flex h-[calc(100vh-3.5rem)]">
           {/* Chat Sidebar */}
           <div className="w-80 border-r border-border/50 flex flex-col bg-card/50">
-            <ChatInterface messages={messages} onMessagesChange={setMessages} />
+            <ChatInterface 
+              messages={messages} 
+              onMessagesChange={setMessages}
+              onProcessedDataChange={setProcessedData}
+            />
           </div>
 
           {/* Main Dashboard */}
           <div className="flex-1 overflow-hidden">
-            <DashboardPreview />
+            <DashboardPreview processedData={processedData} />
           </div>
         </div>
       </div>

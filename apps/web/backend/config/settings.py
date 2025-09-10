@@ -3,7 +3,7 @@ Application settings configuration
 """
 import os
 from typing import List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -25,12 +25,22 @@ class Settings:
     DATABASE_TEST_URL: str = os.getenv("DATABASE_TEST_URL", "sqlite:///test_animato_data.db")
     
     # File Upload
-    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
+    # Align with FileHandler.MAX_FILE_SIZE (50MB)
+    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", str(50 * 1024 * 1024)))
     UPLOAD_FOLDER: str = os.getenv("UPLOAD_FOLDER", "uploads")
-    ALLOWED_EXTENSIONS: List[str] = os.getenv("ALLOWED_EXTENSIONS", "csv,xlsx,xls").split(",")
+    ALLOWED_EXTENSIONS: List[str] = field(default_factory=lambda: os.getenv("ALLOWED_EXTENSIONS", "csv,xlsx,xls,json").split(","))
+
+    # File Storage (Phase 1)
+    FILE_STORAGE_ROOT: str = os.getenv("FILE_STORAGE_ROOT", os.path.join("file-storage"))
+    FILE_UPLOADS_DIR: str = os.path.join(FILE_STORAGE_ROOT, "uploads")
+    FILE_PROCESSED_DIR: str = os.path.join(FILE_STORAGE_ROOT, "processed")
+    FILE_TEMP_DIR: str = os.path.join(FILE_STORAGE_ROOT, "temp")
+    FILE_METADATA_ROOT: str = os.path.join(FILE_STORAGE_ROOT, "metadata")
+    FILE_METADATA_UPLOADS_DIR: str = os.path.join(FILE_METADATA_ROOT, "uploads")
+    FILE_METADATA_DASHBOARDS_DIR: str = os.path.join(FILE_METADATA_ROOT, "dashboards")
     
     # CORS
-    CORS_ORIGINS: List[str] = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+    CORS_ORIGINS: List[str] = field(default_factory=lambda: os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173").split(","))
     
     # API
     API_VERSION: str = os.getenv("API_VERSION", "v1")
@@ -61,8 +71,15 @@ class Settings:
         if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == "jwt-secret-key":
             print("Warning: Using default JWT secret key. Set JWT_SECRET_KEY for production.")
         
-        # Ensure upload folder exists
+        # Ensure upload folder exists (legacy path)
         os.makedirs(self.UPLOAD_FOLDER, exist_ok=True)
+
+        # Ensure file storage directories exist
+        os.makedirs(self.FILE_UPLOADS_DIR, exist_ok=True)
+        os.makedirs(self.FILE_PROCESSED_DIR, exist_ok=True)
+        os.makedirs(self.FILE_TEMP_DIR, exist_ok=True)
+        os.makedirs(self.FILE_METADATA_UPLOADS_DIR, exist_ok=True)
+        os.makedirs(self.FILE_METADATA_DASHBOARDS_DIR, exist_ok=True)
         
         # Ensure logs directory exists
         log_dir = os.path.dirname(self.LOG_FILE)

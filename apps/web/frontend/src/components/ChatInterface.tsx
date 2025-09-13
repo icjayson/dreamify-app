@@ -183,9 +183,13 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
               console.log('Polling status update:', status);
 
               if (status.data?.status === 'completed') {
-                setUploadedFile(prev => prev ? { ...prev, status: 'processed', processedData: status.data } : prev);
+                if (uploadedFile) {
+                  setUploadedFile({ ...uploadedFile, status: 'processed', processedData: status.data });
+                }
               } else if (status.data?.status === 'error') {
-                setUploadedFile(prev => prev ? { ...prev, status: 'error' } : prev);
+                if (uploadedFile) {
+                  setUploadedFile({ ...uploadedFile, status: 'error' });
+                }
               }
             },
             60, // max attempts (60 seconds)

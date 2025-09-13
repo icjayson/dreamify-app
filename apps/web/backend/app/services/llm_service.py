@@ -8,13 +8,14 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List
 from app.models.dashboard_models import MetricTrend
+from app.utils.chart_styling import chart_styling_analyzer
 
 
 class LLMService:
     """Placeholder LLM service for file processing and analysis."""
     
     def __init__(self):
-        self.processing_time = 7  # Simulate 7 seconds of processing
+        self.processing_time = 2  # Simulate 7 seconds of processing
     
     def process_file(self, fileID: str, file_metadata: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -30,6 +31,9 @@ class LLMService:
         # Simulate processing time
         time.sleep(self.processing_time)
         
+        # Generate styling recommendations based on file metadata
+        styling_recommendations = self._generate_styling_recommendations(file_metadata)
+        
         # Extract hardcoded data from dashboard_service.py patterns
         processed_data = {
             "fileID": fileID,
@@ -38,6 +42,7 @@ class LLMService:
             "source_file": file_metadata.get("filename", "unknown"),
             "file_size": file_metadata.get("size", 0),
             "file_type": file_metadata.get("ext", "unknown"),
+            "success": True,
             
             # Metrics (from dashboard_service.py hardcoded data)
             "metrics": [
@@ -208,7 +213,39 @@ class LLMService:
                 "accuracy": 95.2,
                 "consistency": 97.8,
                 "duplicates": 12
-            }
+            },
+            
+            # Styling recommendations
+            "styling_recommendations": styling_recommendations
         }
         
         return processed_data
+    
+    def _generate_styling_recommendations(self, file_metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate styling recommendations based on file metadata and content analysis.
+        
+        Args:
+            file_metadata: File metadata from upload
+            
+        Returns:
+            Dict containing styling recommendations
+        """
+        # Create mock data structure for analysis
+        mock_data = {
+            "columns": ["revenue", "customers", "orders", "growth", "location"],
+            "sample_data": [
+                {"revenue": 58211, "customers": 3781, "orders": 1219, "growth": 30.1, "location": "New York"},
+                {"revenue": 62000, "customers": 4200, "orders": 1350, "growth": 32.5, "location": "San Francisco"},
+                {"revenue": 59000, "customers": 3900, "orders": 1280, "growth": 28.8, "location": "Sydney"}
+            ]
+        }
+        
+        # Generate styling recommendations using the analyzer
+        recommendations = chart_styling_analyzer.generate_styling_recommendations(
+            data=mock_data,
+            chart_type="line",  # Default chart type
+            metadata=file_metadata
+        )
+        
+        return recommendations

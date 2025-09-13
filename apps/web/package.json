@@ -31,6 +31,7 @@
   "author": "Animato Data Team",
   "license": "MIT",
   "dependencies": {
+    "lightswind": "^3.1.16",
     "react-textarea-autosize": "^8.5.9"
   }
 }

@@ -8,18 +8,16 @@ import ChatInterface from "@/components/ChatInterface";
 import DashboardPreview from "@/components/DashboardPreview";
 import HomePage from "@/components/HomePage";
 import { Message } from "@/types/message";
+import { useChatStore } from "@/stores/useChatStore";
+import { useFileStore } from "@/stores/useFileStore";
 
 const Index = () => {
   const [isStarted, setIsStarted] = useState(false);
   const [processedData, setProcessedData] = useState<any>(null);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "Hi! I'm Vibe, your analytics assistant. Upload your data and let's create a stunning dashboard with motion in minutes! What would you like to visualize today?",
-      timestamp: new Date()
-    }
-  ]);
+  
+  // Zustand stores
+  const { messages } = useChatStore();
+  const { uploadState } = useFileStore();
 
   const handleGetStarted = () => {
     setIsStarted(true);
@@ -59,8 +57,6 @@ const Index = () => {
           {/* Chat Sidebar */}
           <div className="w-80 border-r border-border/50 flex flex-col bg-card/50">
             <ChatInterface 
-              messages={messages} 
-              onMessagesChange={setMessages}
               onProcessedDataChange={setProcessedData}
             />
           </div>

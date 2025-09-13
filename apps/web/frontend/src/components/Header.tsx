@@ -1,28 +1,22 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Moon, Sun, Bell, LogIn } from "lucide-react";
+import { Flame, Bell, LogIn } from "lucide-react";
 import { useState } from "react";
 
 const Header = () => {
-  const [isDarkMode, setIsDarkMode] = useState(true);
-
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    // You can add theme toggle logic here
-  };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
+    <header className="fixed top-0 left-0 right-0 z-50 w-full">
+      <div className="flex h-14 items-center justify-between px-6 glass-panel border border-border/30 rounded-2xl max-w-6xl mx-auto mt-4">
         {/* Left side - Logo and brand */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-3">
             {/* Logo */}
-            <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center">
               <img 
-                src="/logo.png" 
+                src="/dreamable-logo.png"
                 alt="Dreamable Logo" 
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             </div>
             {/* Brand name */}
@@ -36,61 +30,43 @@ const Header = () => {
         <nav className="hidden md:flex items-center space-x-6">
           <a
             href="#community"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="text-sm font-medium text-white hover:text-primary transition-colors"
           >
             Community
           </a>
           <a
             href="#guide"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="text-sm font-medium text-white hover:text-primary transition-colors"
           >
             Guide
           </a>
           <a
             href="#pricing"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="text-sm font-medium text-white hover:text-primary transition-colors"
           >
             Pricing
           </a>
         </nav>
 
-        {/* Right side - Theme toggle, notifications, and login */}
+        {/* Right side - Flame icon, notifications, and login */}
         <div className="flex items-center gap-2">
-          {/* Theme toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="w-9 h-9"
-          >
-            {isDarkMode ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
-            <span className="sr-only">Toggle theme</span>
-          </Button>
+          {/* Flame icon */}
+          <div className="w-9 h-9 flex items-center justify-center cursor-pointer">
+            <Flame className="h-5 w-5 text-white" />
+            <span className="sr-only">Flame</span>
+          </div>
 
           {/* Notifications */}
-          <Button variant="ghost" size="icon" className="w-9 h-9">
-            <Bell className="h-4 w-4" />
+          <div className="w-9 h-9 flex items-center justify-center cursor-pointer">
+            <Bell className="h-5 w-5 text-white" />
             <span className="sr-only">Notifications</span>
-          </Button>
+          </div>
 
           {/* Login button */}
-          <Button
-            size="sm"
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = '0 0 20px hsl(261 83% 58% / 0.6), 10px 10px 30px -5px hsl(261 83% 58% / 0.4), 0 0 0 1px hsl(261 83% 58% / 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = '';
-            }}
-            className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium px-4 transition-all duration-200"
-          >
-            <LogIn className="w-4 h-4 mr-2" />
+          <button className="button-gradient px-4 py-2 text-white font-medium transition-all duration-200 flex items-center gap-2 rounded-xl">
             Login
-          </Button>
+            <LogIn className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </header>

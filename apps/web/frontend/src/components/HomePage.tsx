@@ -1,12 +1,15 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Upload, Database, CornerRightUp, Plus, Mic, MicOff, ChevronDown} from "lucide-react";
+import { Sparkles, Upload, Database, CornerRightUp, Plus, Mic, MicOff, ChevronDown, FileText} from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useToast } from "@/hooks/use-toast";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBar from './ui/recording-bar';
+import { useChatStore } from "@/stores/useChatStore";
+import { useFileStore } from "@/stores/useFileStore";
+import { fileService } from "@/services/fileService";
 import { ProblemSolutionSection } from './sections/problem-solution-section';
 import { ValuePropsSection } from './sections/value-props-section';
 import { TargetAudienceSection } from './sections/target-audience-section';
@@ -15,6 +18,10 @@ import { FeaturesShowcaseSection } from './sections/features-showcase-section';
 import { SocialProofSection } from './sections/social-proof-section';
 import { CTASection } from './sections/cta-section';
 import { FooterSection } from './sections/footer-section';
+import MovingDot from './MovingDot';
+import Lottie from 'lottie-react';
+import WaveBackground from '../../../src/ui/lightswind/wave-background';
+import ScrollStack from '../../../src/ui/lightswind/scroll-stack';
 
 
 interface HomePageProps {
@@ -22,17 +29,37 @@ interface HomePageProps {
 }
 
 const HomePage = ({ onGetStarted }: HomePageProps) => {
-  const [chatInput, setChatInput] = useState("");
+  // Zustand stores
+  const {
+    inputValue,
+    selectedDataSource,
+    dropdownOpen,
+    isListening,
+    detectedLanguage,
+    uploadedFile,
+    setInputValue,
+    setSelectedDataSource,
+    setDropdownOpen,
+    setUploadedFile,
+    sendMessage
+  } = useChatStore();
+  
+  const {
+    uploadState,
+    uploadFile,
+    validateClientFile,
+    removeFile
+  } = useFileStore();
+  
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [selectedDataSource, setSelectedDataSource] = useState("");
+  const [lottieData, setLottieData] = useState(null);
   
   // Toast hook
   const { toast } = useToast();
   
   // File upload integration
-  const { uploadState, uploadCSVFile, uploadExcelFile } = useFileUpload();
+  const { uploadState: legacyUploadState, uploadCSVFile, uploadExcelFile } = useFileUpload();
   const csvInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,11 +81,47 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
     { name: "PostgreSQL", icon: "/PostgreSQL.png" }
   ];
 
+  const scrollStackCards = [
+    {
+      title: "Real-time Analytics",
+      subtitle: "Monitor your data with live updates and interactive dashboards",
+      badge: "Live Data"
+    },
+    {
+      title: "AI-Powered Insights",
+      subtitle: "Get intelligent recommendations and automated analysis",
+      badge: "AI Driven"
+    },
+    {
+      title: "Custom fdkfjdlkfdlkfjkld",
+      subtitle: "Create stunning charts and graphs tailored to your needs",
+      badge: "Custom"
+    },
+    {
+      title: "Custom Visualizations",
+      subtitle: "Create stunning charts and graphs tailored to your needs",
+      badge: "Custom"
+    },
+    {
+      title: "Custom Visualizations",
+      subtitle: "Create stunning charts and graphs tailored to your needs",
+      badge: "Custom"
+    }
+  ];
+
   useEffect(() => {
     const interval = setInterval(() => {
       setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
     }, 3000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    // Load Lottie animation data
+    fetch('/bg-test-5.json')
+      .then(response => response.json())
+      .then(data => setLottieData(data))
+      .catch(error => console.error('Error loading Lottie animation:', error));
   }, []);
 
   useEffect(() => {
@@ -75,7 +138,8 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
   }, [dropdownOpen]);
 
   const handleChatSubmit = () => {
-    if (chatInput.trim()) {
+    if (inputValue.trim()) {
+      sendMessage(inputValue);
       onGetStarted();
     }
   };
@@ -118,9 +182,41 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
   const handleCSVFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      await uploadCSVFile(file);
+      const validationError = validateClientFile(file);
+      if (validationError) {
+        toast({ title: "Upload error", description: validationError, variant: "destructive" });
+        return;
+      }
+      
+      // Set uploading status in chat store
+      setUploadedFile({ 
+        fileID: 'pending', 
+        filename: file.name, 
+        size: file.size, 
+        ext: (file.name.split('.').pop() || '').toLowerCase(), 
+        status: 'uploading' 
+      });
+      
+      await uploadFile(file);
       if (uploadState.uploadSuccess) {
+        // Set uploaded status in chat store
+        setUploadedFile({ 
+          fileID: uploadState.processedData?.fileID || 'uploaded', 
+          filename: file.name, 
+          size: file.size, 
+          ext: (file.name.split('.').pop() || '').toLowerCase(), 
+          status: 'uploaded' 
+        });
         onGetStarted();
+      } else if (uploadState.uploadError) {
+        // Set error status in chat store
+        setUploadedFile({ 
+          fileID: 'error', 
+          filename: file.name, 
+          size: file.size, 
+          ext: (file.name.split('.').pop() || '').toLowerCase(), 
+          status: 'error' 
+        });
       }
     }
     // Reset input
@@ -130,9 +226,41 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
   const handleExcelFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      await uploadExcelFile(file);
+      const validationError = validateClientFile(file);
+      if (validationError) {
+        toast({ title: "Upload error", description: validationError, variant: "destructive" });
+        return;
+      }
+      
+      // Set uploading status in chat store
+      setUploadedFile({ 
+        fileID: 'pending', 
+        filename: file.name, 
+        size: file.size, 
+        ext: (file.name.split('.').pop() || '').toLowerCase(), 
+        status: 'uploading' 
+      });
+      
+      await uploadFile(file);
       if (uploadState.uploadSuccess) {
+        // Set uploaded status in chat store
+        setUploadedFile({ 
+          fileID: uploadState.processedData?.fileID || 'uploaded', 
+          filename: file.name, 
+          size: file.size, 
+          ext: (file.name.split('.').pop() || '').toLowerCase(), 
+          status: 'uploaded' 
+        });
         onGetStarted();
+      } else if (uploadState.uploadError) {
+        // Set error status in chat store
+        setUploadedFile({ 
+          fileID: 'error', 
+          filename: file.name, 
+          size: file.size, 
+          ext: (file.name.split('.').pop() || '').toLowerCase(), 
+          status: 'error' 
+        });
       }
     }
     // Reset input
@@ -147,12 +275,10 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
 
   // Speech recognition hook
   const {
-    isListening,
     transcript,
     error: speechError,
     isSupported: speechSupported,
     selectedLanguage,
-    detectedLanguage,
     startListening,
     stopListening,
     resetTranscript,
@@ -160,7 +286,7 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
     completeRecording
   } = useSpeechRecognition({
     onResult: (result) => {
-      setChatInput(prev => prev + (prev ? ' ' : '') + result);
+      setInputValue(inputValue + (inputValue ? ' ' : '') + result);
       resetTranscript();
     },
     onError: (error) => {
@@ -200,35 +326,40 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
     resetTranscript();
   };
 
+  const removeUploadedFile = async (fileID: string) => {
+    await removeFile(fileID);
+    setUploadedFile(null);
+  };
+
   return (
     <>
-      <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-float"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute top-1/2 left-1/2 w-48 h-48 bg-primary/5 rounded-full blur-2xl animate-float" style={{ animationDelay: '4s' }}></div>
-      </div>
+      <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-20">
+      {/* WaveBackground Component */}
+      <WaveBackground 
+        backdropBlurAmount="md" 
+        className="absolute inset-0 z-0"
+      />
+      
+      {/* Overlay for better text readability */}
+      <div className="absolute inset-0 bg-black/60 z-1"></div>
 
       <div className="relative z-10 max-w-6xl mx-auto text-center">
-        <Badge variant="secondary" className="mb-6 bg-primary/10 text-primary border-primary/20 animate-fade-in">
-          <Sparkles className="w-3 h-3 mr-1" />
-          AI-Powered Analytics Platform
-        </Badge>
         
-        <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-slide-up">
-          Build{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary rounded-md px-4 animate-pulse-glow">
-            Interactive
+        <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-slide-up flex items-center justify-center gap-4 flex-wrap">
+          <span className="text-white">Build</span>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
+            Fancy Dashboard
           </span>
-          <br />
-          Dashboards in{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-primary">
-            Minutes
-          </span>
+          <span className="text-white">in minutes with</span>
+          <div className="gradient-panel rounded-xl px-6 py-3 flex items-center gap-3">
+            <div className="w-6 h-6 rounded-lg bg-blue-500 flex items-center justify-center">
+              <div className="w-4 h-4 rounded-full border-2 border-white"></div>
+            </div>
+            <span className="text-white font-bold text-2xl">Dreamable</span>
+          </div>
         </h1>
         
-        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-3xl mx-auto animate-fade-in" style={{ animationDelay: '0s' }}>
+        <p className="text-lg md:text-xl text-white/60 mb-8 max-w-3xl mx-auto animate-fade-in" style={{ animationDelay: '0s' }}>
           Transform raw data into stunningly and interactively visualised dashboards in minutes through 
           natural conversation with AI Agent. No technical skills required.
         </p>
@@ -236,14 +367,78 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
         {/* Chat-First Interface */}
         <div className="max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
           {/* Main Chat Input */}
-          <div className="w-full min-h-[80px] text-lg p-6 glass-panel border-border/30 rounded-3xl resize-none transition-all duration-300">
-            {/* Textarea Row */}
+          <div className="w-full min-h-[80px] text-lg p-6 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300">
+
+            {/* File Chip Area */}
+            {uploadedFile && (
+              <div className="mt-0 mb-4 flex justify-start">
+                <div className="w-[50%]">
+                  <div className="glass-panel rounded-xl border border-border/30 py-2 px-4">
+                    <div className="flex items-center justify-between gap-3">
+                      {/* Left side - File info */}
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        {/* File Icon */}
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 icon-panel rounded-full flex items-center justify-center shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))]">
+                            <FileText className="w-4 h-4 text-white" />
+                          </div>
+                        </div>
+                        
+                        {/* File details */}
+                        <div className="min-w-0">
+                          <div className="text-white font-medium text-sm truncate pb-1">
+                            {uploadedFile.filename}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{(uploadedFile.size/1024/1024).toFixed(1)}MB</span>
+                            <span>•</span>
+                            <div className="flex items-center gap-1">
+                              <div className={`w-1.5 h-1.5 rounded-full ${
+                                uploadedFile.status === 'uploading' ? 'bg-yellow-500' :
+                                uploadedFile.status === 'processing' ? 'bg-blue-500' :
+                                uploadedFile.status === 'processed' ? 'bg-green-500' :
+                                uploadedFile.status === 'error' ? 'bg-red-500' : 'bg-gray-500'
+                              }`}></div>
+                              <span className="capitalize">
+                                {uploadedFile.status === 'uploading' ? 'Uploading' :
+                                 uploadedFile.status === 'processing' ? 'Processing' :
+                                 uploadedFile.status === 'processed' ? 'Processed' :
+                                 uploadedFile.status === 'error' ? 'Error' : 'Ready'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Right side - Actions */}
+                      <div className="flex flex-col items-end gap-0 flex-shrink-0">
+                        <Button
+                          onClick={() => window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank')}
+                          disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
+                          className="button-gradient px-4 py-0 text-xs disabled:opacity-50 whitespace-nowrap"
+                        >
+                          Preview
+                        </Button>
+                        <button
+                          onClick={() => removeUploadedFile(uploadedFile.fileID)}
+                          className="text-[10px] text-muted-foreground hover:text-white underline transition-colors whitespace-nowrap"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+           {/* Textarea Row */}
             <div className="relative mb-4">
               <TextareaAutosize
                 minRows={3}
                 maxRows={10}
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
                 placeholder={isListening ? 'Listening...' : placeholders[placeholderIndex]}
                 className="w-full bg-transparent border-none outline-none resize-none text-lg placeholder:text-muted-foreground/60"
                 onKeyDown={(e) => {
@@ -289,7 +484,7 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
                 {/* Plus Button */}
                 <button
                   onClick={handlePlusClick}
-                  className="w-8 h-8 rounded-md btn-primary-outline flex items-center justify-center group"
+                  className="w-8 h-8 rounded-md button-outline flex items-center justify-center group"
                   onMouseEnter={(e) => {
                     e.currentTarget.classList.add('btn-primary-hover');
                   }}
@@ -305,7 +500,7 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
                 <button
                   onClick={handleCSVClick}
                   disabled={uploadState.isUploading}
-                  className="px-3 py-1.5 text-sm btn-primary-outline rounded-md disabled:opacity-50 flex items-center gap-2"
+                  className="px-3 py-1.5 text-sm button-outline rounded-md disabled:opacity-50 flex items-center gap-2"
                   onMouseEnter={(e) => {
                     if (!uploadState.isUploading) {
                       e.currentTarget.classList.add('btn-primary-hover');
@@ -324,7 +519,7 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
                 <button
                   onClick={handleExcelClick}
                   disabled={uploadState.isUploading}
-                  className="px-3 py-1.5 text-sm btn-primary-outline rounded-md disabled:opacity-50 flex items-center gap-2"
+                  className="px-3 py-1.5 text-sm button-outline rounded-md disabled:opacity-50 flex items-center gap-2"
                   onMouseEnter={(e) => {
                     if (!uploadState.isUploading) {
                       e.currentTarget.classList.add('btn-primary-hover');
@@ -343,7 +538,7 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
                 <div className="relative data-source-dropdown">
                   <Button
                     onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="btn-primary-gradient rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto"
+                    className="button-gradient rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto"
                     aria-expanded={dropdownOpen}
                     aria-haspopup="true"
                     aria-label="Connect data source"
@@ -377,7 +572,7 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
               <div className="flex gap-2">
                 <Button
                   onClick={handleMicClick}
-                  className={`btn-primary-gradient p-3 ${
+                  className={`button-gradient p-3 ${
                     isListening ? 'bg-red-500 hover:bg-red-600 animate-pulse' : ''
                   }`}
                   aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
@@ -387,8 +582,8 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
                 </Button>
                 <Button
                   onClick={handleChatSubmit}
-                  disabled={!chatInput.trim()}
-                  className="btn-primary-gradient p-3 disabled:opacity-50"
+                  disabled={!inputValue.trim()}
+                  className="button-gradient p-3 disabled:opacity-50"
                 >
                   <CornerRightUp className="w-4 h-4" />
                 </Button>
@@ -396,14 +591,12 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
             </div>
           </div>
 
-
-
           {/* Quick Start Prompts */}
           <div className="flex justify-center gap-2 mt-6 flex-wrap animate-fade-in" style={{ animationDelay: '0s' }}>
             {["Monthly Revenue Trends", "Customer Funnel Analysis", "SaaS Metrics Dashboard", "E-commerce Analytics"].map((prompt) => (
               <button
                 key={prompt}
-                onClick={() => setChatInput(prompt)}
+                onClick={() => setInputValue(prompt)}
                 className="px-4 py-2 text-sm bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all duration-200"
               >
                 {prompt}
@@ -413,6 +606,15 @@ const HomePage = ({ onGetStarted }: HomePageProps) => {
         </div>
       </div>
     </section>
+
+    {/* Scroll Stack Section */}
+    <ScrollStack 
+      cards={scrollStackCards}
+      backgroundColor="#1f2937"
+      cardHeight="80vh"
+      animationDuration="0.8s"
+      sectionHeightMultiplier={5}
+    />
       
     {/* New Homepage Sections */}
     <ProblemSolutionSection />

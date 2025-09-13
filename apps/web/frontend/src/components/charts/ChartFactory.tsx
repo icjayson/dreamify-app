@@ -13,19 +13,28 @@ import TopProductsTable from '@/components/dashboard/TopProductsTable';
 import GeographicChart from '@/components/dashboard/GeographicChart';
 import ActivityFeed from '@/components/dashboard/ActivityFeed';
 
+// Import Recharts components
+import RechartsLineChart from '@/components/charts/RechartsLineChart';
+import RechartsBarChart from '@/components/charts/RechartsBarChart';
+import RechartsPieChart from '@/components/charts/RechartsPieChart';
+import RechartsAreaChart from '@/components/charts/RechartsAreaChart';
+import RechartsScatterChart from '@/components/charts/RechartsScatterChart';
+import RechartsComposedChart from '@/components/charts/RechartsComposedChart';
+
 // Chart component registry
 const CHART_COMPONENTS = {
-  [ChartType.LINE]: RevenueChart,
-  [ChartType.BAR]: ProjectionsChart,
+  [ChartType.LINE]: RechartsLineChart,
+  [ChartType.BAR]: RechartsBarChart,
+  [ChartType.PIE]: RechartsPieChart,
+  [ChartType.AREA]: RechartsAreaChart,
+  [ChartType.SCATTER]: RechartsScatterChart,
+  [ChartType.COMPOSED]: RechartsComposedChart,
   [ChartType.METRIC]: MetricCard,
   [ChartType.TABLE]: TopProductsTable,
   [ChartType.GEOGRAPHIC]: GeographicChart,
   [ChartType.ACTIVITY_FEED]: ActivityFeed,
-  // Add more chart types as needed
-  [ChartType.PIE]: GeographicChart, // Using GeographicChart as fallback for pie charts
-  [ChartType.AREA]: RevenueChart, // Using RevenueChart as fallback for area charts
-  [ChartType.SCATTER]: RevenueChart, // Using RevenueChart as fallback for scatter charts
-  [ChartType.DONUT]: GeographicChart, // Using GeographicChart as fallback for donut charts
+  // Fallback components for unsupported types
+  [ChartType.DONUT]: RechartsPieChart, // Using RechartsPieChart as fallback for donut charts
 };
 
 // Chart configuration interfaces
@@ -149,6 +158,7 @@ class ChartFactory {
       case ChartType.PIE:
       case ChartType.AREA:
       case ChartType.SCATTER:
+      case ChartType.COMPOSED:
       case ChartType.DONUT:
       case ChartType.GEOGRAPHIC:
         const chartConfig = config as ChartConfiguration;
@@ -157,7 +167,8 @@ class ChartFactory {
           description: chartConfig.description,
           datasets: chartConfig.datasets,
           config: chartConfig.config,
-          layout: chartConfig.layout
+          layout: chartConfig.layout,
+          styling: chartConfig.styling
         };
 
       case ChartType.ACTIVITY_FEED:
@@ -241,6 +252,7 @@ class ChartFactory {
       case ChartType.PIE:
       case ChartType.AREA:
       case ChartType.SCATTER:
+      case ChartType.COMPOSED:
       case ChartType.DONUT:
       case ChartType.GEOGRAPHIC:
         const chartConfig = config as ChartConfiguration;

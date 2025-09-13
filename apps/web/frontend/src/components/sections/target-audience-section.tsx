@@ -1,32 +1,28 @@
-import { User, Users, TrendingUp, Building,Sparkles } from "lucide-react";
+import { Target, Megaphone, BarChart3, FileText, Sparkles, Brain } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 export const TargetAudienceSection = () => {
   const { isVisible, ref } = useIntersectionObserver({ threshold: 0.1 });
   const audiences = [
     {
-      icon: User,
-      title: "Non-technical founders & executives",
-      benefit: "Make data-driven decisions without learning complex tools",
-      color: "text-primary"
+      icon: Target,
+      title: "Non-tech founders & executives",
+      benefit: "Make data-driven decisions without learning complex tools"
     },
     {
-      icon: TrendingUp,
+      icon: Megaphone,
       title: "Marketing teams",
-      benefit: "Create compelling visual reports that tell your story",
-      color: "text-accent"
+      benefit: "Create compelling visual reports that tell your story"
     },
     {
-      icon: Users,
+      icon: BarChart3,
       title: "Data-curious professionals",
-      benefit: "Explore insights without technical barriers",
-      color: "text-primary"
+      benefit: "Explore insights without technical barriers"
     },
     {
-      icon: Building,
+      icon: FileText,
       title: "Small to mid-size teams",
-      benefit: "Professional dashboards without enterprise complexity",
-      color: "text-accent"
+      benefit: "Professional dashboards without enterprise complexity"
     }
   ];
 
@@ -50,17 +46,37 @@ export const TargetAudienceSection = () => {
       </div>
 
       <div className="relative z-10 container mx-auto px-6">
+        {/* Header with icon */}
         <div className={`text-center mb-16 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
-          <h2 className="text-4xl md:text-6xl font-bold mb-6">
-            Perfect for <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary">teams who want</span>
-            <br />results, not complexity
+          {/* Icon */}
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+              <img 
+                src="/dreamable-logo.png" 
+                alt="Dreamable Logo" 
+                className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
+              />
+            </div>
+          </div>
+          
+          {/* Title with gradient panel */}
+          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
+            <span className="text-white">Perfect for</span>
+            <div className="gradient-panel rounded-xl px-6 py-3">
+              <span className="text-white font-bold text-4xl md:text-6xl">every teams</span>
+            </div>
           </h2>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+          
+          <h2 className="text-3xl md:text-4xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
+            <span className="text-white">who want results, not complexity</span>
+          </h2>
+          
+          <p className="text-xl text-white/60 max-w-3xl mx-auto">
             Dreamable empowers every type of professional to create stunning dashboards
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-16 max-w-7xl mx-auto">
           {audiences.map((audience, index) => (
             <div 
               key={index}
@@ -68,19 +84,25 @@ export const TargetAudienceSection = () => {
               style={{ animationDelay: `${index * 0.3}s` }}
             >
               {/* Icon Container */}
-              <div className="relative mb-6">
-                <div className="w-20 h-20 rounded-3xl glass-panel flex items-center justify-center mx-auto group-hover:scale-110 transition-all duration-300 hover:scale-105">
-                  <audience.icon className={`w-10 h-10 ${audience.color} group-hover:scale-110 transition-transform duration-300`} />
+              <div className="relative flex justify-center">
+                {/* Background layer below icon-panel */}
+                <div className="icon-panel-bg"></div>
+                
+                
+                <div className={`w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 relative z-10 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] ${
+                  isVisible ? 'group-hover:scale-110 animate-zoom-in' : 'opacity-0'
+                }`} style={{ animationDelay: `${0.4 + index * 0.2}s` }}>
+                  <audience.icon className="w-8 h-8 text-white" />
                 </div>
                 {/* Glow effect */}
-                <div className={`absolute inset-0 w-20 h-20 rounded-3xl mx-auto opacity-0 group-hover:opacity-20 blur-xl transition-opacity duration-300 ${audience.color.replace('text-', 'bg-')}`}></div>
+                <div className="absolute inset-0 w-16 h-16 icon-panel opacity-20 blur-xl group-hover:opacity-40 transition-opacity duration-300 z-20"></div>
               </div>
 
               {/* Content */}
-              <h3 className="text-xl font-bold text-foreground mb-4 leading-tight">
+              <h3 className="text-xl font-bold text-white mb-4 leading-tight">
                 {audience.title}
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-sm text-white/60 leading-relaxed">
                 {audience.benefit}
               </p>
 
@@ -88,16 +110,6 @@ export const TargetAudienceSection = () => {
               <div className="mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent"></div>
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Bottom stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto mt-20">
-          {[{stat: "10,000+", label: "Professionals served"}, {stat: "95%", label: "Satisfaction rate"}, {stat: "5 min", label: "Average creation time"}].map((item, index) => (
-            <div key={index} className={`text-center glass-panel rounded-2xl p-4 hover:scale-105 transition-transform duration-200 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`} style={{ animationDelay: `${0.6 + index * 0.1}s` }}>
-              <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent mb-2">{item.stat}</div>
-              <div className="text-muted-foreground">{item.label}</div>
             </div>
           ))}
         </div>

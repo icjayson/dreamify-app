@@ -7,8 +7,8 @@ const heroButtonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'btn-primary-gradient text-white hover:btn-primary-hover',
-        secondary: 'btn-primary-outline',
+        primary: 'button-gradient text-white hover:btn-primary-hover',
+        secondary: 'button-outline',
         outline: 'border border-border bg-background hover:bg-accent hover:text-accent-foreground',
       },
       size: {

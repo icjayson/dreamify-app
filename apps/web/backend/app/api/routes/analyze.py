@@ -57,9 +57,12 @@ def run_analysis():
         if os.path.exists(processed_path):
             return jsonify({
                 'success': True,
-                'fileID': fileID,
-                'status': 'completed',
-                'message': 'File already processed'
+                'data': {
+                    'success': True,
+                    'fileID': fileID,
+                    'status': 'completed',
+                    'message': 'File already processed'
+                }
             }), 200
         
         # Load file metadata
@@ -83,9 +86,12 @@ def run_analysis():
         
         return jsonify({
             'success': True,
-            'fileID': fileID,
-            'status': 'processing',
-            'message': 'File processing started in background'
+            'data': {
+                'success': True,
+                'fileID': fileID,
+                'status': 'processing',
+                'message': 'File processing started in background'
+            }
         }), 200
         
     except Exception as e:
@@ -107,9 +113,12 @@ def get_analysis_status():
         if not os.path.exists(processed_path):
             return jsonify({
                 'success': True,
-                'fileID': fileID,
-                'status': 'processing',
-                'message': 'File is being processed'
+                'data': {
+                    'success': True,
+                    'fileID': fileID,
+                    'status': 'processing',
+                    'message': 'File is being processed'
+                }
             }), 200
         
         # Load processed data
@@ -118,10 +127,7 @@ def get_analysis_status():
         
         return jsonify({
             'success': True,
-            'fileID': fileID,
-            'status': processed_data.get('status', 'completed'),
             'data': processed_data,
-            'message': 'Processing completed' if processed_data.get('status') == 'completed' else 'Processing in progress'
         }), 200
         
     except Exception as e:

@@ -31,6 +31,8 @@ const DashboardPreview = ({
   // Transform processed data to dashboard configuration
   const transformProcessedDataToDashboard = (data: any) => {
     if (!data) return null;
+    
+    console.log('DashboardPreview: Transforming processed data:', data);
 
     const components: any[] = [];
     let componentId = 1;
@@ -60,6 +62,15 @@ const DashboardPreview = ({
     // Transform charts
     if (data.charts && Array.isArray(data.charts)) {
       data.charts.forEach((chart: any, index: number) => {
+        // Apply styling recommendations if available
+        const styling = data.styling_recommendations ? {
+          presetTheme: data.styling_recommendations.preset_theme || 'corporate',
+          colorPalette: data.styling_recommendations.color_palette || ['#2563eb', '#10b981', '#f59e0b'],
+          animationEnabled: data.styling_recommendations.animation_enabled !== false,
+          gridVisible: data.styling_recommendations.grid_visible !== false,
+          legendPosition: data.styling_recommendations.legend_position || 'top' as 'top' | 'bottom' | 'right' | 'none'
+        } : undefined;
+
         components.push({
           id: `chart_${componentId++}`,
           type: 'chart',
@@ -73,7 +84,9 @@ const DashboardPreview = ({
             type: chart.type || 'line',
             title: chart.title || 'Chart',
             description: chart.description || '',
-            datasets: chart.datasets || []
+            datasets: chart.datasets || [],
+            config: chart.config || {},
+            styling: styling
           }
         });
       });
@@ -100,7 +113,7 @@ const DashboardPreview = ({
       });
     }
 
-    return {
+    const dashboardConfig = {
       id: 'processed_dashboard',
       layout: {
         type: 'grid',
@@ -109,6 +122,9 @@ const DashboardPreview = ({
       },
       components
     };
+    
+    console.log('DashboardPreview: Created dashboard config:', dashboardConfig);
+    return dashboardConfig;
   };
 
   // Handle refresh

@@ -13,10 +13,12 @@ import {
   ChartConfiguration, 
   MetricConfiguration, 
   TableConfiguration,
-  DashboardComponent 
+  DashboardComponent,
+  ChartStyling
 } from '@/types/dashboard';
 import { createChart, validateChartConfig } from './ChartFactory';
 import ErrorBoundary from '@/components/charts/ErrorBoundary';
+import { getChartStylingClasses } from '@/utils/chartStyling';
 
 interface ChartRendererProps {
   component: DashboardComponent;
@@ -316,6 +318,10 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
     return renderErrorState();
   }
 
+  // Get styling classes for the chart
+  const chartConfig = config as ChartConfiguration;
+  const stylingClasses = chartConfig.styling ? getChartStylingClasses(chartConfig.styling) : '';
+
   return (
     <ErrorBoundary
       fallback={renderErrorState}
@@ -326,7 +332,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
         }
       }}
     >
-      <Card className={`glass-panel p-6 animate-fade-in ${className}`} style={style}>
+      <Card className={`glass-panel p-6 animate-fade-in ${stylingClasses} ${className}`} style={style}>
         {renderChartHeader()}
         <div className="chart-content">
           {chartElement}

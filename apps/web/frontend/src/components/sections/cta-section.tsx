@@ -1,5 +1,5 @@
 import { HeroButton } from "@/components/ui/hero-button";
-import { Sparkles, Calendar, ArrowRight } from "lucide-react";
+import { Sparkles, Calendar, ArrowRight, Brain } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 export const CTASection = () => {
@@ -26,10 +26,27 @@ export const CTASection = () => {
             </div>
           </div>
 
+          {/* Header with icon */}
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+              <img 
+                src="/dreamable-logo.png" 
+                alt="Dreamable Logo" 
+                className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
+              />
+            </div>
+          </div>
+          
           {/* Main headline */}
-          <h2 className={`text-5xl md:text-7xl font-bold mb-8 leading-tight ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
-            Ready to <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary">transform</span>
-            <br />your data storytelling?
+          <h2 className={`text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
+            <span className="text-white">Ready to</span>
+            <div className="gradient-panel rounded-xl px-6 py-3">
+              <span className="text-white font-bold text-4xl md:text-6xl">transform</span>
+            </div>
+          </h2>
+          
+          <h2 className={`text-4xl md:text-6xl font-bold mb-8 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
+            <span className="text-white">your data storytelling?</span>
           </h2>
 
           <p className={`text-2xl text-muted-foreground max-w-3xl mx-auto mb-12 leading-relaxed ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.4s' }}>
@@ -40,19 +57,19 @@ export const CTASection = () => {
           {/* Key benefits */}
           <div className={`grid md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-16 ${isVisible ? 'animate-zoom-in' : 'opacity-0'}`} style={{ animationDelay: '0.6s' }}>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-4">
                 <span className="text-2xl font-bold text-white">5</span>
               </div>
               <div className="text-foreground font-semibold">Minutes to Results</div>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-4">
                 <Sparkles className="w-8 h-8 text-white" />
               </div>
               <div className="text-foreground font-semibold">AI-Powered Magic</div>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-4">
                 <span className="text-xl font-bold text-white">0</span>
               </div>
               <div className="text-foreground font-semibold">Technical Setup</div>

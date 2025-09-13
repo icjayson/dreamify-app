@@ -9,6 +9,7 @@ export enum ChartType {
   AREA = "area",
   SCATTER = "scatter",
   DONUT = "donut",
+  COMPOSED = "composed",
   METRIC = "metric",
   TABLE = "table",
   GEOGRAPHIC = "geographic",
@@ -40,6 +41,15 @@ export interface ChartDataset {
   metadata?: Record<string, any>;
 }
 
+export interface ChartStyling {
+  presetTheme: string;
+  colorPalette: string[];
+  customStyling?: Record<string, any>;
+  animationEnabled: boolean;
+  gridVisible: boolean;
+  legendPosition: 'top' | 'bottom' | 'right' | 'none';
+}
+
 export interface ChartConfiguration {
   id: string;
   type: ChartType;
@@ -48,6 +58,7 @@ export interface ChartConfiguration {
   datasets: ChartDataset[];
   config?: Record<string, any>;
   layout?: Record<string, any>;
+  styling?: ChartStyling;
   metadata?: Record<string, any>;
 }
 

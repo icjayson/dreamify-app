@@ -10,7 +10,8 @@ import {
   DashboardRefreshRequest,
   DashboardRefreshResponse,
   ChartDataRequest,
-  ChartDataResponse
+  ChartDataResponse,
+  ChartStyling
 } from '@/types/dashboard';
 
 class DashboardService {
@@ -201,6 +202,55 @@ class DashboardService {
       this.cacheDashboard(dashboardId, config);
     }
     return config;
+  }
+
+  /**
+   * Apply styling to dashboard configuration
+   */
+  applyStylingToDashboard(
+    dashboard: DashboardConfiguration,
+    styling: ChartStyling
+  ): DashboardConfiguration {
+    const updatedComponents = dashboard.components.map(component => {
+      if (component.type === 'chart' && 'styling' in component.component_config) {
+        return {
+          ...component,
+          component_config: {
+            ...component.component_config,
+            styling: {
+              ...component.component_config.styling,
+              ...styling
+            }
+          }
+        };
+      }
+      return component;
+    });
+
+    return {
+      ...dashboard,
+      components: updatedComponents
+    };
+  }
+
+  /**
+   * Get styling recommendations for a dashboard
+   */
+  async getStylingRecommendations(dashboardId: string): Promise<ChartStyling | null> {
+    try {
+      const response = await api.get<{ styling: ChartStyling }>(
+        `${this.baseUrl}/styling/${dashboardId}`
+      );
+
+      if (response.success && response.data) {
+        return response.data.styling;
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching styling recommendations:', error);
+      return null;
+    }
   }
 }
 

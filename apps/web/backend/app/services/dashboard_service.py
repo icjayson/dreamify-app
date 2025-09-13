@@ -18,7 +18,8 @@ from app.models.dashboard_models import (
     ChartDataset,
     ChartDataPoint,
     MetricTrend,
-    TableColumn
+    TableColumn,
+    ChartStyling
 )
 from app.core.analytics import CSVProcessor
 from app.utils.chart_data_processor import ChartDataProcessor
@@ -212,14 +213,18 @@ class DashboardService:
         """Generate dashboard components based on data analysis."""
         components = []
         
+        # Get styling recommendations from processed data
+        styling_recommendations = processed_data.get('styling_recommendations', {})
+        
         # Generate metric cards
         metric_components = self._generate_metric_components(processed_data)
         components.extend(metric_components)
         
-        # Generate chart components
+        # Generate chart components with styling
         chart_components = self._generate_chart_components(
             processed_data=processed_data,
-            chart_types=chart_types
+            chart_types=chart_types,
+            styling_recommendations=styling_recommendations
         )
         components.extend(chart_components)
         
@@ -280,7 +285,8 @@ class DashboardService:
     def _generate_chart_components(
         self,
         processed_data: Dict[str, Any],
-        chart_types: Optional[List[ChartType]] = None
+        chart_types: Optional[List[ChartType]] = None,
+        styling_recommendations: Optional[Dict[str, Any]] = None
     ) -> List[DashboardComponent]:
         """Generate chart components."""
         components = []
@@ -291,7 +297,7 @@ class DashboardService:
         
         # Generate revenue chart
         if ChartType.LINE in chart_types:
-            revenue_chart = self._create_revenue_chart()
+            revenue_chart = self._create_revenue_chart(styling_recommendations)
             component = DashboardComponent(
                 id="revenue_chart",
                 type="chart",
@@ -302,7 +308,7 @@ class DashboardService:
         
         # Generate projections chart
         if ChartType.BAR in chart_types:
-            projections_chart = self._create_projections_chart()
+            projections_chart = self._create_projections_chart(styling_recommendations)
             component = DashboardComponent(
                 id="projections_chart",
                 type="chart",
@@ -313,7 +319,7 @@ class DashboardService:
         
         # Generate geographic chart
         if ChartType.GEOGRAPHIC in chart_types:
-            geographic_chart = self._create_geographic_chart()
+            geographic_chart = self._create_geographic_chart(styling_recommendations)
             component = DashboardComponent(
                 id="geographic_chart",
                 type="chart",
@@ -353,7 +359,7 @@ class DashboardService:
             spacing='normal'
         )
     
-    def _create_revenue_chart(self) -> ChartConfiguration:
+    def _create_revenue_chart(self, styling_recommendations: Optional[Dict[str, Any]] = None) -> ChartConfiguration:
         """Create revenue chart configuration."""
         datasets = [
             ChartDataset(
@@ -382,6 +388,9 @@ class DashboardService:
             )
         ]
         
+        # Create styling configuration
+        styling = self._create_chart_styling(styling_recommendations, ChartType.LINE)
+        
         return ChartConfiguration(
             id="revenue_chart",
             type=ChartType.LINE,
@@ -392,10 +401,11 @@ class DashboardService:
                 'animation': True,
                 'showGrid': True,
                 'showLegend': True
-            }
+            },
+            styling=styling
         )
     
-    def _create_projections_chart(self) -> ChartConfiguration:
+    def _create_projections_chart(self, styling_recommendations: Optional[Dict[str, Any]] = None) -> ChartConfiguration:
         """Create projections chart configuration."""
         datasets = [
             ChartDataset(
@@ -424,6 +434,9 @@ class DashboardService:
             )
         ]
         
+        # Create styling configuration
+        styling = self._create_chart_styling(styling_recommendations, ChartType.BAR)
+        
         return ChartConfiguration(
             id="projections_chart",
             type=ChartType.BAR,
@@ -433,10 +446,11 @@ class DashboardService:
             config={
                 'animation': True,
                 'showLegend': True
-            }
+            },
+            styling=styling
         )
     
-    def _create_geographic_chart(self) -> ChartConfiguration:
+    def _create_geographic_chart(self, styling_recommendations: Optional[Dict[str, Any]] = None) -> ChartConfiguration:
         """Create geographic chart configuration."""
         datasets = [
             ChartDataset(
@@ -451,6 +465,9 @@ class DashboardService:
             )
         ]
         
+        # Create styling configuration
+        styling = self._create_chart_styling(styling_recommendations, ChartType.GEOGRAPHIC)
+        
         return ChartConfiguration(
             id="geographic_chart",
             type=ChartType.GEOGRAPHIC,
@@ -460,7 +477,8 @@ class DashboardService:
             config={
                 'showProgressBars': True,
                 'showPieChart': True
-            }
+            },
+            styling=styling
         )
     
     def _create_products_table(self) -> TableConfiguration:
@@ -485,4 +503,28 @@ class DashboardService:
             description="Product performance metrics",
             columns=columns,
             data=data
+        )
+    
+    def _create_chart_styling(
+        self,
+        styling_recommendations: Optional[Dict[str, Any]],
+        chart_type: ChartType
+    ) -> ChartStyling:
+        """Create chart styling configuration from recommendations."""
+        if not styling_recommendations:
+            # Default styling
+            return ChartStyling(
+                preset_theme="corporate",
+                color_palette=["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"],
+                animation_enabled=True,
+                grid_visible=True,
+                legend_position="top"
+            )
+        
+        return ChartStyling(
+            preset_theme=styling_recommendations.get("preset_theme", "corporate"),
+            color_palette=styling_recommendations.get("color_palette", ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]),
+            animation_enabled=styling_recommendations.get("animation_enabled", True),
+            grid_visible=styling_recommendations.get("grid_visible", True),
+            legend_position=styling_recommendations.get("legend_position", "top")
         )

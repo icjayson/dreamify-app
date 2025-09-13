@@ -90,23 +90,30 @@ const ChatInterface = ({ messages, onMessagesChange, onProcessedDataChange }: Ch
         // Start processing with user prompt
         setUploadedFile(prev => prev ? { ...prev, status: 'processing' } : prev);
         
+        console.log('Starting processing for fileID:', uploadedFile.fileID);
         const startResult = await processingService.runProcessing(uploadedFile.fileID);
-        if (startResult.success && startResult.status === 'processing') {
+        console.log('Run processing result:', startResult);
+        
+        if (startResult.data?.success && startResult.data?.status === 'processing') {
+          console.log('Processing started, beginning polling...');
           // Poll for completion
           const finalResult = await processingService.pollProcessingStatus(
             uploadedFile.fileID,
             (status) => {
-              if (status.status === 'completed') {
+              console.log('Polling status update:', status);
+
+              if (status.data?.status === 'completed') {
                 setUploadedFile(prev => prev ? { ...prev, status: 'processed', processedData: status.data } : prev);
-              } else if (status.status === 'error') {
+              } else if (status.data?.status === 'error') {
                 setUploadedFile(prev => prev ? { ...prev, status: 'error' } : prev);
               }
             },
-            30, // max attempts (30 seconds)
-            1000 // 1 second intervals
+            60, // max attempts (60 seconds)
+            2000 // 2 second intervals
           );
+          console.log('Final polling result:', finalResult);
           
-          if (finalResult.success && finalResult.status === 'completed') {
+          if (finalResult.data?.success && finalResult.data?.status === 'completed') {
             // Call the callback to pass processed data to parent component
             if (onProcessedDataChange) {
               onProcessedDataChange(finalResult.data);

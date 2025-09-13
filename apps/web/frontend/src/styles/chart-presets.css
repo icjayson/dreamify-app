@@ -1,0 +1,245 @@
+/**
+ * Chart Preset Themes - CSS Custom Properties for Dynamic Chart Styling
+ * Integrates with existing design system and glass morphism effects
+ */
+
+@layer components {
+  /* Corporate Theme - Professional, clean, business-focused */
+  .chart-preset-corporate {
+    --chart-primary: 220 14% 96%;
+    --chart-secondary: 220 9% 46%;
+    --chart-accent: 220 14% 96%;
+    --chart-success: 142 76% 36%;
+    --chart-warning: 38 92% 50%;
+    --chart-error: 0 84% 60%;
+    
+    --chart-grid-color: 220 13% 91%;
+    --chart-grid-opacity: 0.3;
+    --chart-tooltip-bg: 0 0% 100%;
+    --chart-tooltip-border: 220 13% 91%;
+    --chart-tooltip-text: 220 9% 46%;
+    --chart-legend-text: 220 9% 46%;
+    --chart-axis-text: 220 9% 46%;
+    
+    --chart-animation-duration: 0.8s;
+    --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+    --chart-hover-scale: 1.02;
+  }
+
+  /* Vibrant Theme - Colorful, energetic, modern */
+  .chart-preset-vibrant {
+    --chart-primary: 261 83% 58%;
+    --chart-secondary: 193 100% 50%;
+    --chart-accent: 142 76% 36%;
+    --chart-success: 142 76% 36%;
+    --chart-warning: 38 92% 50%;
+    --chart-error: 0 84% 60%;
+    
+    --chart-grid-color: 261 83% 58%;
+    --chart-grid-opacity: 0.2;
+    --chart-tooltip-bg: 220 27% 8%;
+    --chart-tooltip-border: 261 83% 58%;
+    --chart-tooltip-text: 0 0% 98%;
+    --chart-legend-text: 0 0% 98%;
+    --chart-axis-text: 0 0% 98%;
+    
+    --chart-animation-duration: 1.2s;
+    --chart-animation-easing: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --chart-hover-scale: 1.05;
+  }
+
+  /* Minimal Theme - Clean, simple, focused */
+  .chart-preset-minimal {
+    --chart-primary: 220 9% 46%;
+    --chart-secondary: 220 9% 46%;
+    --chart-accent: 220 9% 46%;
+    --chart-success: 220 9% 46%;
+    --chart-warning: 220 9% 46%;
+    --chart-error: 220 9% 46%;
+    
+    --chart-grid-color: 220 13% 91%;
+    --chart-grid-opacity: 0.1;
+    --chart-tooltip-bg: 0 0% 100%;
+    --chart-tooltip-border: 220 13% 91%;
+    --chart-tooltip-text: 220 9% 46%;
+    --chart-legend-text: 220 9% 46%;
+    --chart-axis-text: 220 9% 46%;
+    
+    --chart-animation-duration: 0.4s;
+    --chart-animation-easing: ease-out;
+    --chart-hover-scale: 1.01;
+  }
+
+  /* Dark Theme - High contrast, modern, sleek */
+  .chart-preset-dark {
+    --chart-primary: 261 83% 70%;
+    --chart-secondary: 193 100% 60%;
+    --chart-accent: 142 76% 50%;
+    --chart-success: 142 76% 50%;
+    --chart-warning: 38 92% 60%;
+    --chart-error: 0 84% 70%;
+    
+    --chart-grid-color: 220 27% 18%;
+    --chart-grid-opacity: 0.4;
+    --chart-tooltip-bg: 220 27% 8%;
+    --chart-tooltip-border: 220 27% 18%;
+    --chart-tooltip-text: 0 0% 98%;
+    --chart-legend-text: 0 0% 98%;
+    --chart-axis-text: 0 0% 98%;
+    
+    --chart-animation-duration: 1s;
+    --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+    --chart-hover-scale: 1.03;
+  }
+
+  /* Colorful Theme - Diverse, playful, engaging */
+  .chart-preset-colorful {
+    --chart-primary: 261 83% 58%;
+    --chart-secondary: 193 100% 50%;
+    --chart-accent: 142 76% 36%;
+    --chart-success: 142 76% 36%;
+    --chart-warning: 38 92% 50%;
+    --chart-error: 0 84% 60%;
+    
+    --chart-grid-color: 261 83% 58%;
+    --chart-grid-opacity: 0.15;
+    --chart-tooltip-bg: 220 27% 8%;
+    --chart-tooltip-border: 261 83% 58%;
+    --chart-tooltip-text: 0 0% 98%;
+    --chart-legend-text: 0 0% 98%;
+    --chart-axis-text: 0 0% 98%;
+    
+    --chart-animation-duration: 1.5s;
+    --chart-animation-easing: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --chart-hover-scale: 1.08;
+  }
+
+  /* Chart Animation Classes */
+  .chart-animate-fade-in {
+    animation: chartFadeIn var(--chart-animation-duration, 0.8s) var(--chart-animation-easing, cubic-bezier(0.4, 0, 0.2, 1)) forwards;
+  }
+
+  .chart-animate-scale-in {
+    animation: chartScaleIn var(--chart-animation-duration, 0.8s) var(--chart-animation-easing, cubic-bezier(0.4, 0, 0.2, 1)) forwards;
+  }
+
+  .chart-animate-slide-up {
+    animation: chartSlideUp var(--chart-animation-duration, 0.8s) var(--chart-animation-easing, cubic-bezier(0.4, 0, 0.2, 1)) forwards;
+  }
+
+  .chart-hover-effect {
+    transition: transform 0.2s ease-out;
+  }
+
+  .chart-hover-effect:hover {
+    transform: scale(var(--chart-hover-scale, 1.02));
+  }
+
+  /* Chart Grid Styling */
+  .chart-grid {
+    stroke: hsl(var(--chart-grid-color, 220 13% 91%));
+    stroke-opacity: var(--chart-grid-opacity, 0.3);
+    stroke-width: 1;
+  }
+
+  /* Chart Tooltip Styling */
+  .chart-tooltip {
+    background-color: hsl(var(--chart-tooltip-bg, 0 0% 100%));
+    border: 1px solid hsl(var(--chart-tooltip-border, 220 13% 91%));
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 8px 12px;
+    font-size: 12px;
+    color: hsl(var(--chart-tooltip-text, 220 9% 46%));
+  }
+
+  /* Chart Legend Styling */
+  .chart-legend {
+    color: hsl(var(--chart-legend-text, 220 9% 46%));
+    font-size: 12px;
+  }
+
+  /* Chart Axis Styling */
+  .chart-axis {
+    color: hsl(var(--chart-axis-text, 220 9% 46%));
+    font-size: 11px;
+  }
+
+  /* Chart Container Styling */
+  .chart-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .chart-container.recharts-wrapper {
+    font-family: inherit;
+  }
+
+  /* Responsive Chart Styling */
+  @media (max-width: 768px) {
+    .chart-tooltip {
+      font-size: 10px;
+      padding: 6px 8px;
+    }
+    
+    .chart-legend {
+      font-size: 10px;
+    }
+    
+    .chart-axis {
+      font-size: 9px;
+    }
+  }
+
+  /* Animation Keyframes */
+  @keyframes chartFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes chartScaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes chartSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Accessibility: Respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    .chart-animate-fade-in,
+    .chart-animate-scale-in,
+    .chart-animate-slide-up {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+    
+    .chart-hover-effect {
+      transition: none;
+    }
+    
+    .chart-hover-effect:hover {
+      transform: none;
+    }
+  }
+}

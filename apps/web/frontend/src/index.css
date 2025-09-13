@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import chart presets */
+@import './styles/chart-presets.css';
+
 /* Vibe Analytics Studio Design System - Motion-First Analytics Platform */
 
 @layer base {

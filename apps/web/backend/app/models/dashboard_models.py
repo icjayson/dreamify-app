@@ -16,6 +16,7 @@ class ChartType(str, Enum):
     AREA = "area"
     SCATTER = "scatter"
     DONUT = "donut"
+    COMPOSED = "composed"
     METRIC = "metric"
     TABLE = "table"
     GEOGRAPHIC = "geographic"
@@ -51,6 +52,16 @@ class ChartDataset(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class ChartStyling(BaseModel):
+    """Chart styling configuration."""
+    preset_theme: str
+    color_palette: List[str]
+    custom_styling: Optional[Dict[str, Any]] = None
+    animation_enabled: bool = True
+    grid_visible: bool = True
+    legend_position: Literal["top", "bottom", "right", "none"] = "top"
+
+
 class ChartConfiguration(BaseModel):
     """Configuration for individual chart components."""
     id: str
@@ -60,6 +71,7 @@ class ChartConfiguration(BaseModel):
     datasets: List[ChartDataset]
     config: Optional[Dict[str, Any]] = None
     layout: Optional[Dict[str, Any]] = None
+    styling: Optional[ChartStyling] = None
     metadata: Optional[Dict[str, Any]] = None
 
     @validator('datasets')

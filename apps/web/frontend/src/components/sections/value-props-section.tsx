@@ -43,28 +43,11 @@ export const ValuePropsSection = () => {
       </div>
     
       <div className="relative z-10 container mx-auto px-6">
-        {/* Header with icon */}
         <div className={`text-center mb-16 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
-          {/* Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
-              <img 
-                src="/dreamable-logo.png" 
-                alt="Dreamable Logo" 
-                className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
-              />
-            </div>
-          </div>
-          
-          {/* Title with gradient panel */}
-          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
-            <span className="text-white">Core</span>
-            <div className="gradient-panel rounded-xl px-6 py-3">
-              <span className="text-white font-bold text-4xl md:text-6xl">Value Propositions</span>
-            </div>
+          <h2 className="text-4xl md:text-6xl font-bold mb-6">
+            Core <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary">Value Propositions</span>
           </h2>
-          
-          <p className="text-xl text-white/60 max-w-3xl mx-auto">
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             That make Dreamable the superior choice for data visualization
           </p>
         </div>
@@ -73,47 +56,51 @@ export const ValuePropsSection = () => {
           {valueProps.map((prop, index) => (
             <div 
               key={index}
-              className={`glass-panel rounded-3xl p-8 group hover:scale-105 transition-transform duration-200 flex flex-col h-full ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`}
+              className={`glass-panel rounded-3xl p-8 group hover:scale-105 transition-transform duration-200 ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`}
               style={{ animationDelay: `${0.2 + index * 0.2}s` }}
             >
               {/* Icon */}
-              <div className="mb-0">
+              <div className="mb-8">
                 <div className="relative">
-                  <div className={`w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] ${
+                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-6 transition-transform duration-300 ${
                     isVisible ? 'group-hover:scale-110 animate-zoom-in' : 'opacity-0'
                   }`} style={{ animationDelay: `${0.4 + index * 0.2}s` }}>
                     <prop.icon className="w-8 h-8 text-white" />
                   </div>
                   {/* Glow effect */}
-                  <div className="absolute inset-0 w-16 h-16 icon-panel opacity-20 blur-xl group-hover:opacity-40 transition-opacity duration-300"></div>
+                  <div className="absolute inset-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent opacity-20 blur-xl group-hover:opacity-40 transition-opacity duration-300"></div>
                 </div>
               </div>
 
               {/* Content */}
-              <div className="space-y-4 flex-1 flex flex-col">
-                <h3 className="text-2xl font-bold text-white mb-0">{prop.title}</h3>
-                <p className="text-white/60 leading-relaxed">
+              <div className="space-y-6">
+                <h3 className="text-2xl font-bold text-foreground mb-4">{prop.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">
                   {prop.description}
                 </p>
 
                 {/* Features List */}
-                <ul className="space-y-2 flex-1">
+                <ul className="space-y-3">
                   {prop.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-center text-sm text-white/60">
+                    <li key={featureIndex} className="flex items-center text-sm text-muted-foreground">
                       <div className="w-1.5 h-1.5 rounded-full bg-accent mr-3"></div>
                       {feature}
                     </li>
                   ))}
                 </ul>
 
-                {/* Learn More Button */}
-                <div className="pt-2 mt-auto flex justify-center">
-                  <button className="inline-flex items-center button-outline px-4 py-2 rounded-lg font-medium group/link">
+                {/* Learn More Link */}
+                <div className="pt-4">
+                  <a 
+                    href="#" 
+                    className="inline-flex items-center text-sm font-medium hover:text-accent transition-colors group/link"
+                  >
                     Learn more
                     <ArrowRight className="w-4 h-4 ml-2 group-hover/link:translate-x-1 transition-transform" />
-                  </button>
+                  </a>
                 </div>
               </div>
+
 
               {/* Hover effect overlay */}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary/5 to-secondary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none "></div>
@@ -123,8 +110,8 @@ export const ValuePropsSection = () => {
 
         {/* Bottom highlight */}
         <div className={`text-center mt-8 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`} style={{ animationDelay: '0.8s' }}>
-          <div className="inline-flex items-center glass-panel rounded-full hover:shadow-[0_0_10px_hsl(var(--primary)_/_0.6),_5px_5px_20px_0_hsl(var(--primary)_/_0.4),_0_0_0_1px_hsl(var(--primary)_/_0.2)] px-8 py-2">
-            <Brain className="w-6 h-6 text-blue-400 mr-3 animate-pulse-glow" />
+          <div className="inline-flex items-center glass-panel rounded-full hover:shadow-[0_0_10px_hsl(261_83%_58%_/_0.6),_5px_5px_20px_0_hsl(261_83%_58%_/_0.4),_0_0_0_1px_hsl(261_83%_58%_/_0.2)] px-8 py-2">
+            <Brain className="w-6 h-6 text-accent mr-3 animate-pulse-glow" />
             <span className="text-muted-foreground font-medium">Powered by advanced AI technology</span>
           </div>
         </div>

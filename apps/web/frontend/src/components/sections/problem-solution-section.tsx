@@ -1,4 +1,4 @@
-import { Check, X, Sparkles, Zap, Brain } from "lucide-react";
+import { Check, X, Sparkles, Zap } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 export const ProblemSolutionSection = () => {
@@ -61,35 +61,18 @@ export const ProblemSolutionSection = () => {
       </div>
 
       <div className="relative z-10 container mx-auto px-6">
-        {/* Header with icon */}
         <div className={`text-center mb-16 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
-          {/* Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
-              <img 
-                src="/dreamable-logo.png" 
-                alt="Dreamable Logo" 
-                className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
-              />
-            </div>
-          </div>
-          
-          {/* Title with gradient panel */}
-          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
-            <span className="text-white">Stop struggling with</span>
-            <div className="gradient-panel rounded-xl px-6 py-3">
-              <span className="text-white font-bold text-4xl md:text-6xl">outdated tools</span>
-            </div>
+          <h2 className="text-4xl md:text-6xl font-bold mb-6">
+            Stop struggling with <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary">outdated tools</span>
           </h2>
-          
-          <p className="text-xl text-white/60 max-w-3xl mx-auto">
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Compare Dreamable with traditional dashboard solutions and basic BI tools
           </p>
         </div>
 
         {/* Comparison Table */}
         <div className={`max-w-6xl mx-auto ${isVisible ? 'animate-zoom-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
-          <div className="glass-panel rounded-3xl overflow-hidden transition-transform duration-200">
+          <div className="glass-panel rounded-3xl overflow-hidden bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 transition-transform duration-200">
             {/* Headers */}
             <div className="grid grid-cols-4 border-b border-slate-700/50">
               <div className="p-6">
@@ -114,10 +97,10 @@ export const ProblemSolutionSection = () => {
               </div>
               <div className="p-6 text-center">
                 <div className="space-y-2">
-                  <h3 className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-500 text-lg">Dreamable</h3>
-                  <div className="inline-flex items-center px-3 py-1 rounded-full bg-gradient-to-r from-primary/20 to-blue-500/20 border border-primary">
-                    <Sparkles className="w-3 h-3 text-blue-500 mr-1" />
-                    <span className="text-sm text-blue-500 font-medium">Superior</span>
+                  <h3 className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 text-lg">Dreamable</h3>
+                  <div className="inline-flex items-center px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-400/30">
+                    <Sparkles className="w-3 h-3 text-purple-400 mr-1" />
+                    <span className="text-sm text-purple-400 font-medium">Superior</span>
                   </div>
                 </div>
               </div>
@@ -143,11 +126,11 @@ export const ProblemSolutionSection = () => {
                 </div>
                 <div className="p-4 text-center">
                   <div className="flex items-center justify-center space-x-2">
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-500 font-medium group-hover:from-blue-500 group-hover:to-blue-300 transition-all">
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 font-medium group-hover:from-blue-300 group-hover:to-purple-300 transition-all">
                       {row.dreamable}
                     </span>
                     {row.dreamableIcon && (
-                      <Sparkles className="w-4 h-4 text-blue-500 group-hover:text-blue-300 group-hover:scale-110 transition-all" />
+                      <Sparkles className="w-4 h-4 text-purple-400 group-hover:text-purple-300 group-hover:scale-110 transition-all" />
                     )}
                   </div>
                 </div>
@@ -158,10 +141,10 @@ export const ProblemSolutionSection = () => {
 
         {/* Bottom highlight */}
         <div className={`text-center mt-8 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`} style={{ animationDelay: '0.8s' }}>
-            <div className="inline-flex items-center glass-panel rounded-full px-8 py-2 hover:shadow-[0_0_10px_hsl(var(--primary)_/_0.6),_5px_5px_20px_0_hsl(var(--primary)_/_0.4),_0_0_0_1px_hsl(var(--primary)_/_0.2)] transition-all duration-300">
-              <Sparkles className="w-5 h-5 text-blue-400 mr-2 animate-pulse" />
-              <span className="text-slate-300">The choice is clear - experience the Dreamable difference</span>
-            </div>
+          <div className="inline-flex items-center glass-panel rounded-full px-8 py-2 bg-slate-800/50 border border-slate-700/50 hover:shadow-[0_0_10px_hsl(261_83%_58%_/_0.6),_5px_5px_20px_0_hsl(261_83%_58%_/_0.4),_0_0_0_1px_hsl(261_83%_58%_/_0.2)]">
+            <Sparkles className="w-5 h-5 text-purple-400 mr-2 animate-pulse" />
+            <span className="text-slate-300">The choice is clear - experience the Dreamable difference</span>
+          </div>
         </div>
       </div>
     </section>

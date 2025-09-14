@@ -1,4 +1,4 @@
-import { Upload, MessageCircle, Sparkles, Share, ArrowRight, Brain } from "lucide-react";
+import { Upload, MessageCircle, Sparkles, Share, ArrowRight } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 export const HowItWorksSection = () => {
@@ -49,28 +49,11 @@ export const HowItWorksSection = () => {
       </div>
 
       <div className="relative z-10 container mx-auto px-6">
-        {/* Header with icon */}
         <div className={`text-center mb-16 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
-          {/* Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
-              <img 
-                src="/dreamable-logo.png" 
-                alt="Dreamable Logo" 
-                className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
-              />
-            </div>
-          </div>
-          
-          {/* Title with gradient panel */}
-          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
-            <span className="text-white">How</span>
-            <div className="gradient-panel rounded-xl px-6 py-3">
-              <span className="text-white font-bold text-4xl md:text-6xl">It Works</span>
-            </div>
+          <h2 className="text-4xl md:text-6xl font-bold mb-6">
+            How <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary">It Works</span>
           </h2>
-          
-          <p className="text-xl text-white/60 max-w-3xl mx-auto">
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Four simple steps to transform your data into stunning visualizations
           </p>
         </div>
@@ -89,7 +72,7 @@ export const HowItWorksSection = () => {
               >
                 {/* Step Number */}
                 <div className="relative mb-8">
-                  <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto relative z-10">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center mx-auto mb-4 relative z-10">
                     <span className="text-2xl font-bold text-white">{step.number}</span>
                   </div>
                   

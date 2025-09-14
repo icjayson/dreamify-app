@@ -1,103 +1,38 @@
-import { useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CornerRightUp, Upload, Bot, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, Link, Mic, MicOff, FileText } from "lucide-react";
-import TextareaAutosize from 'react-textarea-autosize';
-import RecordingBarSidebar from './ui/recording-bar-sidebar';
-import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import { CornerRightUp, Upload, Bot, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign } from "lucide-react";
 
 import { Message } from "@/types/message";
 import { fileService, type UploadResponse } from "@/services/fileService";
 import { processingService, type ProcessingResponse } from "@/services/processingService";
 import { useToast } from "@/hooks/use-toast";
-import { useChatStore } from "@/stores/useChatStore";
-import { useFileStore } from "@/stores/useFileStore";
 
 interface ChatInterfaceProps {
+  messages: Message[];
+  onMessagesChange: (messages: Message[]) => void;
   onProcessedDataChange?: (data: any) => void;
 }
 
-const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
-  // Zustand stores
-  const {
-    inputValue,
-    isTyping,
-    messages,
-    uploadedFile,
-    dropdownOpen,
-    selectedDataSource,
-    isListening,
-    detectedLanguage,
-    setInputValue,
-    setIsTyping,
-    setMessages,
-    addMessage,
-    setUploadedFile,
-    setDropdownOpen,
-    setSelectedDataSource,
-    setIsListening,
-    setTranscript,
-    setDetectedLanguage,
-    sendMessage,
-    clearInput
-  } = useChatStore();
-  
-  const {
-    attachedCsvName,
-    attachedCsvSummary,
-    attachedCsvRaw,
-    uploadState,
-    setAttachedCsvName,
-    setAttachedCsvSummary,
-    setAttachedCsvRaw,
-    uploadFile,
-    removeFile,
-    parseCsvToSummary,
-    readCsvRawPreview,
-    clearAttachment,
-    validateClientFile
-  } = useFileStore();
-  
+const ChatInterface = ({ messages, onMessagesChange, onProcessedDataChange }: ChatInterfaceProps) => {
+  const [inputValue, setInputValue] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [attachedCsvName, setAttachedCsvName] = useState<string | null>(null);
+  const [attachedCsvSummary, setAttachedCsvSummary] = useState<string | null>(null);
+  const [attachedCsvRaw, setAttachedCsvRaw] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<{
+    fileID: string;
+    filename: string;
+    size: number;
+    ext: string;
+    status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
+    processedData?: any;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-
-  // Speech recognition hook
-  const {
-    isSupported: speechSupported,
-    startListening,
-    stopListening,
-    resetTranscript,
-    abortRecording,
-    completeRecording
-  } = useSpeechRecognition({
-    onResult: (result) => {
-      setInputValue(inputValue + (inputValue ? ' ' : '') + result);
-      resetTranscript();
-    },
-    onError: (error) => {
-      toast({
-        title: "Speech Recognition Error",
-        description: error,
-        variant: "destructive",
-      });
-    },
-    continuous: true
-  });
-
-  // Connectors array for data source dropdown
-  const connectors = [
-    { name: "Google Sheets", icon: "/google-sheet.png" },
-    { name: "GA4", icon: "/GA4.png" },
-    { name: "Meta", icon: "/meta.png" },
-    { name: "Airtable", icon: "/airtable.png" },
-    { name: "Stripe", icon: "/stripe.jpeg" },
-    { name: "Shopify", icon: "/shopify.png" },
-    { name: "HubSpot", icon: "/hubspot.jpeg" },
-    { name: "PostgreSQL", icon: "/PostgreSQL.png" }
-  ];
 
   const escapeHtml = (unsafe: string): string =>
     unsafe
@@ -134,19 +69,6 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      
-      if (dropdownOpen && !target.closest('.data-source-dropdown')) {
-        setDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [dropdownOpen]);
-
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
 
@@ -158,17 +80,15 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
       attachment: uploadedFile ? { kind: "csv", name: uploadedFile.filename } : undefined,
     };
 
-    addMessage(userMessage);
-    clearInput();
+    onMessagesChange([...messages, userMessage]);
+    setInputValue("");
     setIsTyping(true);
 
     // If there's an uploaded file, process it with the user's prompt
     if (uploadedFile && uploadedFile.status === 'uploaded') {
       try {
         // Start processing with user prompt
-        if (uploadedFile) {
-          setUploadedFile({ ...uploadedFile, status: 'processing' });
-        }
+        setUploadedFile(prev => prev ? { ...prev, status: 'processing' } : prev);
         
         console.log('Starting processing for fileID:', uploadedFile.fileID);
         const startResult = await processingService.runProcessing(uploadedFile.fileID);
@@ -183,13 +103,9 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
               console.log('Polling status update:', status);
 
               if (status.data?.status === 'completed') {
-                if (uploadedFile) {
-                  setUploadedFile({ ...uploadedFile, status: 'processed', processedData: status.data });
-                }
+                setUploadedFile(prev => prev ? { ...prev, status: 'processed', processedData: status.data } : prev);
               } else if (status.data?.status === 'error') {
-                if (uploadedFile) {
-                  setUploadedFile({ ...uploadedFile, status: 'error' });
-                }
+                setUploadedFile(prev => prev ? { ...prev, status: 'error' } : prev);
               }
             },
             60, // max attempts (60 seconds)
@@ -260,9 +176,9 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
       let assistantContent = "";
 
       // Establish a stable base array to avoid jittery re-renders
-      const baseMessages = [...messages];
+      const baseMessages = [...messages, { id: Date.now().toString(), role: "user" as const, content: userPrompt, timestamp: new Date() }];
       // Add placeholder assistant message once
-      setMessages([
+      onMessagesChange([
         ...baseMessages,
         {
           id: assistantId,
@@ -288,7 +204,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
             if (event.message && event.message.content) {
               assistantContent += event.message.content;
               // Update the last assistant message progressively based on the stable base
-              setMessages([
+              onMessagesChange([
                 ...baseMessages,
                 {
                   id: assistantId,
@@ -313,7 +229,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
         content: "There was an error contacting the local model. Ensure Ollama is running on 127.0.0.1:11434 and the model qwen2.5-coder:7b is pulled (ollama pull qwen2.5-coder:7b).",
         timestamp: new Date(),
       };
-      setMessages([...messages, aiMessage]);
+      onMessagesChange([...messages, { id: Date.now().toString(), role: "user", content: userPrompt, timestamp: new Date() }, aiMessage]);
     } finally {
       setIsTyping(false);
     }
@@ -364,48 +280,92 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
     fileInputRef.current?.click();
   };
 
-  const handleDataSourceSelect = (source: string) => {
-    setSelectedDataSource(source);
-    setDropdownOpen(false);
-    console.log('Data source selected:', source);
+  const validateClientFile = (file: File): string | null => {
+    const sizeLimit = 50 * 1024 * 1024;
+    if (file.size > sizeLimit) return "File too large. Maximum size: 50MB";
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const allowed = ["csv","xlsx","xls","json"];
+    if (!ext || !allowed.includes(ext)) return "Invalid file type. Supported: CSV, XLSX, XLS, JSON";
+    return null;
   };
-
-  const handleMicClick = () => {
-    if (!speechSupported) {
-      toast({
-        title: "Not Supported",
-        description: "Speech recognition is not supported in your browser",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
-    }
-  };
-
-  const handleRecordingCancel = () => {
-    abortRecording();
-  };
-
-  const handleRecordingConfirm = () => {
-    completeRecording();
-    resetTranscript();
-  };
-
 
   const removeUploadedFile = async (fileID: string) => {
-    await removeFile(fileID);
+    try {
+      await fileService.deleteFile(fileID);
+    } catch (_e) {
+      // best-effort; ignore
+    }
     setUploadedFile(null);
   };
 
+  const parseCsvToSummary = async (file: File): Promise<string> => {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    const maxPreviewRows = 20;
+    const previewLines = lines.slice(0, maxPreviewRows + 1);
+    const splitCsvLine = (line: string): string[] => {
+      const result: string[] = [];
+      let curr = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            curr += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === ',' && !inQuotes) {
+          result.push(curr);
+          curr = "";
+        } else {
+          curr += ch;
+        }
+      }
+      result.push(curr);
+      return result.map(s => s.trim());
+    };
 
+    const rows = previewLines.map(splitCsvLine);
+    const header = rows[0] || [];
+    const sampleRows = rows.slice(1);
+    const totalRows = lines.length > 0 ? lines.length - 1 : 0;
+
+    const sampleRendered = sampleRows
+      .slice(0, maxPreviewRows)
+      .map(r => r.join(" | "))
+      .join("\n");
+
+    const summary = [
+      "[CSV SUMMARY]",
+      `File: ${file.name}`,
+      `Total rows (excluding header): ${totalRows}`,
+      `Columns (${header.length}): ${header.join(", ")}`,
+      "Sample (first rows):",
+      sampleRendered,
+    ].join("\n");
+
+    return summary;
+  };
+
+  const readCsvRawPreview = async (file: File): Promise<string> => {
+    const maxChars = 200_000;
+    const text = await file.text();
+    return text.slice(0, maxChars);
+  };
+
+  const clearAttachment = () => {
+    setAttachedCsvName(null);
+    setAttachedCsvSummary(null);
+    setAttachedCsvRaw(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const suggestedPrompts = [
-    { text: "Upload my sales data and create dashboard", icon: Database },
+    { text: "Upload my sales data and create MRR dashboard", icon: Database },
     { text: "Show revenue trends with smooth animations", icon: TrendingUp },
     { text: "Create conversion funnel visualization", icon: BarChart3 },
     { text: "Build customer growth dashboard", icon: Users },
@@ -447,7 +407,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                 )}
               </div>
               
-              <div className={`p-3 glass-panel rounded-2xl text-sm whitespace-pre-wrap break-words ${
+              <Card className={`p-3 glass-panel text-sm whitespace-pre-wrap break-words ${
                 message.role === "user" 
                   ? "bg-primary/10 border-primary/20" 
                   : "bg-card/80 border-border/50"
@@ -464,7 +424,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                 <span className="text-xs text-muted-foreground mt-1 block">
                   {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
-              </div>
+              </Card>
             </div>
           </div>
         ))}
@@ -494,18 +454,19 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
 
       {/* Suggested Prompts */}
       {messages.length <= 1 && (
-        <div className="mx-2">
+        <div className="px-4 pb-3">
           <p className="text-xs text-muted-foreground mb-2">Quick starts:</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 gap-1">
             {suggestedPrompts.slice(0, 3).map((prompt, index) => (
-              <button
+              <Badge
                 key={index}
+                variant="secondary"
+                className="cursor-pointer hover:bg-primary/20 hover:text-primary transition-colors p-2 justify-start h-auto text-xs"
                 onClick={() => setInputValue(prompt.text)}
-                className="px-2 py-1 text-xs bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all duration-200 flex items-center gap-1"
               >
-                <prompt.icon className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{prompt.text}</span>
-              </button>
+                <prompt.icon className="w-3 h-3 mr-1 flex-shrink-0" />
+                <span className="text-left">{prompt.text}</span>
+              </Badge>
             ))}
           </div>
         </div>
@@ -513,162 +474,66 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
 
       {/* File Chip Area */}
       {uploadedFile && (
-        <div className="mx-2 mt-4 mb-2">
-          <div className="glass-panel rounded-xl border border-border/30 py-2 px-4">
-            <div className="flex items-center justify-between gap-2">
-              {/* Left side - File info */}
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                {/* File Icon */}
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-lg bg-background/50 border border-border/30 flex items-center justify-center">
-                    <FileText className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                
-                {/* File details */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-white font-medium text-xs truncate">
-                    {uploadedFile.filename}
-                  </div>
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <span>{(uploadedFile.size/1024/1024).toFixed(1)}MB</span>
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        uploadedFile.status === 'uploading' ? 'bg-yellow-500' :
-                        uploadedFile.status === 'processing' ? 'bg-blue-500' :
-                        uploadedFile.status === 'processed' ? 'bg-green-500' :
-                        uploadedFile.status === 'error' ? 'bg-red-500' : 'bg-gray-500'
-                      }`}></div>
-                      <span className="capitalize truncate">
-                        {uploadedFile.status === 'uploading' ? 'Uploading' :
-                         uploadedFile.status === 'processing' ? 'Processing' :
-                         uploadedFile.status === 'processed' ? 'Processed' :
-                         uploadedFile.status === 'error' ? 'Error' : 'Ready'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Right side - Actions */}
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <Button
-                  onClick={() => window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank')}
-                  disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
-                  className="button-gradient px-2 py-0 text-xs disabled:opacity-50 whitespace-nowrap"
-                >
-                  Preview
-                </Button>
-                <button
-                  onClick={() => removeUploadedFile(uploadedFile.fileID)}
-                  className="text-[10px] text-muted-foreground hover:text-white underline transition-colors whitespace-nowrap"
-                >
-                  Remove
-                </button>
-              </div>
+        <div className="px-4 pb-2">
+          <Card className="p-2 flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{uploadedFile.ext.toUpperCase()}</Badge>
+              <span className="font-medium">{uploadedFile.filename}</span>
+              <span className="text-muted-foreground">{(uploadedFile.size/1024/1024).toFixed(2)} MB</span>
+              {uploadedFile.status === 'uploading' && <span className="text-muted-foreground">Uploading…</span>}
+              {uploadedFile.status === 'processing' && <span className="text-blue-500">Processing…</span>}
+              {uploadedFile.status === 'processed' && <span className="text-green-500">Processed</span>}
+              {uploadedFile.status === 'error' && <span className="text-red-500">Error</span>}
             </div>
-          </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank')}
+                disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
+              >
+                Preview
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => removeUploadedFile(uploadedFile.fileID)}
+              >
+                Remove
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
 
       {/* Input Area */}
-      <div className="m-2 bg-card/30">
-        {/* Main Chat Input with Hero Section Styling */}
-        <div className="w-full min-h-[60px] text-sm p-4 glass-panel rounded-2xl resize-none transition-all duration-300">
-          {/* Textarea Row */}
-          <div className="relative mb-3">
-            <TextareaAutosize
-              minRows={2}
-              maxRows={6}
+      <div className="p-4 border-t border-border/50 bg-card/30">
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder={isListening ? 'Listening...' : "Describe your dashboard..."}
-              className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
+              onKeyPress={handleKeyPress}
+              placeholder="Describe your dashboard..."
+              className="pr-10 h-9 bg-background/50 border-border/50 focus:border-primary text-sm"
             />
+            <Button
+              onClick={handleFileUpload}
+              variant="ghost"
+              size="sm"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 hover:bg-primary/20"
+            >
+              <Upload className="w-3 h-3" />
+            </Button>
           </div>
           
-          {/* Recording Bar - Positioned between textarea and buttons */}
-          <RecordingBarSidebar 
-            isVisible={isListening}
-            detectedLanguage={detectedLanguage}
-            onCancel={handleRecordingCancel}
-            onConfirm={handleRecordingConfirm}
-          />
-          
-          {/* Buttons Row */}
-          <div className="flex items-center justify-between">
-            {/* Left side - File Upload and Data Connector Buttons */}
-            <div className="flex items-center gap-2">
-              {/* Upload Button - Icon only */}
-              <button
-                onClick={handleFileUpload}
-                className="button-outline p-2 flex items-center justify-center"
-              >
-                <Upload className="w-4 h-4" />
-              </button>
-
-              {/* Data Connector Dropup */}
-              <div className="relative data-source-dropdown">
-                <button
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="button-outline p-2 flex items-center justify-center gap-1"
-                  aria-expanded={dropdownOpen}
-                  aria-haspopup="true"
-                  aria-label="Connect data source"
-                >
-                  <Link className="w-4 h-4" />
-                  <ChevronUp className={`w-3 h-3 text-white/60 ${
-                    dropdownOpen ? 'rotate-180' : ''
-                  }`} />
-                </button>
-                
-                {dropdownOpen && (
-                  <div className="absolute bottom-full left-0 mb-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
-                    <div className="py-1">
-                      {connectors.map((connector) => (
-                        <button
-                          key={connector.name}
-                          onClick={() => handleDataSourceSelect(connector.name)}
-                          className="w-full px-3 py-2 text-left text-sm flex items-center gap-2"
-                        >
-                          <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
-                          {connector.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Right side - Mic and Send Buttons */}
-            <div className="flex gap-2">
-              <button
-                onClick={handleMicClick}
-                className={`p-2 flex items-center justify-center ${
-                  isListening ? 'text-red-500 animate-pulse' : 'text-white hover:text-primary'
-                }`}
-                aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
-                disabled={!speechSupported}
-              >
-                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
-              <Button
-                onClick={() => handleSend()}
-                disabled={!inputValue.trim() || isTyping}
-                className="button-gradient p-3 disabled:opacity-50"
-              >
-                <CornerRightUp className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
+          <Button
+            onClick={() => handleSend()}
+            className="btn-primary-gradient h-9 px-3"
+            disabled={!inputValue.trim() || isTyping}
+          >
+            <CornerRightUp className="w-3 h-3" />
+          </Button>
         </div>
 
         <input
@@ -685,21 +550,12 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
               return;
             }
             try {
-              // Create new file object for upload
-              const newFile = { 
-                fileID: 'pending', 
-                filename: file.name, 
-                size: file.size, 
-                ext: (file.name.split('.').pop() || '').toLowerCase(), 
-                status: 'uploading' as const 
-              };
-              
               // Replace behavior: if an uploaded file exists, we'll delete it after new upload succeeds
-              setUploadedFile(newFile);
+              setUploadedFile({ fileID: 'pending', filename: file.name, size: file.size, ext: (file.name.split('.').pop() || '').toLowerCase(), status: 'uploading' });
 
               const res: UploadResponse = await fileService.uploadFile(file);
               if (!res.success || !res.fileID || !res.ext || res.size === undefined || !res.filename) {
-                setUploadedFile({ ...newFile, status: 'error' });
+                setUploadedFile(prev => prev ? { ...prev, status: 'error' } : prev);
                 toast({ title: "Upload failed", description: res.error || 'Upload failed', variant: "destructive" });
                 return;
               }
@@ -712,13 +568,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
               setUploadedFile({ fileID: res.fileID, filename: res.filename, size: res.size, ext: res.ext, status: 'uploaded' });
               toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
             } catch (_e) {
-              setUploadedFile({ 
-                fileID: 'error', 
-                filename: file.name, 
-                size: file.size, 
-                ext: (file.name.split('.').pop() || '').toLowerCase(), 
-                status: 'error' 
-              });
+              setUploadedFile(prev => prev ? { ...prev, status: 'error' } : prev);
               toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
             }
           }}

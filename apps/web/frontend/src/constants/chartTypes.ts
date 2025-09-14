@@ -12,6 +12,7 @@ export const AVAILABLE_CHART_TYPES: ChartType[] = [
   ChartType.AREA,
   ChartType.SCATTER,
   ChartType.DONUT,
+  ChartType.COMPOSED,
   ChartType.METRIC,
   ChartType.TABLE,
   ChartType.GEOGRAPHIC,
@@ -26,6 +27,7 @@ export const CHART_TYPE_DISPLAY_NAMES: Record<ChartType, string> = {
   [ChartType.AREA]: 'Area Chart',
   [ChartType.SCATTER]: 'Scatter Plot',
   [ChartType.DONUT]: 'Donut Chart',
+  [ChartType.COMPOSED]: 'Composed Chart',
   [ChartType.METRIC]: 'Metric Card',
   [ChartType.TABLE]: 'Data Table',
   [ChartType.GEOGRAPHIC]: 'Geographic Chart',
@@ -40,6 +42,7 @@ export const CHART_TYPE_DESCRIPTIONS: Record<ChartType, string> = {
   [ChartType.AREA]: 'Display trends with filled areas under the line',
   [ChartType.SCATTER]: 'Show relationships between two variables',
   [ChartType.DONUT]: 'Show proportional data with a hollow center',
+  [ChartType.COMPOSED]: 'Combine multiple chart types in a single visualization',
   [ChartType.METRIC]: 'Display key performance indicators with trends',
   [ChartType.TABLE]: 'Present structured data in rows and columns',
   [ChartType.GEOGRAPHIC]: 'Visualize location-based data and distributions',
@@ -98,6 +101,12 @@ export const CHART_TYPE_VALIDATION_RULES: Record<ChartType, {
     requiredFields: ['label', 'value'],
     optionalFields: ['metadata']
   },
+  [ChartType.COMPOSED]: {
+    minDataPoints: 2,
+    maxDataPoints: 1000,
+    requiredFields: ['label', 'value'],
+    optionalFields: ['metadata', 'chartType']
+  },
   [ChartType.METRIC]: {
     minDataPoints: 1,
     maxDataPoints: 1,
@@ -132,6 +141,7 @@ export const CHART_TYPE_ICONS: Record<ChartType, string> = {
   [ChartType.AREA]: 'AreaChart',
   [ChartType.SCATTER]: 'Scatter',
   [ChartType.DONUT]: 'Circle',
+  [ChartType.COMPOSED]: 'Layers',
   [ChartType.METRIC]: 'Gauge',
   [ChartType.TABLE]: 'Table',
   [ChartType.GEOGRAPHIC]: 'Map',
@@ -146,6 +156,7 @@ export const CHART_TYPE_COLORS: Record<ChartType, string> = {
   [ChartType.AREA]: 'hsl(var(--primary))',
   [ChartType.SCATTER]: 'hsl(var(--secondary))',
   [ChartType.DONUT]: 'hsl(var(--accent))',
+  [ChartType.COMPOSED]: 'hsl(var(--primary))',
   [ChartType.METRIC]: 'hsl(var(--success))',
   [ChartType.TABLE]: 'hsl(var(--muted-foreground))',
   [ChartType.GEOGRAPHIC]: 'hsl(var(--primary))',
@@ -204,6 +215,15 @@ export const DEFAULT_CHART_CONFIGS: Record<ChartType, Record<string, any>> = {
     responsive: true,
     maintainAspectRatio: true,
     cutout: '50%'
+  },
+  [ChartType.COMPOSED]: {
+    animation: true,
+    showGrid: true,
+    showLegend: true,
+    showTooltip: true,
+    responsive: true,
+    maintainAspectRatio: false,
+    combineCharts: true
   },
   [ChartType.METRIC]: {
     animation: true,

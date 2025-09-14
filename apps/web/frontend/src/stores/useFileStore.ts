@@ -139,7 +139,7 @@ export const useFileStore = create<FileState>((set, get) => ({
   processFile: async (fileID: string) => {
     try {
       const startResult = await processingService.runProcessing(fileID);
-      if (startResult.success && startResult.status === 'processing') {
+      if (startResult.success && startResult.data?.status === 'processing') {
         const finalResult = await processingService.pollProcessingStatus(
           fileID,
           (status) => {
@@ -149,7 +149,7 @@ export const useFileStore = create<FileState>((set, get) => ({
           1000 // 1 second intervals
         );
         
-        if (finalResult.success && finalResult.status === 'completed') {
+        if (finalResult.success && finalResult.data?.status === 'completed') {
           set((state) => ({
             uploadState: {
               ...state.uploadState,

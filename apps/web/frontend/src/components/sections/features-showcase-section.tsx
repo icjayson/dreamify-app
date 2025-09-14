@@ -1,4 +1,4 @@
-import { MessageCircle, Sparkles, Download, Play, ArrowRight } from "lucide-react";
+import { MessageCircle, Sparkles, Download, Play, ArrowRight, Brain } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 export const FeaturesShowcaseSection = () => {
@@ -60,11 +60,28 @@ export const FeaturesShowcaseSection = () => {
       </div>
 
       <div className="relative z-10 container mx-auto px-6">
+        {/* Header with icon */}
         <div className={`text-center mb-20 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
-          <h2 className="text-4xl md:text-6xl font-bold mb-6">
-            Core <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary">Features</span>
+          {/* Icon */}
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+              <img 
+                src="/dreamable-logo.png" 
+                alt="Dreamable Logo" 
+                className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
+              />
+            </div>
+          </div>
+          
+          {/* Title with gradient panel */}
+          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
+            <span className="text-white">Core</span>
+            <div className="gradient-panel rounded-xl px-6 py-3">
+              <span className="text-white font-bold text-4xl md:text-6xl">Features</span>
+            </div>
           </h2>
-          <p className="text-xl text-muted-foreground mx-auto">
+          
+          <p className="text-xl text-white/60 mx-auto">
             Discover the three revolutionary capabilities that make Dreamable the future of data visualization
           </p>
         </div>
@@ -83,7 +100,7 @@ export const FeaturesShowcaseSection = () => {
               {/* Content */}
               <div className={`space-y-8 ${feature.alignment === 'right' ? 'md:col-start-2' : ''}`}>
                 <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                  <div className="w-16 h-16 icon-panel rounded-lg flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))]">
                     <feature.icon className="w-8 h-8 text-white" />
                   </div>
                   <div className="w-full h-px bg-gradient-to-r from-primary to-transparent"></div>
@@ -118,7 +135,7 @@ export const FeaturesShowcaseSection = () => {
                         >
                           <div className={`max-w-xs px-4 py-3 rounded-2xl ${
                             message.isUser 
-                              ? 'btn-primary-gradient text-white' 
+                              ? 'button-gradient text-white' 
                               : 'glass-panel border border-border/30 text-muted-foreground'
                           }`}>
                             {message.user}

@@ -1,9 +1,28 @@
-import { HeroButton } from "@/components/ui/hero-button";
-import { Sparkles, Calendar, ArrowRight } from "lucide-react";
+import { Sparkles, Calendar, ArrowRight, Clock, Award, Users } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 export const CTASection = () => {
   const { isVisible, ref } = useIntersectionObserver({ threshold: 0.1 });
+  const stats = [
+    {
+      icon: Clock,
+      value: "5 min",
+      label: "Average creation time",
+      description: "From data upload to stunning dashboard"
+    },
+    {
+      icon: Award,
+      value: "Superior",
+      label: "Visual quality",
+      description: "Motion-rich, professional aesthetics"
+    },
+    {
+      icon: Users,
+      value: "Zero",
+      label: "Technical setup",
+      description: "No coding, configuration, or training needed"
+    }
+  ];
 
   return (
     <section className="py-24 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
@@ -26,53 +45,76 @@ export const CTASection = () => {
             </div>
           </div>
 
+          {/* Header with icon */}
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+              <img 
+                src="/dreamable-logo.png" 
+                alt="Dreamable Logo" 
+                className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
+              />
+            </div>
+          </div>
+          
           {/* Main headline */}
-          <h2 className={`text-5xl md:text-7xl font-bold mb-8 leading-tight ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
-            Ready to <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary">transform</span>
-            <br />your data storytelling?
+          <h2 className={`text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
+            <span className="text-white">Ready to</span>
+            <div className="gradient-panel rounded-xl px-6 py-3">
+              <span className="text-white font-bold text-4xl md:text-6xl">transform</span>
+            </div>
+          </h2>
+          
+          <h2 className={`text-3xl md:text-5xl font-bold mb-8 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
+            <span className="text-white">your data storytelling?</span>
           </h2>
 
-          <p className={`text-2xl text-muted-foreground max-w-3xl mx-auto mb-12 leading-relaxed ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.4s' }}>
+          <p className={`text-xl text-muted-foreground max-w-3xl mx-auto mb-12 leading-relaxed ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.4s' }}>
             Start creating <span className="text-accent font-semibold">stunning, animated dashboards</span> in minutes. 
             Join thousands of professionals who've already discovered the Dreamable difference.
           </p>
 
-          {/* Key benefits */}
-          <div className={`grid md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-16 ${isVisible ? 'animate-zoom-in' : 'opacity-0'}`} style={{ animationDelay: '0.6s' }}>
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-white">5</span>
+        {/* Stats Grid */}
+        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto mb-16">
+          {stats.map((stat, index) => (
+            <div 
+              key={index}
+              className={`text-center glass-panel rounded-3xl p-8 group hover:scale-105 transition-transform duration-200 ${isVisible ? 'animate-zoom-in' : 'opacity-0'}`}
+              style={{ animationDelay: `${index * 0.2}s` }}
+            >
+              {/* Icon */}
+              <div className="mb-8">
+                <div className="relative">
+                  <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-6">
+                    <stat.icon className="w-8 h-8 text-white" />
+                  </div>
+                  {/* Glow effect */}
+                  <div className="absolute inset-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent opacity-20 blur-xl group-hover:opacity-80 transition-opacity duration-300 mx-auto"></div>
+                </div>
               </div>
-              <div className="text-foreground font-semibold">Minutes to Results</div>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center mx-auto mb-4">
-                <Sparkles className="w-8 h-8 text-white" />
+              
+              <div className="space-y-4">
+                <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">{stat.value}</div>
+                <div className="text-xl font-semibold text-foreground">{stat.label}</div>
+                <div className="text-muted-foreground">{stat.description}</div>
               </div>
-              <div className="text-foreground font-semibold">AI-Powered Magic</div>
             </div>
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center mx-auto mb-4">
-                <span className="text-xl font-bold text-white">0</span>
-              </div>
-              <div className="text-foreground font-semibold">Technical Setup</div>
-            </div>
-          </div>
+          ))}
+        </div>
 
           {/* CTA Buttons */}
-          <div className={`flex flex-col sm:flex-row gap-6 justify-center mb-12 ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`} style={{ animationDelay: '0.8s' }}>
-            <HeroButton variant="primary" size="lg" className="group text-lg px-12 py-5">
+          <div className={`flex flex-col sm:flex-row gap-8 justify-center mb-12 ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`} style={{ animationDelay: '0.8s' }}>
+            <button className="button-gradient group text-xl px-8 py-4 rounded-2xl flex items-center justify-center">
               Get Started Free
               <Sparkles className="ml-3 w-6 h-6 group-hover:animate-spin transition-transform" />
-            </HeroButton>
-            <HeroButton variant="secondary" size="lg" className="group text-lg px-12 py-5">
+            </button>
+            <button className="button-outline group text-xl px-8 py-4 rounded-2xl flex items-center justify-center">
               <Calendar className="mr-3 w-6 h-6 group-hover:scale-110 transition-transform" />
               Book a Demo
-            </HeroButton>
+            </button>
           </div>
 
           {/* Trust indicators */}
-          <div className={`glass-panel rounded-2xl p-8 max-w-3xl mx-auto hover:scale-105 transition-transform duration-200 ${isVisible ? 'animate-slide-in-right' : 'opacity-0'}`} style={{ animationDelay: '1s' }}>
+          <div className={`glass-panel rounded-2xl py-2 max-w-2xl mx-auto hover:scale-105 transition-transform hover:shadow-[0_0_10px_hsl(var(--primary)_/_0.6),_5px_5px_20px_0_hsl(var(--primary)_/_0.4),_0_0_0_1px_hsl(var(--primary)_/_0.2)] duration-200 ${isVisible ? 'animate-slide-in-right' : 'opacity-0'}`} style={{ animationDelay: '1s' }}>
             <div className="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-8">
               <div className="flex items-center">
                 <div className="w-3 h-3 rounded-full bg-green-500 mr-3 animate-pulse"></div>

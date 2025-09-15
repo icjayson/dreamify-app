@@ -243,7 +243,7 @@ class LLMService:
         
         # Generate styling recommendations using the analyzer
         recommendations = chart_styling_analyzer.generate_styling_recommendations(
-            data=mock_data,z
+            data=mock_data,
             chart_type="line",  # Default chart type
             metadata=file_metadata
         )

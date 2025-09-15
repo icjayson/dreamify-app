@@ -50,10 +50,13 @@ const DashboardPreview = ({
             height: 2
           },
           component_config: {
+            id: metric.id || `metric_${index + 1}`,
             title: metric.title || 'Metric',
             value: metric.value || '0',
             change: metric.change || '0%',
-            trend: metric.trend || 'NEUTRAL'
+            trend: typeof metric.trend === 'string'
+              ? (metric.trend || 'stable').toString().toLowerCase()
+              : 'stable'
           }
         });
       });
@@ -81,6 +84,7 @@ const DashboardPreview = ({
             height: 4
           },
           component_config: {
+            id: chart.id || `chart_${index + 1}`,
             type: chart.type || 'line',
             title: chart.title || 'Chart',
             description: chart.description || '',
@@ -105,6 +109,7 @@ const DashboardPreview = ({
             height: 3
           },
           component_config: {
+            id: table.id || `table_${index + 1}`,
             title: table.title || 'Table',
             columns: table.columns || [],
             data: table.data || []

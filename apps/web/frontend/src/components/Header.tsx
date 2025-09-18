@@ -2,9 +2,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Flame, Bell, LogIn } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const Header = () => {
-
+  const navigate = useNavigate();
   return (
     <header className="fixed top-0 left-0 right-0 z-50 w-full">
       <div className="flex h-14 items-center justify-between px-6 glass-panel border border-border/30 rounded-2xl max-w-6xl mx-auto mt-4">
@@ -63,7 +64,7 @@ const Header = () => {
           </div>
 
           {/* Login button */}
-          <button className="button-gradient px-4 py-2 text-white font-medium transition-all duration-200 flex items-center gap-2 rounded-xl">
+          <button onClick={() => navigate("/login")} className="button-gradient px-4 py-2 text-white font-medium transition-all duration-200 flex items-center gap-2 rounded-xl">
             Login
             <LogIn className="w-4 h-4" />
           </button>

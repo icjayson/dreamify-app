@@ -109,7 +109,6 @@
   .glass-panel {
     background: hsl(var(--primary) / 0.1);
     outline: 1px solid rgba(255, 255, 255, 0.2);
-    border-image: linear-gradient(45deg, transparent, transparent, white, transparent, transparent) 1;
     @apply backdrop-blur-xl;
   }
 

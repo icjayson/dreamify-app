@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CornerRightUp, Upload, Bot, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, Link, Mic, MicOff, FileText } from "lucide-react";
+import { CONNECTORS } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from './ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
@@ -98,17 +99,19 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
     setDetectedLanguage(speechDetectedLanguage);
   }, [speechDetectedLanguage, setDetectedLanguage]);
 
+  // (removed store token listener)
+
+  // Also listen to a global event to open the file picker directly
+  useEffect(() => {
+    const handler = () => {
+      fileInputRef.current?.click();
+    };
+    window.addEventListener('nyx:open-file-picker', handler as EventListener);
+    return () => window.removeEventListener('nyx:open-file-picker', handler as EventListener);
+  }, []);
+
   // Connectors array for data source dropdown
-  const connectors = [
-    { name: "Google Sheets", icon: "/google-sheet.png" },
-    { name: "GA4", icon: "/GA4.png" },
-    { name: "Meta", icon: "/meta.png" },
-    { name: "Airtable", icon: "/airtable.png" },
-    { name: "Stripe", icon: "/stripe.jpeg" },
-    { name: "Shopify", icon: "/shopify.png" },
-    { name: "HubSpot", icon: "/hubspot.jpeg" },
-    { name: "PostgreSQL", icon: "/PostgreSQL.png" }
-  ];
+  // Shared connectors list imported above
 
   const escapeHtml = (unsafe: string): string =>
     unsafe
@@ -266,7 +269,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
       <div className="py-2">
         <div className="flex items-center gap-2 mb-1 px-2 ">
           <Bot className="w-5 h-5 text-accent" />
-          <span className="font-medium text-sm">Dreamable AI Agent</span>
+          <span className="font-medium text-sm">Nyx</span>
         </div>
         <p className="text-xs text-muted-foreground px-2">
           Describe dashboard vision and I'll build it with beautiful animations
@@ -479,7 +482,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                 {dropdownOpen && (
                   <div className="absolute bottom-full left-0 mb-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
                     <div className="py-1">
-                      {connectors.map((connector) => (
+                      {CONNECTORS.map((connector) => (
                         <button
                           key={connector.name}
                           onClick={() => handleDataSourceSelect(connector.name)}

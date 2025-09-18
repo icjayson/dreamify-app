@@ -157,7 +157,7 @@ const initialMessages: Message[] = [
   {
     id: "1",
     role: "assistant",
-    content: "Hi! I'm Vibe, your analytics assistant. Upload your data and let's create a stunning dashboard with motion in minutes! What would you like to visualize today?",
+    content: "Hi! I'm Nyx, your analytics intern. Upload data, visualise motion-rich dashboard in seconds!",
     timestamp: new Date()
   }
 ];

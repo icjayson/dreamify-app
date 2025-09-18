@@ -9,6 +9,8 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/Login.tsx";
 import Signup from "./pages/Signup.tsx";
 import WorkspacePage from "./pages/workspace";
+import ProjectPage from "./pages/project";
+import PreviewPage from "./pages/preview.tsx";
 import { useChatStore } from "./stores/useChatStore";
 
 const queryClient = new QueryClient();
@@ -28,6 +30,8 @@ const AppContent = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/workspace" element={<WorkspacePage />} />
+        <Route path="/workspace/project" element={<ProjectPage />} />
+        <Route path="/workspace/project/preview" element={<PreviewPage />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

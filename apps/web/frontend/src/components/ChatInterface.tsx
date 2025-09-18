@@ -261,21 +261,20 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
   ];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0 bg-muted">
       {/* Chat Header */}
-      <div className="p-4 border-b border-border/50">
-        <div className="flex items-center gap-2 mb-2">
+      <div className="py-2">
+        <div className="flex items-center gap-2 mb-1 px-2 ">
           <Bot className="w-5 h-5 text-accent" />
-          <span className="font-medium">AI Assistant</span>
-          <Badge variant="outline" className="ml-auto text-xs">Online</Badge>
+          <span className="font-medium text-sm">Dreamable AI Agent</span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Describe your dashboard vision and I'll build it with beautiful animations
+        <p className="text-xs text-muted-foreground px-2">
+          Describe dashboard vision and I'll build it with beautiful animations
         </p>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -341,9 +340,9 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
 
       {/* Suggested Prompts */}
       {messages.length <= 1 && (
-        <div className="mx-2">
-          <p className="text-xs text-muted-foreground mb-2">Quick starts:</p>
-          <div className="flex flex-wrap gap-2">
+        <div className="mt-auto">
+          <p className="text-xs mx-2 text-muted-foreground mb-2">Quick starts:</p>
+          <div className="flex flex-wrap gap-2 mx-2">
             {suggestedPrompts.slice(0, 3).map((prompt, index) => (
               <button
                 key={index}
@@ -358,69 +357,70 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
         </div>
       )}
 
-      {/* File Chip Area */}
-      {uploadedFile && (
-        <div className="mx-2 mt-4 mb-2">
-          <div className="glass-panel rounded-xl border border-border/30 py-2 px-4">
-            <div className="flex items-center justify-between gap-2">
-              {/* Left side - File info */}
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                {/* File Icon */}
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-lg bg-background/50 border border-border/30 flex items-center justify-center">
-                    <FileText className="w-4 h-4 text-white" />
+      {/* Bottom Area: File chip + Input */}
+      <div className="mt-auto">
+        {uploadedFile && (
+          <div className="mx-2 mt-4 mb-2">
+            <div className="glass-panel rounded-xl border border-border/30 py-2 px-4">
+              <div className="flex items-center justify-between gap-2">
+                {/* Left side - File info */}
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {/* File Icon */}
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-background/50 border border-border/30 flex items-center justify-center">
+                      <FileText className="w-4 h-4 text-white" />
+                    </div>
                   </div>
-                </div>
-                
-                {/* File details */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-white font-medium text-xs truncate">
-                    {uploadedFile.filename}
-                  </div>
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <span>{(uploadedFile.size/1024/1024).toFixed(1)}MB</span>
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        uploadedFile.status === 'uploading' ? 'bg-yellow-500' :
-                        uploadedFile.status === 'processing' ? 'bg-blue-500' :
-                        uploadedFile.status === 'processed' ? 'bg-green-500' :
-                        uploadedFile.status === 'error' ? 'bg-red-500' : 'bg-gray-500'
-                      }`}></div>
-                      <span className="capitalize truncate">
-                        {uploadedFile.status === 'uploading' ? 'Uploading' :
-                         uploadedFile.status === 'processing' ? 'Processing' :
-                         uploadedFile.status === 'processed' ? 'Processed' :
-                         uploadedFile.status === 'error' ? 'Error' : 'Ready'}
-                      </span>
+                  
+                  {/* File details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white font-medium text-xs truncate">
+                      {uploadedFile.filename}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span>{(uploadedFile.size/1024/1024).toFixed(1)}MB</span>
+                      <span>•</span>
+                      <div className="flex items-center gap-1">
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          uploadedFile.status === 'uploading' ? 'bg-yellow-500' :
+                          uploadedFile.status === 'processing' ? 'bg-blue-500' :
+                          uploadedFile.status === 'processed' ? 'bg-green-500' :
+                          uploadedFile.status === 'error' ? 'bg-red-500' : 'bg-gray-500'
+                        }`}></div>
+                        <span className="capitalize truncate">
+                          {uploadedFile.status === 'uploading' ? 'Uploading' :
+                           uploadedFile.status === 'processing' ? 'Processing' :
+                           uploadedFile.status === 'processed' ? 'Processed' :
+                           uploadedFile.status === 'error' ? 'Error' : 'Ready'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              {/* Right side - Actions */}
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <Button
-                  onClick={() => window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank')}
-                  disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
-                  className="button-gradient px-2 py-0 text-xs disabled:opacity-50 whitespace-nowrap"
-                >
-                  Preview
-                </Button>
-                <button
-                  onClick={() => removeUploadedFile(uploadedFile.fileID)}
-                  className="text-[10px] text-muted-foreground hover:text-white underline transition-colors whitespace-nowrap"
-                >
-                  Remove
-                </button>
+                
+                {/* Right side - Actions */}
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <Button
+                    onClick={() => window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank')}
+                    disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
+                    className="button-gradient px-2 py-0 text-xs disabled:opacity-50 whitespace-nowrap"
+                  >
+                    Preview
+                  </Button>
+                  <button
+                    onClick={() => removeUploadedFile(uploadedFile.fileID)}
+                    className="text-[10px] text-muted-foreground hover:text-white underline transition-colors whitespace-nowrap"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Input Area */}
-      <div className="m-2 bg-card/30">
+        {/* Input Area */}
+        <div className="m-2 bg-card/30">
         {/* Main Chat Input with Hero Section Styling */}
         <div className="w-full min-h-[60px] text-sm p-4 glass-panel rounded-2xl resize-none transition-all duration-300">
           {/* Textarea Row */}
@@ -517,6 +517,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
             </div>
           </div>
         </div>
+      </div>
 
         <input
           ref={fileInputRef}

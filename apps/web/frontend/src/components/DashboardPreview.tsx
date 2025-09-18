@@ -182,26 +182,6 @@ const DashboardPreview = ({
               {dashboardState.configuration?.description || "Real-time analytics with AI insights"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-success border-success/30 bg-success/10">
-              ● Live Data
-            </Badge>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleRefresh}
-              disabled={dashboardState.loading}
-            >
-              {dashboardState.loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-            </Button>
-            <Button variant="outline" size="sm">
-              Share
-            </Button>
-          </div>
         </div>
         
         {/* Navigation Tabs */}

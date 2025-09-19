@@ -53,7 +53,7 @@ const SheetContent = forwardRef<HTMLDivElement, SheetContentProps>(
       <div
         ref={ref}
         className={cn(
-          "fixed top-0 z-50 h-full w-full border-r bg-background p-0 shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
+          "fixed top-0 z-50 h-full w-full border-r bg-muted p-0 shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
           side === "right" && "right-0 border-l border-r-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
           className
         )}
@@ -190,7 +190,7 @@ const Sidebar = forwardRef<
       return (
         <div
           className={cn(
-            "flex h-full w-[--sidebar-width] flex-col bg-background text-foreground border-r",
+            "flex h-full w-[--sidebar-width] flex-col bg-muted text-foreground border-r",
             className
           )}
           ref={ref}
@@ -207,7 +207,7 @@ const Sidebar = forwardRef<
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
-            className="w-[--sidebar-width] bg-background p-0 text-foreground"
+            className="w-[--sidebar-width] bg-muted p-0 text-foreground"
             style={
               {
                 "--sidebar-width": "18rem",
@@ -241,7 +241,7 @@ const Sidebar = forwardRef<
       >
         <div
           data-sidebar="sidebar"
-          className="flex h-full w-full flex-col bg-background border-r group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-border group-data-[variant=floating]:shadow"
+          className="flex h-full w-full flex-col bg-muted border-r group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-border group-data-[variant=floating]:shadow"
         >
           {children}
         </div>
@@ -260,7 +260,7 @@ const SidebarHeader = forwardRef<
     <div
       ref={ref}
       data-sidebar="header"
-      className={cn("flex flex-col gap-2 p-2 sticky top-0 z-10 bg-background", className)}
+      className={cn("flex flex-col gap-2 p-2 sticky top-0 z-10 bg-muted", className)}
       {...props}
     />
   );
@@ -295,7 +295,7 @@ const SidebarFooter = forwardRef<
     <div
       ref={ref}
       data-sidebar="footer"
-      className={cn("flex flex-col gap-2 p-2 sticky bottom-0 z-10 bg-background", className)}
+      className={cn("flex flex-col gap-2 p-2 sticky bottom-0 z-10 bg-muted", className)}
       {...props}
     />
   );
@@ -407,8 +407,8 @@ const SidebarMenuButton = forwardRef<
         data-sidebar="menu-button"
         data-active={isActive}
         className={cn(
-          "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-ring transition-[width,height,padding] hover:bg-muted hover:text-foreground focus-visible:ring-2 active:bg-muted active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-muted data-[active=true]:font-medium data-[active=true]:text-foreground data-[state=open]:hover:bg-muted data-[state=open]:hover:text-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
-          isActive && "bg-muted font-medium text-foreground",
+          "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-ring transition-[width,height,padding] hover:bg-background hover:text-foreground focus-visible:ring-2 active:bg-background active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-primary data-[active=true]:font-medium data-[active=true]:text-foreground data-[state=open]:hover:bg-background data-[state=open]:hover:text-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+          isActive && "bg-secondary font-medium text-foreground",
           className
         )}
         {...props}
@@ -531,13 +531,13 @@ export default function WorkspaceSidebar({
       <Sidebar 
         variant="sidebar" 
         collapsible="icon"
-        className="border-r bg-background"
+        className="border-r bg-muted"
       >
         {/* Header Section - Sticky */}
-        <SidebarHeader className="border-b bg-muted/20 relative" ref={workspaceDropdownRef}>
+        <SidebarHeader className="border-b bg-secondary/20 relative" ref={workspaceDropdownRef}>
           <button
             onClick={toggleWorkspaceDropdown}
-            className="w-full flex items-center justify-between p-3 hover:bg-muted rounded-md transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:gap-0"
+            className="w-full flex items-center justify-between p-3 hover:bg-background rounded-md transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:gap-0"
             aria-label="Toggle workspace menu"
           >
             <div className="flex items-start justify-start gap-3">
@@ -554,7 +554,7 @@ export default function WorkspaceSidebar({
         
           {/* Switch Workspace Menu */}
           <div className={cn(
-            "absolute top-4 left-full z-50 ml-2 bg-background border border-border rounded-lg shadow-lg w-64 transition-all duration-200 ease-in-out",
+            "absolute top-4 left-full z-50 ml-2 bg-muted border border-border rounded-lg shadow-lg w-64 transition-all duration-200 ease-in-out",
             state.workspaceDropdownOpen 
               ? "opacity-100 translate-x-0 scale-100" 
               : "opacity-0 -translate-x-2 scale-95 pointer-events-none"
@@ -562,21 +562,21 @@ export default function WorkspaceSidebar({
               <div className="p-2">
                 <h4 className="text-xs font-medium text-muted-foreground mb-2 px-2">Teams</h4>
                 <div className="space-y-1">
-                  <button className="w-full flex items-center justify-between p-2 hover:bg-muted rounded-md transition-colors">
+                  <button className="w-full flex items-center justify-between p-2 hover:bg-background rounded-md transition-colors">
                     <div className="flex items-center gap-2">
                       <Building2 className="w-4 h-4 text-primary" />
                       <span className="text-sm text-foreground">Workspace 1</span>
                     </div>
                     <span className="text-xs text-muted-foreground">⌘1</span>
                   </button>
-                  <button className="w-full flex items-center justify-between p-2 hover:bg-muted rounded-md transition-colors">
+                  <button className="w-full flex items-center justify-between p-2 hover:bg-background rounded-md transition-colors">
                     <div className="flex items-center gap-2">
                       <Building2 className="w-4 h-4 text-primary" />
                       <span className="text-sm text-foreground">Workspace 2</span>
                     </div>
                     <span className="text-xs text-muted-foreground">⌘2</span>
                   </button>
-                  <button className="w-full flex items-center justify-between p-2 hover:bg-muted rounded-md transition-colors">
+                  <button className="w-full flex items-center justify-between p-2 hover:bg-background rounded-md transition-colors">
                     <div className="flex items-center gap-2">
                       <Building2 className="w-4 h-4 text-primary" />
                       <span className="text-sm text-foreground">Workspace 3</span>
@@ -585,7 +585,7 @@ export default function WorkspaceSidebar({
                   </button>
                 </div>
                 <div className="border-t border-border my-2"></div>
-                <button className="w-full flex items-center gap-2 p-2 hover:bg-muted rounded-md transition-colors">
+                <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
                   <Plus className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-foreground">Add workspace</span>
                 </button>
@@ -603,11 +603,11 @@ export default function WorkspaceSidebar({
                   <SidebarMenuButton
                     isActive={currentActive === "projects"}
                     onClick={() => handleItemClick("projects")}
-                    className="w-full flex items-center justify-between rounded-xl px-2 py-2 mb-1"
+                    className="w-full flex items-center justify-between rounded-xl px-2 py-2 mt-2 mb-2"
                   >
                     <div className="flex items-center gap-3">
                       <BarChart3 className="w-5 h-5" />
-                      <span className="text-base font-semibold group-data-[collapsible=icon]:hidden">Projects</span>
+                      <span className="text-base font-medium group-data-[collapsible=icon]:hidden">Projects</span>
                     </div>
                   </SidebarMenuButton>
                   <SidebarMenuButton
@@ -617,7 +617,7 @@ export default function WorkspaceSidebar({
                   >
                     <div className="flex items-center gap-3">
                       <Users className="w-5 h-5" />
-                      <span className="text-base group-data-[collapsible=icon]:hidden">Template</span>
+                      <span className="text-base font-medium group-data-[collapsible=icon]:hidden">Template</span>
                     </div>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -635,11 +635,11 @@ export default function WorkspaceSidebar({
                   <SidebarMenuButton
                     isActive={currentActive === "learn"}
                     onClick={() => handleItemClick("learn")}
-                    className="w-full flex items-center justify-between px-2 py-2 mb-1"
+                    className="w-full flex items-center justify-between px-2 py-2 mb-2"
                   >
                     <div className="flex items-center gap-3">
                       <FileText className="w-5 h-5" />
-                      <span className="text-base group-data-[collapsible=icon]:hidden">Learn</span>
+                      <span className="text-base font-medium group-data-[collapsible=icon]:hidden">Learn</span>
                     </div>
                     <ArrowUpRight className="w-4 h-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                   </SidebarMenuButton>
@@ -650,7 +650,7 @@ export default function WorkspaceSidebar({
                   >
                     <div className="flex items-center gap-3">
                       <Headphones className="w-5 h-5" />
-                      <span className="text-base group-data-[collapsible=icon]:hidden">Help</span>
+                      <span className="text-base font-medium group-data-[collapsible=icon]:hidden">Help</span>
                     </div>
                     <ArrowUpRight className="w-4 h-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                   </SidebarMenuButton>
@@ -661,11 +661,11 @@ export default function WorkspaceSidebar({
         </SidebarContent>
 
         {/* Footer Section - Sticky */}
-        <SidebarFooter className="border-t bg-muted/20 relative" ref={userMenuRef}>
+        <SidebarFooter className="border-t bg-secondary/20 relative" ref={userMenuRef}>
           <div className="p-1">
             <button
               onClick={toggleUserMenu}
-              className="w-full flex items-center gap-3 p-3 hover:bg-muted rounded-md transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:gap-0"
+              className="w-full flex items-center gap-3 p-3 hover:bg-background rounded-md transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:gap-0"
               aria-label="Toggle user menu"
             >
               <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
@@ -681,7 +681,7 @@ export default function WorkspaceSidebar({
           
           {/* User Menu Dropdown */}
           <div className={cn(
-            "absolute bottom-4 left-full z-50 ml-2 bg-background border border-border rounded-lg shadow-lg w-64 transition-all duration-200 ease-in-out",
+            "absolute bottom-4 left-full z-50 ml-2 bg-muted border border-border rounded-lg shadow-lg w-64 transition-all duration-200 ease-in-out",
             state.userMenuOpen 
               ? "opacity-100 translate-x-0 scale-100" 
               : "opacity-0 -translate-x-2 scale-95 pointer-events-none"
@@ -702,23 +702,23 @@ export default function WorkspaceSidebar({
               
               {/* Menu Items */}
               <div className="space-y-1">
-                <button className="w-full flex items-center gap-2 p-2 hover:bg-muted rounded-md transition-colors">
+                <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
                   <Star className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-foreground">Upgrade to Pro</span>
                 </button>
-                <button className="w-full flex items-center gap-2 p-2 hover:bg-muted rounded-md transition-colors">
+                <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
                   <Check className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-foreground">Account</span>
         </button>
-                <button className="w-full flex items-center gap-2 p-2 hover:bg-muted rounded-md transition-colors">
+                <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
                   <CreditCard className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-foreground">Billing</span>
         </button>
-                <button className="w-full flex items-center gap-2 p-2 hover:bg-muted rounded-md transition-colors">
+                <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
                   <Bell className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-foreground">Notifications</span>
         </button>
-                <button className="w-full flex items-center gap-2 p-2 hover:bg-muted rounded-md transition-colors" onClick={handleLogout}>
+                <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors" onClick={handleLogout}>
                   <LogOut className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-foreground">Log out</span>
         </button>

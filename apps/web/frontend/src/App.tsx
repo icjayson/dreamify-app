@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
+import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import Header from "./components/Header";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -29,9 +30,21 @@ const AppContent = () => {
         <Route path="/" element={<Index />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/workspace" element={<WorkspacePage />} />
-        <Route path="/workspace/project" element={<ProjectPage />} />
-        <Route path="/workspace/project/preview" element={<PreviewPage />} />
+        <Route path="/workspace" element={
+          <SignedIn>
+            <WorkspacePage />
+          </SignedIn>
+        } />
+        <Route path="/workspace/project" element={
+          <SignedIn>
+            <ProjectPage />
+          </SignedIn>
+        } />
+        <Route path="/workspace/project/preview" element={
+          <SignedIn>
+            <PreviewPage />
+          </SignedIn>
+        } />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -44,9 +57,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
+      <AppContent />
     </TooltipProvider>
   </QueryClientProvider>
 );

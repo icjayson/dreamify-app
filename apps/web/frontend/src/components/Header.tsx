@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Flame, Bell, LogIn } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 
 const Header = () => {
   const navigate = useNavigate();
@@ -63,11 +64,18 @@ const Header = () => {
             <span className="sr-only">Notifications</span>
           </div>
 
-          {/* Login button */}
-          <button onClick={() => navigate("/login")} className="button-gradient px-4 py-2 text-white font-medium transition-all duration-200 flex items-center gap-2 rounded-xl">
-            Login
-            <LogIn className="w-4 h-4" />
-          </button>
+          {/* Authentication buttons */}
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="button-gradient px-4 py-2 text-white font-medium transition-all duration-200 flex items-center gap-2 rounded-xl">
+                Login
+                <LogIn className="w-4 h-4" />
+              </button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
         </div>
       </div>
     </header>

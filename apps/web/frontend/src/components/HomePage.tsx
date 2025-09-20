@@ -683,7 +683,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     <HowItWorksSection />
     <FeaturesShowcaseSection />
     <SocialProofSection />
-    <CTASection />
+    <CTASection onGetStarted={onGetStarted} />
     <FooterSection />
   </>
 );

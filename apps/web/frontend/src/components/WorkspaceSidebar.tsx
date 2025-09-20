@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useUser, useClerk, UserProfile } from "@clerk/clerk-react";
 
 // Custom Sheet Components
 interface SheetProps {
@@ -449,6 +450,7 @@ interface SidebarState {
   activeItem: string;
   workspaceDropdownOpen: boolean;
   userMenuOpen: boolean;
+  userProfileOpen: boolean;
 }
 
 interface WorkspaceSidebarProps {
@@ -468,10 +470,14 @@ export default function WorkspaceSidebar({
   collapsed,
   onCollapsedChange,
 }: WorkspaceSidebarProps) {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  
   const [state, setState] = useState<SidebarState>({
     activeItem: "projects",
     workspaceDropdownOpen: false,
     userMenuOpen: false,
+    userProfileOpen: false,
   });
 
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
@@ -497,6 +503,23 @@ export default function WorkspaceSidebar({
     };
   }, [state.workspaceDropdownOpen, state.userMenuOpen]);
 
+  // Close user profile modal when pressing Escape key
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && state.userProfileOpen) {
+        setState(prev => ({ ...prev, userProfileOpen: false }));
+      }
+    };
+
+    if (state.userProfileOpen) {
+      document.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [state.userProfileOpen]);
+
   const handleItemClick = (item: string) => {
     setState(prev => ({ ...prev, activeItem: item }));
     onActiveItemChange?.(item);
@@ -512,13 +535,17 @@ export default function WorkspaceSidebar({
     setState(prev => ({ ...prev, userMenuOpen: !prev.userMenuOpen }));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     try {
-      // Clear any local state if needed in the future
       setState(prev => ({ ...prev, userMenuOpen: false }));
-    } finally {
-      window.location.href = "/";
+      await signOut();
+    } catch (error) {
+      console.error("Error signing out:", error);
     }
+  };
+
+  const handleManageAccount = () => {
+    setState(prev => ({ ...prev, userMenuOpen: false, userProfileOpen: true }));
   };
 
   return (
@@ -668,12 +695,24 @@ export default function WorkspaceSidebar({
               className="w-full flex items-center gap-3 p-3 hover:bg-background rounded-md transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:gap-0"
               aria-label="Toggle user menu"
             >
-              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                <User className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
+                {user?.imageUrl ? (
+                  <img 
+                    src={user.imageUrl} 
+                    alt={user.fullName || "User"} 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="w-4 h-4 text-white" />
+                )}
               </div>
               <div className="flex-1 text-left group-data-[collapsible=icon]:hidden">
-                <p className="text-sm font-medium text-foreground">User Name</p>
-                <p className="text-xs text-muted-foreground">user@gmail.com</p>
+                <p className="text-sm font-medium text-foreground">
+                  {user?.fullName || user?.firstName || "User"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {user?.primaryEmailAddress?.emailAddress || "user@example.com"}
+                </p>
               </div>
               <ChevronsUpDown className="w-4 h-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
             </button>
@@ -689,12 +728,24 @@ export default function WorkspaceSidebar({
             <div className="p-2">
               {/* User Info Header */}
               <div className="flex items-center gap-3 p-2 mb-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-white" />
+                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
+                  {user?.imageUrl ? (
+                    <img 
+                      src={user.imageUrl} 
+                      alt={user.fullName || "User"} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-4 h-4 text-white" />
+                  )}
                 </div>
                 <div className="flex flex-col items-start justify-start">
-                <p className="text-sm font-medium text-foreground">User Name</p>
-                  <p className="text-xs text-muted-foreground">user@gmail.com</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {user?.fullName || user?.firstName || "User"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {user?.primaryEmailAddress?.emailAddress || "user@example.com"}
+                  </p>
                 </div>
               </div>
               
@@ -706,9 +757,12 @@ export default function WorkspaceSidebar({
                   <Star className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-foreground">Upgrade to Pro</span>
                 </button>
-                <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
+                <button 
+                  onClick={handleManageAccount}
+                  className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors"
+                >
                   <Check className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-foreground">Account</span>
+                  <span className="text-sm text-foreground">Manage Account</span>
         </button>
                 <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
                   <CreditCard className="w-4 h-4 text-muted-foreground" />
@@ -727,6 +781,370 @@ export default function WorkspaceSidebar({
           </div>
         </SidebarFooter>
       </Sidebar>
+      
+      {/* User Profile Modal */}
+      {state.userProfileOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="fixed inset-0 bg-black/80" 
+            onClick={() => setState(prev => ({ ...prev, userProfileOpen: false }))}
+          />
+          <div className="relative z-10 bg-muted rounded-lg shadow-lg w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-border flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">Manage Account</h2>
+                <button
+                  onClick={() => setState(prev => ({ ...prev, userProfileOpen: false }))}
+                  className="text-white/70 hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <style dangerouslySetInnerHTML={{
+                __html: `
+                  .cl-userProfile-root {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root * {
+                    background-color: hsl(var(--muted)) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-card {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-page {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-pageScrollBox {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSection {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContent {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentText {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButton {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonPrimary {
+                    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent))) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonSecondary {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonTertiary {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonQuaternary {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonGhost {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonOutline {
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonSolid {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonSubtle {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonDestructive {
+                    background-color: #ef4444 !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonConstructive {
+                    background-color: #22c55e !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonNeutral {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonBrand {
+                    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent))) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonPrimaryBrand {
+                    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent))) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonSecondaryBrand {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonTertiaryBrand {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonQuaternaryBrand {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonGhostBrand {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonOutlineBrand {
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonSolidBrand {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonSubtleBrand {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonDestructiveBrand {
+                    background-color: #ef4444 !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonConstructiveBrand {
+                    background-color: #22c55e !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-profileSectionContentButtonNeutralBrand {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                  }
+                  /* Fix scrollbar and borders */
+                  .cl-userProfile-root ::-webkit-scrollbar {
+                    width: 8px !important;
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root ::-webkit-scrollbar-track {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root ::-webkit-scrollbar-thumb {
+                    background-color: rgba(255, 255, 255, 0.2) !important;
+                    border-radius: 4px !important;
+                  }
+                  .cl-userProfile-root ::-webkit-scrollbar-thumb:hover {
+                    background-color: rgba(255, 255, 255, 0.3) !important;
+                  }
+                  .cl-userProfile-root * {
+                    border-color: rgba(255, 255, 255, 0.1) !important;
+                  }
+                  .cl-userProfile-root .cl-scrollBox {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-scrollBoxInner {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  /* Fix cl-internal-15hkgn2 class */
+                  .cl-userProfile-root .cl-internal-15hkgn2 {
+                    background-color: hsl(var(--muted)) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 * {
+                    background-color: hsl(var(--muted)) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-card {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-page {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-pageScrollBox {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSection {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContent {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentText {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButton {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonPrimary {
+                    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent))) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonSecondary {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonTertiary {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonQuaternary {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonGhost {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonOutline {
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonSolid {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonSubtle {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonDestructive {
+                    background-color: #ef4444 !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonConstructive {
+                    background-color: #22c55e !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonNeutral {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonBrand {
+                    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent))) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonPrimaryBrand {
+                    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent))) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonSecondaryBrand {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonTertiaryBrand {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonQuaternaryBrand {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonGhostBrand {
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonOutlineBrand {
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonSolidBrand {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonSubtleBrand {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonDestructiveBrand {
+                    background-color: #ef4444 !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonConstructiveBrand {
+                    background-color: #22c55e !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-profileSectionContentButtonNeutralBrand {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 ::-webkit-scrollbar {
+                    width: 8px !important;
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 ::-webkit-scrollbar-track {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 ::-webkit-scrollbar-thumb {
+                    background-color: rgba(255, 255, 255, 0.2) !important;
+                    border-radius: 4px !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 ::-webkit-scrollbar-thumb:hover {
+                    background-color: rgba(255, 255, 255, 0.3) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 * {
+                    border-color: rgba(255, 255, 255, 0.1) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-scrollBox {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                  .cl-userProfile-root .cl-internal-15hkgn2 .cl-scrollBoxInner {
+                    background-color: hsl(var(--muted)) !important;
+                  }
+                `
+              }} />
+              <UserProfile 
+                appearance={{
+                  elements: {
+                    rootBox: "w-full h-full",
+                    card: "shadow-none border-none bg-transparent",
+                    navbar: "border-b border-white/20",
+                    navbarButton: "text-white/70 hover:text-white",
+                    navbarButtonActive: "text-white bg-white/10",
+                    page: "p-4 bg-muted",
+                    pageScrollBox: "p-0 bg-muted",
+                    formButtonPrimary: "button-gradient",
+                    formFieldInput: "bg-white/10 border-white/20 text-white placeholder-white/50",
+                    formFieldLabel: "text-white",
+                    identityPreview: "bg-white/10 border-white/20",
+                    identityPreviewText: "text-white",
+                    identityPreviewEditButton: "text-white hover:text-white/80",
+                    formFieldSuccessText: "text-green-400",
+                    formFieldErrorText: "text-red-400",
+                    footer: "border-t border-white/20 bg-white/5",
+                    footerActionLink: "text-white hover:text-white/80",
+                    // Additional selectors for dark theme
+                    main: "bg-muted",
+                    profileSection: "bg-muted",
+                    profileSectionTitle: "text-white",
+                    profileSectionContent: "bg-muted",
+                    profileSectionContentText: "text-white",
+                    profileSectionContentButton: "text-white",
+                    profileSectionContentButtonPrimary: "button-gradient",
+                    profileSectionContentButtonSecondary: "bg-white/10 text-white border-white/20",
+                    profileSectionContentButtonDanger: "bg-red-500 text-white",
+                    profileSectionContentButtonSuccess: "bg-green-500 text-white",
+                    profileSectionContentButtonWarning: "bg-yellow-500 text-white",
+                    profileSectionContentButtonInfo: "bg-blue-500 text-white",
+                    profileSectionContentButtonLink: "text-white hover:text-white/80",
+                    profileSectionContentButtonGhost: "text-white hover:bg-white/10",
+                    profileSectionContentButtonOutline: "border-white/20 text-white hover:bg-white/10",
+                    profileSectionContentButtonSolid: "bg-white/10 text-white hover:bg-white/20",
+                    profileSectionContentButtonSubtle: "text-white/70 hover:text-white hover:bg-white/5",
+                    profileSectionContentButtonDestructive: "bg-red-500 text-white hover:bg-red-600",
+                    profileSectionContentButtonConstructive: "bg-green-500 text-white hover:bg-green-600",
+                    profileSectionContentButtonNeutral: "bg-white/10 text-white hover:bg-white/20",
+                    profileSectionContentButtonBrand: "button-gradient",
+                    profileSectionContentButtonPrimaryBrand: "button-gradient",
+                    profileSectionContentButtonSecondaryBrand: "bg-white/10 text-white border-white/20",
+                    profileSectionContentButtonTertiaryBrand: "text-white hover:bg-white/10",
+                    profileSectionContentButtonQuaternaryBrand: "text-white/70 hover:text-white",
+                    profileSectionContentButtonGhostBrand: "text-white hover:bg-white/10",
+                    profileSectionContentButtonOutlineBrand: "border-white/20 text-white hover:bg-white/10",
+                    profileSectionContentButtonSolidBrand: "bg-white/10 text-white hover:bg-white/20",
+                    profileSectionContentButtonSubtleBrand: "text-white/70 hover:text-white hover:bg-white/5",
+                    profileSectionContentButtonDestructiveBrand: "bg-red-500 text-white hover:bg-red-600",
+                    profileSectionContentButtonConstructiveBrand: "bg-green-500 text-white hover:bg-green-600",
+                    profileSectionContentButtonNeutralBrand: "bg-white/10 text-white hover:bg-white/20"
+                  }
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </SidebarProvider>
   );
 }

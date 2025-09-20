@@ -331,7 +331,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                     <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                     <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
-                  <span className="text-sm text-accent">AI is analyzing...</span>
+                  <span className="text-sm text-accent">Nyx is analyzing...</span>
                 </div>
               </Card>
             </div>

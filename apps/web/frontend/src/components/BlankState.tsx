@@ -92,7 +92,7 @@ const BlankState: React.FC<BlankStateProps> = ({
               onClick={() => setMenuOpen((v) => !v)}
               aria-expanded={menuOpen}
               aria-haspopup="menu"
-              className="h-9 px-4 rounded-md text-sm border border-border/50 hover:bg-muted/50 transition flex items-center gap-2"
+              className="button-outline h-9 px-4 rounded-md text-sm border border-border/50 hover:bg-muted/50 transition flex items-center gap-2"
             >
               <LinkIcon className="h-4 w-4" />
               Connect data source

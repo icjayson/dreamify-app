@@ -42,9 +42,12 @@ def _process_file_background(fileID: str, file_metadata: dict):
             json.dump(error_data, f, ensure_ascii=False, indent=2)
 
 
-@analyze_bp.route('/run', methods=['POST'])
+@analyze_bp.route('/run', methods=['POST', 'OPTIONS'])
 def run_analysis():
     """Start file processing analysis."""
+    if request.method == 'OPTIONS':
+        return jsonify({'success': True}), 200
+    
     try:
         data = request.get_json()
         if not data or 'fileID' not in data:

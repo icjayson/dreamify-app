@@ -109,7 +109,7 @@
   .glass-panel {
     background: hsl(var(--primary) / 0.1);
     outline: 1px solid rgba(255, 255, 255, 0.2);
-    @apply backdrop-blur-xl;
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
   /* Gradient buttons */

@@ -16,6 +16,14 @@ except ImportError as e:
     print(f"Warning: Could not import dashboard routes: {e}")
     # Continue without dashboard routes for now
 
+# Import and register analyze routes
+try:
+    from app.api.routes.analyze import analyze_bp
+    api_bp.register_blueprint(analyze_bp, url_prefix='/analyze')
+except ImportError as e:
+    print(f"Warning: Could not import analyze routes: {e}")
+    # Continue without analyze routes for now
+
 @api_bp.route('/analytics/dashboard', methods=['POST'])
 def create_dashboard():
     """Create a new analytics dashboard."""

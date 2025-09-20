@@ -30,7 +30,7 @@ export default function WorkspacePage() {
 
       {/* Content Area: Responsive Sidebar + Main */}
       <div
-        className="grid bg-background"
+        className="grid bg-muted"
         style={{ gridTemplateColumns: `${sidebarCollapsed ? '4rem' : '16rem'} 1fr` }}
       >
         {/* Sidebar */}
@@ -51,7 +51,7 @@ export default function WorkspacePage() {
             <div className="flex items-center gap-2">
             <button
               type="button"
-              className="p-1.5 rounded-md hover:bg-muted transition-colors"
+              className="p-1.5 rounded-md hover:bg-background transition-colors"
               aria-label="Toggle navigation"
               onClick={() => setSidebarCollapsed((v) => !v)}
             >

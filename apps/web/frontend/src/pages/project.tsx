@@ -52,15 +52,15 @@ export default function ProjectPage() {
       
         {/* blank placeholder */}
         <div className="lg:col-span-3">
-           <div className="m-2 ml-0 mt-0 rounded-lg border h-[calc(100vh-4rem)]">
+           <div className="m-2 ml-0 mt-0 rounded-lg border border-white/20 h-[calc(100vh-4rem)]">
             {!hasPolledStatus ? (
               <BlankState
                 subtexts={[
-                  "Upload a CSV and let Nyx build dashboard",
+                  "Upload a CSV file and let Nyx build dashboard",
                   "Connect Google Sheets, GA4, Meta, Stripe, and more",
                   "Describe your dashboard — Nyx designs it instantly",
                   "Cinematic motion and clear storytelling for your data",
-                  "Try sample data to preview Nyx's capabilities",
+                  "Try now to observe Nyx's capabilities",
                 ]}
                 intervalMs={1000}
                 onWatchTutorial={() => window.open('/tutorial', '_blank')}

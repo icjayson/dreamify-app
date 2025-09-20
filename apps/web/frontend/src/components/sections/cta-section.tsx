@@ -1,7 +1,11 @@
 import { Sparkles, Calendar, ArrowRight, Clock, Award, Users } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
-export const CTASection = () => {
+interface CTASectionProps {
+  onGetStarted?: () => void;
+}
+
+export const CTASection = ({ onGetStarted }: CTASectionProps) => {
   const { isVisible, ref } = useIntersectionObserver({ threshold: 0.1 });
   const stats = [
     {
@@ -103,7 +107,10 @@ export const CTASection = () => {
 
           {/* CTA Buttons */}
           <div className={`flex flex-col sm:flex-row gap-8 justify-center mb-12 ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`} style={{ animationDelay: '0.8s' }}>
-            <button className="button-gradient group text-xl px-8 py-4 rounded-2xl flex items-center justify-center">
+            <button 
+              onClick={onGetStarted}
+              className="button-gradient group text-xl px-8 py-4 rounded-2xl flex items-center justify-center"
+            >
               Get Started Free
               <Sparkles className="ml-3 w-6 h-6 group-hover:animate-spin transition-transform" />
             </button>

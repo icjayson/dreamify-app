@@ -37,11 +37,11 @@ export const TargetAudienceSection = () => {
       </div>
 
       {/* Animated elements */}
-      <div className={`flex justify-center mb-8 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
+      <div className={`flex justify-center mb-4 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
         <div className="flex space-x-4">
-          <Sparkles className="w-8 h-8 text-primary animate-pulse" />
-          <Sparkles className="w-6 h-6 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
-          <Sparkles className="w-10 h-10 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
+          <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+          <Sparkles className="w-4 h-4 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
+          <Sparkles className="w-6 h-6 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
       </div>
 
@@ -49,30 +49,30 @@ export const TargetAudienceSection = () => {
         {/* Header with icon */}
         <div className={`text-center mb-16 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
           {/* Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-20 h-20 rounded-lg flex items-center justify-center">
               <img 
-                src="/dreamable-logo.png" 
-                alt="Dreamable Logo" 
+                src="/logo-main.png" 
+                alt="Dreamify Logo" 
                 className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
               />
             </div>
           </div>
           
           {/* Title with gradient panel */}
-          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
+          <h2 className="text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap">
             <span className="text-white">Perfect for</span>
             <div className="gradient-panel rounded-xl px-6 py-3">
-              <span className="text-white font-bold text-4xl md:text-6xl">every teams</span>
+              <span className="text-white font-bold text-3xl md:text-5xl">every teams</span>
             </div>
           </h2>
           
-          <h2 className="text-3xl md:text-4xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
+          <h2 className="text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap">
             <span className="text-white">who want results, not complexity</span>
           </h2>
           
-          <p className="text-xl text-white/60 max-w-3xl mx-auto">
-            Dreamable empowers every type of professional to create stunning dashboards
+          <p className="text-md text-white/60 max-w-3xl mx-auto">
+            Dreamify empowers every type of professional to create stunning dashboards
           </p>
         </div>
 

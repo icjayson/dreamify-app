@@ -40,43 +40,58 @@ export const HowItWorksSection = () => {
       <div className="absolute inset-0 bg-gradient-to-r from-background via-background to-background"></div>
       
       {/* Animated elements */}
-      <div className={`flex justify-center mb-8 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
+      <div className={`flex justify-center mb-4 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
         <div className="flex space-x-4">
-          <Sparkles className="w-8 h-8 text-primary animate-pulse" />
-          <Sparkles className="w-6 h-6 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
-          <Sparkles className="w-10 h-10 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
+          <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+          <Sparkles className="w-4 h-4 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
+          <Sparkles className="w-6 h-6 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
       </div>
 
       <div className="relative z-10 container mx-auto px-6">
         {/* Header with icon */}
-        <div className={`text-center mb-16 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
+        <div className={`text-center mb-8 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
           {/* Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-20 h-20 rounded-lg flex items-center justify-center">
               <img 
-                src="/dreamable-logo.png" 
-                alt="Dreamable Logo" 
+                src="/logo-main.png" 
+                alt="Dreamify Logo" 
                 className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
               />
             </div>
           </div>
           
           {/* Title with gradient panel */}
-          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
+          <h2 className="text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap">
             <span className="text-white">How</span>
             <div className="gradient-panel rounded-xl px-6 py-3">
-              <span className="text-white font-bold text-4xl md:text-6xl">It Works</span>
+              <span className="text-white font-bold text-3xl md:text-5xl">It Works</span>
             </div>
           </h2>
           
-          <p className="text-xl text-white/60 max-w-3xl mx-auto">
+          <p className="text-md text-white/60 max-w-3xl mx-auto">
             Four simple steps to transform your data into stunning visualizations
           </p>
         </div>
 
+        {/* Demo video above timeline */}
+        <div className={`relative z-10 max-w-5xl mx-auto mb-20 ${isVisible ? 'animate-zoom-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
+          <video
+            className="w-full rounded-2xl border border-white/50 max-w-5xl aspect-video object-cover bg-card/50"
+            controls
+            preload="auto"
+            loop={true}
+            autoPlay
+            muted
+            aria-label="Product demo video"
+            src="/video-demo-test.mp4"
+          >
+          </video>
+        </div>
+
         {/* Timeline */}
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-[1400px] mx-auto">
           <div className="grid md:grid-cols-4 gap-8 relative">
             {/* Connection Line - Hidden on mobile */}
             <div className="hidden md:block absolute top-24 left-0 right-0 h-0.5 bg-gradient-to-r from-primary via-secondary to-accent opacity-30"></div>
@@ -106,14 +121,14 @@ export const HowItWorksSection = () => {
 
                 {/* Content */}
                 <div className="space-y-4">
-                  <h3 className="text-2xl font-bold text-foreground">{step.title}</h3>
-                  <p className="text-muted-foreground leading-relaxed">{step.description}</p>
+                  <h3 className="text-xl font-bold text-foreground">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
                 </div>
 
                 {/* Arrow for non-last items */}
                 {index < steps.length - 1 && (
                   <div className="hidden md:block absolute top-24 -right-4 z-20">
-                    <ArrowRight className="w-8 h-8 text-accent opacity-60" />
+                    <ArrowRight className="w-6 h-6 text-accent opacity-60" />
                   </div>
                 )}
               </div>

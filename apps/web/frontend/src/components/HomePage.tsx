@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Upload, Database, CornerRightUp, Plus, Mic, MicOff, ChevronDown, FileText} from "lucide-react";
+import { Sparkles, Upload, Database, CornerRightUp, Plus, Mic, MicOff, Link, FileText} from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
@@ -384,7 +384,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
   return (
     <>
-      <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-20">
+      <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-44">
       {/* WaveBackground Component */}
       <WaveBackground 
         backdropBlurAmount="md" 
@@ -396,23 +396,27 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
       <div className="relative z-10 max-w-6xl mx-auto text-center">
         
-        <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-slide-up flex items-center justify-center gap-4 flex-wrap">
-          <span className="text-white">Build</span>
-          <span className="pr-3 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
-            Fancy Dashboard
-          </span>
-          <span className="text-white">in minutes with</span>
-          <div className="gradient-panel rounded-xl px-6 py-3 flex items-center gap-3">
-            <img 
-              src="/dreamable-logo.png" 
-              alt="Dreamable Logo" 
-              className="w-6 h-6 rounded-lg object-contain"
-            />
-            <span className="text-white font-bold text-2xl md:text-4xl">Dreamable</span>
+        <h1 className="text-4xl md:text-6xl font-bold mb-6 animate-slide-up">
+          <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
+            <span className="text-white">Build</span>
+            <span className="px-3 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white text-5xl md:text-7xl to-accent italic font-instrument-serif">
+              Fancy Dashboard
+            </span>
+          </div>
+          <div className="flex items-center justify-center gap-4 flex-wrap">
+            <span className="text-white">in minutes with</span>
+            <div className="gradient-panel rounded-xl px-6 py-3 flex items-center gap-3">
+              <img 
+                src="/logo-white.png" 
+                alt="Dreamify Logo" 
+                className="w-12 h-12 rounded-lg object-contain"
+              />
+              <span className="text-white font-medium text-2xl md:text-4xl font-outfit">Dreamify</span>
+            </div>
           </div>
         </h1>
         
-        <p className="text-lg md:text-xl text-white/60 mb-8 max-w-3xl mx-auto animate-fade-in" style={{ animationDelay: '0s' }}>
+        <p className="text-md md:text-lg text-white/60 mb-8 max-w-3xl mx-auto animate-fade-in" style={{ animationDelay: '0s' }}>
           Transform raw data into stunningly and interactively visualised dashboards in minutes through 
           natural conversation with AI Agent. No technical skills required.
         </p>
@@ -420,7 +424,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         {/* Chat-First Interface */}
         <div className="max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
           {/* Main Chat Input */}
-          <div className="w-full min-h-[80px] text-lg p-6 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300">
+          <div className="w-full min-h-[80px] text-md p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300">
 
             {/* File Chip Area */}
             {uploadedFile && (
@@ -597,7 +601,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     aria-label="Connect data source"
                   >
                     {selectedDataSource || "Connect your data source"}
-                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${
+                    <Link className={`w-4 h-4 transition-transform duration-200 ${
                       dropdownOpen ? 'rotate-180' : ''
                     }`} />
                   </Button>
@@ -652,35 +656,31 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           </div>
 
           {/* Quick Start Prompts */}
-          <div className="flex justify-center gap-2 mt-6 flex-wrap animate-fade-in" style={{ animationDelay: '0s' }}>
-            {["Monthly Revenue Trends", "Customer Funnel Analysis", "SaaS Metrics Dashboard", "E-commerce Analytics"].map((prompt) => (
+          <div className="flex justify-start gap-2 mt-6 flex-wrap animate-fade-in w-full" style={{ animationDelay: '0s' }}>
+            <p className="text-xs text-white/40 text-left ml-1">Quick start prompts:</p>
+            <div className="flex flex-wrap gap-2">
+            {["Act as a Data Analyst: challenge assumptions and list caveats.", "Act as a Growth PM: prioritize the top 3 actions from this data.", "Act as a Sales Ops lead: translate insights into pipeline plays.", "Build a comprehensive dashboard from the connected data source"].map((prompt) => (
               <button
                 key={prompt}
                 onClick={() => setInputValue(prompt)}
-                className="px-4 py-2 text-sm bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all duration-200"
+                className="px-4 py-2 text-xs bg-primary/20 text-white/40 border border-primary/50 rounded-full hover:bg-primary/40 hover:text-white/80 transition-all duration-200"
               >
                 {prompt}
               </button>
             ))}
+            </div>
           </div>
         </div>
       </div>
+      {/* Sentinel marks the end of the hero section for header trigger */}
+      <div id="hero-sentinel" aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-px pointer-events-none" />
     </section>
-
-    {/* Scroll Stack Section */}
-    <ScrollStack 
-      cards={scrollStackCards}
-      backgroundColor="#1f2937"
-      cardHeight="80vh"
-      animationDuration="0.8s"
-      sectionHeightMultiplier={5}
-    />
       
     {/* New Homepage Sections */}
+    <HowItWorksSection />
     <ProblemSolutionSection />
     <ValuePropsSection />
     <TargetAudienceSection />
-    <HowItWorksSection />
     <FeaturesShowcaseSection />
     <SocialProofSection />
     <CTASection onGetStarted={onGetStarted} />

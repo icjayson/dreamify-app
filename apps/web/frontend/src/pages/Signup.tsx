@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { SignUp } from "@clerk/clerk-react";
 import { CheckCircle2, ArrowLeft } from "lucide-react";
 import WaveBackground from "../../../src/ui/lightswind/wave-background";
+import { dark } from "@clerk/themes";
 
 const REDIRECT_AFTER_AUTH = "/";
 
@@ -26,8 +27,8 @@ const Signup = () => {
         {/* Minimal Header */}
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center gap-3">
-            <img src="/dreamable-logo.png" alt="Dreamable Logo" className="w-8 h-8 object-contain" />
-            <span className="text-xl font-semibold text-foreground">Dreamable</span>
+            <img src="/logo-main.png" alt="Dreamify Logo" className="w-10 h-10 object-contain" />
+            <span className="text-2xl font-medium text-foreground font-outfit">Dreamify</span>
           </div>
         </div>
 
@@ -54,29 +55,35 @@ const Signup = () => {
             <div className="space-y-4">
               <SignUp 
                 appearance={{
+                  baseTheme: dark,
                   elements: {
                     formButtonPrimary: "w-full button-gradient",
                     card: "bg-transparent shadow-none border-none",
                     headerTitle: "hidden",
                     headerSubtitle: "hidden",
-                    socialButtonsBlockButton: "w-full button-outline mb-4",
+                    socialButtonsBlockButton: "w-full button-gradient mb-4",
                     dividerLine: "bg-border",
+                    fontFamily: "Inter",
                     dividerText: "text-xs text-muted-foreground",
                     formFieldInput: "bg-input border-border text-foreground",
                     formFieldLabel: "text-sm font-medium text-foreground",
-                    footerActionLink: "text-primary hover:underline",
+                    footerActionLink: "text-white hover:text-accent hover:underline",
                     identityPreviewText: "text-muted-foreground",
                     formFieldSuccessText: "text-green-500",
                     formFieldErrorText: "text-red-500"
+                  },
+                  variables: {
+                    colorText: "#ffffff",
+                    colorBackground: "primary",
+                  },
+                  layout: {
+                    unsafe_disableDevelopmentModeWarnings: true,
+                    animations: true,
                   }
                 }}
                 redirectUrl="/workspace"
               />
             </div>
-
-            <p className="text-sm text-muted-foreground mt-6 text-center">
-              Already have an account? <Link to="/login" className="text-primary hover:underline">Login</Link>
-            </p>
           </div>
         </div>
       </div>

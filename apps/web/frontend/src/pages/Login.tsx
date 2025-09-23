@@ -1,6 +1,7 @@
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { SignIn } from "@clerk/clerk-react";
+import { dark } from '@clerk/themes';
 import { CheckCircle2, ArrowLeft } from "lucide-react";
 import WaveBackground from "../../../src/ui/lightswind/wave-background";
 
@@ -26,8 +27,8 @@ const Login = () => {
         {/* Minimal Header */}
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center gap-3">
-            <img src="/dreamable-logo.png" alt="Dreamable Logo" className="w-8 h-8 object-contain" />
-            <span className="text-xl font-semibold text-foreground">Dreamable</span>
+            <img src="/logo-main.png" alt="Dreamify Logo" className="w-10 h-10 object-contain" />
+            <span className="text-2xl font-medium text-foreground font-outfit">Dreamify</span>
           </div>
         </div>
 
@@ -36,7 +37,7 @@ const Login = () => {
           {/* Brand panel */}
           <div className="hidden md:flex flex-col justify-center gap-6 p-10 bg-gradient-to-br from-primary/10 via-background to-accent/10">
             <div>
-              <h2 className="text-2xl font-bold text-white">Welcome to Dreamable</h2>
+              <h2 className="text-2xl font-bold text-white">Welcome to Dreamify</h2>
               <p className="text-white/70 mt-1">Build beautiful dashboards in minutes.</p>
             </div>
             <ul className="space-y-3 text-white/80">
@@ -54,29 +55,36 @@ const Login = () => {
             <div className="space-y-4">
               <SignIn 
                 appearance={{
+                  baseTheme: dark,
                   elements: {
                     formButtonPrimary: "w-full button-gradient",
+                    fontFamily: "Inter",
                     card: "bg-transparent shadow-none border-none",
                     headerTitle: "hidden",
                     headerSubtitle: "hidden",
-                    socialButtonsBlockButton: "w-full button-outline mb-4",
+                    socialButtonsBlockButton: "w-full button-gradient mb-4",
                     dividerLine: "bg-border",
                     dividerText: "text-xs text-muted-foreground",
                     formFieldInput: "bg-input border-border text-foreground",
                     formFieldLabel: "text-sm font-medium text-foreground",
-                    footerActionLink: "text-primary hover:underline",
+                    footerActionLink: "text-white hover:text-accent hover:underline",
                     identityPreviewText: "text-muted-foreground",
                     formFieldSuccessText: "text-green-500",
                     formFieldErrorText: "text-red-500"
+
+                   },
+                  variables: {
+                    colorText: "#ffffff",
+                    colorBackground: "primary",
+                  },
+                  layout: {
+                    unsafe_disableDevelopmentModeWarnings: true,
+                    animations: true,
                   }
                 }}
                 redirectUrl="/workspace"
               />
             </div>
-
-            <p className="text-sm text-muted-foreground mt-6 text-center">
-              Don't have an account? <Link to="/signup" className="text-primary hover:underline">Sign up</Link>
-            </p>
           </div>
         </div>
       </div>

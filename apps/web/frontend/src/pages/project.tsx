@@ -19,7 +19,7 @@ export default function ProjectPage() {
         <div className="grid grid-cols-4 items-center h-10">
           <div className="col-span-1">
             <div className="flex items-center gap-3">
-              <img src="/dreamable-logo.png" alt="Dreamable" className="w-6 h-6 rounded" />
+              <img src="/logo-main.png" alt="Dreamify" className="w-6 h-6 rounded" />
               <span className="font-regular text-sm truncate">project-name</span>
             </div>
           </div>

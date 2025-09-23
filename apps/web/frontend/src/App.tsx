@@ -12,6 +12,7 @@ import Signup from "./pages/Signup.tsx";
 import WorkspacePage from "./pages/workspace";
 import ProjectPage from "./pages/project";
 import PreviewPage from "./pages/preview.tsx";
+import WaitlistPage from "./pages/Waitlist.tsx";
 import { useChatStore } from "./stores/useChatStore";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const AppContent = () => {
         <Route path="/" element={<Index />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/waitlist" element={<WaitlistPage />} />
         <Route path="/workspace" element={
           <SignedIn>
             <WorkspacePage />

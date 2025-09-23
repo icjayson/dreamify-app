@@ -112,6 +112,36 @@
     border-color: rgba(255, 255, 255, 0.2);
   }
 
+  /* Opaque variant for scrolled header */
+  .glass-panel-opaque {
+    background: hsl(var(--muted) / 0.8);
+    outline: 1px solid rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.3);
+    transition: var(--animation-smooth);
+  }
+
+  .shadow-header {
+    box-shadow: var(--shadow-glass);
+  }
+
+  /* Header smooth animation helpers */
+  .header-animated {
+    transition: transform var(--animation-slow),
+                max-width var(--animation-slow),
+                background-color var(--animation-slow),
+                box-shadow var(--animation-slow),
+                outline-color var(--animation-slow),
+                border-color var(--animation-slow),
+                backdrop-filter var(--animation-slow);
+    will-change: transform, max-width, backdrop-filter, background-color, box-shadow;
+    backdrop-filter: blur(6px);
+  }
+
+  .header-scrolled {
+    transform: scale(1);
+    backdrop-filter: blur(10px);
+  }
+
   /* Gradient buttons */
   .button-gradient {
     color: white;
@@ -319,6 +349,15 @@
 
   /* Accessibility: Respect reduced motion preference */
   @media (prefers-reduced-motion: reduce) {
+    .header-animated {
+      transition: none;
+    }
+    .header-scrolled {
+      transform: none;
+    }
+    .glass-panel-opaque {
+      transition: none;
+    }
     .animate-slide-in-left,
     .animate-slide-in-right,
     .animate-zoom-in,

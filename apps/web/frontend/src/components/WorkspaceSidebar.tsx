@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useUser, useClerk, UserProfile } from "@clerk/clerk-react";
+import { useUserSync } from "@/hooks/useUserSync";
 
 // Custom Sheet Components
 interface SheetProps {
@@ -472,6 +473,7 @@ export default function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { supabaseUser, isSyncing } = useUserSync();
   
   const [state, setState] = useState<SidebarState>({
     activeItem: "projects",
@@ -696,10 +698,10 @@ export default function WorkspaceSidebar({
               aria-label="Toggle user menu"
             >
               <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
-                {user?.imageUrl ? (
+                {(supabaseUser?.image_url || user?.imageUrl) ? (
                   <img 
-                    src={user.imageUrl} 
-                    alt={user.fullName || "User"} 
+                    src={supabaseUser?.image_url || user?.imageUrl} 
+                    alt={supabaseUser?.full_name || user?.fullName || "User"} 
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -708,11 +710,14 @@ export default function WorkspaceSidebar({
               </div>
               <div className="flex-1 text-left group-data-[collapsible=icon]:hidden">
                 <p className="text-sm font-medium text-foreground">
-                  {user?.fullName || user?.firstName || "User"}
+                  {supabaseUser?.full_name || user?.fullName || user?.firstName || "User"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {user?.primaryEmailAddress?.emailAddress || "user@example.com"}
+                  {supabaseUser?.email || user?.primaryEmailAddress?.emailAddress || "user@example.com"}
                 </p>
+                {isSyncing && (
+                  <p className="text-xs text-blue-500">Syncing...</p>
+                )}
               </div>
               <ChevronsUpDown className="w-4 h-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
             </button>
@@ -729,10 +734,10 @@ export default function WorkspaceSidebar({
               {/* User Info Header */}
               <div className="flex items-center gap-3 p-2 mb-2">
                 <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
-                  {user?.imageUrl ? (
+                  {(supabaseUser?.image_url || user?.imageUrl) ? (
                     <img 
-                      src={user.imageUrl} 
-                      alt={user.fullName || "User"} 
+                      src={supabaseUser?.image_url || user?.imageUrl} 
+                      alt={supabaseUser?.full_name || user?.fullName || "User"} 
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -741,11 +746,14 @@ export default function WorkspaceSidebar({
                 </div>
                 <div className="flex flex-col items-start justify-start">
                   <p className="text-sm font-medium text-foreground">
-                    {user?.fullName || user?.firstName || "User"}
+                    {supabaseUser?.full_name || user?.fullName || user?.firstName || "User"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {user?.primaryEmailAddress?.emailAddress || "user@example.com"}
+                    {supabaseUser?.email || user?.primaryEmailAddress?.emailAddress || "user@example.com"}
                   </p>
+                  {isSyncing && (
+                    <p className="text-xs text-blue-500">Syncing...</p>
+                  )}
                 </div>
               </div>
               

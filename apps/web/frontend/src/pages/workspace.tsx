@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Plus, Search, Flame, Circle, Menu, PanelLeft } from "lucide-react";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
 import WorkspaceSidebar from "@/components/WorkspaceSidebar";
 import ProjectCard from "@/components/ProjectCard";
+import { useUserSync } from "@/hooks/useUserSync";
 
 const HARDCODED_WORKSPACE = {
   orgName: "Workspace Name",
@@ -24,6 +25,14 @@ export default function WorkspacePage() {
   const [activeTab, setActiveTab] = useState<string>("projects");
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const navigate = useNavigate();
+  
+  // Initialize user sync when workspace loads
+  const { refreshUser, isSyncing } = useUserSync();
+  
+  useEffect(() => {
+    // Trigger user sync when workspace page loads
+    refreshUser();
+  }, [refreshUser]);
 
   return (
     <div className="min-h-screen">

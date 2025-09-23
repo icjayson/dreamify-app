@@ -63,7 +63,7 @@ const BlankState: React.FC<BlankStateProps> = ({
         onFocusCapture={resume}
         onBlurCapture={resume}
       >
-        <img src="/dreamable-logo.png" alt="Dreamable" className="w-10 h-10 mx-auto mb-3 rounded" />
+        <img src="/logo-main.png" alt="Dreamify" className="w-10 h-10 mx-auto mb-3 rounded" />
         <h2 id="blankstate-title" className="text-lg font-semibold mb-2">Get Started with Nyx</h2>
 
         <div

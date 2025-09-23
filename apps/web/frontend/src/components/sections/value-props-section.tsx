@@ -7,7 +7,7 @@ export const ValuePropsSection = () => {
     {
       icon: Zap,
       title: "Speed Revolution",
-      description: "Transform raw CSV/data into animated dashboard in under 5 minutes. Pre-built analytics functions eliminate manual calculations.",
+      description: "Transform raw data into animated dashboard in under 5 minutes. Pre-built analytics functions eliminate manual calculations.",
       features: ["5-minute creation", "Pre-built functions", "Instant results", "No manual work"]
     },
     {
@@ -36,36 +36,36 @@ export const ValuePropsSection = () => {
       {/* Animated elements */}
       <div className={`flex justify-center mb-8 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
         <div className="flex space-x-4">
-          <Sparkles className="w-8 h-8 text-primary animate-pulse" />
-          <Sparkles className="w-6 h-6 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
-          <Sparkles className="w-10 h-10 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
+          <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+          <Sparkles className="w-4 h-4 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
+          <Sparkles className="w-6 h-6 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
       </div>
     
       <div className="relative z-10 container mx-auto px-6">
         {/* Header with icon */}
-        <div className={`text-center mb-16 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
+        <div className={`text-center mb-8 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
           {/* Icon */}
           <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+            <div className="w-20 h-20 rounded-lg flex items-center justify-center">
               <img 
-                src="/dreamable-logo.png" 
-                alt="Dreamable Logo" 
+                src="/logo-main.png" 
+                alt="Dreamify Logo" 
                 className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
               />
             </div>
           </div>
           
           {/* Title with gradient panel */}
-          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
+          <h2 className="text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap">
             <span className="text-white">Core</span>
             <div className="gradient-panel rounded-xl px-6 py-3">
-              <span className="text-white font-bold text-4xl md:text-6xl">Value Propositions</span>
+              <span className="text-white font-bold text-3xl md:text-5xl">Value Propositions</span>
             </div>
           </h2>
           
-          <p className="text-xl text-white/60 max-w-3xl mx-auto">
-            That make Dreamable the superior choice for data visualization
+          <p className="text-md text-white/60 max-w-3xl mx-auto">
+            That make Dreamify the superior choice for data visualization
           </p>
         </div>
 
@@ -95,7 +95,7 @@ export const ValuePropsSection = () => {
           {valueProps.map((prop, index) => (
             <div 
               key={index}
-              className={`glass-panel rounded-3xl p-8 group hover:scale-105 transition-transform duration-200 flex flex-col h-full ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`}
+              className={`glass-panel rounded-3xl p-6 group hover:scale-105 transition-transform duration-200 flex flex-col h-full ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`}
               style={{ animationDelay: `${0.2 + index * 0.2}s` }}
             >
               {/* Icon */}
@@ -113,8 +113,8 @@ export const ValuePropsSection = () => {
 
               {/* Content */}
               <div className="space-y-4 flex-1 flex flex-col">
-                <h3 className="text-2xl font-bold text-white mb-0">{prop.title}</h3>
-                <p className="text-white/60 leading-relaxed">
+                <h3 className="text-xl font-bold text-white mb-0">{prop.title}</h3>
+                <p className="text-sm text-white/60 leading-relaxed">
                   {prop.description}
                 </p>
 
@@ -130,7 +130,7 @@ export const ValuePropsSection = () => {
 
                 {/* Learn More Button */}
                 <div className="pt-2 mt-auto flex justify-center">
-                  <button className="inline-flex items-center button-outline px-4 py-2 rounded-lg font-medium group/link">
+                  <button className="text-sm inline-flex items-center button-outline px-4 py-2 rounded-lg font-medium group/link">
                     Learn more
                     <ArrowRight className="w-4 h-4 ml-2 group-hover/link:translate-x-1 transition-transform" />
                   </button>

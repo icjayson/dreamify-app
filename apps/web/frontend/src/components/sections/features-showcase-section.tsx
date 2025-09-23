@@ -51,38 +51,38 @@ export const FeaturesShowcaseSection = () => {
       </div>
       
       {/* Animated elements */}
-      <div className={`flex justify-center mb-8 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
+      <div className={`flex justify-center mb-4 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
         <div className="flex space-x-4">
-          <Sparkles className="w-8 h-8 text-primary animate-pulse" />
-          <Sparkles className="w-6 h-6 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
-          <Sparkles className="w-10 h-10 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
+          <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+          <Sparkles className="w-4 h-4 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
+          <Sparkles className="w-6 h-6 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
       </div>
 
       <div className="relative z-10 container mx-auto px-6">
         {/* Header with icon */}
-        <div className={`text-center mb-20 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
+        <div className={`text-center mb-8 ${isVisible ? 'animate-fade-in' : 'opacity-0'}`}>
           {/* Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-20 h-20 rounded-lg flex items-center justify-center">
               <img 
-                src="/dreamable-logo.png" 
-                alt="Dreamable Logo" 
+                src="/logo-main.png" 
+                alt="Dreamify Logo" 
                 className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
               />
             </div>
           </div>
           
           {/* Title with gradient panel */}
-          <h2 className="text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap">
+          <h2 className="text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap">
             <span className="text-white">Core</span>
             <div className="gradient-panel rounded-xl px-6 py-3">
-              <span className="text-white font-bold text-4xl md:text-6xl">Features</span>
+              <span className="text-white font-bold text-3xl md:text-5xl">Features</span>
             </div>
           </h2>
           
-          <p className="text-xl text-white/60 mx-auto">
-            Discover the three revolutionary capabilities that make Dreamable the future of data visualization
+          <p className="text-md text-white/60 max-w-3xl mx-auto">
+            Discover the three revolutionary capabilities that make Dreamify the future of data visualization
           </p>
         </div>
 
@@ -98,18 +98,18 @@ export const FeaturesShowcaseSection = () => {
               style={{ animationDelay: `${0.3 + index * 0.2}s` }}
             >
               {/* Content */}
-              <div className={`space-y-8 ${feature.alignment === 'right' ? 'md:col-start-2' : ''}`}>
+              <div className={`space-y-6 ${feature.alignment === 'right' ? 'md:col-start-2' : ''}`}>
                 <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 icon-panel rounded-lg flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))]">
+                  <div className="w-16 h-16 icon-panel rounded-lg flex items-center justify-center mb-4 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))]">
                     <feature.icon className="w-8 h-8 text-white" />
                   </div>
                   <div className="w-full h-px bg-gradient-to-r from-primary to-transparent"></div>
                 </div>
                 
-                <h3 className="text-3xl font-bold text-foreground">{feature.title}</h3>
-                <p className="text-xl text-foreground-muted leading-relaxed">{feature.description}</p>
+                <h3 className="text-2xl font-bold text-foreground">{feature.title}</h3>
+                <p className="text-md text-foreground-muted leading-relaxed">{feature.description}</p>
                 
-                <button className="inline-flex items-center text-accent hover:text-accent-bright font-medium group">
+                <button className="text-sm inline-flex items-center text-accent hover:text-accent-bright font-medium group">
                   Explore this feature
                   <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </button>

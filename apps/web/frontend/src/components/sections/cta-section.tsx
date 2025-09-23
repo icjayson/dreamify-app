@@ -24,7 +24,7 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
       icon: Users,
       value: "Zero",
       label: "Technical setup",
-      description: "No coding, configuration, or training needed"
+      description: "No coding or configuration needed"
     }
   ];
 
@@ -41,52 +41,52 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
       <div className="relative z-10 container mx-auto px-6">
         <div className="max-w-5xl mx-auto text-center">
           {/* Animated elements */}
-          <div className={`flex justify-center mb-8 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
+          <div className={`flex justify-center mb-4 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
             <div className="flex space-x-4">
-              <Sparkles className="w-8 h-8 text-primary animate-pulse" />
-              <Sparkles className="w-6 h-6 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
-              <Sparkles className="w-10 h-10 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
+              <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+              <Sparkles className="w-4 h-4 text-secondary animate-pulse" style={{ animationDelay: '0.5s' }} />
+              <Sparkles className="w-6 h-6 text-accent animate-pulse" style={{ animationDelay: '1s' }} />
             </div>
           </div>
 
           {/* Header with icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-20 h-20 rounded-lg flex items-center justify-center">
               <img 
-                src="/dreamable-logo.png" 
-                alt="Dreamable Logo" 
+                src="/logo-main.png" 
+                alt="Dreamify Logo" 
                 className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
               />
             </div>
           </div>
           
           {/* Main headline */}
-          <h2 className={`text-4xl md:text-6xl font-bold mb-6 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
+          <h2 className={`text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
             <span className="text-white">Ready to</span>
             <div className="gradient-panel rounded-xl px-6 py-3">
-              <span className="text-white font-bold text-4xl md:text-6xl">transform</span>
+              <span className="text-white font-bold text-3xl md:text-5xl">transform</span>
             </div>
           </h2>
           
-          <h2 className={`text-3xl md:text-5xl font-bold mb-8 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
+          <h2 className={`text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
             <span className="text-white">your data storytelling?</span>
           </h2>
 
-          <p className={`text-xl text-muted-foreground max-w-3xl mx-auto mb-12 leading-relaxed ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.4s' }}>
+          <p className={`text-md text-muted-foreground max-w-3xl mx-auto mb-8 leading-relaxed ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.4s' }}>
             Start creating <span className="text-accent font-semibold">stunning, animated dashboards</span> in minutes. 
-            Join thousands of professionals who've already discovered the Dreamable difference.
+            Join thousands of professionals who've already discovered the Dreamify difference.
           </p>
 
         {/* Stats Grid */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto mb-16">
+        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto mb-12">
           {stats.map((stat, index) => (
             <div 
               key={index}
-              className={`text-center glass-panel rounded-3xl p-8 group hover:scale-105 transition-transform duration-200 ${isVisible ? 'animate-zoom-in' : 'opacity-0'}`}
+              className={`text-center glass-panel rounded-3xl p-6 group hover:scale-105 transition-transform duration-200 ${isVisible ? 'animate-zoom-in' : 'opacity-0'}`}
               style={{ animationDelay: `${index * 0.2}s` }}
             >
               {/* Icon */}
-              <div className="mb-8">
+              <div className="mb-6">
                 <div className="relative">
                   <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-6">
                     <stat.icon className="w-8 h-8 text-white" />
@@ -96,10 +96,10 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
                 </div>
               </div>
               
-              <div className="space-y-4">
-                <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">{stat.value}</div>
-                <div className="text-xl font-semibold text-foreground">{stat.label}</div>
-                <div className="text-muted-foreground">{stat.description}</div>
+              <div className="space-y-2">
+                <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">{stat.value}</div>
+                <div className="text-lg font-semibold text-foreground">{stat.label}</div>
+                <div className="text-sm text-muted-foreground">{stat.description}</div>
               </div>
             </div>
           ))}
@@ -109,12 +109,12 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
           <div className={`flex flex-col sm:flex-row gap-8 justify-center mb-12 ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`} style={{ animationDelay: '0.8s' }}>
             <button 
               onClick={onGetStarted}
-              className="button-gradient group text-xl px-8 py-4 rounded-2xl flex items-center justify-center"
+              className="button-gradient group text-lg px-8 py-4 rounded-2xl flex items-center justify-center"
             >
-              Get Started Free
+              Join the waitlist
               <Sparkles className="ml-3 w-6 h-6 group-hover:animate-spin transition-transform" />
             </button>
-            <button className="button-outline group text-xl px-8 py-4 rounded-2xl flex items-center justify-center">
+            <button className="button-outline group text-lg px-8 py-4 rounded-2xl flex items-center justify-center">
               <Calendar className="mr-3 w-6 h-6 group-hover:scale-110 transition-transform" />
               Book a Demo
             </button>
@@ -125,17 +125,17 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
             <div className="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-8">
               <div className="flex items-center">
                 <div className="w-3 h-3 rounded-full bg-green-500 mr-3 animate-pulse"></div>
-                <span className="text-muted-foreground">No credit card required</span>
+                <span className="text-sm text-muted-foreground">No credit card required</span>
               </div>
-              <div className="hidden md:block w-px h-6 bg-border"></div>
+              <div className="hidden md:block w-px h-4 bg-border"></div>
               <div className="flex items-center">
                 <div className="w-3 h-3 rounded-full bg-blue-500 mr-3 animate-pulse"></div>
-                <span className="text-muted-foreground">14-day free trial</span>
+                <span className="text-sm text-muted-foreground">14-day free trial</span>
               </div>
-              <div className="hidden md:block w-px h-6 bg-border"></div>
+              <div className="hidden md:block w-px h-4 bg-border"></div>
               <div className="flex items-center">
                 <div className="w-3 h-3 rounded-full bg-accent mr-3 animate-pulse"></div>
-                <span className="text-muted-foreground">Cancel anytime</span>
+                <span className="text-sm text-muted-foreground">Cancel anytime</span>
               </div>
             </div>
           </div>

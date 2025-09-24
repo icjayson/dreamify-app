@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download, SquareArrowOutUpRight } from "lucide-react";
 import ChatInterface from "@/components/ChatInterface";
-import DashboardPreview from "@/components/DashboardPreview";
+import AmazonDashboard from "@/components/Amazon_Dashboard";
 import { useChatStore } from "@/stores/useChatStore";
 import BlankState from "@/components/BlankState";
 
@@ -19,7 +19,7 @@ export default function ProjectPage() {
         <div className="grid grid-cols-4 items-center h-10">
           <div className="col-span-1">
             <div className="flex items-center gap-3">
-              <img src="/logo-main.png" alt="Dreamify" className="w-6 h-6 rounded" />
+              <img src="/logo-watermark.png" alt="Dreamify" className="w-12 h-6 object-contain" />
               <span className="font-regular text-sm truncate">project-name</span>
             </div>
           </div>
@@ -29,9 +29,16 @@ export default function ProjectPage() {
                 <ArrowLeft className="w-4 h-4" />
                 Back
               </button>
-              <button onClick={() => { try { if (processedData) { sessionStorage.setItem('project_preview_data', JSON.stringify(processedData)); } } catch (_e) {} window.open('/workspace/project/preview', '_blank'); }} className="button-gradient h-8 px-4 rounded-md text-sm text-white">
-                Publish
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { try { window.dispatchEvent(new Event('amazon-dashboard:export-view')); } catch (_e) {} }} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
+                  <Download className="w-4 h-4" />
+                  <span>Export View</span>
+                </button>
+                <button onClick={() => { try { if (processedData) { sessionStorage.setItem('project_preview_data', JSON.stringify(processedData)); } } catch (_e) {} window.open('/workspace/project/preview', '_blank'); }} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center">
+                  <span>Publish</span>
+                  <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -64,7 +71,7 @@ export default function ProjectPage() {
                 ]}
                 intervalMs={1000}
                 onWatchTutorial={() => window.open('/tutorial', '_blank')}
-                onUploadData={() => {
+                handleFileUpload={() => {
                   try {
                     window.dispatchEvent(new Event('nyx:open-file-picker'));
                     const el = document.querySelector('[data-chat-root]');
@@ -93,7 +100,7 @@ export default function ProjectPage() {
                 }}
               />
             ) : (
-              <DashboardPreview processedData={processedData} />
+              <AmazonDashboard processedData={processedData} className="h-full overflow-y-auto" />
             )}
           </div>
         </div>

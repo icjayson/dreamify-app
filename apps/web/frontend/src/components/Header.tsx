@@ -56,17 +56,14 @@ const Header = () => {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2">
             {/* Logo */}
-            <div className="w-12 h-12 rounded-lg flex items-center justify-center">
+            <div className="w-32 h-auto rounded-lg flex items-center justify-center">
               <img 
-                src="/logo-main.png"
+                src="/logo-horizon.png"
                 alt="Dreamify Logo" 
                 className="w-full h-full object-contain"
+                onClick={() => navigate("/")}
               />
             </div>
-            {/* Brand name */}
-            <span className="text-xl font-medium text-foreground font-outfit">
-              Dreamify
-            </span>
           </div>
           <nav className="hidden md:flex items-center space-x-4 ml-8">
             <a

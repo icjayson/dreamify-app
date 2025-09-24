@@ -2,15 +2,33 @@ import { create } from 'zustand';
 import { Message } from '@/types/message';
 import { processingService } from '@/services/processingService';
 
-// Helper function for AI response generation
-const generateAIResponse = async (userPrompt: string, processedData: any, messages: Message[], setMessages: (messages: Message[]) => void) => {
+// Helper function for AI response generation using functional updates
+const generateAIResponse = async (
+  userPrompt: string,
+  processedData: any,
+  messagesSnapshot: Message[],
+  updateMessages: (updater: (prev: Message[]) => Message[]) => void
+) => {
+  console.log('generateAIResponse called with:', { userPrompt, hasProcessedData: !!processedData, messageCount: messagesSnapshot.length });
+  
+  // Check if there's already an assistant message for this specific user prompt to avoid duplicates
+  // Only check the very last message to avoid blocking responses after initial message
+  const lastMessage = messagesSnapshot[messagesSnapshot.length - 1];
+  const hasRecentAssistantMessage = lastMessage && lastMessage.role === 'assistant' && lastMessage.content.trim() !== '';
+  if (hasRecentAssistantMessage) {
+    console.log('Last message is already an assistant message, skipping AI response generation');
+    return;
+  }
+  
+  console.log('Proceeding with AI response generation...');
+
   // Stream response from local Ollama (proxied via /ollama)
   try {
     const controller = new AbortController();
     const signal = controller.signal;
     
     // Build system messages based on processed data
-    const systemMessages = [];
+    const systemMessages = [] as Array<{ role: string; content: string }>;
     if (processedData) {
       systemMessages.push({
         role: "system", 
@@ -26,7 +44,7 @@ const generateAIResponse = async (userPrompt: string, processedData: any, messag
         stream: true,
         messages: [
           ...systemMessages,
-          ...messages.map((m) => ({ role: m.role, content: m.content })),
+          ...messagesSnapshot.map((m) => ({ role: m.role, content: m.content })),
           { role: "user", content: userPrompt }
         ],
       }),
@@ -43,18 +61,16 @@ const generateAIResponse = async (userPrompt: string, processedData: any, messag
     let assistantId = (Date.now() + 1).toString();
     let assistantContent = "";
 
-    // Establish a stable base array to avoid jittery re-renders
-    const baseMessages = [...messages];
-    // Add placeholder assistant message once
-    setMessages([
-      ...baseMessages,
+    // Append placeholder assistant message once using functional update
+    updateMessages((prev) => ([
+      ...prev,
       {
         id: assistantId,
         role: "assistant" as const,
         content: "",
         timestamp: new Date(),
       },
-    ]);
+    ]));
 
     while (true) {
       const { value, done } = await reader.read();
@@ -71,16 +87,12 @@ const generateAIResponse = async (userPrompt: string, processedData: any, messag
           const event = JSON.parse(line);
           if (event.message && event.message.content) {
             assistantContent += event.message.content;
-            // Update the last assistant message progressively based on the stable base
-            setMessages([
-              ...baseMessages,
-              {
-                id: assistantId,
-                role: "assistant" as const,
-                content: assistantContent,
-                timestamp: new Date(),
-              },
-            ]);
+            // Update the assistant placeholder progressively using functional update
+            updateMessages((prev) => prev.map((m) => (
+              m.id === assistantId
+                ? { ...m, content: assistantContent, timestamp: new Date() }
+                : m
+            )));
           }
           if (event.done) {
             break;
@@ -97,7 +109,7 @@ const generateAIResponse = async (userPrompt: string, processedData: any, messag
       content: "There was an error contacting the local model. Ensure Ollama is running on 127.0.0.1:11434 and the model qwen2.5-coder:7b is pulled (ollama pull qwen2.5-coder:7b).",
       timestamp: new Date(),
     };
-    setMessages([...messages, aiMessage]);
+    updateMessages((prev) => [...prev, aiMessage]);
   }
 };
 
@@ -145,6 +157,7 @@ interface ChatState {
   setTranscript: (transcript: string) => void;
   setDetectedLanguage: (language: string | null) => void;
   setIsProcessing: (processing: boolean) => void;
+  updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   
   // Complex actions
   sendMessage: (content: string) => void;
@@ -191,6 +204,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setTranscript: (transcript) => set({ transcript }),
   setDetectedLanguage: (language) => set({ detectedLanguage: language }),
   setIsProcessing: (processing) => set({ isProcessing: processing }),
+  updateMessages: (updater) => set((state) => ({ messages: updater(state.messages) })),
   
   // Complex actions
   sendMessage: (content) => {
@@ -215,7 +229,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void) => {
     const state = get();
-    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, setMessages, messages } = state;
+    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages } = state;
     
     if (!uploadedFile || uploadedFile.status !== 'uploaded') {
       // No file uploaded, check if user message already exists
@@ -229,6 +243,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           timestamp: new Date(),
         };
         addMessage(userMessage);
+      }
+      // Generate AI response for no file case
+      console.log('No file case - generating AI response');
+      setIsTyping(true);
+      try {
+        // Get updated messages after adding user message
+        const updatedMessages = get().messages;
+        console.log('No file - Updated messages before AI call:', updatedMessages.map(m => ({ id: m.id, role: m.role, content: m.content.substring(0, 50) })));
+        await generateAIResponse(content, null, updatedMessages, updateMessages);
+      } finally {
+        setIsTyping(false);
       }
       return;
     }
@@ -246,6 +271,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
       addMessage(userMessage);
     }
+    
+    // Get updated messages after adding user message
+    const updatedMessages = get().messages;
     setIsTyping(true);
     setIsProcessing(true);
 
@@ -281,17 +309,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (onProcessedDataChange) {
             onProcessedDataChange(finalResult.data);
           }
-          // Generate AI response based on processed data and user prompt
-          await generateAIResponse(content, finalResult.data, messages, setMessages);
+          
+          // Check if this is the first user prompt with a file (fixed response logic)
+          const hasUserPrompt = updatedMessages.some((m) => m.role === 'user');
+          const hasFixedReply = updatedMessages.some((m) => m.id === '2');
+          
+          if (hasUserPrompt && !hasFixedReply) {
+            // First user prompt with file - add fixed response
+            updateMessages((prev) => ([
+              ...prev,
+              {
+                id: '2',
+                role: 'assistant',
+                content: "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.",
+                timestamp: new Date(),
+              }
+            ]));
+          } else {
+            // Subsequent turns - generate AI response
+            console.log('Subsequent turn - generating AI response');
+            console.log('Updated messages before AI call:', updatedMessages.map(m => ({ id: m.id, role: m.role, content: m.content.substring(0, 50) })));
+            await generateAIResponse(content, finalResult.data, updatedMessages, updateMessages);
+          }
         } else {
-          await generateAIResponse(content, null, messages, setMessages);
+          await generateAIResponse(content, null, updatedMessages, updateMessages);
         }
       } else {
-        await generateAIResponse(content, null, messages, setMessages);
+        await generateAIResponse(content, null, updatedMessages, updateMessages);
       }
     } catch (error) {
       console.error('Processing error:', error);
-      await generateAIResponse(content, null, messages, setMessages);
+      await generateAIResponse(content, null, updatedMessages, updateMessages);
     } finally {
       setIsTyping(false);
       setIsProcessing(false);

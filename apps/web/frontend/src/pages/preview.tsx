@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import DashboardPreview from "@/components/DashboardPreview";
+import AmazonDashboard from "@/components/Amazon_Dashboard";
 
 export default function PreviewPage() {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ export default function PreviewPage() {
     <div className="min-h-screen bg-muted">
       {/* Content */}
       <div>
-        <DashboardPreview processedData={processedData} />
+        <AmazonDashboard processedData={processedData} />
       </div>
     </div>
   );

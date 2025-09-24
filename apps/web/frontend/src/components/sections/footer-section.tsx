@@ -45,14 +45,13 @@ export const FooterSection = () => {
           {/* Brand */}
           <div className="md:col-span-2">
             <div className="flex items-center mb-2">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mr-3 p-1">
+              <div className="w-40 h-auto rounded-xl flex items-center justify-center mr-3 p-1">
                 <img 
-                  src="/logo-main.png" 
+                  src="/logo-horizon.png" 
                   alt="Dreamify Logo" 
                   className="w-full h-full object-contain"
                 />
               </div>
-              <span className="text-2xl font-medium font-outfit">Dreamify</span>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed mb-8 max-w-md">
               Transform raw data into stunning, animated dashboards through natural conversation. 

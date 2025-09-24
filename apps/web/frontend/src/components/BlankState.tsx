@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRotatingText } from "@/hooks/useRotatingText";
-import { Link as LinkIcon } from "lucide-react";
+import { Link as LinkIcon, Upload } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import { useChatStore } from "@/stores/useChatStore";
 
@@ -8,7 +8,7 @@ interface BlankStateProps {
   subtexts: string[];
   intervalMs?: number;
   onWatchTutorial?: () => void;
-  onUploadData?: () => void;
+  handleFileUpload?: () => void;
   onConnectDataSource?: () => void;
   onUseSample?: () => void;
   className?: string;
@@ -18,7 +18,7 @@ const BlankState: React.FC<BlankStateProps> = ({
   subtexts,
   intervalMs = 3500,
   onWatchTutorial,
-  onUploadData,
+  handleFileUpload,
   onConnectDataSource,
   onUseSample,
   className = "",
@@ -63,7 +63,7 @@ const BlankState: React.FC<BlankStateProps> = ({
         onFocusCapture={resume}
         onBlurCapture={resume}
       >
-        <img src="/logo-main.png" alt="Dreamify" className="w-10 h-10 mx-auto mb-3 rounded" />
+        <img src="/logo-watermark.png" alt="Dreamify" className="w-20 h-20 object-contain mx-auto mb-3 rounded hover:animate-spin transition-all duration-300" />
         <h2 id="blankstate-title" className="text-lg font-semibold mb-2">Get Started with Nyx</h2>
 
         <div
@@ -81,10 +81,10 @@ const BlankState: React.FC<BlankStateProps> = ({
         </div>
 
         <div className="flex items-center justify-center gap-2 mb-3">
-          {onUploadData && (
-            <button onClick={onUploadData} className="button-gradient h-9 px-4 rounded-md text-sm text-white flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12l7-7 7 7" /><path d="M19 19H5" /></svg>
-              Upload CSV
+          {handleFileUpload && (
+            <button onClick={handleFileUpload} className="button-gradient h-9 px-4 rounded-md text-sm text-white flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              Upload local database
             </button>
           )}
           <div className="relative" ref={menuRef}>

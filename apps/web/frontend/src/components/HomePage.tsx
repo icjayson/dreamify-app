@@ -383,7 +383,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   };
 
   return (
-    <>
+    <div className="h-screen overflow-y-auto homepage-scrollbar">
       <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-44">
       {/* WaveBackground Component */}
       <WaveBackground 
@@ -407,11 +407,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
             <span className="text-white">in minutes with</span>
             <div className="gradient-panel rounded-xl px-6 py-3 flex items-center gap-3">
               <img 
-                src="/logo-white.png" 
+                src="/logo-full-horizon-white.png" 
                 alt="Dreamify Logo" 
-                className="w-12 h-12 rounded-lg object-contain"
+                className="w-36 h-auto rounded-lg object-contain"
               />
-              <span className="text-white font-medium text-2xl md:text-4xl font-outfit">Dreamify</span>
             </div>
           </div>
         </h1>
@@ -685,7 +684,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     <SocialProofSection />
     <CTASection onGetStarted={onGetStarted} />
     <FooterSection />
-  </>
+  </div>
 );
 };
 

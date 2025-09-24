@@ -18,7 +18,7 @@ const Index = () => {
   const [processedData, setProcessedData] = useState<any>(null);
   
   // Zustand stores
-  const { messages, dashboardTheme, isThemeChanging } = useChatStore();
+  const { messages, dashboardTheme, isThemeChanging, isInitialLoading } = useChatStore();
   const { uploadState } = useFileStore();
 
   const handleGetStarted = () => {
@@ -45,7 +45,9 @@ const Index = () => {
 
           {/* Main Dashboard */}
           <div className="flex-1 overflow-hidden">
-            {isThemeChanging ? (
+            {isInitialLoading ? (
+              <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
+            ) : isThemeChanging ? (
               <DashboardLoading />
             ) : dashboardTheme === 'dark' ? (
               <AmazonDashboardDark processedData={processedData} />

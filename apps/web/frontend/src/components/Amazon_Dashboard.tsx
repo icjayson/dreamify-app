@@ -45,7 +45,6 @@ function truthy(x: any) {
 }
 
 export default function AmazonDashboard({ processedData, className = "", style = {} as React.CSSProperties }: { processedData?: any; className?: string; style?: React.CSSProperties }) {
-  const [isReady, setIsReady] = useState(false);
   const [raw, setRaw] = useState<any[]>([]);
   const [sampleLoaded, setSampleLoaded] = useState(false);
 
@@ -128,11 +127,7 @@ export default function AmazonDashboard({ processedData, className = "", style =
     }
   }, []);
 
-  // Gate initial render with a 4-second delay
-  useEffect(() => {
-    const timerId = setTimeout(() => setIsReady(true), 4000);
-    return () => clearTimeout(timerId);
-  }, []);
+  // Removed internal initial render delay; container decides when to show loading
 
   // Derive filter domain
   const minDate = useMemo(() => raw.length ? new Date(Math.min(...raw.map(r=>+r.date))) : null, [raw]);
@@ -276,11 +271,7 @@ export default function AmazonDashboard({ processedData, className = "", style =
     };
   }, [filtered]);
 
-  if (!isReady) {
-    return (
-      <div aria-busy="true" aria-live="polite" data-testid="amazon-dashboard-loading" />
-    );
-  }
+  // Render immediately; parent may gate with external loader
 
   return (
     <div className={`p-6 space-y-6 bg-white text-gray-900 rounded-xl border border-gray-200 shadow-sm overflow-hidden ${className}`} style={style}>

@@ -2,27 +2,14 @@ import { create } from 'zustand';
 import { Message } from '@/types/message';
 import { processingService } from '@/services/processingService';
 
-// Theme detection function
-const detectThemeChange = (message: string, messages: Message[]): 'light' | 'dark' | null => {
-  // Only check for theme change on second user interaction (messages.length > 3)
-  if (messages.length <= 3) return null;
-  
+// Theme detection function (keyword-based only)
+const detectThemeChange = (message: string): 'light' | 'dark' | null => {
   const lowerMessage = message.toLowerCase();
   const themeKeywords = ['dark', 'theme', 'modify', 'change', 'switch'];
-  
-  // Check if message contains theme-related keywords
   const hasThemeKeywords = themeKeywords.some(keyword => lowerMessage.includes(keyword));
-  
-  if (hasThemeKeywords) {
-    // If message contains "dark" or similar, return dark theme
-    if (lowerMessage.includes('dark')) {
-      return 'dark';
-    }
-    // Default to dark theme for any theme change request
-    return 'dark';
-  }
-  
-  return null;
+  if (!hasThemeKeywords) return null;
+  if (lowerMessage.includes('dark')) return 'dark';
+  return 'dark';
 };
 
 // Helper function for AI response generation using functional updates
@@ -171,6 +158,8 @@ interface ChatState {
   // Theme state
   dashboardTheme: 'light' | 'dark';
   isThemeChanging: boolean;
+  hasShownInitialDashboard: boolean;
+  isInitialLoading: boolean;
   
   // Actions
   setInputValue: (value: string) => void;
@@ -187,6 +176,8 @@ interface ChatState {
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setDashboardTheme: (theme: 'light' | 'dark') => void;
   setIsThemeChanging: (changing: boolean) => void;
+  setHasShownInitialDashboard: (flag: boolean) => void;
+  setIsInitialLoading: (flag: boolean) => void;
   
   // Complex actions
   sendMessage: (content: string) => void;
@@ -218,6 +209,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   detectedLanguage: null,
   dashboardTheme: 'light',
   isThemeChanging: false,
+  hasShownInitialDashboard: false,
+  isInitialLoading: false,
   
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -238,6 +231,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   updateMessages: (updater) => set((state) => ({ messages: updater(state.messages) })),
   setDashboardTheme: (theme) => set({ dashboardTheme: theme }),
   setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
+  setHasShownInitialDashboard: (flag) => set({ hasShownInitialDashboard: flag }),
+  setIsInitialLoading: (flag) => set({ isInitialLoading: flag }),
   
   // Complex actions
   sendMessage: (content) => {
@@ -262,11 +257,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void) => {
     const state = get();
-    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging } = state;
+    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme } = state;
     
-    // Check for theme change detection
-    const detectedTheme = detectThemeChange(content, messages);
-    if (detectedTheme) {
+    // Text-only message path: allow theme change after initial dashboard shown, only if currently light
+    const isTextOnly = !uploadedFile || uploadedFile.status !== 'uploaded';
+    const detectedTheme = detectThemeChange(content);
+    if (isTextOnly && hasShownInitialDashboard && dashboardTheme === 'light' && detectedTheme) {
       console.log('Theme change detected:', detectedTheme);
       setIsThemeChanging(true);
       
@@ -306,7 +302,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     
-    if (!uploadedFile || uploadedFile.status !== 'uploaded') {
+    if (isTextOnly) {
       // No file uploaded, check if user message already exists
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content !== content.trim()) {
@@ -383,6 +379,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Call the callback to pass processed data to parent component
           if (onProcessedDataChange) {
             onProcessedDataChange(finalResult.data);
+          }
+          // First successful generation: show initial loading for 10s, then mark shown
+          if (!get().hasShownInitialDashboard) {
+            set({ isInitialLoading: true });
+            setTimeout(() => {
+              set({ isInitialLoading: false, hasShownInitialDashboard: true });
+            }, 10000);
           }
           
           // Check if this is the first user prompt with a file (fixed response logic)

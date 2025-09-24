@@ -14,6 +14,7 @@ export default function ProjectPage() {
   const uploadedFile = useChatStore((s) => s.uploadedFile);
   const dashboardTheme = useChatStore((s) => s.dashboardTheme);
   const isThemeChanging = useChatStore((s) => s.isThemeChanging);
+  const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
 
   return (
@@ -104,7 +105,11 @@ export default function ProjectPage() {
                 }}
               />
             ) : (
-              isThemeChanging ? (
+              uploadedFile?.status === 'processing' ? (
+                <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
+              ) : isInitialLoading ? (
+                <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
+              ) : isThemeChanging ? (
                 <DashboardLoading />
               ) : dashboardTheme === 'dark' ? (
                 <AmazonDashboardDark processedData={processedData} className="h-full overflow-y-auto" />

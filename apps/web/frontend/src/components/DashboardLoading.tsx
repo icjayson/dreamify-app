@@ -5,9 +5,12 @@ import { Loader2 } from "lucide-react";
 interface DashboardLoadingProps {
   className?: string;
   style?: React.CSSProperties;
+  title?: string;
+  description?: string;
+  durationSec?: number;
 }
 
-export default function DashboardLoading({ className = "", style = {} as React.CSSProperties }: DashboardLoadingProps) {
+export default function DashboardLoading({ className = "", style = {} as React.CSSProperties, title = "Changing Theme", description = "Please wait while we update your dashboard...", durationSec = 10 }: DashboardLoadingProps) {
   return (
     <div className={`flex items-center justify-center h-full bg-gray-50 ${className}`} style={style}>
       <motion.div 
@@ -24,8 +27,8 @@ export default function DashboardLoading({ className = "", style = {} as React.C
         </motion.div>
         
         <div className="text-center">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Changing Theme</h3>
-          <p className="text-sm text-gray-600">Please wait while we update your dashboard...</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+          <p className="text-sm text-gray-600">{description}</p>
         </div>
         
         <motion.div 
@@ -38,7 +41,7 @@ export default function DashboardLoading({ className = "", style = {} as React.C
             className="h-full bg-blue-600 rounded-full"
             initial={{ width: "0%" }}
             animate={{ width: "100%" }}
-            transition={{ duration: 10, ease: "linear" }}
+            transition={{ duration: durationSec, ease: "linear" }}
           />
         </motion.div>
       </motion.div>

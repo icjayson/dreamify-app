@@ -10,6 +10,7 @@ export default function PreviewPage() {
   const location = useLocation();
   const dashboardTheme = useChatStore((s) => s.dashboardTheme);
   const isThemeChanging = useChatStore((s) => s.isThemeChanging);
+  const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const state = location.state as { processedData?: any } | null;
   let processedData = state?.processedData;
 
@@ -29,7 +30,9 @@ export default function PreviewPage() {
     <div className="min-h-screen bg-muted">
       {/* Content */}
       <div>
-        {isThemeChanging ? (
+        {isInitialLoading ? (
+          <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
+        ) : isThemeChanging ? (
           <DashboardLoading />
         ) : dashboardTheme === 'dark' ? (
           <AmazonDashboardDark processedData={processedData} />

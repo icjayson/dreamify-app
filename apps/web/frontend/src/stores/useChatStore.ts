@@ -2,6 +2,29 @@ import { create } from 'zustand';
 import { Message } from '@/types/message';
 import { processingService } from '@/services/processingService';
 
+// Theme detection function
+const detectThemeChange = (message: string, messages: Message[]): 'light' | 'dark' | null => {
+  // Only check for theme change on second user interaction (messages.length > 3)
+  if (messages.length <= 3) return null;
+  
+  const lowerMessage = message.toLowerCase();
+  const themeKeywords = ['dark', 'theme', 'modify', 'change', 'switch'];
+  
+  // Check if message contains theme-related keywords
+  const hasThemeKeywords = themeKeywords.some(keyword => lowerMessage.includes(keyword));
+  
+  if (hasThemeKeywords) {
+    // If message contains "dark" or similar, return dark theme
+    if (lowerMessage.includes('dark')) {
+      return 'dark';
+    }
+    // Default to dark theme for any theme change request
+    return 'dark';
+  }
+  
+  return null;
+};
+
 // Helper function for AI response generation using functional updates
 const generateAIResponse = async (
   userPrompt: string,
@@ -145,6 +168,10 @@ interface ChatState {
   transcript: string;
   detectedLanguage: string | null;
   
+  // Theme state
+  dashboardTheme: 'light' | 'dark';
+  isThemeChanging: boolean;
+  
   // Actions
   setInputValue: (value: string) => void;
   setIsTyping: (typing: boolean) => void;
@@ -158,6 +185,8 @@ interface ChatState {
   setDetectedLanguage: (language: string | null) => void;
   setIsProcessing: (processing: boolean) => void;
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
+  setDashboardTheme: (theme: 'light' | 'dark') => void;
+  setIsThemeChanging: (changing: boolean) => void;
   
   // Complex actions
   sendMessage: (content: string) => void;
@@ -187,6 +216,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isListening: false,
   transcript: "",
   detectedLanguage: null,
+  dashboardTheme: 'light',
+  isThemeChanging: false,
   
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -205,6 +236,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setDetectedLanguage: (language) => set({ detectedLanguage: language }),
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   updateMessages: (updater) => set((state) => ({ messages: updater(state.messages) })),
+  setDashboardTheme: (theme) => set({ dashboardTheme: theme }),
+  setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
   
   // Complex actions
   sendMessage: (content) => {
@@ -229,7 +262,49 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void) => {
     const state = get();
-    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages } = state;
+    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging } = state;
+    
+    // Check for theme change detection
+    const detectedTheme = detectThemeChange(content, messages);
+    if (detectedTheme) {
+      console.log('Theme change detected:', detectedTheme);
+      setIsThemeChanging(true);
+      
+      // Add user message
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: "user",
+        content: content.trim(),
+        timestamp: new Date(),
+      };
+      addMessage(userMessage);
+      
+      // Add loading message
+      const loadingMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Changing dashboard theme...",
+        timestamp: new Date(),
+      };
+      addMessage(loadingMessage);
+      
+      // Wait 10 seconds for loading effect
+      setTimeout(() => {
+        setDashboardTheme(detectedTheme);
+        setIsThemeChanging(false);
+        
+        // Add completion message
+        const completionMessage: Message = {
+          id: (Date.now() + 2).toString(),
+          role: "assistant",
+          content: `Dashboard theme has been changed to ${detectedTheme} mode!`,
+          timestamp: new Date(),
+        };
+        addMessage(completionMessage);
+      }, 10000);
+      
+      return;
+    }
     
     if (!uploadedFile || uploadedFile.status !== 'uploaded') {
       // No file uploaded, check if user message already exists

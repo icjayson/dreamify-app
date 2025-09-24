@@ -1,0 +1,47 @@
+import React from "react";
+import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
+
+interface DashboardLoadingProps {
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+export default function DashboardLoading({ className = "", style = {} as React.CSSProperties }: DashboardLoadingProps) {
+  return (
+    <div className={`flex items-center justify-center h-full bg-gray-50 ${className}`} style={style}>
+      <motion.div 
+        className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl shadow-lg border border-gray-200"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        >
+          <Loader2 className="h-8 w-8 text-blue-600" />
+        </motion.div>
+        
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Changing Theme</h3>
+          <p className="text-sm text-gray-600">Please wait while we update your dashboard...</p>
+        </div>
+        
+        <motion.div 
+          className="w-48 h-1 bg-gray-200 rounded-full overflow-hidden"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          <motion.div
+            className="h-full bg-blue-600 rounded-full"
+            initial={{ width: "0%" }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 10, ease: "linear" }}
+          />
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+}

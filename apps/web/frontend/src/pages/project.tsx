@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, SquareArrowOutUpRight } from "lucide-react";
 import ChatInterface from "@/components/ChatInterface";
 import AmazonDashboard from "@/components/Amazon_Dashboard";
+import AmazonDashboardDark from "@/components/Amazon_Dashboard_Dark";
+import DashboardLoading from "@/components/DashboardLoading";
 import { useChatStore } from "@/stores/useChatStore";
 import BlankState from "@/components/BlankState";
 
@@ -10,6 +12,9 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const [processedData, setProcessedData] = useState<any>(null);
   const uploadedFile = useChatStore((s) => s.uploadedFile);
+  const dashboardTheme = useChatStore((s) => s.dashboardTheme);
+  const isThemeChanging = useChatStore((s) => s.isThemeChanging);
+  const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
 
   return (
@@ -100,7 +105,17 @@ export default function ProjectPage() {
                 }}
               />
             ) : (
-              <AmazonDashboard processedData={processedData} className="h-full overflow-y-auto" />
+              uploadedFile?.status === 'processing' ? (
+                <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
+              ) : isInitialLoading ? (
+                <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
+              ) : isThemeChanging ? (
+                <DashboardLoading />
+              ) : dashboardTheme === 'dark' ? (
+                <AmazonDashboardDark processedData={processedData} className="h-full overflow-y-auto" />
+              ) : (
+                <AmazonDashboard processedData={processedData} className="h-full overflow-y-auto" />
+              )
             )}
           </div>
         </div>

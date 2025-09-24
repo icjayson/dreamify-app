@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import ChatInterface from "@/components/ChatInterface";
 import AmazonDashboard from "@/components/Amazon_Dashboard";
+import AmazonDashboardDark from "@/components/Amazon_Dashboard_Dark";
+import DashboardLoading from "@/components/DashboardLoading";
 import HomePage from "@/components/HomePage";
 import { Message } from "@/types/message";
 import { useChatStore } from "@/stores/useChatStore";
@@ -16,7 +18,7 @@ const Index = () => {
   const [processedData, setProcessedData] = useState<any>(null);
   
   // Zustand stores
-  const { messages } = useChatStore();
+  const { messages, dashboardTheme, isThemeChanging, isInitialLoading } = useChatStore();
   const { uploadState } = useFileStore();
 
   const handleGetStarted = () => {
@@ -43,7 +45,15 @@ const Index = () => {
 
           {/* Main Dashboard */}
           <div className="flex-1 overflow-hidden">
-            <AmazonDashboard processedData={processedData} />
+            {isInitialLoading ? (
+              <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
+            ) : isThemeChanging ? (
+              <DashboardLoading />
+            ) : dashboardTheme === 'dark' ? (
+              <AmazonDashboardDark processedData={processedData} />
+            ) : (
+              <AmazonDashboard processedData={processedData} />
+            )}
           </div>
         </div>
       </div>

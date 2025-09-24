@@ -14,6 +14,11 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         rewrite: (pathStr) => pathStr.replace(/^\/ollama/, ""),
       },
+      "/api": {
+        target: "http://127.0.0.1:5000",
+        changeOrigin: true,
+        rewrite: (pathStr) => pathStr.replace(/^\/api/, "/api"),
+      },
     },
   },
   plugins: [

@@ -44,7 +44,7 @@ function truthy(x: any) {
   return !(s === "" || s === "na" || s === "none" || s === "null" || s === "false");
 }
 
-export default function AmazonDashboard({ processedData, className = "", style = {} as React.CSSProperties }: { processedData?: any; className?: string; style?: React.CSSProperties }) {
+export default function AmazonDashboardDark({ processedData, className = "", style = {} as React.CSSProperties }: { processedData?: any; className?: string; style?: React.CSSProperties }) {
   const [raw, setRaw] = useState<any[]>([]);
   const [sampleLoaded, setSampleLoaded] = useState(false);
 
@@ -242,7 +242,7 @@ export default function AmazonDashboard({ processedData, className = "", style =
     }
   }, [allCategories]);
 
-  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#955196", "#A3E635", "#F97316", "#06B6D4"]; // accessible palette
+  const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#F97316", "#84CC16"]; // Dark theme palette
 
   const resetFilters = () => {
     setStatusSel(new Set());
@@ -274,37 +274,37 @@ export default function AmazonDashboard({ processedData, className = "", style =
   // Render immediately; parent may gate with external loader
 
   return (
-    <div className={`p-6 space-y-6 bg-white text-gray-900 rounded-xl border border-gray-200 shadow-sm overflow-hidden ${className}`} style={style}>
+    <div className={`p-6 space-y-6 bg-gray-900 text-white rounded-xl border border-gray-700 shadow-sm overflow-hidden ${className}`} style={style}>
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-1">Amazon Sales Report</h1>
-          <p className="text-sm text-muted-foreground">Amazon sales report by time, status, fulfillment, category, geography, and promotions.</p>
+          <h1 className="text-3xl font-bold tracking-tight mb-1 text-white">Amazon Sales Report</h1>
+          <p className="text-sm text-gray-400">Amazon sales report by time, status, fulfillment, category, geography, and promotions.</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
+      <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-sm">
         <div className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground">From</label>
-              <Input className="rounded-xl border-gray-200 bg-white text-gray-400" type="date" value={dateFrom} onChange={(e)=>setDateFrom(e.target.value)} />
+              <label className="text-xs text-gray-400">From</label>
+              <Input className="rounded-xl border-gray-600 bg-gray-700 text-white placeholder-gray-400" type="date" value={dateFrom} onChange={(e)=>setDateFrom(e.target.value)} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">To</label>
-              <Input className="rounded-xl border-gray-200 bg-white text-gray-400" type="date" value={dateTo} onChange={(e)=>setDateTo(e.target.value)} />
+              <label className="text-xs text-gray-400">To</label>
+              <Input className="rounded-xl border-gray-600 bg-gray-700 text-white placeholder-gray-400" type="date" value={dateTo} onChange={(e)=>setDateTo(e.target.value)} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Search (SKU / Style / Category)</label>
+              <label className="text-xs text-gray-400">Search (SKU / Style / Category)</label>
               <div className="flex gap-2">
-                <Input className="rounded-xl border-gray-200 bg-white text-gray-400" placeholder="e.g. KUR-1234 or Kurta" value={searchText} onChange={(e)=>setSearchText(e.target.value)} />
-                <button type="button" aria-label="Clear search" onClick={()=>setSearchText("")} className="rounded-2xl inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-gray-900 bg-white hover:bg-gray-50 transition"><Search className="h-4 w-4"/></button>
+                <Input className="rounded-xl border-gray-600 bg-gray-700 text-white placeholder-gray-400" placeholder="e.g. KUR-1234 or Kurta" value={searchText} onChange={(e)=>setSearchText(e.target.value)} />
+                <button type="button" aria-label="Clear search" onClick={()=>setSearchText("")} className="rounded-2xl inline-flex items-center justify-center px-3 py-2 border border-gray-600 text-white bg-gray-700 hover:bg-gray-600 transition"><Search className="h-4 w-4"/></button>
               </div>
             </div>
             <div className="flex items-end gap-2">
-              <button type="button" onClick={resetFilters} className="rounded-2xl inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-900 bg-white hover:bg-gray-50 transition"><RefreshCw className="h-4 w-4"/> <span>Reset</span></button>
-              <button type="button" onClick={()=>setB2bOnly(v=>!v)} className={b2bOnly ? "rounded-2xl inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white hover:bg-gray-800 transition" : "rounded-2xl inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-900 bg-white hover:bg-gray-50 transition"}>
-                <span className="mr-2 rounded-2xl px-2 py-0.5 text-xs bg-gray-900 text-white">B2B</span>
+              <button type="button" onClick={resetFilters} className="rounded-2xl inline-flex items-center gap-2 px-4 py-2 border border-gray-600 text-white bg-gray-700 hover:bg-gray-600 transition"><RefreshCw className="h-4 w-4"/> <span>Reset</span></button>
+              <button type="button" onClick={()=>setB2bOnly(v=>!v)} className={b2bOnly ? "rounded-2xl inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-900 hover:bg-gray-100 transition" : "rounded-2xl inline-flex items-center gap-2 px-4 py-2 border border-gray-600 text-white bg-gray-700 hover:bg-gray-600 transition"}>
+                <span className="mr-2 rounded-2xl px-2 py-0.5 text-xs bg-white text-gray-900">B2B</span>
                 {b2bOnly?"Only":"Include"}
               </button>
             </div>
@@ -313,13 +313,13 @@ export default function AmazonDashboard({ processedData, className = "", style =
           {/* Quick pickers */}
           <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground">Status</label>
+              <label className="text-xs text-gray-400">Status</label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {allStatuses.map(s => (
                   <span
                     key={s}
                     onClick={()=> setStatusSel(prev => { const n = new Set(prev); n.has(s)? n.delete(s): n.add(s); return n; })}
-                    className={`cursor-pointer rounded-2xl px-3 py-1 text-xs inline-flex items-center ${statusSel.has(s)?"bg-gray-900 text-white":"bg-gray-100 text-gray-700"}`}
+                    className={`cursor-pointer rounded-2xl px-3 py-1 text-xs inline-flex items-center ${statusSel.has(s)?"bg-white text-gray-900":"bg-gray-700 text-gray-300"}`}
                   >
                     {s || "(blank)"}
                   </span>
@@ -327,13 +327,13 @@ export default function AmazonDashboard({ processedData, className = "", style =
               </div>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Fulfillment</label>
+              <label className="text-xs text-gray-400">Fulfillment</label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {allFulfill.map(s => (
                   <span
                     key={s}
                     onClick={()=> setFulfillmentSel(prev => { const n = new Set(prev); n.has(s)? n.delete(s): n.add(s); return n; })}
-                    className={`cursor-pointer rounded-2xl px-3 py-1 text-xs inline-flex items-center ${fulfillmentSel.has(s)?"bg-gray-900 text-white":"bg-gray-100 text-gray-700"}`}
+                    className={`cursor-pointer rounded-2xl px-3 py-1 text-xs inline-flex items-center ${fulfillmentSel.has(s)?"bg-white text-gray-900":"bg-gray-700 text-gray-300"}`}
                   >
                     {s || "(blank)"}
                   </span>
@@ -341,14 +341,14 @@ export default function AmazonDashboard({ processedData, className = "", style =
               </div>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Category</label>
+              <label className="text-xs text-gray-400">Category</label>
               <div className="overflow-y-auto rounded-xl p-2">
                 <div className="flex flex-wrap gap-2">
                   {allCategories.map(c => (
                     <span
                       key={c}
                       onClick={()=> setCategorySel(prev => { const n = new Set(prev); n.has(c)? n.delete(c): n.add(c); return n; })}
-                      className={`cursor-pointer rounded-2xl px-3 py-1 text-xs inline-flex items-center ${categorySel.has(c)?"bg-gray-900 text-white":"bg-gray-100 text-gray-700"}`}
+                      className={`cursor-pointer rounded-2xl px-3 py-1 text-xs inline-flex items-center ${categorySel.has(c)?"bg-white text-gray-900":"bg-gray-700 text-gray-300"}`}
                     >
                       {c || "(blank)"}
                     </span>
@@ -363,61 +363,61 @@ export default function AmazonDashboard({ processedData, className = "", style =
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <motion.div layout initial={{opacity:0, y:8}} animate={{opacity:1, y:0}}>
-          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm">
+          <div className="rounded-2xl bg-gray-800 border border-gray-700 shadow-sm">
             <div className="p-4">
-              <p className="text-xs text-gray-600">Orders (unique)</p>
-              <div className="text-2xl text-gray-900 font-semibold">{n.format(metrics.ordersAll || 0)}</div>
+              <p className="text-xs text-gray-400">Orders (unique)</p>
+              <div className="text-2xl text-white font-semibold">{n.format(metrics.ordersAll || 0)}</div>
             </div>
           </div>
         </motion.div>
         <motion.div layout initial={{opacity:0, y:8}} animate={{opacity:1, y:0}}>
-          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm">
+          <div className="rounded-2xl bg-gray-800 border border-gray-700 shadow-sm">
             <div className="p-4">
-              <p className="text-xs text-gray-600">Shipped Revenue</p>
-              <div className="text-2xl text-gray-900 font-semibold flex items-center gap-1"><IndianRupee className="h-5 w-5"/>{n.format(Math.round(metrics.shippedRevenue || 0))}</div>
+              <p className="text-xs text-gray-400">Shipped Revenue</p>
+              <div className="text-2xl text-white font-semibold flex items-center gap-1"><IndianRupee className="h-5 w-5"/>{n.format(Math.round(metrics.shippedRevenue || 0))}</div>
             </div>
           </div>
         </motion.div>
         <motion.div layout initial={{opacity:0, y:8}} animate={{opacity:1, y:0}}>
-          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm">
+          <div className="rounded-2xl bg-gray-800 border border-gray-700 shadow-sm">
             <div className="p-4">
-              <p className="text-xs text-gray-600">AOV (Shipped)</p>
-              <div className="text-2xl text-gray-900 font-semibold">{inr(Math.round(metrics.aov || 0))}</div>
+              <p className="text-xs text-gray-400">AOV (Shipped)</p>
+              <div className="text-2xl text-white font-semibold">{inr(Math.round(metrics.aov || 0))}</div>
             </div>
           </div>
         </motion.div>
         <motion.div layout initial={{opacity:0, y:8}} animate={{opacity:1, y:0}}>
-          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm">
+          <div className="rounded-2xl bg-gray-800 border border-gray-700 shadow-sm">
             <div className="p-4">
-              <p className="text-xs text-gray-600">Cancellation Rate</p>
-              <div className="text-2xl text-gray-900 font-semibold">{metrics.ordersAll ? ((metrics.ordersCancelled / metrics.ordersAll) * 100).toFixed(1) + "%" : "0%"}</div>
+              <p className="text-xs text-gray-400">Cancellation Rate</p>
+              <div className="text-2xl text-white font-semibold">{metrics.ordersAll ? ((metrics.ordersCancelled / metrics.ordersAll) * 100).toFixed(1) + "%" : "0%"}</div>
             </div>
           </div>
         </motion.div>
       </div>
 
       <Tabs defaultValue="trend" className="w-full">
-        <TabsList className="bg-gray-100 rounded-2xl p-1">
-          <TabsTrigger className="rounded-xl data-[state=active]:text-gray-900 data-[state=active]:bg-white data-[state=active]:shadow-sm" value="trend">Revenue & Orders Trend</TabsTrigger>
-          <TabsTrigger className="rounded-xl data-[state=active]:text-gray-900 data-[state=active]:bg-white data-[state=active]:shadow-sm" value="status">Status Mix</TabsTrigger>
-          <TabsTrigger className="rounded-xl data-[state=active]:text-gray-900 data-[state=active]:bg-white data-[state=active]:shadow-sm" value="fulfill">Fulfillment</TabsTrigger>
-          <TabsTrigger className="rounded-xl data-[state=active]:text-gray-900 data-[state=active]:bg-white data-[state=active]:shadow-sm" value="category">Category Share</TabsTrigger>
-          <TabsTrigger className="rounded-xl data-[state=active]:text-gray-900 data-[state=active]:bg-white data-[state=active]:shadow-sm" value="geo">By State</TabsTrigger>
-          <TabsTrigger className="rounded-xl data-[state=active]:text-gray-900 data-[state=active]:bg-white data-[state=active]:shadow-sm" value="skus">Top SKUs</TabsTrigger>
+        <TabsList className="bg-gray-800 rounded-2xl p-1">
+          <TabsTrigger className="rounded-xl data-[state=active]:text-white data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm text-gray-300" value="trend">Revenue & Orders Trend</TabsTrigger>
+          <TabsTrigger className="rounded-xl data-[state=active]:text-white data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm text-gray-300" value="status">Status Mix</TabsTrigger>
+          <TabsTrigger className="rounded-xl data-[state=active]:text-white data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm text-gray-300" value="fulfill">Fulfillment</TabsTrigger>
+          <TabsTrigger className="rounded-xl data-[state=active]:text-white data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm text-gray-300" value="category">Category Share</TabsTrigger>
+          <TabsTrigger className="rounded-xl data-[state=active]:text-white data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm text-gray-300" value="geo">By State</TabsTrigger>
+          <TabsTrigger className="rounded-xl data-[state=active]:text-white data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm text-gray-300" value="skus">Top SKUs</TabsTrigger>
         </TabsList>
 
         {/* Trend */}
         <TabsContent value="trend">
           <ResponsiveContainer width="100%" height={360}>
             <LineChart data={metrics.byDay} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip />
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="date" stroke="#9CA3AF" />
+              <YAxis yAxisId="left" stroke="#9CA3AF" />
+              <YAxis yAxisId="right" orientation="right" stroke="#9CA3AF" />
+              <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', color: '#F9FAFB' }} />
               <Legend />
-              <Line yAxisId="left" type="monotone" dataKey="revenue" name="Revenue" stroke="#8884d8" dot={false} />
-              <Line yAxisId="right" type="monotone" dataKey="orders" name="Orders" stroke="#82ca9d" dot={false} />
+              <Line yAxisId="left" type="monotone" dataKey="revenue" name="Revenue" stroke="#3B82F6" dot={false} />
+              <Line yAxisId="right" type="monotone" dataKey="orders" name="Orders" stroke="#10B981" dot={false} />
               <Brush dataKey="date" height={20} />
             </LineChart>
           </ResponsiveContainer>
@@ -427,12 +427,12 @@ export default function AmazonDashboard({ processedData, className = "", style =
         <TabsContent value="status">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={metrics.statusCounts}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="name" stroke="#9CA3AF" />
+              <YAxis stroke="#9CA3AF" />
+              <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', color: '#F9FAFB' }} />
               <Legend />
-              <Bar dataKey="value" name="Lines" fill="#0088FE" />
+              <Bar dataKey="value" name="Lines" fill="#3B82F6" />
             </BarChart>
           </ResponsiveContainer>
         </TabsContent>
@@ -446,7 +446,7 @@ export default function AmazonDashboard({ processedData, className = "", style =
                   <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', color: '#F9FAFB' }} />
               <Legend />
             </PieChart>
           </ResponsiveContainer>
@@ -455,13 +455,13 @@ export default function AmazonDashboard({ processedData, className = "", style =
         {/* Category Share via Treemap */}
         <TabsContent value="category">
           <ResponsiveContainer width="100%" height={360}>
-            <Treemap data={metrics.byCategory} dataKey="value" nameKey="name" stroke="#fff" fill="#82ca9d"/>
+            <Treemap data={metrics.byCategory} dataKey="value" nameKey="name" stroke="#374151" fill="#10B981"/>
           </ResponsiveContainer>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-            <div className="rounded-2xl bg-white border border-gray-200 shadow-sm"><div className="p-4"><p className="text-xs text-muted-foreground">Promo Penetration</p><div className="text-xl font-semibold">{((metrics.promoPenetration||0)*100).toFixed(1)}%</div></div></div>
-            <div className="rounded-2xl bg-white border border-gray-200 shadow-sm"><div className="p-4"><p className="text-xs text-muted-foreground">B2B Revenue Share</p><div className="text-xl font-semibold">{((metrics.b2bShare||0)*100).toFixed(1)}%</div></div></div>
-            <div className="rounded-2xl bg-white border border-gray-200 shadow-sm"><div className="p-4"><p className="text-xs text-muted-foreground">ASP (Shipped)</p><div className="text-xl font-semibold">{inr(Math.round(metrics.asp||0))}</div></div></div>
-            <div className="rounded-2xl bg-white border border-gray-200 shadow-sm"><div className="p-4"><p className="text-xs text-muted-foreground">Units / Order</p><div className="text-xl font-semibold">{(metrics.uPo||0).toFixed(2)}</div></div></div>
+            <div className="rounded-2xl bg-gray-800 border border-gray-700 shadow-sm"><div className="p-4"><p className="text-xs text-gray-400">Promo Penetration</p><div className="text-xl font-semibold text-white">{((metrics.promoPenetration||0)*100).toFixed(1)}%</div></div></div>
+            <div className="rounded-2xl bg-gray-800 border border-gray-700 shadow-sm"><div className="p-4"><p className="text-xs text-gray-400">B2B Revenue Share</p><div className="text-xl font-semibold text-white">{((metrics.b2bShare||0)*100).toFixed(1)}%</div></div></div>
+            <div className="rounded-2xl bg-gray-800 border border-gray-700 shadow-sm"><div className="p-4"><p className="text-xs text-gray-400">ASP (Shipped)</p><div className="text-xl font-semibold text-white">{inr(Math.round(metrics.asp||0))}</div></div></div>
+            <div className="rounded-2xl bg-gray-800 border border-gray-700 shadow-sm"><div className="p-4"><p className="text-xs text-gray-400">Units / Order</p><div className="text-xl font-semibold text-white">{(metrics.uPo||0).toFixed(2)}</div></div></div>
           </div>
         </TabsContent>
 
@@ -469,21 +469,21 @@ export default function AmazonDashboard({ processedData, className = "", style =
         <TabsContent value="geo">
           <ResponsiveContainer width="100%" height={360}>
             <BarChart data={[...metrics.byState].sort((a,b)=> b.orders - a.orders).slice(0, 15)}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="state" angle={-30} textAnchor="end" interval={0} height={60}/>
-              <YAxis />
-              <Tooltip />
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="state" angle={-30} textAnchor="end" interval={0} height={60} stroke="#9CA3AF"/>
+              <YAxis stroke="#9CA3AF" />
+              <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', color: '#F9FAFB' }} />
               <Legend />
-              <Bar dataKey="orders" name="Orders" fill="#00C49F" />
+              <Bar dataKey="orders" name="Orders" fill="#10B981" />
             </BarChart>
           </ResponsiveContainer>
         </TabsContent>
 
         {/* Top SKUs Table */}
         <TabsContent value="skus">
-          <div className="overflow-auto rounded-2xl border">
+          <div className="overflow-auto rounded-2xl border border-gray-700">
             <table className="min-w-full text-sm">
-              <thead className="bg-muted sticky top-0 text-white">
+              <thead className="bg-gray-800 sticky top-0 text-white">
                 <tr>
                   <th className="text-left p-2">SKU</th>
                   <th className="text-left p-2">Style</th>
@@ -497,15 +497,15 @@ export default function AmazonDashboard({ processedData, className = "", style =
               </thead>
               <tbody>
                 {metrics.bySku.map((r: any) => (
-                  <tr key={r.sku} className="odd:bg-white even:bg-muted/40">
-                    <td className="p-2 font-mono">{r.sku}</td>
-                    <td className="p-2">{r.style}</td>
-                    <td className="p-2">{r.category}</td>
-                    <td className="p-2 text-right">{inr(Math.round(r.revenue))}</td>
-                    <td className="p-2 text-right">{n.format(r.units)}</td>
-                    <td className="p-2 text-right">{n.format(r.orders)}</td>
-                    <td className="p-2 text-right">{inr(Math.round(r.asp))}</td>
-                    <td className="p-2 text-right">{inr(Math.round(r.aov))}</td>
+                  <tr key={r.sku} className="odd:bg-gray-900 even:bg-gray-800">
+                    <td className="p-2 font-mono text-white">{r.sku}</td>
+                    <td className="p-2 text-white">{r.style}</td>
+                    <td className="p-2 text-white">{r.category}</td>
+                    <td className="p-2 text-right text-white">{inr(Math.round(r.revenue))}</td>
+                    <td className="p-2 text-right text-white">{n.format(r.units)}</td>
+                    <td className="p-2 text-right text-white">{n.format(r.orders)}</td>
+                    <td className="p-2 text-right text-white">{inr(Math.round(r.asp))}</td>
+                    <td className="p-2 text-right text-white">{inr(Math.round(r.aov))}</td>
                   </tr>
                 ))}
               </tbody>

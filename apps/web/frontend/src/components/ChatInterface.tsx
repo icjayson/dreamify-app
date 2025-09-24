@@ -164,6 +164,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
 
+    // Delegate adding the user message to the store's process flow to avoid duplicates
     clearInput();
     await processFileWithMessage(inputValue.trim(), onProcessedDataChange);
   };
@@ -255,10 +256,10 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
 
 
   const suggestedPrompts = [
-    { text: "Upload my sales data and create dashboard", icon: Database },
-    { text: "Show revenue trends with smooth animations", icon: TrendingUp },
-    { text: "Create conversion funnel visualization", icon: BarChart3 },
-    { text: "Build customer growth dashboard", icon: Users },
+    { text: "Act as a Data Analyst: challenge assumptions and list caveats.", icon: Database },
+    { text: "Act as a Growth PM: prioritize the top 3 actions from this data.", icon: TrendingUp },
+    { text: "Act as a Sales Ops lead: translate insights into pipeline plays.", icon: BarChart3 },
+    { text: "Build a comprehensive dashboard from connected data", icon: Users },
     { text: "Analyze profit margins by product", icon: DollarSign },
     { text: "Add geographic revenue distribution", icon: Sparkles }
   ];
@@ -302,8 +303,18 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                   : "bg-card/80 border-border/50"
               }`}>
                 {message.attachment && message.attachment.kind === "csv" && (
-                  <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Attached CSV: {message.attachment.name}
+                  <div className="mb-2">
+                    <span
+                      className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-border/40 bg-background/50 text-[11px] text-white/90 w-full"
+                      title={message.attachment.name}
+                      aria-label="Attached CSV file"
+                    >
+                      <span className="inline-flex items-center gap-1 text-white/70">
+                        <FileText className="w-3 h-3 text-white/80" />
+                        Attached file
+                      </span>
+                      <span className="truncate w-full">{message.attachment.name}</span>
+                    </span>
                   </div>
                 )}
                 <div
@@ -346,7 +357,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
         <div className="mt-auto">
           <p className="text-xs mx-2 text-muted-foreground mb-2">Quick starts:</p>
           <div className="flex flex-wrap gap-2 mx-2">
-            {suggestedPrompts.slice(0, 3).map((prompt, index) => (
+            {suggestedPrompts.slice(0, 4).map((prompt, index) => (
               <button
                 key={index}
                 onClick={() => setInputValue(prompt.text)}

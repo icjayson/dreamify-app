@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import ChatInterface from "@/components/ChatInterface";
-import DashboardPreview from "@/components/DashboardPreview";
+import AmazonDashboard from "@/components/Amazon_Dashboard";
 import HomePage from "@/components/HomePage";
 import { Message } from "@/types/message";
 import { useChatStore } from "@/stores/useChatStore";
@@ -43,7 +43,7 @@ const Index = () => {
 
           {/* Main Dashboard */}
           <div className="flex-1 overflow-hidden">
-            <DashboardPreview processedData={processedData} />
+            <AmazonDashboard processedData={processedData} />
           </div>
         </div>
       </div>

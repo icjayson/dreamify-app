@@ -27,7 +27,7 @@ const Login = () => {
         {/* Minimal Header */}
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center gap-3">
-            <img src="/logo-main.png" alt="Dreamify Logo" className="w-10 h-10 object-contain" />
+            <img src="/logo-watermark.png" alt="Dreamify Logo" className="w-10 h-10 object-contain" />
             <span className="text-2xl font-medium text-foreground font-outfit">Dreamify</span>
           </div>
         </div>

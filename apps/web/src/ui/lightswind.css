@@ -303,9 +303,25 @@
 /* Global Scrollbar Styling */
 * {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--scrollbar-thumb)) hsl(var(--scrollbar-track));
+  scrollbar-color: hsl(var(--primary) / 0.2) transparent;
   /* Apply font family globally */
   box-sizing: border-box; /* Good practice for all elements */
+}
+
+/* Global WebKit Scrollbar Styling */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.2);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.3);
 }
 
 /* Body Styling */

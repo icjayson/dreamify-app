@@ -28,7 +28,7 @@ export default function WaitlistPage() {
         {/* Hero Header (CTA-style, aligned like homepage sections) */}
         <div className="mx-auto max-w-4xl text-center mb-10">
           <div className="flex items-center justify-center gap-3 mb-8">
-            <img src="/logo-main.png" alt="Dreamify Logo" className="w-10 h-10 object-contain hover:animate-spin transition-all duration-300" />
+            <img src="/logo-watermark.png" alt="Dreamify Logo" className="w-10 h-10 object-contain hover:animate-spin transition-all duration-300" />
             <span className="text-2xl font-medium text-foreground font-outfit">Dreamify</span>
           </div>
           <h1 className="text-xl md:text-4xl font-bold tracking-tight text-foreground leading-relaxed flex flex-wrap items-center justify-center gap-2">

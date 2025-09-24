@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+.dockerignore
+
+notebooks/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Environment
+.env
+config/config.yaml
+*.credentials.json
+
+# Tests
+tests/
+
+# Documentation
+README.md
+
+# Logs
+*.log
+
+gsm-data-prod-*.json
+
+data/
+datasets/
+
+*.zip
+*.tar.gz

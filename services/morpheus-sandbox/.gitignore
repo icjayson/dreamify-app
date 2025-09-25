@@ -225,6 +225,15 @@ samples/
 runs/
 *.pt
 *.pth
+*.csv
+*.tsv
+*.json
+*.sqlite
+*.db
+*.h5
+*.hdf5
+*.ckpt
+*.model
 
 development/*
 streamlit/

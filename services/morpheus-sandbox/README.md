@@ -69,11 +69,37 @@ python test_api.py
   "chart_recommendations": [
     {
       "chart_type": "line_chart",
+      "title": "Sales Trend Over Time",
       "columns": ["Date", "Sales"],
       "x_axis": "Date",
-      "y_axis": "Sales", 
-      "confidence": 0.85,
-      "reasoning": "Time series data perfect for trend analysis"
+      "y_axis": "Sales",
+      "color": null,
+      "size": null,
+      "confidence": 0.9,
+      "reasoning": "Shows temporal trends in sales data"
+    },
+    {
+      "chart_type": "bar_chart", 
+      "title": "Sales by Product",
+      "columns": ["Product", "Sales"],
+      "x_axis": "Product",
+      "y_axis": "Sales",
+      "confidence": 0.9,
+      "reasoning": "Compares sales performance across products"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Total Sales",
+      "value": 15000,
+      "type": "sum",
+      "description": "Sum of all sales values"
+    },
+    {
+      "name": "Average Daily Sales",
+      "value": 1250.5,
+      "type": "average", 
+      "description": "Average sales per day"
     }
   ],
   "insights": [
@@ -84,7 +110,7 @@ python test_api.py
       "description": "Dataset structure: 3 columns, 17 rows"
     }
   ],
-  "messages_saved_to": "storage/out/analysis_20241224_143022.json"
+  "messages_saved_to": "storage/out/workflow_20241224_143022.json"
 }
 ```
 

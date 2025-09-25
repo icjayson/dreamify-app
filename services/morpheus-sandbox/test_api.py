@@ -29,14 +29,23 @@ def test_api():
             print(f"Status: {result.get('status')}")
             print(f"File: {result.get('file_path')}")
             print(f"Chart recommendations: {len(result.get('chart_recommendations', []))}")
+            print(f"Metrics: {len(result.get('metrics', []))}")
             print(f"Insights: {len(result.get('insights', []))}")
             print(f"Results saved to: {result.get('messages_saved_to')}")
             
             print("\nChart Recommendations:")
             for i, rec in enumerate(result.get('chart_recommendations', []), 1):
-                print(f"{i}. {rec.get('chart_type')} - Confidence: {rec.get('confidence', 0):.2f}")
+                print(f"{i}. {rec.get('chart_type')} - {rec.get('title', 'No title')}")
                 print(f"   Columns: {rec.get('columns', [])}")
+                print(f"   X-axis: {rec.get('x_axis', 'None')}, Y-axis: {rec.get('y_axis', 'None')}")
+                print(f"   Confidence: {rec.get('confidence', 0):.2f}")
                 print(f"   Reasoning: {rec.get('reasoning', 'No reasoning')}")
+            
+            print("\nKey Metrics:")
+            for i, metric in enumerate(result.get('metrics', []), 1):
+                print(f"{i}. {metric.get('name', 'Unknown')}: {metric.get('value', 'N/A')}")
+                print(f"   Type: {metric.get('type', 'Unknown')}")
+                print(f"   Description: {metric.get('description', 'No description')}")
             
             return True
         else:

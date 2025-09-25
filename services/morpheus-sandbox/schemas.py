@@ -7,6 +7,7 @@ class AnalyzeRequest(BaseModel):
 
 class ChartRecommendation(BaseModel):
     chart_type: str
+    title: Optional[str] = None
     columns: List[str]
     x_axis: Optional[str] = None
     y_axis: Optional[str] = None
@@ -15,6 +16,12 @@ class ChartRecommendation(BaseModel):
     metadata: Dict[str, Any] = {}
     confidence: float
     reasoning: str
+
+class DataMetric(BaseModel):
+    name: str
+    value: Any
+    type: str  # e.g., "sum", "average", "count", "categorical"
+    description: str
 
 class DataInsight(BaseModel):
     column: str
@@ -26,5 +33,6 @@ class AnalyzeResponse(BaseModel):
     status: str
     file_path: str
     chart_recommendations: List[ChartRecommendation]
+    metrics: List[DataMetric]
     insights: List[DataInsight]
     messages_saved_to: str

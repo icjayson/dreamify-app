@@ -11,7 +11,7 @@ class Settings:
     """Application settings"""
     
     # Application
-    APP_NAME: str = "Animato Data Analytics"
+    APP_NAME: str = "Dreamify App Analytics"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("FLASK_DEBUG", "true").lower() == "true"
     SECRET_KEY: str = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
@@ -21,8 +21,8 @@ class Settings:
     PORT: int = int(os.getenv("FLASK_PORT", "5000"))
     
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///animato_data.db")
-    DATABASE_TEST_URL: str = os.getenv("DATABASE_TEST_URL", "sqlite:///test_animato_data.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///dreamify_app.db")
+    DATABASE_TEST_URL: str = os.getenv("DATABASE_TEST_URL", "sqlite:///test_dreamify_app.db")
     
     # File Upload
     # Align with FileHandler.MAX_FILE_SIZE (50MB)

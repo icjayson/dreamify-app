@@ -1,11 +1,11 @@
-# Animato Data Analytics Platform
+# Dreamify App Analytics Platform
 
 A full-stack analytics platform for data processing, visualization, and insights generation.
 
 ## Project Structure
 
 ```
-animato-data/
+dreamify-app/
 ├── frontend/          # React + TypeScript + Vite frontend
 ├── backend/           # Python + Flask backend
 ├── docs/              # Project documentation
@@ -50,7 +50,7 @@ animato-data/
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd animato-data
+   cd dreamify-app
    ```
 
 2. **Setup Frontend**

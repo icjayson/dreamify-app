@@ -1,5 +1,5 @@
 {
-  "name": "animato-data",
+  "name": "dreamify-app",
   "version": "1.0.0",
   "description": "A full-stack analytics platform for data processing, visualization, and insights generation",
   "private": true,
@@ -28,7 +28,7 @@
     "python",
     "flask"
   ],
-  "author": "Animato Data Team",
+  "author": "Dreamify App Team",
   "license": "MIT",
   "dependencies": {
     "@clerk/themes": "^2.4.19",

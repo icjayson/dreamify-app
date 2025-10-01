@@ -46,7 +46,7 @@ const Header = () => {
   }, []);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 w-full">
+    <header className="fixed top-0 left-0 right-0 z-[100]">
       <div className={`${
         isScrolled
           ? "max-w-4xl glass-panel-opaque shadow-header header-scrolled"

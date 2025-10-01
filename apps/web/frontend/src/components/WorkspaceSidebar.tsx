@@ -574,7 +574,7 @@ export default function WorkspaceSidebar({
                 <Building2 className="w-4 h-4 text-white" />
               </div>
               <div className="flex flex-col items-start justify-start group-data-[collapsible=icon]:hidden">
-                <h3 className="text-sm font-semibold text-foreground">Workspace Name</h3>
+                <h3 className="text-sm font-semibold text-foreground">My Workspace</h3>
                 <p className="text-xs text-muted-foreground">Workspace</p>
               </div>
             </div>

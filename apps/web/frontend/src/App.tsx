@@ -23,10 +23,11 @@ const AppContent = () => {
   const location = useLocation();
   const isAuthPath = location.pathname === "/login" || location.pathname === "/signup";
   const isWorkspacePath = location.pathname.startsWith("/workspace");
+  const isHomePath = location.pathname === "/";
 
   return (
     <>
-      {!isStarted && !isAuthPath && !isWorkspacePath && <Header />}
+      {(isHomePath || (!isStarted && !isAuthPath && !isWorkspacePath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/login" element={<Login />} />

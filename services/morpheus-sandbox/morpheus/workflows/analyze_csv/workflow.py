@@ -39,7 +39,7 @@ Analyze this CSV file and recommend chart types: {file_path}
 User request: {user_prompt}
 
 Steps:
-1. Use Python REPL to load and analyze the CSV file
+1. Use Python REPL to load and analyze the CSV file. Always use print for receiving Python REPL tool output.
 2. Use get_available_chart_types to see what charts are available  
 3. Based on your analysis, recommend specific chart types with reasoning
 4. Calculate key metrics from the data (totals, averages, counts, etc.)
@@ -112,6 +112,7 @@ Do NOT create any visualizations - only analyze and recommend.
                             tool_result = f"Unknown tool: {tool_name}"
                         
                         logger.info(response)
+                        # logger.info(response.additional_kwargs['tool_calls'][0]['function']['arguments']['query'])
                         logger.info(f"Tool result: {str(tool_result)}")
                         
                         # Add tool result to messages

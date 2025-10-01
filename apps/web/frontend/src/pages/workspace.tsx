@@ -8,12 +8,12 @@ import ProjectCard from "@/components/ProjectCard";
 import { useUserSync } from "@/hooks/useUserSync";
 
 const HARDCODED_WORKSPACE = {
-  orgName: "Workspace Name",
+  orgName: "My Workspace",
   projects: [
     {
       id: "p1",
-      name: "Marketing Dashboard",
-      thumbnail: "/bg-test-1.jpg",
+      name: "Performance Marketing Dashboard",
+      thumbnail: "/Projectcard-image-1.png",
       updatedAt: "2 days ago",
       description: "Track campaign performance and funnel metrics.",
     },
@@ -89,11 +89,11 @@ export default function WorkspacePage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-medium text-muted-foreground">Projects</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           <ProjectCard project={HARDCODED_WORKSPACE.projects[0]} />
           {/* Create New Project Card */}
-          <Card onClick={() => navigate('/workspace/project')} className="border-dashed border-2 hover:border-foreground/20 cursor-pointer">
-            <CardContent className="flex items-center justify-center h-full min-h-[200px]">
+          <Card onClick={() => navigate('/workspace/project')} className="border-dashed border-2 hover:border-foreground/20 cursor-pointer max-w-sm h-full">
+            <CardContent className="flex items-center justify-center h-full">
               <div className="text-center">
                 <Plus className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-muted-foreground">Create New Project</p>

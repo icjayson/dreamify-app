@@ -396,39 +396,39 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
       <div className="relative z-10 max-w-6xl mx-auto text-center">
         
-        <h1 className="text-4xl md:text-6xl font-bold mb-6 animate-slide-up">
-          <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
-            <span className="text-white">Build</span>
-            <span className="px-3 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white text-5xl md:text-7xl to-accent italic font-instrument-serif">
-              Fancy Dashboard
+        {/* New 2-row heading layout */}
+        <div className="text-center mb-8 animate-slide-up">
+          {/* Row 1: The AI Data Analyst with gradient styling */}
+          <h1 className="text-5xl md:text-7xl font-bold mb-6 font-instrument-serif">
+            <span className="px-3 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
+              The AI Data Analyst
             </span>
-          </div>
-          <div className="flex items-center justify-center gap-4 flex-wrap">
-            <span className="text-white">in minutes with</span>
-            <div className="gradient-panel rounded-xl px-6 py-3 flex items-center gap-3">
+          </h1>
+          
+          {/* Row 2: Logo + Build Fancy Dashboard in minutes */}
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <h2 className="text-xl lg:text-3xl text-white font-inter">
+              Build Fancy Dashboard in minutes with
+            </h2>
+            <div className="button-gradient rounded-xl px-4 py-2 flex items-center gap-3">
               <img 
                 src="/logo-full-horizon-white.png" 
                 alt="Dreamify Logo" 
-                className="w-36 h-auto rounded-lg object-contain"
+                className="w-20 sm:w-24 md:w-28 lg:w-36 h-auto rounded-lg object-contain"
               />
             </div>
           </div>
-        </h1>
-        
-        <p className="text-md md:text-lg text-white/60 mb-8 max-w-3xl mx-auto animate-fade-in" style={{ animationDelay: '0s' }}>
-          Transform raw data into stunningly and interactively visualised dashboards in minutes through 
-          natural conversation with AI Agent. No technical skills required.
-        </p>
+        </div>
 
         {/* Chat-First Interface */}
-        <div className="max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
+        <div className="max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
           {/* Main Chat Input */}
-          <div className="w-full min-h-[80px] text-md p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300">
+          <div className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300">
 
             {/* File Chip Area */}
             {uploadedFile && (
               <div className="mt-0 mb-4 flex justify-start">
-                <div className="w-[50%]">
+                <div className="w-full sm:w-3/4 md:w-2/3 lg:w-1/2">
                   <div className="glass-panel rounded-xl border border-border/30 py-2 px-4">
                     <div className="flex items-center justify-between gap-3">
                       {/* Left side - File info */}
@@ -516,9 +516,9 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
             />
             
             {/* Buttons Row */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               {/* Left side buttons */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {/* Hidden file inputs */}
                 <input
                   type="file"
@@ -536,21 +536,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   className="hidden"
                   aria-label="Select Excel file"
                 />
-                
-                {/* Plus Button */}
-                <button
-                  onClick={handlePlusClick}
-                  className="w-8 h-8 rounded-md button-outline flex items-center justify-center group"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.classList.add('btn-primary-hover');
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.classList.remove('btn-primary-hover');
-                  }}
-                  aria-label="Add new item"
-                >
-                  <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                </button>
 
                 {/* CSV Button */}
                 <button
@@ -568,7 +553,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   aria-label="Upload CSV file"
                 >
                   <Upload className="w-4 h-4" />
-                  {uploadState.isUploading ? 'Uploading...' : 'CSV'}
+                  <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'CSV'}</span>
                 </button>
 
                 {/* Excel Button */}
@@ -587,7 +572,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   aria-label="Upload Excel file"
                 >
                   <Database className="w-4 h-4" />
-                  {uploadState.isUploading ? 'Uploading...' : 'Excel'}
+                  <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'Excel'}</span>
                 </button>
 
                 {/* Connect Data Source Dropdown */}
@@ -599,7 +584,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     aria-haspopup="true"
                     aria-label="Connect data source"
                   >
-                    {selectedDataSource || "Connect your data source"}
+                    <span className="hidden sm:inline">{selectedDataSource || "Connect your data source"}</span>
                     <Link className={`w-4 h-4 transition-transform duration-200 ${
                       dropdownOpen ? 'rotate-180' : ''
                     }`} />
@@ -655,7 +640,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           </div>
 
           {/* Quick Start Prompts */}
-          <div className="flex justify-start gap-2 mt-6 flex-wrap animate-fade-in w-full" style={{ animationDelay: '0s' }}>
+          <div className="flex flex-col gap-2 mt-4 sm:mt-6 animate-fade-in w-full" style={{ animationDelay: '0s' }}>
             <p className="text-xs text-white/40 text-left ml-1">Quick start prompts:</p>
             <div className="flex flex-wrap gap-2">
             {["Act as a Data Analyst: challenge assumptions and list caveats.", "Act as a Growth PM: prioritize the top 3 actions from this data.", "Act as a Sales Ops lead: translate insights into pipeline plays.", "Build a comprehensive dashboard from the connected data source"].map((prompt) => (

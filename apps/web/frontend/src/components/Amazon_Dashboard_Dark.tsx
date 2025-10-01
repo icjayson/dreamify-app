@@ -8,7 +8,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis
 import { RefreshCw, Download, Search, IndianRupee } from "lucide-react";
 
 // Lightweight number/currency formatters
-const n = new Intl.NumberFormat("en-IN");
+const n = new Intl.NumberFormat("en-US");
 const inr = (v: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(v || 0);
 
 // Utilities

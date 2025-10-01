@@ -10,15 +10,19 @@ type Project = {
 
 export default function ProjectCard({ project }: { project: Project }) {
   return (
-    <Card className="overflow-hidden hover:border-foreground/20 transition-colors">
-      {project.thumbnail ? (
-        <img
-          src={project.thumbnail}
-          alt={project.name}
-          className="w-full h-36 object-cover"
-          loading="lazy"
-        />
-      ) : null}
+    <Card className="overflow-hidden hover:border-foreground/20 transition-colors max-w-sm h-full">
+      <div className="w-full aspect-video overflow-hidden">
+        {project.thumbnail ? (
+          <img
+            src={project.thumbnail}
+            alt={project.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full bg-muted" />
+        )}
+      </div>
       <CardContent className="p-4">
         <h3 className="font-semibold mb-1">{project.name}</h3>
         {project.description ? (

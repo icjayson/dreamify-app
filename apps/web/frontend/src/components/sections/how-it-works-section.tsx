@@ -8,28 +8,28 @@ export const HowItWorksSection = () => {
       number: 1,
       icon: Upload,
       title: "Upload your data",
-      description: "Drag & drop your CSV files or connect to your data sources. We handle the rest.",
+      description: "Drag & drop your CSV files or connect to your data sources. Nyx handles the rest.",
       animation: "animate-bounce"
     },
     {
       number: 2,
       icon: MessageCircle,
-      title: "Chat with AI",
-      description: "Tell us what you want to see in natural language. 'Show me sales trends by region'",
+      title: "Chat with Nyx",
+      description: "Tell Nyx what you want to see in natural language. 'Show me sales trends by region'",
       animation: "animate-pulse"
     },
     {
       number: 3,
       icon: Sparkles,
       title: "Watch magic happen",
-      description: "AI analyzes your data and creates beautiful animated dashboards in real-time.",
+      description: "Nyx analyzes your data and creates beautiful animated dashboards in real-time.",
       animation: "animate-spin"
     },
     {
       number: 4,
       icon: Share,
       title: "Export & share",
-      description: "Download as interactive HTML, PDF, or share with your team instantly.",
+      description: "Download as shareable link, PDF, or share with your team instantly.",
       animation: "animate-ping"
     }
   ];
@@ -85,7 +85,7 @@ export const HowItWorksSection = () => {
             autoPlay
             muted
             aria-label="Product demo video"
-            src="/video-demo-test.mp4"
+            src="/video-demo-main.mov"
           >
           </video>
         </div>

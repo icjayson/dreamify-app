@@ -6,21 +6,21 @@ export const ValuePropsSection = () => {
   const valueProps = [
     {
       icon: Zap,
-      title: "Speed Revolution",
-      description: "Transform raw data into animated dashboard in under 5 minutes. Pre-built analytics functions eliminate manual calculations.",
-      features: ["5-minute creation", "Pre-built functions", "Instant results", "No manual work"]
+      title: "Unified data aggregation",
+      description: "Connect any source — local database, biz application and warehouse. AI merges & aggregates, one dashboard, all data.",
+      features: ["Local Database", "Business Application", "Warehouse", "SQL Server"]
     },
     {
       icon: Eye,
-      title: "Superior Visual Experience", 
-      description: "Motion-first design with smooth transitions, professional aesthetics, and interactive elements. Your data never looked this good.",
-      features: ["Motion-rich design", "Professional aesthetics", "Interactive elements", "Cinematic quality"]
+      title: "Hybrid end-to-end data analytics", 
+      description: "AI-driven process — auto data cleaning, metric calculation, instant insights, animated dashboards, zero manual work.",
+      features: ["Data Cleaning", "Metric Calculation", "Data Modeling", "Data Analysis"]
     },
     {
       icon: Brain,
-      title: "AI-Powered Intelligence",
-      description: "Natural language interaction. Just describe what you want to see - AI analyzes patterns and provides contextual insights.",
-      features: ["Natural conversation", "Pattern analysis", "Contextual insights", "Smart suggestions"]
+      title: "Hybrid end-to-end dashboard visualization",
+      description: "Motion-first design with smooth transitions, professional aesthetics, and interactive elements. Your data never looked this good.",
+      features: ["Motion-rich design", "Professional aesthetics", "Interactive elements", "Cinematic quality"]
     }
   ];
 

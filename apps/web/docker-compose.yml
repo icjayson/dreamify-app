@@ -15,7 +15,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     networks:
-      - animato-network
+      - dreamify-network
 
   backend:
     build:
@@ -29,10 +29,10 @@ services:
     volumes:
       - ./backend:/app
     networks:
-      - animato-network
+      - dreamify-network
 
 networks:
-  animato-network:
+  dreamify-network:
     driver: bridge
 
 volumes:

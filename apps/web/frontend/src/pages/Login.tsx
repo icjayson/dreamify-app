@@ -82,7 +82,7 @@ const Login = () => {
                     animations: true,
                   }
                 }}
-                redirectUrl="/workspace"
+                redirectUrl="/"
               />
             </div>
           </div>

@@ -35,9 +35,8 @@ export const HowItWorksSection = () => {
   ];
 
   return (
-    <section className="py-24 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-r from-background via-background to-background"></div>
+    <section className="pt-40 pb-24 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
+      {/* Background removed to show WaveBackground */}
       
       {/* Animated elements */}
       <div className={`flex justify-center mb-4 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>

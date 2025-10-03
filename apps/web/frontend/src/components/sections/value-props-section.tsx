@@ -27,7 +27,7 @@ export const ValuePropsSection = () => {
   return (
     <section className="py-24 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
       {/* Background with animated elements */}
-      <div className="absolute inset-0 bg-gradient-to-r from-background via-background to-background"></div>
+      {/* Background removed to show WaveBackground */}
       <div className="absolute inset-0 opacity-30">
         <div className="absolute top-20 left-20 w-32 h-32 rounded-full bg-primary/20 blur-3xl animate-pulse-glow"></div>
         <div className="absolute bottom-40 right-20 w-40 h-40 rounded-full bg-secondary/20 blur-3xl animate-pulse-glow" style={{ animationDelay: '2s' }}></div>

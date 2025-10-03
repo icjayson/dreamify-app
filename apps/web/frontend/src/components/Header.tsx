@@ -1,62 +1,110 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LogIn } from "lucide-react";
-import { useEffect, useState } from "react";
+import { LogIn, User as UserIcon, Star, CreditCard, Bell, ChevronsUpDown, LogOut, PanelLeftOpen } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, useUser, useClerk, UserProfile } from "@clerk/clerk-react";
+import { useUserSync } from "@/hooks/useUserSync";
+import { dark } from "@clerk/themes";
+import { cn } from "@/lib/utils";
+import AccountCenterModal from "@/components/AccountCenterModal";
 
 const Header = () => {
   const navigate = useNavigate();
-  const [isScrolled, setIsScrolled] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [userProfileOpen, setUserProfileOpen] = useState(false);
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [accountCenterOpen, setAccountCenterOpen] = useState(false);
+  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications">("pricing");
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const { supabaseUser, isSyncing } = useUserSync();
+  const [showProjectsBtn, setShowProjectsBtn] = useState(true);
 
   useEffect(() => {
-    let ticking = false;
-    const sentinel = document.getElementById('hero-sentinel');
+    const handleOpen = () => setShowProjectsBtn(false);
+    const handleClose = () => setShowProjectsBtn(true);
+    window.addEventListener('open-projects', handleOpen as EventListener);
+    window.addEventListener('close-projects', handleClose as EventListener);
+    return () => {
+      window.removeEventListener('open-projects', handleOpen as EventListener);
+      window.removeEventListener('close-projects', handleClose as EventListener);
+    };
+  }, []);
 
-    // If sentinel exists, prefer IntersectionObserver
-    if (sentinel && 'IntersectionObserver' in window) {
-      const observer = new IntersectionObserver((entries) => {
-        const entry = entries[0];
-        setIsScrolled(!entry.isIntersecting);
-      }, { root: null, rootMargin: '0px', threshold: 0 });
 
-      observer.observe(sentinel);
-
-      // Initialize based on current intersection by forcing a check using bounding rect
-      const rect = sentinel.getBoundingClientRect();
-      setIsScrolled(rect.top <= 0);
-
-      return () => observer.disconnect();
-    }
-
-    // Fallback: scroll listener with rAF
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          setIsScrolled(window.scrollY > 16);
-          ticking = false;
-        });
-        ticking = true;
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
       }
     };
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [userMenuOpen]);
 
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll as EventListener);
-  }, []);
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && userProfileOpen) {
+        setUserProfileOpen(false);
+      }
+    };
+    if (userProfileOpen) {
+      document.addEventListener('keydown', handleEscape);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [userProfileOpen]);
+
+  const displayName = supabaseUser?.full_name || user?.fullName || user?.firstName || "User";
+  const email = supabaseUser?.email || user?.primaryEmailAddress?.emailAddress || "user@example.com";
+  const avatarUrl = supabaseUser?.image_url || user?.imageUrl;
+
+  const toggleUserMenu = () => setUserMenuOpen(prev => !prev);
+  const handleManageAccount = () => {
+    setUserMenuOpen(false);
+    setUserProfileOpen(true);
+  };
+  const handleLogout = async () => {
+    try {
+      setUserMenuOpen(false);
+      await signOut();
+    } catch (e) {
+      console.error("Error signing out:", e);
+    }
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-[100]">
-      <div className={`${
-        isScrolled
-          ? "max-w-4xl glass-panel-opaque shadow-header header-scrolled"
-          : "max-w-6xl"
-      } flex h-14 items-center justify-between px-6 glass-panel border border-border/30 rounded-2xl mx-auto mt-4 header-animated transition-[max-width] transition-colors duration-500`}>
+      {/* My projects floating button aligned with header but outside the glass panel */}
+      <SignedIn>
+        {showProjectsBtn && (
+        <div className="fixed left-6 top-6 z-[110]">
+          <button
+            onMouseEnter={(e) => e.currentTarget.classList.add('hovered')}
+            onMouseLeave={(e) => e.currentTarget.classList.remove('hovered')}
+            onClick={() => window.dispatchEvent(new Event('open-projects'))}
+            className="button-outline group inline-flex items-center gap-2 px-3 py-2 rounded-md"
+          >
+            <span className="text-sm text-white">My projects</span>
+            <PanelLeftOpen className="w-4 h-4 text-white/70 transition-transform group-hover:translate-x-0.5" />
+          </button>
+        </div>
+        )}
+      </SignedIn>
+      
+      <div className="max-w-6xl flex h-14 items-center justify-between px-4 glass-panel border border-border/30 rounded-2xl mx-auto mt-4">
         {/* Left side - Logo and brand */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2">
             {/* Logo */}
-            <div className="w-32 h-auto rounded-lg flex items-center justify-center">
+            <div className="w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
               <img 
                 src="/logo-horizon.png"
                 alt="Dreamify Logo" 
@@ -66,21 +114,21 @@ const Header = () => {
             </div>
           </div>
           <nav className="hidden md:flex items-center space-x-4 ml-8">
+            <button
+              onClick={() => navigate("/about")}
+              className="text-sm font-medium text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
+            >
+              About Us
+            </button>
             <a
               href="#community"
-              className="text-sm font-medium text-white hover:text-accent transition-colors"
+              className="text-sm font-medium text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
             >
               Community
             </a>
             <a
-              href="#guide"
-              className="text-sm font-medium text-white hover:text-accent transition-colors"
-            >
-              Guide
-            </a>
-            <a
-              href="#pricing"
-              className="text-sm font-medium text-white hover:text-accent transition-colors"
+              onClick={(e) => { e.preventDefault(); setAccountCenterTab("pricing"); setAccountCenterOpen(true); }}
+              className="text-sm font-medium text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
             >
               Pricing
             </a>
@@ -91,13 +139,15 @@ const Header = () => {
 
         {/* Right side - Flame icon, notifications, waitlist, and login */}
         <div className="flex items-center gap-4">
-          {/* Waitlist CTA (always visible) */}
-          <button 
-            onClick={() => navigate("/waitlist")}
-            className="button-gradient px-4 py-2 text-white font-medium transition-all text-sm duration-200 flex items-center gap-2 rounded-xl"
-          >
-            Join the waitlist
-          </button>
+          {/* Waitlist CTA (only when signed out) */}
+          <SignedOut>
+            <button 
+              onClick={() => navigate("/waitlist")}
+              className="button-gradient px-4 py-2 text-white font-medium transition-all text-sm duration-200 flex items-center gap-2 rounded-xl"
+            >
+              Join the waitlist
+            </button>
+          </SignedOut>
 
           {/* Authentication buttons */}
           <SignedOut>
@@ -110,12 +160,183 @@ const Header = () => {
             </button>
           </SignedOut>
           <SignedIn>
-            <UserButton afterSignOutUrl="/" />
+            <div className="relative" ref={userMenuRef}>
+              <button 
+                onClick={toggleUserMenu}
+                className="flex items-center gap-2 px-2 py-1.5 hover:bg-black/50 rounded-lg transition-colors"
+                aria-label="Toggle user menu"
+              >
+                <div className="w-8 h-8 shrink-0 aspect-square bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                  ) : (
+                    <UserIcon className="w-4 h-4 text-white" />
+                  )}
+                </div>
+                <span className="text-sm font-medium text-white max-w-[160px] truncate">{displayName}</span>
+                <ChevronsUpDown className="w-4 h-4 text-white/70" />
+              </button>
+
+              {/* User Menu Dropdown */}
+              <div className={cn(
+                "absolute right-0 top-full mt-2 z-50 bg-muted border border-border rounded-lg shadow-lg w-64 transition-all duration-200 ease-in-out",
+                userMenuOpen ? "opacity-100 translate-y-0 scale-100" : "opacity-0 -translate-y-2 scale-95 pointer-events-none"
+              )}>
+                <div className="p-2">
+                  {/* User Info Header */}
+                  <div className="flex items-center gap-3 p-2 mb-2">
+                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                      ) : (
+                        <UserIcon className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                    <div className="flex flex-col items-start justify-start">
+                      <p className="text-sm font-medium text-foreground">{displayName}</p>
+                      <p className="text-xs text-muted-foreground">{email}</p>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-border my-2"></div>
+
+                  {/* Menu Items */}
+                  <div className="space-y-1">
+                    <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors" onClick={() => { setAccountCenterTab("pricing"); setAccountCenterOpen(true); }}>
+                      <Star className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-foreground">Upgrade to Pro</span>
+                    </button>
+                    <button 
+                      onClick={() => { setUserMenuOpen(false); setAccountCenterTab("account"); setAccountCenterOpen(true); }}
+                      className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors"
+                    >
+                      <UserIcon className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-foreground">Manage Account</span>
+                    </button>
+                    <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
+                      <CreditCard className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-foreground">Billing</span>
+                    </button>
+                    <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors">
+                      <Bell className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-foreground">Notifications</span>
+                    </button>
+                    <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors" onClick={handleLogout}>
+                      <LogOut className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-foreground">Log out</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </SignedIn>
         </div>
       </div>
+      {userProfileOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div 
+            className="fixed inset-0 bg-black/80" 
+            onClick={() => setUserProfileOpen(false)}
+          />
+          <div className="relative z-10 bg-muted rounded-lg shadow-lg w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
+            <div className="px-4 pt-3 pb-2 border-b border-border flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">Manage Account</h2>
+                <button
+                  onClick={() => setUserProfileOpen(false)}
+                  className="text-white/70 hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors"
+                  aria-label="Close profile"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-1 overflow-y-auto p-2">
+              <UserProfile 
+                appearance={{
+                  baseTheme: dark,
+                  elements: {
+                    rootBox: "w-full h-full",
+                    card: "shadow-none border-none bg-transparent",
+                    navbar: "border-none",
+                    navbarButton: "text-white/70 hover:text-white hover:bg-primary active:bg-primary",
+                    navbarButtonActive: "text-white bg-white",
+                    page: "p-4 bg-muted",
+                    pageScrollBox: "p-0 bg-muted",
+                    formButtonPrimary: "button-gradient",
+                    formFieldInput: "bg-black border-border text-white placeholder-white/30",
+                    formFieldLabel: "text-white",
+                    identityPreview: "bg-white/10 border-white/20",
+                    identityPreviewText: "text-white",
+                    identityPreviewEditButton: "text-white hover:text-white/80",
+                    formFieldSuccessText: "text-green-400",
+                    formFieldErrorText: "text-red-400",
+                    footer: "border-none",
+                    footerActionLink: "text-white hover:text-white/80",
+                    main: "bg-muted",
+                    profileSection: "bg-muted",
+                    profileSectionTitle: "text-white",
+                    profileSectionContent: "bg-muted",
+                    profileSectionContentText: "text-white",
+                    profileSectionContentButton: "text-white",
+                    profileSectionContentButtonPrimary: "button-gradient",
+                    profileSectionContentButtonSecondary: "bg-white/10 text-white border-white/20",
+                    profileSectionContentButtonDanger: "bg-red-500 text-white",
+                    profileSectionContentButtonSuccess: "bg-green-500 text-white",
+                    profileSectionContentButtonWarning: "bg-yellow-500 text-white",
+                    profileSectionContentButtonInfo: "bg-blue-500 text-white",
+                    profileSectionContentButtonLink: "text-white hover:text-white/80",
+                    profileSectionContentButtonGhost: "text-white hover:bg-white/10",
+                    profileSectionContentButtonOutline: "border-white/20 text-white hover:bg-white/10",
+                    profileSectionContentButtonSolid: "bg-white/10 text-white hover:bg-white/20",
+                    profileSectionContentButtonSubtle: "text-white/70 hover:text-white hover:bg-white/5",
+                    profileSectionContentButtonDestructive: "bg-red-500 text-white hover:bg-red-600",
+                    profileSectionContentButtonConstructive: "bg-green-500 text-white hover:bg-green-600",
+                    profileSectionContentButtonNeutral: "bg-white/10 text-white hover:bg-white/20",
+                    profileSectionContentButtonBrand: "button-gradient",
+                    profileSectionContentButtonPrimaryBrand: "button-gradient",
+                    profileSectionContentButtonSecondaryBrand: "bg-white/10 text-white border-white/20",
+                    profileSectionContentButtonTertiaryBrand: "text-white hover:bg-white/10",
+                    profileSectionContentButtonQuaternaryBrand: "text-white/70 hover:text-white",
+                    profileSectionContentButtonGhostBrand: "text-white hover:bg-white/10",
+                    profileSectionContentButtonOutlineBrand: "border-white/20 text-white hover:bg-white/10",
+                    profileSectionContentButtonSolidBrand: "bg-white/10 text-white hover:bg-white/20",
+                    profileSectionContentButtonSubtleBrand: "text-white/70 hover:text-white hover:bg-white/5",
+                    profileSectionContentButtonDestructiveBrand: "bg-red-500 text-white hover:bg-red-600",
+                    profileSectionContentButtonConstructiveBrand: "bg-green-500 text-white hover:bg-green-600",
+                    profileSectionContentButtonNeutralBrand: "bg-white/10 text-white hover:bg-white/20"
+                  },
+                  variables: {
+                    colorText: "#ffffff",
+                    colorBackground: "primary",
+                  },
+                  layout: {
+                    unsafe_disableDevelopmentModeWarnings: true,
+                    animations: true,
+                  }
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Deprecated single pricing modal (kept temporarily) */}
+      {/* <PricingModal open={pricingOpen} onClose={() => setPricingOpen(false)} /> */}
+      <AccountCenterModal 
+        open={accountCenterOpen}
+        activeTab={accountCenterTab}
+        onChangeTab={(t) => setAccountCenterTab(t)}
+        onClose={() => setAccountCenterOpen(false)}
+      />
     </header>
   );
 };
 
 export default Header;
+
+// User Profile Modal (global to header)
+// Rendered at the end to ensure it overlays content
+// Keep outside component to avoid JSX nesting warnings
+// We attach it conditionally below the default export via IIFE in runtime

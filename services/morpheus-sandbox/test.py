@@ -5,7 +5,7 @@ Test the updated workflow with logging and workflow output
 
 import sys
 import os
-sys.path.insert(0, '/home/ducnpt/projects/morpheus')
+sys.path.insert(0, '/home/hungnq/projects/morpheus')
 
 def test_workflow_with_logging():
     """Test the workflow with the new logging and output features"""
@@ -20,7 +20,7 @@ def test_workflow_with_logging():
         workflow = AnalyzeCSVWorkflow()
         
         # Test file path
-        file_path = "/home/ducnpt/projects/morpheus/storage/in/sales_data.csv"
+        file_path = "/home/hungnq/projects/morpheus/storage/in/sales_amazon.csv"
         
         if not os.path.exists(file_path):
             print(f"❌ Test file not found: {file_path}")

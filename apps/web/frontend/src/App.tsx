@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import Header from "./components/Header";
+import AboutPage from "./pages/About";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login.tsx";
@@ -24,12 +25,14 @@ const AppContent = () => {
   const isAuthPath = location.pathname === "/login" || location.pathname === "/signup";
   const isWorkspacePath = location.pathname.startsWith("/workspace");
   const isHomePath = location.pathname === "/";
+  const isAboutPath = location.pathname === "/about";
 
   return (
     <>
-      {(isHomePath || (!isStarted && !isAuthPath && !isWorkspacePath)) && <Header />}
+      {(isHomePath || isAboutPath || (!isStarted && !isAuthPath && !isWorkspacePath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/waitlist" element={<WaitlistPage />} />

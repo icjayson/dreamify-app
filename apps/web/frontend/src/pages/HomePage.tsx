@@ -1,27 +1,31 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Upload, Database, CornerRightUp, Plus, Mic, MicOff, Link, FileText} from "lucide-react";
+import { Sparkles, Upload, Database, CornerRightUp, Plus, Mic, MicOff, Link, FileText } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { SignedIn } from "@clerk/clerk-react";
+import { ChevronRight } from "lucide-react";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useToast } from "@/hooks/use-toast";
 import TextareaAutosize from 'react-textarea-autosize';
-import RecordingBar from './ui/recording-bar';
+import RecordingBar from '@/components/ui/recording-bar';
 import { useChatStore } from "@/stores/useChatStore";
 import { useFileStore } from "@/stores/useFileStore";
 import { fileService, type UploadResponse } from "@/services/fileService";
 import { Message } from "@/types/message";
-import { ProblemSolutionSection } from './sections/problem-solution-section';
-import { ValuePropsSection } from './sections/value-props-section';
-import { TargetAudienceSection } from './sections/target-audience-section';
-import { HowItWorksSection } from './sections/how-it-works-section';
-import { FeaturesShowcaseSection } from './sections/features-showcase-section';
-import { SocialProofSection } from './sections/social-proof-section';
-import { CTASection } from './sections/cta-section';
-import { FooterSection } from './sections/footer-section';
-import MovingDot from './MovingDot';
+import { ProblemSolutionSection } from '@/components/sections/problem-solution-section';
+import { ValuePropsSection } from '@/components/sections/value-props-section';
+import { TargetAudienceSection } from '@/components/sections/target-audience-section';
+import { HowItWorksSection } from '@/components/sections/how-it-works-section';
+import { FeaturesShowcaseSection } from '@/components/sections/features-showcase-section';
+import { SocialProofSection } from '@/components/sections/social-proof-section';
+import { CTASection } from '@/components/sections/cta-section';
+import { FooterSection } from '@/components/sections/footer-section';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
 import ScrollStack from '../../../src/ui/lightswind/scroll-stack';
+import ProjectsSection from '@/components/ProjectsSection';
+import ProjectsSidebar from '@/components/ProjectsSidebar';
 
 
 interface HomePageProps {
@@ -30,6 +34,27 @@ interface HomePageProps {
 }
 
 const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
+  const navigate = useNavigate();
+  // Mock recent projects
+  const [recentProjects, setRecentProjects] = useState<Array<{ id: string; title: string }>>([
+    { id: 'p1', title: 'Marketing Dashboard' },
+    { id: 'p2', title: 'Sales Overview' },
+    { id: 'p3', title: 'Product Analytics' },
+    { id: 'p4', title: 'Finance KPI Board' },
+    { id: 'p5', title: 'Operations Metrics' },
+  ]);
+
+  const openProject = (_id: string) => {
+    navigate('/workspace/project');
+  };
+
+  const renameProject = (id: string, newTitle: string) => {
+    setRecentProjects((prev) => prev.map((p) => (p.id === id ? { ...p, title: newTitle } : p)));
+  };
+
+  const deleteProject = (id: string) => {
+    setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+  };
   // Zustand stores
   const {
     inputValue,
@@ -382,17 +407,34 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     setUploadedFile(null);
   };
 
+  const [projectsOpen, setProjectsOpen] = useState(false);
+
+  useEffect(() => {
+    const openProjects = () => setProjectsOpen(true);
+    window.addEventListener('open-projects', openProjects as EventListener);
+    return () => window.removeEventListener('open-projects', openProjects as EventListener);
+  }, []);
+
+  // sidebar show/animation is handled inside ProjectsSidebar component
+
+  const closeProjects = () => {
+    setProjectsOpen(false);
+    window.dispatchEvent(new Event('close-projects'));
+  };
+
+  // Allow page to scroll even when sidebar is open (no body lock)
+
   return (
-    <div className="h-screen overflow-y-auto homepage-scrollbar">
-      <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-44">
-      {/* WaveBackground Component */}
+    <div className="min-h-screen overflow-y-auto homepage-scrollbar">
+      {/* Fixed WaveBackground Component for entire page */}
       <WaveBackground 
-        backdropBlurAmount="md" 
-        className="absolute inset-0 z-0"
+        className="fixed inset-0 z-0"
       />
       
-      {/* Overlay for better text readability */}
-      <div className="absolute inset-0 bg-black/60 z-1"></div>
+      {/* Fixed overlay for better text readability */}
+      <div className="fixed inset-0 bg-black/60 z-1"></div>
+
+      <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-44">
 
       <div className="relative z-10 max-w-6xl mx-auto text-center">
         
@@ -659,15 +701,20 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       {/* Sentinel marks the end of the hero section for header trigger */}
       <div id="hero-sentinel" aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-px pointer-events-none" />
     </section>
-      
-    {/* New Homepage Sections */}
-    <HowItWorksSection />
-    <ProblemSolutionSection />
-    <ValuePropsSection />
-    <TargetAudienceSection />
-    <FeaturesShowcaseSection />
-    <SocialProofSection />
-    <CTASection onGetStarted={onGetStarted} />
+
+    {/* Removed floating button here; header provides the button when signed in */}
+
+    {/* Projects sidebar */}
+    <ProjectsSidebar
+      open={projectsOpen}
+      onClose={closeProjects}
+      recents={recentProjects}
+      onNewProject={() => navigate('/workspace/project')}
+      onOpenProject={openProject}
+      onRenameProject={renameProject}
+      onDeleteProject={deleteProject}
+    />
+    <ProjectsSection />
     <FooterSection />
   </div>
 );

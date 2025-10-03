@@ -30,7 +30,7 @@ export default function ProjectPage() {
           </div>
           <div className="col-span-3">
             <div className="flex items-center justify-between h-10">
-              <button onClick={() => navigate('/workspace')} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
+              <button onClick={() => navigate('/')} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
                 <ArrowLeft className="w-4 h-4" />
                 Back
               </button>

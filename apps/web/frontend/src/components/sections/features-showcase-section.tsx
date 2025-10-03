@@ -43,7 +43,7 @@ export const FeaturesShowcaseSection = () => {
   return (
     <section className="py-24 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
       {/* Background with animated elements */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background to-background"></div>
+      {/* Background removed to show WaveBackground */}
       <div className="absolute inset-0 opacity-20">
         <div className="absolute top-40 left-20 w-2 h-2 bg-primary rounded-full animate-ping"></div>
         <div className="absolute top-60 right-32 w-1 h-1 bg-secondary rounded-full animate-ping" style={{ animationDelay: '1s' }}></div>

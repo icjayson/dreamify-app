@@ -36,9 +36,9 @@ export const FooterSection = () => {
   ];
 
   return (
-    <footer className="relative py-8 border-t border-border">
+    <footer className="relative py-8 border-t border-white/30 z-10">
       {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-t from-background to-background"></div>
+      <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent"></div>
       
       <div className="relative z-10 container mx-auto px-6">
         <div className="grid md:grid-cols-6 gap-8 mb-8">

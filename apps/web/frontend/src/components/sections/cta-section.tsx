@@ -31,7 +31,7 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
   return (
     <section className="py-24 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
       {/* Background with enhanced gradients */}
-      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-background"></div>
+      {/* Background removed to show WaveBackground */}
       <div className="absolute inset-0 opacity-30">
         <div className="absolute top-20 left-20 w-96 h-96 rounded-full bg-primary/20 blur-3xl animate-pulse"></div>
         <div className="absolute bottom-20 right-20 w-80 h-80 rounded-full bg-secondary/20 blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>

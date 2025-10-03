@@ -8,8 +8,7 @@ import ChatInterface from "@/components/ChatInterface";
 import AmazonDashboard from "@/components/Amazon_Dashboard";
 import AmazonDashboardDark from "@/components/Amazon_Dashboard_Dark";
 import DashboardLoading from "@/components/DashboardLoading";
-import HomePage from "@/components/HomePage";
-import { Message } from "@/types/message";
+import HomePage from "@/pages/HomePage";
 import { useChatStore } from "@/stores/useChatStore";
 import { useFileStore } from "@/stores/useFileStore";
 

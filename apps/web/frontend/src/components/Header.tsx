@@ -173,7 +173,7 @@ const Header = () => {
                     <UserIcon className="w-4 h-4 text-white" />
                   )}
                 </div>
-                <span className="text-sm font-medium text-white max-w-[160px] truncate">{displayName}</span>
+                <span className="hidden sm:inline text-sm font-medium text-white max-w-[160px] truncate">{displayName}</span>
                 <ChevronsUpDown className="w-4 h-4 text-white/70" />
               </button>
 
@@ -202,7 +202,7 @@ const Header = () => {
 
                   {/* Menu Items */}
                   <div className="space-y-1">
-                    <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors" onClick={() => { setAccountCenterTab("pricing"); setAccountCenterOpen(true); }}>
+                    <button className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors" onClick={() => { setUserMenuOpen(false); setAccountCenterTab("pricing"); setAccountCenterOpen(true); }}>
                       <Star className="w-4 h-4 text-muted-foreground" />
                       <span className="text-sm text-foreground">Upgrade to Pro</span>
                     </button>

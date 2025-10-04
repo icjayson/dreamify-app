@@ -1,6 +1,6 @@
 const LocalProjectCard = ({ project }: { project: { id: string; name: string; thumbnail?: string; updatedAt: string; description?: string; } }) => {
   return (
-    <div className="glass-panel overflow-hidden hover:scale-[102%] transition-all duration-500 transition-colors max-w-sm h-full rounded-lg bg-background/30">
+    <div className="glass-panel overflow-hidden hover:scale-[102%] transition-all duration-500 transition-colors w-full max-w-sm h-full rounded-lg bg-background/30">
       <div className="w-full aspect-video overflow-hidden">
         {project.thumbnail ? (
           <img
@@ -28,7 +28,7 @@ const ProjectsSection = () => {
   return (
     <section className="w-full py-20 relative z-10">
       <div className="max-w-6xl mx-auto px-2 sm:px-4 md:px-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 justify-items-center">
           {Array.from({ length: 15 }).map((_, idx) => (
             <LocalProjectCard
               key={idx}

@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => ({
         rewrite: (pathStr) => pathStr.replace(/^\/api/, "/api"),
       },
     },
+    allowedHosts: ["app.dreamify.dev"],   // 👈 add your custom domain here
   },
   plugins: [
     react(),

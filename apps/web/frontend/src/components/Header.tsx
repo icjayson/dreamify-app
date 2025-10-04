@@ -81,11 +81,11 @@ const Header = () => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-[100]">
+    <header className="fixed top-0 left-0 right-0 z-[100] mx-4">
       {/* My projects floating button aligned with header but outside the glass panel */}
       <SignedIn>
         {showProjectsBtn && (
-        <div className="fixed left-6 top-6 z-[110]">
+        <div className="hidden lg:block fixed left-6 top-6 z-[110]">
           <button
             onMouseEnter={(e) => e.currentTarget.classList.add('hovered')}
             onMouseLeave={(e) => e.currentTarget.classList.remove('hovered')}
@@ -99,19 +99,50 @@ const Header = () => {
         )}
       </SignedIn>
       
-      <div className="max-w-6xl flex h-14 items-center justify-between px-4 glass-panel border border-border/30 rounded-2xl mx-auto mt-4">
+      <div className="2xl:max-w-6xl xl:max-w-4xl lg:max-w-2xl md:w-full flex h-14 items-center justify-between px-4 glass-panel border border-border/30 rounded-2xl mx-auto mt-4">
         {/* Left side - Logo and brand */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2">
-            {/* Logo */}
-            <div className="w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
-              <img 
-                src="/logo-horizon.png"
-                alt="Dreamify Logo" 
-                className="w-full h-full object-contain"
-                onClick={() => navigate("/")}
-              />
-            </div>
+            {/* Logo for signed-in users - only show on lg+ screens */}
+            <SignedIn>
+              <div className="hidden lg:block w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
+                <img 
+                  src="/logo-horizon.png"
+                  alt="Dreamify Logo" 
+                  className="w-full h-full object-contain"
+                  onClick={() => navigate("/")}
+                />
+              </div>
+            </SignedIn>
+            
+            {/* Logo for non-signed-in users - show on all screen sizes */}
+            <SignedOut>
+              <div className="w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
+                <img 
+                  src="/logo-horizon.png"
+                  alt="Dreamify Logo" 
+                  className="w-full h-full object-contain"
+                  onClick={() => navigate("/")}
+                />
+              </div>
+            </SignedOut>
+            
+            {/* My projects button - only show on md and below screens for signed-in users */}
+            <SignedIn>
+              {showProjectsBtn && (
+                <div className="lg:hidden">
+                  <button
+                    onMouseEnter={(e) => e.currentTarget.classList.add('hovered')}
+                    onMouseLeave={(e) => e.currentTarget.classList.remove('hovered')}
+                    onClick={() => window.dispatchEvent(new Event('open-projects'))}
+                    className="button-outline group inline-flex items-center gap-2 px-3 py-2 rounded-md"
+                  >
+                    <span className="text-sm text-white">My projects</span>
+                    <PanelLeftOpen className="w-4 h-4 text-white/70 transition-transform group-hover:translate-x-0.5" />
+                  </button>
+                </div>
+              )}
+            </SignedIn>
           </div>
           <nav className="hidden md:flex items-center space-x-4 ml-8">
             <button
@@ -145,7 +176,7 @@ const Header = () => {
               onClick={() => navigate("/waitlist")}
               className="button-gradient px-4 py-2 text-white font-medium transition-all text-sm duration-200 flex items-center gap-2 rounded-xl"
             >
-              Join the waitlist
+              Join waitlist
             </button>
           </SignedOut>
 

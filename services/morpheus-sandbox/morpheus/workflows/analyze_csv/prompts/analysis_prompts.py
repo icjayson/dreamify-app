@@ -111,11 +111,11 @@ Prioritize metrics based on:
 
 ### Filter & Enhancement Suggestions
 For each chart, consider adding:
-- Date range filters**: For temporal data
-- Category multi-select**: For high-cardinality dimensions
-- Top-N filters**: Show only top 10/20 items
-- Comparison toggles**: Period-over-period, year-over-year
-- Aggregation options**: Sum, Average, Count, Min, Max
+- Date range filters: For temporal data
+- Category multi-select: For high-cardinality dimensions
+- Top-N filters: Show only top 10/20 items
+- Comparison toggles: Period-over-period, year-over-year
+- Aggregation options: Sum, Average, Count, Min, Max
 
 ================================================================================
 OUTPUT FORMAT (MANDATORY SCHEMA)
@@ -156,37 +156,19 @@ this EXACT structure:
       "chart_type": "line_chart",
       "priority": "high",
       "title": "Sales Trend Over Time",
-      "config": {
-        "x_axis": {
+      "x_axis": "Date",
+      "y_axis": "Sales",
+      "color": null,
+      "size": null,
+      "columns": ["Date", "Sales"],
+      "aggregation": "sum",
+      "filters": [
+        {
           "column": "Date",
-          "label": "Date",
-          "data_type": "temporal",
-          "cardinality": 365
-        },
-        "y_axis": {
-          "column": "Sales",
-          "label": "Sales",
-          "data_type": "numeric",
-          "aggregation": "sum"
-        },
-        "color": {
-          "column": null,
-          "label": null,
-          "data_type": null,
-          "cardinality": null
-        },
-        "size": {
-          "column": null,
-          "label": null
-        },
-        "filters": [
-          {
-            "column": "Date",
-            "type": "date_range",
-            "default": "last_30_days"
-          }
-        ]
-      },
+          "type": "date_range",
+          "default": "last_30_days"
+        }
+      ],
       "reasoning": {
         "insight": "Shows seasonal sales pattern",
         "evidence": {
@@ -241,8 +223,6 @@ this EXACT structure:
 
 ================================================================================
 IMPORTANT:
-- Do NOT include "messages", "tool_calls" in the final output JSON.
-- Only return the fields: analysis_metadata, metrics, charts, tables, layout, and nothing else.
 - Keep it simple and practical
 - Focus on actionable insights
 - Do NOT create plots - only analyze and recommend

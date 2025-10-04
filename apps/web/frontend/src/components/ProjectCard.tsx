@@ -10,7 +10,7 @@ type Project = {
 
 export default function ProjectCard({ project }: { project: Project }) {
   return (
-    <Card className="overflow-hidden hover:border-foreground/20 transition-colors max-w-sm h-full">
+    <Card className="overflow-hidden hover:border-foreground/20  transition-colors max-w-sm h-full">
       <div className="w-full aspect-video overflow-hidden">
         {project.thumbnail ? (
           <img

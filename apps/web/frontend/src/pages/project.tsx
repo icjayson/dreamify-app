@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, SquareArrowOutUpRight } from "lucide-react";
 import ChatInterface from "@/components/ChatInterface";
-import AmazonDashboard from "@/components/Amazon_Dashboard";
-import AmazonDashboardDark from "@/components/Amazon_Dashboard_Dark";
+import DashboardPreview from "@/components/DashboardPreview";
 import DashboardLoading from "@/components/DashboardLoading";
 import { useChatStore } from "@/stores/useChatStore";
 import BlankState from "@/components/BlankState";
@@ -12,8 +11,6 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const [processedData, setProcessedData] = useState<any>(null);
   const uploadedFile = useChatStore((s) => s.uploadedFile);
-  const dashboardTheme = useChatStore((s) => s.dashboardTheme);
-  const isThemeChanging = useChatStore((s) => s.isThemeChanging);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
 
@@ -68,11 +65,11 @@ export default function ProjectPage() {
             {!hasPolledStatus ? (
               <BlankState
                 subtexts={[
-                  "Upload a CSV file and let Nyx build dashboard",
+                  "Upload a CSV file and let Morpheus build dashboard",
                   "Connect Google Sheets, GA4, Meta, Stripe, and more",
-                  "Describe your dashboard — Nyx designs it instantly",
+                  "Describe your dashboard — Morpheus designs it instantly",
                   "Cinematic motion and clear storytelling for your data",
-                  "Try now to observe Nyx's capabilities",
+                  "Try now to observe Morpheus's capabilities",
                 ]}
                 intervalMs={1000}
                 onWatchTutorial={() => window.open('/tutorial', '_blank')}
@@ -109,12 +106,12 @@ export default function ProjectPage() {
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
               ) : isInitialLoading ? (
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
-              ) : isThemeChanging ? (
-                <DashboardLoading />
-              ) : dashboardTheme === 'dark' ? (
-                <AmazonDashboardDark processedData={processedData} className="h-full overflow-y-auto" />
+              ) : (processedData && processedData.status !== 'completed') ? (
+                <DashboardLoading title="Finalizing Dashboard" description="Applying styling and layout..." durationSec={10} />
+              ) : (processedData && processedData.status === 'completed') ? (
+                <DashboardPreview processedData={processedData} className="h-full overflow-y-auto" />
               ) : (
-                <AmazonDashboard processedData={processedData} className="h-full overflow-y-auto" />
+                <DashboardLoading title="Preparing Dashboard" description="Please wait..." durationSec={10} />
               )
             )}
           </div>

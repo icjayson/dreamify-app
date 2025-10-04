@@ -64,7 +64,7 @@ const BlankState: React.FC<BlankStateProps> = ({
         onBlurCapture={resume}
       >
         <img src="/logo-watermark.png" alt="Dreamify" className="w-20 h-20 object-contain mx-auto mb-3 rounded hover:animate-spin transition-all duration-300" />
-        <h2 id="blankstate-title" className="text-lg font-semibold mb-2">Get Started with Nyx</h2>
+        <h2 id="blankstate-title" className="text-lg font-semibold mb-2">Get Started with Morpheus</h2>
 
         <div
           aria-live="polite"

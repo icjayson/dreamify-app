@@ -140,7 +140,8 @@ class ChartFactory {
           title: metricConfig.title,
           value: metricConfig.value,
           change: metricConfig.change,
-          trend: metricConfig.trend
+          trend: metricConfig.trend,
+          timeComparison: (metricConfig as any).timeComparison
         };
 
       case ChartType.TABLE:
@@ -166,6 +167,8 @@ class ChartFactory {
           title: chartConfig.title,
           description: chartConfig.description,
           datasets: chartConfig.datasets,
+          axisConfig: (chartConfig as any).axisConfig,
+          data: (chartConfig as any).data,
           config: chartConfig.config,
           layout: chartConfig.layout,
           styling: chartConfig.styling
@@ -229,11 +232,8 @@ class ChartFactory {
     switch (type) {
       case ChartType.METRIC:
         const metricConfig = config as MetricConfiguration;
-        if (!metricConfig.value) {
+        if (metricConfig.value === undefined || metricConfig.value === null) {
           errors.push('Metric value is required');
-        }
-        if (!metricConfig.change) {
-          errors.push('Metric change is required');
         }
         break;
 
@@ -256,8 +256,10 @@ class ChartFactory {
       case ChartType.DONUT:
       case ChartType.GEOGRAPHIC:
         const chartConfig = config as ChartConfiguration;
-        if (!chartConfig.datasets || chartConfig.datasets.length === 0) {
-          errors.push('Chart datasets are required');
+        const hasDatasets = Array.isArray(chartConfig.datasets) && chartConfig.datasets.length > 0;
+        const hasAxisConfig = !!(chartConfig as any).axisConfig;
+        if (!hasDatasets && !hasAxisConfig) {
+          errors.push('Chart requires either datasets or axisConfig');
         }
         break;
     }

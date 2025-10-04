@@ -55,7 +55,18 @@ export interface ChartConfiguration {
   type: ChartType;
   title: string;
   description?: string;
-  datasets: ChartDataset[];
+  // Datasets are optional when using axisConfig + data
+  datasets?: ChartDataset[];
+  // Axis-based configuration (Morpheus-style)
+  axisConfig?: {
+    x_axis: { column: string; label?: string; data_type?: string; cardinality?: number; granularity?: string };
+    y_axis: { column: string; label?: string; data_type?: string; aggregation?: string };
+    color?: { column?: string; label?: string; data_type?: string; cardinality?: number };
+    size?: { column?: string; label?: string };
+    filters?: Array<{ column: string; type: string; default?: any }>;
+  };
+  // Optional raw/aggregated records when provided by the agent
+  data?: any[];
   config?: Record<string, any>;
   layout?: Record<string, any>;
   styling?: ChartStyling;
@@ -66,8 +77,18 @@ export interface MetricConfiguration {
   id: string;
   title: string;
   value: string | number;
-  change: string;
-  trend: MetricTrend;
+  // Optional change and trend (can be computed from timeComparison)
+  change?: string | number;
+  trend?: MetricTrend | string;
+  // Optional time comparison context from agent
+  timeComparison?: {
+    enabled: boolean;
+    type?: string;
+    time_column?: string;
+    comparison_type?: string;
+    previous_value?: number;
+    label?: string;
+  };
   metadata?: Record<string, any>;
 }
 
@@ -83,7 +104,8 @@ export interface TableConfiguration {
   id: string;
   title: string;
   description?: string;
-  columns: TableColumn[];
+  // Accept either detailed column descriptors or simple string names
+  columns: TableColumn[] | string[];
   data: Record<string, any>[];
   pagination?: Record<string, any>;
   metadata?: Record<string, any>;

@@ -270,7 +270,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
       <div className="py-2">
         <div className="flex items-center gap-2 mb-1 px-2 ">
           <Bot className="w-5 h-5 text-accent" />
-          <span className="font-medium text-sm">Nyx</span>
+          <span className="font-medium text-sm">Morpheus</span>
         </div>
         <p className="text-xs text-muted-foreground px-2">
           Describe dashboard vision and I'll build it with beautiful animations
@@ -342,7 +342,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                     <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                     <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
-                  <span className="text-sm text-accent">Nyx is analyzing...</span>
+                  <span className="text-sm text-accent">Morpheus is analyzing...</span>
                 </div>
               </Card>
             </div>

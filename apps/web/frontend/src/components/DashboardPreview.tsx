@@ -28,107 +28,94 @@ const DashboardPreview = ({
 
   // No automatic dashboard generation on mount
 
-  // Transform processed data to dashboard configuration
-  const transformProcessedDataToDashboard = (data: any) => {
+  // Normalize incoming data (Morpheus-first format)
+  const normalizeDashboard = (data: any) => {
     if (!data) return null;
-    
-    console.log('DashboardPreview: Transforming processed data:', data);
-
     const components: any[] = [];
     let componentId = 1;
 
-    // Transform metrics
-    if (data.metrics && Array.isArray(data.metrics)) {
-      data.metrics.forEach((metric: any, index: number) => {
+    // Metrics (Morpheus: name -> title, optional change/trend)
+    if (Array.isArray(data.metrics)) {
+      data.metrics.forEach((m: any, idx: number) => {
+        const prev = m?.time_comparison?.previous_value;
+        let change: string | number | undefined = m.change;
+        let trend: string | undefined = m.trend;
+        if ((change === undefined || change === null) && typeof m.value === 'number' && typeof prev === 'number' && prev !== 0) {
+          const pct = ((m.value - prev) / prev) * 100;
+          change = `${pct.toFixed(2)}%`;
+          trend = pct > 0 ? 'up' : pct < 0 ? 'down' : 'stable';
+        }
         components.push({
           id: `metric_${componentId++}`,
           type: 'metric',
-          position: {
-            x: (index % 4) * 3,
-            y: Math.floor(index / 4) * 2,
-            width: 3,
-            height: 2
-          },
+          position: { x: (idx % 4) * 3, y: Math.floor(idx / 4) * 2, width: 3, height: 2 },
           component_config: {
-            id: metric.id || `metric_${index + 1}`,
-            title: metric.title || 'Metric',
-            value: metric.value || '0',
-            change: metric.change || '0%',
-            trend: typeof metric.trend === 'string'
-              ? (metric.trend || 'stable').toString().toLowerCase()
-              : 'stable'
+            id: m.id || `metric_${idx + 1}`,
+            title: m.title || m.name || 'Metric',
+            value: m.value,
+            change,
+            trend,
+            timeComparison: m.time_comparison
           }
         });
       });
     }
 
-    // Transform charts
-    if (data.charts && Array.isArray(data.charts)) {
-      data.charts.forEach((chart: any, index: number) => {
-        // Apply styling recommendations if available
-        const styling = data.styling_recommendations ? {
-          presetTheme: data.styling_recommendations.preset_theme || 'corporate',
-          colorPalette: data.styling_recommendations.color_palette || ['#2563eb', '#10b981', '#f59e0b'],
-          animationEnabled: data.styling_recommendations.animation_enabled !== false,
-          gridVisible: data.styling_recommendations.grid_visible !== false,
-          legendPosition: data.styling_recommendations.legend_position || 'top' as 'top' | 'bottom' | 'right' | 'none'
-        } : undefined;
-
+    // Charts (Morpheus: chart_type + config axis)
+    const typeMap: Record<string, string> = {
+      line_chart: 'line',
+      bar_chart: 'bar',
+      pie_chart: 'pie',
+      area_chart: 'area',
+      scatter_chart: 'scatter',
+      composed_chart: 'composed',
+      geographic: 'geographic',
+      table: 'table'
+    };
+    if (Array.isArray(data.charts)) {
+      data.charts.forEach((c: any, idx: number) => {
+        const mappedType = typeMap[(c.chart_type || '').toLowerCase()] || 'line';
         components.push({
           id: `chart_${componentId++}`,
           type: 'chart',
-          position: {
-            x: (index % 2) * 6,
-            y: Math.floor(index / 2) * 4 + 2,
-            width: 6,
-            height: 4
-          },
+          position: { x: (idx % 2) * 6, y: Math.floor(idx / 2) * 4 + 2, width: 6, height: 4 },
           component_config: {
-            id: chart.id || `chart_${index + 1}`,
-            type: chart.type || 'line',
-            title: chart.title || 'Chart',
-            description: chart.description || '',
-            datasets: chart.datasets || [],
-            config: chart.config || {},
-            styling: styling
+            id: c.id || `chart_${idx + 1}`,
+            type: mappedType,
+            title: c.title || 'Chart',
+            description: c.reasoning?.insight || c.description || '',
+            axisConfig: c.config,
+            data: c.data,
+            config: {},
+            styling: undefined
           }
         });
       });
     }
 
-    // Transform tables
-    if (data.tables && Array.isArray(data.tables)) {
-      data.tables.forEach((table: any, index: number) => {
+    // Tables (Morpheus: columns string[] + rows objects)
+    if (Array.isArray(data.tables)) {
+      data.tables.forEach((t: any, idx: number) => {
         components.push({
           id: `table_${componentId++}`,
           type: 'table',
-          position: {
-            x: 0,
-            y: Math.floor(index / 2) * 6 + 6,
-            width: 12,
-            height: 3
-          },
+          position: { x: 0, y: Math.floor(idx / 2) * 6 + 6, width: 12, height: 3 },
           component_config: {
-            id: table.id || `table_${index + 1}`,
-            title: table.title || 'Table',
-            columns: table.columns || [],
-            data: table.data || []
+            id: t.id || `table_${idx + 1}`,
+            title: t.title || 'Table',
+            columns: Array.isArray(t.columns) ? t.columns : [],
+            data: Array.isArray(t.rows) ? t.rows : []
           }
         });
       });
     }
 
+    const gridColumns = data?.layout?.recommended_grid?.length ? 12 : 12;
     const dashboardConfig = {
       id: 'processed_dashboard',
-      layout: {
-        type: 'grid',
-        grid_columns: 12,
-        grid_rows: 20
-      },
+      layout: { type: 'grid', grid_columns: gridColumns, grid_rows: 20 },
       components
     };
-    
-    console.log('DashboardPreview: Created dashboard config:', dashboardConfig);
     return dashboardConfig;
   };
 
@@ -223,12 +210,12 @@ const DashboardPreview = ({
         )}
 
         {/* Processed Data Dashboard */}
-        {processedData && transformProcessedDataToDashboard(processedData) && (
+        {processedData && normalizeDashboard(processedData) && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold">Processed Data Dashboard</h2>
               <Badge variant="secondary" className="bg-green-100 text-green-800">
-                Generated by Nyx
+                Generated by Morpheus
               </Badge>
             </div>
             
@@ -236,10 +223,10 @@ const DashboardPreview = ({
             <div 
               className="grid gap-6"
               style={{
-                gridTemplateColumns: `repeat(${transformProcessedDataToDashboard(processedData)?.layout.grid_columns || 12}, 1fr)`
+                gridTemplateColumns: `repeat(${normalizeDashboard(processedData)?.layout.grid_columns || 12}, 1fr)`
               }}
             >
-              {transformProcessedDataToDashboard(processedData)?.components.map((component) => (
+              {normalizeDashboard(processedData)?.components.map((component) => (
                 <div
                   key={component.id}
                   className="animate-fade-in"

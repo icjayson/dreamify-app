@@ -5,6 +5,8 @@ Dashboard service for generating and managing dashboard configurations.
 import time
 import uuid
 from typing import Dict, List, Any, Optional
+import os
+import json
 from datetime import datetime
 from app.models.dashboard_models import (
     DashboardConfiguration,
@@ -194,14 +196,26 @@ class DashboardService:
     
     def _get_processed_data(self, data_source: str) -> Dict[str, Any]:
         """Get processed data from data source."""
-        # This would typically fetch from database or file system
-        # For now, return mock data structure
+        # Try to load from file-storage/processed/{data_source}.json
+        try:
+            backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            processed_dir = os.path.join(backend_root, 'file-storage', 'processed')
+            candidate_path = os.path.join(processed_dir, f'{data_source}.json')
+            if os.path.exists(candidate_path):
+                with open(candidate_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load processed data for {data_source}: {e}")
+        
+        # Fallback to empty-safe structure
         return {
-            'column_analysis': {},
+            'metrics': [],
+            'charts': [],
+            'tables': [],
             'business_insights': [],
             'visualization_suggestions': [],
             'data_quality': {},
-            'metadata': {}
+            'metadata': {'data_source': data_source}
         }
     
     def _generate_components(
@@ -236,49 +250,38 @@ class DashboardService:
     
     def _generate_metric_components(self, processed_data: Dict[str, Any]) -> List[DashboardComponent]:
         """Generate metric card components."""
-        components = []
+        components: List[DashboardComponent] = []
+        metrics = processed_data.get('metrics', []) or []
+        if not isinstance(metrics, list):
+            return components
         
-        # Sample metric configurations
-        metrics = [
-            {
-                'id': 'customers_metric',
-                'title': 'Customers',
-                'value': '3,781',
-                'change': '+11.01%',
-                'trend': MetricTrend.UP
-            },
-            {
-                'id': 'orders_metric',
-                'title': 'Orders',
-                'value': '1,219',
-                'change': '-0.3%',
-                'trend': MetricTrend.DOWN
-            },
-            {
-                'id': 'revenue_metric',
-                'title': 'Revenue',
-                'value': '$695',
-                'change': '+15.03%',
-                'trend': MetricTrend.UP
-            },
-            {
-                'id': 'growth_metric',
-                'title': 'Growth',
-                'value': '30.1%',
-                'change': '+6.08%',
-                'trend': MetricTrend.UP
-            }
-        ]
+        def map_trend(value: Any) -> MetricTrend:
+            if isinstance(value, MetricTrend):
+                return value
+            s = str(value).lower()
+            if 'down' in s:
+                return MetricTrend.DOWN
+            if 'up' in s:
+                return MetricTrend.UP
+            return MetricTrend.STABLE if hasattr(MetricTrend, 'STABLE') else MetricTrend.UP
         
-        for i, metric_data in enumerate(metrics):
-            metric_config = MetricConfiguration(**metric_data)
-            component = DashboardComponent(
-                id=f"metric_{i}",
-                type="metric",
-                position={'x': i % 4, 'y': 0, 'width': 3, 'height': 1},
-                component_config=metric_config
-            )
-            components.append(component)
+        for i, m in enumerate(metrics):
+            try:
+                metric_config = MetricConfiguration(
+                    id=m.get('id') or f'metric_{i+1}',
+                    title=m.get('title') or m.get('name') or 'Metric',
+                    value=m.get('value'),
+                    change=m.get('change'),
+                    trend=map_trend(m.get('trend'))
+                )
+                components.append(DashboardComponent(
+                    id=f"metric_{i}",
+                    type="metric",
+                    position={'x': (i % 4) * 3, 'y': (i // 4) * 2, 'width': 3, 'height': 2},
+                    component_config=metric_config
+                ))
+            except Exception as e:
+                logger.warning(f"Skipping metric due to error: {e}")
         
         return components
     
@@ -288,61 +291,93 @@ class DashboardService:
         chart_types: Optional[List[ChartType]] = None,
         styling_recommendations: Optional[Dict[str, Any]] = None
     ) -> List[DashboardComponent]:
-        """Generate chart components."""
-        components = []
+        """Generate chart components strictly from processed data."""
+        components: List[DashboardComponent] = []
+        charts = processed_data.get('charts', []) or []
+        if not isinstance(charts, list):
+            return components
         
-        # Default chart types if none specified
-        if not chart_types:
-            chart_types = [ChartType.LINE, ChartType.BAR, ChartType.PIE, ChartType.GEOGRAPHIC]
+        def map_chart_type(t: Any) -> Optional[ChartType]:
+            if isinstance(t, ChartType):
+                return t
+            if t is None:
+                return None
+            s = str(t).lower()
+            mapping = {
+                'line': ChartType.LINE,
+                'bar': ChartType.BAR,
+                'pie': ChartType.PIE,
+                'area': ChartType.AREA if hasattr(ChartType, 'AREA') else ChartType.LINE,
+                'scatter': ChartType.SCATTER if hasattr(ChartType, 'SCATTER') else ChartType.LINE,
+                'composed': ChartType.COMPOSED if hasattr(ChartType, 'COMPOSED') else ChartType.LINE,
+                'geographic': ChartType.GEOGRAPHIC,
+                'table': None
+            }
+            return mapping.get(s)
         
-        # Generate revenue chart
-        if ChartType.LINE in chart_types:
-            revenue_chart = self._create_revenue_chart(styling_recommendations)
-            component = DashboardComponent(
-                id="revenue_chart",
-                type="chart",
-                position={'x': 0, 'y': 1, 'width': 8, 'height': 2},
-                component_config=revenue_chart
-            )
-            components.append(component)
-        
-        # Generate projections chart
-        if ChartType.BAR in chart_types:
-            projections_chart = self._create_projections_chart(styling_recommendations)
-            component = DashboardComponent(
-                id="projections_chart",
-                type="chart",
-                position={'x': 8, 'y': 1, 'width': 4, 'height': 2},
-                component_config=projections_chart
-            )
-            components.append(component)
-        
-        # Generate geographic chart
-        if ChartType.GEOGRAPHIC in chart_types:
-            geographic_chart = self._create_geographic_chart(styling_recommendations)
-            component = DashboardComponent(
-                id="geographic_chart",
-                type="chart",
-                position={'x': 4, 'y': 3, 'width': 4, 'height': 2},
-                component_config=geographic_chart
-            )
-            components.append(component)
+        idx = 0
+        for chart in charts:
+            try:
+                ctype = map_chart_type(chart.get('type'))
+                if ctype is None:
+                    continue
+                if chart_types and ctype not in chart_types:
+                    continue
+                
+                datasets_data = chart.get('datasets') or []
+                datasets: List[ChartDataset] = []
+                for ds in datasets_data:
+                    points = [ChartDataPoint(label=p.get('label'), value=p.get('value')) for p in (ds.get('data') or [])]
+                    datasets.append(ChartDataset(label=ds.get('label'), data=points, color=ds.get('color')))
+                
+                styling = self._create_chart_styling(styling_recommendations, ctype)
+                chart_config = ChartConfiguration(
+                    id=chart.get('id') or f'chart_{idx+1}',
+                    type=ctype,
+                    title=chart.get('title') or 'Chart',
+                    description=chart.get('description'),
+                    datasets=datasets,
+                    config=chart.get('config') or {},
+                    styling=styling
+                )
+                components.append(DashboardComponent(
+                    id=chart_config.id,
+                    type="chart",
+                    position=chart.get('position') or {'x': (idx * 4) % 12, 'y': (idx // 3) * 2 + 1, 'width': 4, 'height': 2},
+                    component_config=chart_config
+                ))
+                idx += 1
+            except Exception as e:
+                logger.warning(f"Skipping chart due to error: {e}")
         
         return components
     
     def _generate_table_components(self, processed_data: Dict[str, Any]) -> List[DashboardComponent]:
-        """Generate table components."""
-        components = []
+        """Generate table components strictly from processed data."""
+        components: List[DashboardComponent] = []
+        tables = processed_data.get('tables', []) or []
+        if not isinstance(tables, list):
+            return components
         
-        # Generate top products table
-        products_table = self._create_products_table()
-        component = DashboardComponent(
-            id="products_table",
-            type="table",
-            position={'x': 0, 'y': 3, 'width': 4, 'height': 2},
-            component_config=products_table
-        )
-        components.append(component)
+        for idx, tbl in enumerate(tables):
+            try:
+                columns_src = tbl.get('columns') or []
+                columns = [TableColumn(key=c.get('key'), label=c.get('label'), type=c.get('type') or 'string') for c in columns_src]
+                table_config = TableConfiguration(
+                    id=tbl.get('id') or f'table_{idx+1}',
+                    title=tbl.get('title') or 'Table',
+                    description=tbl.get('description'),
+                    columns=columns,
+                    data=tbl.get('data') or []
+                )
+                components.append(DashboardComponent(
+                    id=table_config.id,
+                    type="table",
+                    position=tbl.get('position') or {'x': (idx * 4) % 12, 'y': 3 + (idx // 3) * 2, 'width': 4, 'height': 2},
+                    component_config=table_config
+                ))
+            except Exception as e:
+                logger.warning(f"Skipping table due to error: {e}")
         
         return components
     

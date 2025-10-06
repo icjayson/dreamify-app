@@ -6,12 +6,8 @@ import React from 'react';
 import { ChartType, ChartConfiguration, MetricConfiguration, TableConfiguration } from '@/types/dashboard';
 
 // Import chart components
-import RevenueChart from '@/components/dashboard/RevenueChart';
-import ProjectionsChart from '@/components/dashboard/ProjectionsChart';
-import MetricCard from '@/components/dashboard/MetricCard';
-import TopProductsTable from '@/components/dashboard/TopProductsTable';
-import GeographicChart from '@/components/dashboard/GeographicChart';
-import ActivityFeed from '@/components/dashboard/ActivityFeed';
+import MetricCard from '@/components/charts/MetricCard';
+import Table from '@/components/charts/Table';
 
 // Import Recharts components
 import RechartsLineChart from '@/components/charts/RechartsLineChart';
@@ -20,6 +16,11 @@ import RechartsPieChart from '@/components/charts/RechartsPieChart';
 import RechartsAreaChart from '@/components/charts/RechartsAreaChart';
 import RechartsScatterChart from '@/components/charts/RechartsScatterChart';
 import RechartsComposedChart from '@/components/charts/RechartsComposedChart';
+import RechartsRadarChart from '@/components/charts/RechartsRadarChart';
+import RechartsRadialBarChart from '@/components/charts/RechartsRadialBarChart';
+import RechartsFunnelChart from '@/components/charts/RechartsFunnelChart';
+import RechartsTreemapChart from '@/components/charts/RechartsTreemapChart';
+import RechartsSankeyChart from '@/components/charts/RechartsSankeyChart';
 
 // Chart component registry
 const CHART_COMPONENTS = {
@@ -29,10 +30,14 @@ const CHART_COMPONENTS = {
   [ChartType.AREA]: RechartsAreaChart,
   [ChartType.SCATTER]: RechartsScatterChart,
   [ChartType.COMPOSED]: RechartsComposedChart,
+  [ChartType.RADAR]: RechartsRadarChart,
+  [ChartType.RADIAL_BAR]: RechartsRadialBarChart,
+  [ChartType.FUNNEL]: RechartsFunnelChart,
+  [ChartType.TREEMAP]: RechartsTreemapChart,
+  [ChartType.SANKEY]: RechartsSankeyChart,
   [ChartType.METRIC]: MetricCard,
-  [ChartType.TABLE]: TopProductsTable,
-  [ChartType.GEOGRAPHIC]: GeographicChart,
-  [ChartType.ACTIVITY_FEED]: ActivityFeed,
+  [ChartType.TABLE]: Table,
+  // Removed: Geographic, Activity Feed, Revenue, Projections
   // Fallback components for unsupported types
   [ChartType.DONUT]: RechartsPieChart, // Using RechartsPieChart as fallback for donut charts
 };
@@ -146,10 +151,19 @@ class ChartFactory {
 
       case ChartType.TABLE:
         const tableConfig = config as TableConfiguration;
+        // Normalize columns if provided as string[] to TableColumn[]
+        let normalizedColumns: any = tableConfig.columns;
+        if (Array.isArray(tableConfig.columns) && tableConfig.columns.length > 0 && typeof tableConfig.columns[0] === 'string') {
+          normalizedColumns = (tableConfig.columns as string[]).map((name) => ({
+            key: name,
+            label: name,
+            type: 'string'
+          }));
+        }
         return {
           title: tableConfig.title,
           description: tableConfig.description,
-          columns: tableConfig.columns,
+          columns: normalizedColumns,
           data: tableConfig.data,
           pagination: tableConfig.pagination
         };
@@ -160,6 +174,11 @@ class ChartFactory {
       case ChartType.AREA:
       case ChartType.SCATTER:
       case ChartType.COMPOSED:
+      case ChartType.RADAR:
+      case ChartType.RADIAL_BAR:
+      case ChartType.FUNNEL:
+      case ChartType.TREEMAP:
+      case ChartType.SANKEY:
       case ChartType.DONUT:
       case ChartType.GEOGRAPHIC:
         const chartConfig = config as ChartConfiguration;
@@ -175,10 +194,7 @@ class ChartFactory {
         };
 
       case ChartType.ACTIVITY_FEED:
-        return {
-          // ActivityFeed uses hardcoded data for now
-          // This will be updated when ActivityFeed is refactored
-        };
+        return {};
 
       default:
         return {};
@@ -253,13 +269,19 @@ class ChartFactory {
       case ChartType.AREA:
       case ChartType.SCATTER:
       case ChartType.COMPOSED:
+      case ChartType.RADAR:
+      case ChartType.RADIAL_BAR:
+      case ChartType.FUNNEL:
+      case ChartType.TREEMAP:
+      case ChartType.SANKEY:
       case ChartType.DONUT:
       case ChartType.GEOGRAPHIC:
         const chartConfig = config as ChartConfiguration;
         const hasDatasets = Array.isArray(chartConfig.datasets) && chartConfig.datasets.length > 0;
         const hasAxisConfig = !!(chartConfig as any).axisConfig;
-        if (!hasDatasets && !hasAxisConfig) {
-          errors.push('Chart requires either datasets or axisConfig');
+        const hasSankeyData = (type === ChartType.SANKEY) && !!(chartConfig as any)?.config?.data && Array.isArray((chartConfig as any).config.data.nodes) && Array.isArray((chartConfig as any).config.data.links);
+        if (!hasDatasets && !hasAxisConfig && !hasSankeyData) {
+          errors.push(type === ChartType.SANKEY ? 'Sankey chart requires datasets, axisConfig, or config.data {nodes, links}' : 'Chart requires either datasets or axisConfig');
         }
         break;
     }

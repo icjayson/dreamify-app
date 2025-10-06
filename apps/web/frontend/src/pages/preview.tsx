@@ -4,6 +4,7 @@ import AmazonDashboard from "@/components/Amazon_Dashboard";
 import AmazonDashboardDark from "@/components/Amazon_Dashboard_Dark";
 import DashboardLoading from "@/components/DashboardLoading";
 import { useChatStore } from "@/stores/useChatStore";
+import DashboardPreview from "@/components/DashboardPreview";
 
 export default function PreviewPage() {
   const navigate = useNavigate();
@@ -35,9 +36,9 @@ export default function PreviewPage() {
         ) : isThemeChanging ? (
           <DashboardLoading />
         ) : dashboardTheme === 'dark' ? (
-          <AmazonDashboardDark processedData={processedData} />
+          <DashboardPreview processedData={processedData}/>
         ) : (
-          <AmazonDashboard processedData={processedData} />
+          <DashboardPreview processedData={processedData}/>
         )}
       </div>
     </div>

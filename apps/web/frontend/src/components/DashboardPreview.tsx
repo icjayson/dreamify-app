@@ -17,7 +17,7 @@ interface DashboardPreviewProps {
 }
 
 const DashboardPreview = ({ 
-  dataSource = "sample_data",
+  dataSource,
   dashboardId,
   className = "",
   style = {},
@@ -134,7 +134,6 @@ const DashboardPreview = ({
         chart_types: [ChartType.LINE, ChartType.BAR, ChartType.METRIC, ChartType.TABLE, ChartType.GEOGRAPHIC],
         metadata: {
           title: "eCommerce Sales Dashboard",
-          description: "Real-time analytics with AI insights"
         }
       };
       generateDashboard(request);
@@ -171,20 +170,7 @@ const DashboardPreview = ({
           </div>
         </div>
         
-        {/* Navigation Tabs */}
-        <div className="flex gap-1">
-          {["Overview", "Revenue", "Customers", "Products"].map((tab) => (
-            <Button
-              key={tab}
-              variant={activeSection === tab.toLowerCase() ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveSection(tab.toLowerCase())}
-              className="text-xs"
-            >
-              {tab}
-            </Button>
-          ))}
-        </div>
+        
       </div>
 
       {/* Main Dashboard Content */}
@@ -280,34 +266,14 @@ const DashboardPreview = ({
           </div>
         )}
 
-        {/* Fallback to hardcoded dashboard if no configuration */}
         {!processedData && !dashboardState.configuration && !dashboardState.loading && !dashboardState.error && (
           <div className="space-y-6">
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                No dashboard configuration available. Using fallback layout.
+                No dashboard configuration available. Generate a dashboard or upload data to get started.
               </AlertDescription>
             </Alert>
-            
-            {/* Fallback hardcoded layout */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="lg:col-span-2">
-                <div className="h-32 bg-muted rounded-lg flex items-center justify-center">
-                  <p className="text-muted-foreground">Revenue Chart</p>
-                </div>
-              </div>
-              <div>
-                <div className="h-32 bg-muted rounded-lg flex items-center justify-center">
-                  <p className="text-muted-foreground">Projections Chart</p>
-                </div>
-              </div>
-              <div>
-                <div className="h-32 bg-muted rounded-lg flex items-center justify-center">
-                  <p className="text-muted-foreground">Geographic Chart</p>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>

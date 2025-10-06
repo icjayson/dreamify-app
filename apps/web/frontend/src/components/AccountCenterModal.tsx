@@ -86,6 +86,34 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
   const draggingRef = useRef(false);
   const startYRef = useRef<number | null>(null);
 
+  // Responsive: detect desktop to avoid mounting mobile Sheet overlay on desktop
+  const [isDesktop, setIsDesktop] = useState<boolean>(false);
+
+  useEffect(() => {
+    const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 640px)') : null;
+    const update = () => setIsDesktop(!!mq && mq.matches);
+    update();
+    if (mq) {
+      try {
+        mq.addEventListener('change', update);
+      } catch {
+        // Safari fallback
+        // @ts-ignore
+        mq.addListener(update);
+      }
+    }
+    return () => {
+      if (mq) {
+        try {
+          mq.removeEventListener('change', update);
+        } catch {
+          // @ts-ignore
+          mq.removeListener(update);
+        }
+      }
+    };
+  }, []);
+
   // Mobile two-sheet state
   const [isShowingMobileContent, setIsShowingMobileContent] = useState(false);
   const [mobileActiveTab, setMobileActiveTab] = useState<AccountCenterTab>(activeTab);
@@ -143,7 +171,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
   return (
     <>
       {/* Mobile: Single Sheet toggling between Settings list and Content (sm:hidden) */}
-      {open && (
+      {open && !isDesktop && (
         <Sheet open={open} onOpenChange={(v) => { if (!v) { setIsShowingMobileContent(false); onClose(); } }}>
           <SheetContent side="bottom" className="sm:hidden h-[80vh] w-full bg-muted border-t border-border rounded-t-2xl overflow-hidden p-0">
             {/* Drag Handle */}

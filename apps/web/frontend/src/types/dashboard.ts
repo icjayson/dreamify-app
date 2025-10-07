@@ -87,11 +87,15 @@ export interface MetricConfiguration {
   trend?: MetricTrend | string;
   // Optional time comparison context from agent
   timeComparison?: {
-    enabled: boolean;
+    enabled?: boolean;
+    period?: 'mom' | 'yoy' | 'wow' | string;
+    current_value?: number | null;
+    previous_value?: number | null;
+    percentage_change?: number | null;
     type?: string;
     time_column?: string;
     comparison_type?: string;
-    previous_value?: number;
+    previous_value_legacy?: number;
     label?: string;
   };
   metadata?: Record<string, any>;

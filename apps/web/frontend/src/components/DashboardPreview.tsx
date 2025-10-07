@@ -1,12 +1,16 @@
-import { useState, useEffect } from "react";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RefreshCw, AlertCircle, Loader2 } from "lucide-react";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
 import { DashboardGenerationRequest, LayoutType, ChartType } from "@/types/dashboard";
+import { 
+  convertLLMStylingToChartStyling,
+  validateChartStyling,
+  getDefaultChartStyling,
+  applyChartStyling,
+  getChartStylingClasses
+} from "@/utils/chartStyling";
 
 interface DashboardPreviewProps {
   dataSource?: string;
@@ -25,14 +29,26 @@ const DashboardPreview = ({
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard } = useDashboard(dashboardId);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // No automatic dashboard generation on mount
 
   // Normalize incoming data (Morpheus-first format)
+  const getDashboardStyling = (data: any) => {
+    if (!data?.styling_recommendations) return undefined;
+    const converted = convertLLMStylingToChartStyling(data.styling_recommendations);
+    const validation = validateChartStyling(converted);
+    return validation.isValid ? converted : getDefaultChartStyling();
+  };
+
   const normalizeDashboard = (data: any) => {
     if (!data) return null;
     const components: any[] = [];
     let componentId = 1;
+
+    // Dashboard-level styling (light theme from backend)
+    const dashboardStyling = getDashboardStyling(data);
+    const dashboardTile: any = (dashboardStyling as any)?.tile;
 
     // Metrics (Morpheus: name -> title, optional change/trend)
     if (Array.isArray(data.metrics)) {
@@ -55,7 +71,15 @@ const DashboardPreview = ({
             value: m.value,
             change,
             trend,
-            timeComparison: m.time_comparison
+            timeComparison: m.time_comparison,
+            // merge dashboard tile defaults into metric styling if missing
+            styling: {
+              ...(m.styling || {}),
+              tile: {
+                ...(dashboardTile || {}),
+                ...((m.styling && (m.styling as any).tile) || {})
+              }
+            }
           }
         });
       });
@@ -75,6 +99,19 @@ const DashboardPreview = ({
     if (Array.isArray(data.charts)) {
       data.charts.forEach((c: any, idx: number) => {
         const mappedType = typeMap[(c.chart_type || '').toLowerCase()] || 'line';
+        const chartLevelStyling = c.styling ? convertLLMStylingToChartStyling(c.styling) : undefined;
+        const validatedChartStyling = chartLevelStyling && validateChartStyling(chartLevelStyling).isValid
+          ? chartLevelStyling
+          : (dashboardStyling || getDefaultChartStyling());
+        // merge dashboard tile defaults
+        const mergedChartStyling: any = {
+          ...validatedChartStyling,
+          tile: {
+            ...(dashboardTile || {}),
+            ...((chartLevelStyling as any)?.tile || {})
+          }
+        };
+
         components.push({
           id: `chart_${componentId++}`,
           type: 'chart',
@@ -84,10 +121,11 @@ const DashboardPreview = ({
             type: mappedType,
             title: c.title || 'Chart',
             description: c.reasoning?.insight || c.description || '',
-            axisConfig: c.config,
+            axisConfig: c.config || { xKey: 'label', yKey: 'value' },
+            datasets: Array.isArray(c.datasets) ? c.datasets : [],
             data: c.data,
             config: {},
-            styling: undefined
+            styling: mergedChartStyling
           }
         });
       });
@@ -104,7 +142,14 @@ const DashboardPreview = ({
             id: t.id || `table_${idx + 1}`,
             title: t.title || 'Table',
             columns: Array.isArray(t.columns) ? t.columns : [],
-            data: Array.isArray(t.rows) ? t.rows : []
+            data: Array.isArray(t.rows) ? t.rows : [],
+            styling: {
+              ...(t.styling || {}),
+              tile: {
+                ...(dashboardTile || {}),
+                ...((t.styling || {}).tile || {})
+              }
+            }
           }
         });
       });
@@ -118,6 +163,14 @@ const DashboardPreview = ({
     };
     return dashboardConfig;
   };
+
+  // Apply dashboard-level styling to container to decouple from global theme
+  const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData]);
+  useEffect(() => {
+    if (containerRef.current && dashboardStylingForContainer) {
+      applyChartStyling(containerRef.current, dashboardStylingForContainer);
+    }
+  }, [dashboardStylingForContainer]);
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -156,22 +209,13 @@ const DashboardPreview = ({
   };
 
   return (
-    <div className={`h-full overflow-y-auto bg-background/50 ${className}`} style={style}>
-      {/* Dashboard Header */}
-      <div className="p-6 border-b border-border/50 glass-panel">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-semibold mb-1">
-              {dashboardState.configuration?.title || "eCommerce Sales Dashboard"}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {dashboardState.configuration?.description || "Real-time analytics with AI insights"}
-            </p>
-          </div>
-        </div>
-        
-        
-      </div>
+    <div
+      ref={containerRef}
+      className={`h-full overflow-y-auto ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
+      style={style}
+      data-theme="dashboard-preview"
+    >
+      {/* Header removed as per request */}
 
       {/* Main Dashboard Content */}
       <div className="p-6">
@@ -198,12 +242,7 @@ const DashboardPreview = ({
         {/* Processed Data Dashboard */}
         {processedData && normalizeDashboard(processedData) && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Processed Data Dashboard</h2>
-              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                Generated by Morpheus
-              </Badge>
-            </div>
+            {/* Removed Processed Data Dashboard title and badge */}
             
             {/* Dynamic Grid Layout for Processed Data */}
             <div 
@@ -223,10 +262,7 @@ const DashboardPreview = ({
                 >
                   <ChartRenderer
                     component={component}
-                    onRefresh={handleComponentRefresh}
                     onError={handleComponentError}
-                    showRefreshButton={true}
-                    autoRefresh={false}
                   />
                 </div>
               ))}
@@ -255,10 +291,7 @@ const DashboardPreview = ({
                 >
                   <ChartRenderer
                     component={component}
-                    onRefresh={handleComponentRefresh}
                     onError={handleComponentError}
-                    showRefreshButton={true}
-                    autoRefresh={false}
                   />
                 </div>
               ))}

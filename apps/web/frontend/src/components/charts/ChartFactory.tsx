@@ -146,7 +146,8 @@ class ChartFactory {
           value: metricConfig.value,
           change: metricConfig.change,
           trend: metricConfig.trend,
-          timeComparison: (metricConfig as any).timeComparison
+          timeComparison: (metricConfig as any).timeComparison,
+          styling: (metricConfig as any).styling
         };
 
       case ChartType.TABLE:
@@ -165,7 +166,8 @@ class ChartFactory {
           description: tableConfig.description,
           columns: normalizedColumns,
           data: tableConfig.data,
-          pagination: tableConfig.pagination
+          pagination: tableConfig.pagination,
+          styling: (tableConfig as any).styling
         };
 
       case ChartType.LINE:

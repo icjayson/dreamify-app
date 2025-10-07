@@ -2,12 +2,10 @@
  * ChartRenderer - Component for rendering charts based on configuration
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Card } from '@/components/ui/card';
+import React, { useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { 
   ChartType, 
   ChartConfiguration, 
@@ -25,17 +23,12 @@ interface ChartRendererProps {
   className?: string;
   style?: React.CSSProperties;
   onError?: (error: Error, component: DashboardComponent) => void;
-  onRefresh?: (componentId: string) => Promise<void>;
-  showRefreshButton?: boolean;
-  autoRefresh?: boolean;
-  refreshInterval?: number;
 }
 
 interface ChartRendererState {
   loading: boolean;
   error: string | null;
-  lastUpdated: Date | null;
-  retryCount: number;
+  // removed refresh-related state
 }
 
 const ChartRenderer: React.FC<ChartRendererProps> = ({
@@ -43,16 +36,12 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
   className = '',
   style = {},
   onError,
-  onRefresh,
-  showRefreshButton = true,
-  autoRefresh = false,
-  refreshInterval = 30000 // 30 seconds
+  // refresh removed
 }) => {
   const [state, setState] = useState<ChartRendererState>({
     loading: false,
     error: null,
-    lastUpdated: null,
-    retryCount: 0
+    // no refresh state
   });
 
   // Validate component configuration
@@ -79,60 +68,14 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
     return validateChartConfig(chartType, config as ChartConfiguration | MetricConfiguration | TableConfiguration);
   }, [component]);
 
-  // Auto-refresh effect
-  useEffect(() => {
-    if (!autoRefresh || !onRefresh) return;
-
-    const interval = setInterval(() => {
-      handleRefresh();
-    }, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, onRefresh]);
-
-  // Handle refresh
-  const handleRefresh = async () => {
-    if (!onRefresh) return;
-
-    setState(prev => ({ ...prev, loading: true, error: null }));
-
-    try {
-      await onRefresh(component.id);
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        lastUpdated: new Date(),
-        retryCount: 0
-      }));
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Refresh failed';
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: errorMessage,
-        retryCount: prev.retryCount + 1
-      }));
-
-      if (onError) {
-        onError(error instanceof Error ? error : new Error(errorMessage), component);
-      }
-    }
-  };
-
-  // Handle retry
-  const handleRetry = () => {
-    setState(prev => ({ ...prev, error: null, retryCount: prev.retryCount + 1 }));
-  };
+  // refresh removed
 
   // Render loading state
   const renderLoadingState = () => (
-    <Card className={`glass-panel p-6 ${className}`} style={style}>
+    <div className={`p-6 ${className}`} style={style}>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Skeleton className="h-6 w-32" />
-          {showRefreshButton && (
-            <Skeleton className="h-8 w-8 rounded" />
-          )}
         </div>
         <Skeleton className="h-4 w-48" />
         <div className="space-y-2">
@@ -140,40 +83,18 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
           <Skeleton className="h-4 w-24" />
         </div>
       </div>
-    </Card>
+    </div>
   );
 
   // Render error state
   const renderErrorState = () => (
-    <Card className={`glass-panel p-6 ${className}`} style={style}>
+    <div className={`p-6 ${className}`} style={style}>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-destructive">
             {component.component_config?.title || 'Chart Error'}
           </h3>
-          <div className="flex items-center gap-2">
-            {showRefreshButton && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={state.loading}
-              >
-                {state.loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRetry}
-            >
-              Retry
-            </Button>
-          </div>
+          <div className="flex items-center gap-2" />
         </div>
         
         <Alert variant="destructive">
@@ -196,91 +117,28 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
             </ul>
           </div>
         )}
-
-        {state.retryCount > 0 && (
-          <p className="text-xs text-muted-foreground">
-            Retry attempt: {state.retryCount}
-          </p>
-        )}
       </div>
-    </Card>
+    </div>
   );
 
   // Render empty state
   const renderEmptyState = () => (
-    <Card className={`glass-panel p-6 ${className}`} style={style}>
+    <div className={`p-6 ${className}`} style={style}>
       <div className="text-center space-y-4">
         <h3 className="text-lg font-semibold">
           {component.component_config?.title || 'Empty Chart'}
         </h3>
-        <p className="text-muted-foreground">
+        <p>
           No data available for this chart
         </p>
-        {showRefreshButton && onRefresh && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={state.loading}
-          >
-            {state.loading ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
-            )}
-            Refresh
-          </Button>
-        )}
       </div>
-    </Card>
+    </div>
   );
 
-  // Render chart header
-  const renderChartHeader = () => {
-    const config = component.component_config;
-    if (!config) return null;
-
-    return (
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-semibold mb-1">
-            {config.title}
-          </h3>
-          {'description' in config && config.description && (
-            <p className="text-sm text-muted-foreground">
-              {config.description}
-            </p>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {state.lastUpdated && (
-            <span className="text-xs text-muted-foreground">
-              Updated: {state.lastUpdated.toLocaleTimeString()}
-            </span>
-          )}
-          
-          {showRefreshButton && onRefresh && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={state.loading}
-            >
-              {state.loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  };
+  // Header removed to avoid duplication; each chart/metric/table handles its own title
 
   // Main render logic
-  if (state.loading && !state.lastUpdated) {
+  if (state.loading) {
     return renderLoadingState();
   }
 
@@ -322,6 +180,15 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
   const chartConfig = config as ChartConfiguration;
   const stylingClasses = chartConfig.styling ? getChartStylingClasses(chartConfig.styling) : '';
 
+  // Compute tile styles from styling
+  const tile = (chartConfig as any)?.styling?.tile || {};
+  const containerStyle: React.CSSProperties = {
+    border: `${(tile.borderWidth ?? 1)}px solid ${tile.borderColor || 'hsl(220 14% 90%)'}`,
+    borderRadius: (tile.borderRadius ?? 12) as number,
+    backgroundColor: tile.background || 'hsl(0 0% 100%)',
+    ...style
+  };
+
   return (
     <ErrorBoundary
       fallback={renderErrorState}
@@ -332,12 +199,11 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
         }
       }}
     >
-      <Card className={`glass-panel p-6 animate-fade-in ${stylingClasses} ${className}`} style={style}>
-        {renderChartHeader()}
+      <div className={`p-6 rounded-md animate-fade-in ${stylingClasses} ${className}`} style={containerStyle}>
         <div className="chart-content">
           {chartElement}
         </div>
-      </Card>
+      </div>
     </ErrorBoundary>
   );
 };

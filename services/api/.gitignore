@@ -133,3 +133,5 @@ uploads/
 logs/
 *.db
 *.sqlite
+
+file-storage/

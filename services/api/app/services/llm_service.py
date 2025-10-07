@@ -50,29 +50,106 @@ class LLMService:
                     "id": "total_revenue_metric",
                     "title": "Total Revenue",
                     "value": "$78592678.30",
-                    "change": "",
-                    "trend": "stable"
+                    "change": "12.27%",
+                    "trend": "up",
+                    "time_comparison": {
+                        "period": "mom",
+                        "current_value": 78592678.30,
+                        "previous_value": 70000000.00,
+                        "percentage_change": 12.27
+                    },
+                    # Light theme metric styling
+                    "styling": {
+                        "accentColor": "hsl(220 9% 46%)",
+                        "trendUpColor": "hsl(142 76% 36%)",
+                        "trendDownColor": "hsl(0 84% 60%)",
+                        "background": "hsl(220 14% 96%)",
+                        "text": "hsl(220 9% 14%)",
+                        "tile": {
+                            "borderColor": "hsl(220 14% 90%)",
+                            "borderWidth": 1,
+                            "borderRadius": 12,
+                            "background": "hsl(0 0% 100%)"
+                        }
+                    }
                 },
                 {
                     "id": "total_quantity_metric",
                     "title": "Total Quantity Sold",
                     "value": "116649",
-                    "change": "",
-                    "trend": "stable"
+                    "change": "-3.15%",
+                    "trend": "down",
+                    "time_comparison": {
+                        "period": "mom",
+                        "current_value": 116649,
+                        "previous_value": 120440,
+                        "percentage_change": -3.15
+                    },
+                    "styling": {
+                        "accentColor": "hsl(220 9% 46%)",
+                        "trendUpColor": "hsl(142 76% 36%)",
+                        "trendDownColor": "hsl(0 84% 60%)",
+                        "background": "hsl(220 14% 96%)",
+                        "text": "hsl(220 9% 14%)",
+                        "tile": {
+                            "borderColor": "hsl(220 14% 90%)",
+                            "borderWidth": 1,
+                            "borderRadius": 12,
+                            "background": "hsl(0 0% 100%)"
+                        }
+                    }
                 },
                 {
                     "id": "total_orders_metric",
                     "title": "Total Orders",
                     "value": "120378",
-                    "change": "",
-                    "trend": "stable"
+                    "change": "0.00%",
+                    "trend": "stable",
+                    "time_comparison": {
+                        "period": "mom",
+                        "current_value": 120378,
+                        "previous_value": 120378,
+                        "percentage_change": 0.0
+                    },
+                    "styling": {
+                        "accentColor": "hsl(220 9% 46%)",
+                        "trendUpColor": "hsl(142 76% 36%)",
+                        "trendDownColor": "hsl(0 84% 60%)",
+                        "background": "hsl(220 14% 96%)",
+                        "text": "hsl(220 9% 14%)",
+                        "tile": {
+                            "borderColor": "hsl(220 14% 90%)",
+                            "borderWidth": 1,
+                            "borderRadius": 12,
+                            "background": "hsl(0 0% 100%)"
+                        }
+                    }
                 },
                 {
                     "id": "average_order_value_metric",
                     "title": "Average Order Value",
                     "value": "$652.88",
-                    "change": "",
-                    "trend": "stable"
+                    "change": None,
+                    "trend": None,
+                    "time_comparison": {
+                        "period": "mom",
+                        "current_value": 652.88,
+                        "previous_value": None,
+                        "percentage_change": None
+                    },
+                    "styling": {
+                        "accentColor": "hsl(220 9% 46%)",
+                        "trendUpColor": "hsl(142 76% 36%)",
+                        "trendDownColor": "hsl(0 84% 60%)",
+                        "background": "hsl(220 14% 96%)",
+                        "text": "hsl(220 9% 14%)",
+                        "tile": {
+                            "borderColor": "hsl(220 14% 90%)",
+                            "borderWidth": 1,
+                            "borderRadius": 12,
+                            "background": "hsl(0 0% 100%)"
+                        }
+                    }
                 }
             ],
             "charts": [
@@ -102,7 +179,8 @@ class LLMService:
                             "value": 23425809.38
                         }
                         ],
-                        "color": "hsl(var(--primary))"
+                        # Light theme series color
+                        "color": "hsl(220 9% 46%)"
                     }
                     ],
                     "config": {
@@ -110,18 +188,62 @@ class LLMService:
                     "showGrid": True,
                     "showLegend": True
                     },
+                    # Per-chart light theme styling compatible with frontend converter
+                    "styling": {
+                        "theme": "corporate",
+                        "colorPalette": [
+                            "hsl(220 9% 46%)",
+                            "hsl(142 76% 36%)",
+                            "hsl(38 92% 50%)",
+                            "hsl(0 84% 60%)"
+                        ],
+                        "animation": "enabled",
+                        "grid": "visible",
+                        "legend": "top",
+                        "tile": {
+                            "borderColor": "hsl(220 14% 90%)",
+                            "borderWidth": 1,
+                            "borderRadius": 12,
+                            "background": "hsl(0 0% 100%)"
+                        }
+                    },
                     "reasoning": {
                     "insight": "This chart reveals the revenue trends over the months, helping to identify peak sales periods."
                     }
                 }
             ],
-            "tables": [],
+            "tables": [
+                {
+                    "id": "top_products_table",
+                    "title": "Top Products",
+                    "columns": ["name", "revenue", "quantity"],
+                    "rows": [
+                        {"name": "Product A", "revenue": 125000.5, "quantity": 512},
+                        {"name": "Product B", "revenue": 118400.0, "quantity": 480},
+                        {"name": "Product C", "revenue": 98950.25, "quantity": 410}
+                    ],
+                    # Light theme table styling
+                    "styling": {
+                        "headerBg": "hsl(220 14% 96%)",
+                        "headerText": "hsl(220 9% 14%)",
+                        "rowBg": "hsl(0 0% 100%)",
+                        "rowAltBg": "hsl(210 20% 98%)",
+                        "borderColor": "hsl(220 14% 90%)",
+                        "tile": {
+                            "borderColor": "hsl(220 14% 90%)",
+                            "borderWidth": 1,
+                            "borderRadius": 12,
+                            "background": "hsl(0 0% 100%)"
+                        }
+                    }
+                }
+            ],
                 "insights": [
                 "Total revenue generated is over $78.59 million.",
                 "A total of 120,378 orders were processed.",
                 "The average order value is $652.88, indicating healthy spending per order."
             ],
-            "status": "success"
+            "status": "completed",
             
             # Data quality metrics
             "data_quality": {
@@ -133,7 +255,26 @@ class LLMService:
             },
             
             # Styling recommendations
-            "styling_recommendations": styling_recommendations
+            "styling_recommendations": {
+                # Dashboard-level light theme styling to align all components
+                "theme": "corporate",
+                "colorPalette": [
+                    "hsl(220 14% 96%)",
+                    "hsl(220 9% 46%)",
+                    "hsl(142 76% 36%)",
+                    "hsl(38 92% 50%)",
+                    "hsl(0 84% 60%)"
+                ],
+                "animation": "enabled",
+                "grid": "visible",
+                "legend": "top",
+                "tile": {
+                    "borderColor": "hsl(220 14% 90%)",
+                    "borderWidth": 1,
+                    "borderRadius": 12,
+                    "background": "hsl(0 0% 100%)"
+                }
+            }
         }
         
         return processed_data

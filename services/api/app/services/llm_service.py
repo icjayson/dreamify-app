@@ -52,6 +52,7 @@ class LLMService:
                     "value": "$78592678.30",
                     "change": "12.27%",
                     "trend": "up",
+                    "layout": {"x": 0, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
                     "time_comparison": {
                         "period": "mom",
                         "current_value": 78592678.30,
@@ -79,6 +80,7 @@ class LLMService:
                     "value": "116649",
                     "change": "-3.15%",
                     "trend": "down",
+                    "layout": {"x": 6, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
                     "time_comparison": {
                         "period": "mom",
                         "current_value": 116649,
@@ -105,6 +107,7 @@ class LLMService:
                     "value": "120378",
                     "change": "0.00%",
                     "trend": "stable",
+                    "layout": {"x": 12, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
                     "time_comparison": {
                         "period": "mom",
                         "current_value": 120378,
@@ -131,6 +134,7 @@ class LLMService:
                     "value": "$652.88",
                     "change": None,
                     "trend": None,
+                    "layout": {"x": 18, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
                     "time_comparison": {
                         "period": "mom",
                         "current_value": 652.88,
@@ -158,6 +162,7 @@ class LLMService:
                     "chart_type": "line_chart",
                     "title": "Monthly Revenue Over Time",
                     "description": "Shows the trend of revenue generated each month.",
+                    "layout": {"x": 0, "y": 3, "w": 24, "h": 16, "minW": 12, "minH": 10},
                     "datasets": [
                     {
                         "label": "Monthly Revenue",
@@ -216,6 +221,7 @@ class LLMService:
                 {
                     "id": "top_products_table",
                     "title": "Top Products",
+                    "layout": {"x": 0, "y": 11, "w": 24, "h": 12, "minW": 12, "minH": 5},
                     "columns": ["name", "revenue", "quantity"],
                     "rows": [
                         {"name": "Product A", "revenue": 125000.5, "quantity": 512},
@@ -268,6 +274,7 @@ class LLMService:
                 "animation": "enabled",
                 "grid": "visible",
                 "legend": "top",
+                "dashboardBackground": "hsl(220 14% 96%)",
                 "tile": {
                     "borderColor": "hsl(220 14% 90%)",
                     "borderWidth": 1,

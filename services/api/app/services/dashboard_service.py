@@ -389,8 +389,8 @@ class DashboardService:
         """Create dashboard layout configuration."""
         return DashboardLayout(
             type=layout_preference,
-            grid_columns=12,
-            breakpoints={'sm': 6, 'md': 8, 'lg': 12},
+            grid_columns=24,
+            breakpoints={'sm': 8, 'md': 12, 'lg': 24},
             spacing='normal'
         )
     

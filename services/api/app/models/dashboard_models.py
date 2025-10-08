@@ -120,7 +120,7 @@ class TableConfiguration(BaseModel):
 class DashboardLayout(BaseModel):
     """Dashboard layout configuration."""
     type: LayoutType
-    grid_columns: Optional[int] = 12
+    grid_columns: Optional[int] = 24
     breakpoints: Optional[Dict[str, int]] = None
     spacing: Optional[str] = "normal"
     metadata: Optional[Dict[str, Any]] = None

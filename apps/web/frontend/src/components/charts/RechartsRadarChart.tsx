@@ -102,7 +102,7 @@ const RechartsRadarChart: React.FC<RechartsRadarChartProps> = ({
   };
 
   return (
-    <div className={`chart-container ${stylingClasses} ${className}`} style={style}>
+    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '85%', ...style }}>
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-1">{title}</h3>
         {description && (
@@ -110,7 +110,7 @@ const RechartsRadarChart: React.FC<RechartsRadarChartProps> = ({
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%">
         <RadarChart data={transformedData} outerRadius={90}>
           <PolarGrid className="chart-grid" stroke="hsl(var(--chart-grid-color))" strokeOpacity="var(--chart-grid-opacity)" />
           <PolarAngleAxis dataKey="label" className="chart-axis" tick={{ fill: 'hsl(var(--chart-axis-text))' }} />

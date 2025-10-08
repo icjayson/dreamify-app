@@ -120,7 +120,21 @@ export const EXTENDED_COLOR_PALETTES: Record<ChartPresetTheme, string[]> = {
 };
 
 /**
+ * Get dashboard background style object
+ * Ensures compatibility with parent container's border and rounded styling
+ */
+export function getDashboardBackgroundStyle(styling: ChartStyling): React.CSSProperties {
+  return {
+    backgroundColor: styling.dashboardBackground || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.CORPORATE][0],
+    // Ensure background doesn't interfere with parent border styling
+    border: 'none',
+    borderRadius: 'inherit'
+  };
+}
+
+/**
  * Apply chart styling to a container element
+ * Ensures compatibility with parent container's border and rounded styling
  */
 export function applyChartStyling(
   container: HTMLElement,
@@ -133,6 +147,14 @@ export function applyChartStyling(
     .filter(cls => !cls.startsWith('chart-preset-'))
     .concat(presetClass)
     .join(' ');
+
+  // Apply dashboard background styling without interfering with parent border
+  if (styling.dashboardBackground) {
+    container.style.backgroundColor = styling.dashboardBackground;
+    // Ensure we don't override parent border styling
+    container.style.border = 'none';
+    container.style.borderRadius = 'inherit';
+  }
 
   // Apply custom styling if provided
   if (styling.customStyling) {
@@ -206,6 +228,7 @@ export function convertLLMStylingToChartStyling(
     animation?: string;
     grid?: string;
     legend?: string;
+    dashboardBackground?: string;
   }
 ): ChartStyling {
   return {
@@ -213,7 +236,8 @@ export function convertLLMStylingToChartStyling(
     colorPalette: llmStyling.colorPalette || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.CORPORATE],
     animationEnabled: llmStyling.animation !== 'none',
     gridVisible: llmStyling.grid !== 'hidden',
-    legendPosition: (llmStyling.legend as 'top' | 'bottom' | 'right' | 'none') || 'top'
+    legendPosition: (llmStyling.legend as 'top' | 'bottom' | 'right' | 'none') || 'top',
+    dashboardBackground: llmStyling.dashboardBackground || llmStyling.colorPalette?.[0] || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.CORPORATE][0]
   };
 }
 
@@ -257,7 +281,8 @@ export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_TH
     colorPalette: THEME_COLOR_PALETTES[theme],
     animationEnabled: true,
     gridVisible: true,
-    legendPosition: 'top'
+    legendPosition: 'top',
+    dashboardBackground: THEME_COLOR_PALETTES[theme][0]
   };
 }
 
@@ -274,6 +299,7 @@ export function mergeChartStyling(
     customStyling: customStyling.customStyling || defaultStyling.customStyling,
     animationEnabled: customStyling.animationEnabled ?? defaultStyling.animationEnabled,
     gridVisible: customStyling.gridVisible ?? defaultStyling.gridVisible,
-    legendPosition: customStyling.legendPosition || defaultStyling.legendPosition
+    legendPosition: customStyling.legendPosition || defaultStyling.legendPosition,
+    dashboardBackground: customStyling.dashboardBackground || defaultStyling.dashboardBackground
   };
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RefreshCw, AlertCircle, Loader2 } from "lucide-react";
 import ChartRenderer from "@/components/charts/ChartRenderer";
@@ -9,7 +10,8 @@ import {
   validateChartStyling,
   getDefaultChartStyling,
   applyChartStyling,
-  getChartStylingClasses
+  getChartStylingClasses,
+  getDashboardBackgroundStyle
 } from "@/utils/chartStyling";
 
 interface DashboardPreviewProps {
@@ -28,7 +30,7 @@ const DashboardPreview = ({
   processedData
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
-  const { dashboardState, generateDashboard, refreshDashboard, resetDashboard } = useDashboard(dashboardId);
+  const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // No automatic dashboard generation on mount
@@ -61,10 +63,15 @@ const DashboardPreview = ({
           change = `${pct.toFixed(2)}%`;
           trend = pct > 0 ? 'up' : pct < 0 ? 'down' : 'stable';
         }
+        const layout = m?.layout;
+        const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
         components.push({
           id: `metric_${componentId++}`,
           type: 'metric',
-          position: { x: (idx % 4) * 3, y: Math.floor(idx / 4) * 2, width: 3, height: 2 },
+          position: hasLayout
+            ? { x: layout.x, y: layout.y, width: layout.w, height: layout.h }
+            : { x: (idx % 4) * 3, y: Math.floor(idx / 4) * 2, width: 3, height: 2 },
+          layout: hasLayout ? { ...layout } : undefined,
           component_config: {
             id: m.id || `metric_${idx + 1}`,
             title: m.title || m.name || 'Metric',
@@ -112,10 +119,15 @@ const DashboardPreview = ({
           }
         };
 
+        const layout = c?.layout;
+        const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
         components.push({
           id: `chart_${componentId++}`,
           type: 'chart',
-          position: { x: (idx % 2) * 6, y: Math.floor(idx / 2) * 4 + 2, width: 6, height: 4 },
+          position: hasLayout
+            ? { x: layout.x, y: layout.y, width: layout.w, height: layout.h }
+            : { x: (idx % 2) * 6, y: Math.floor(idx / 2) * 4 + 2, width: 6, height: 4 },
+          layout: hasLayout ? { ...layout } : undefined,
           component_config: {
             id: c.id || `chart_${idx + 1}`,
             type: mappedType,
@@ -134,10 +146,15 @@ const DashboardPreview = ({
     // Tables (Morpheus: columns string[] + rows objects)
     if (Array.isArray(data.tables)) {
       data.tables.forEach((t: any, idx: number) => {
+        const layout = t?.layout;
+        const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
         components.push({
           id: `table_${componentId++}`,
           type: 'table',
-          position: { x: 0, y: Math.floor(idx / 2) * 6 + 6, width: 12, height: 3 },
+          position: hasLayout
+            ? { x: layout.x, y: layout.y, width: layout.w, height: layout.h }
+            : { x: 0, y: Math.floor(idx / 2) * 6 + 6, width: 12, height: 3 },
+          layout: hasLayout ? { ...layout } : undefined,
           component_config: {
             id: t.id || `table_${idx + 1}`,
             title: t.title || 'Table',
@@ -171,6 +188,121 @@ const DashboardPreview = ({
       applyChartStyling(containerRef.current, dashboardStylingForContainer);
     }
   }, [dashboardStylingForContainer]);
+
+  // Grid layout config
+  const ResponsiveGridLayout = useMemo(() => WidthProvider(Responsive), []);
+  const breakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 } as const;
+  const cols = { lg: 24, md: 12, sm: 8, xs: 4, xxs: 2 } as const;
+  const margin: [number, number] = [6, 6];
+  const containerPadding: [number, number] = [6,6];
+  const rowHeight = 30;
+
+  // Build normalized dashboards and active selection
+  const normalizedProcessed = useMemo(() => processedData ? normalizeDashboard(processedData) : null, [processedData]);
+  const activeDashboard = useMemo(() => {
+    if (normalizedProcessed) return normalizedProcessed;
+    if (dashboardState.configuration) return dashboardState.configuration as any;
+    return null;
+  }, [normalizedProcessed, dashboardState.configuration]);
+
+  // Helpers to build layouts per component list
+  const getMinSizeForType = (type: string) => {
+    if (type === 'metric') return { minW: 2, minH: 2 };
+    if (type === 'table') return { minW: 6, minH: 3 };
+    return { minW: 4, minH: 4 }; // default for charts
+  };
+
+  const componentsToBaseLayout = (components: any[]): Layout[] => {
+    return components.map((c: any, index: number) => {
+      const typeMin = getMinSizeForType(c.type);
+      const src = c.layout || {};
+      const x = Number.isFinite(src.x) ? src.x : (Number.isFinite(c.position?.x) ? c.position.x : (index % 12));
+      const y = Number.isFinite(src.y) ? src.y : (Number.isFinite(c.position?.y) ? c.position.y : Math.floor(index / 12));
+      const w = Number.isFinite(src.w) ? src.w : (Number.isFinite(c.position?.width) ? c.position.width : 4);
+      const h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 4);
+      // Enforce content-driven minima for first render if provided by backend; otherwise type defaults
+      const minW = Number.isFinite(src.minW) ? src.minW : typeMin.minW;
+      const minH = Number.isFinite(src.minH) ? src.minH : typeMin.minH;
+      return { i: String(c.id), x, y, w, h, minW, minH, static: false } as Layout;
+    });
+  };
+
+  // Scale a layout from one column system to another while preserving proportions
+  const scaleLayoutForCols = (layout: Layout[], fromCols: number, toCols: number): Layout[] => {
+    return layout.map((item) => {
+      const scaledW = Math.max(1, Math.round((item.w * toCols) / fromCols));
+      let scaledX = Math.round((item.x * toCols) / fromCols);
+      // clamp to ensure the item fits within the target column count
+      if (scaledX + scaledW > toCols) {
+        scaledX = Math.max(0, toCols - scaledW);
+      }
+      const scaledMinW = item.minW ? Math.max(1, Math.round((item.minW * toCols) / fromCols)) : item.minW;
+      return { ...item, x: scaledX, w: scaledW, minW: scaledMinW } as Layout;
+    });
+  };
+
+  const buildLayoutsFromComponents = (components: any[] | undefined | null): Layouts => {
+    const baseLg = components ? componentsToBaseLayout(components) : [];
+    return {
+      lg: baseLg,
+      md: scaleLayoutForCols(baseLg, 24, 12),
+      sm: scaleLayoutForCols(baseLg, 24, 8),
+      xs: scaleLayoutForCols(baseLg, 24, 4),
+      xxs: scaleLayoutForCols(baseLg, 24, 2)
+    } as Layouts;
+  };
+
+  const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v2`,[activeDashboard?.id]);
+
+  const [layouts, setLayouts] = useState<Layouts>({ lg: [], md: [], sm: [], xs: [], xxs: [] });
+
+  // Initialize or update layouts when active dashboard changes
+  useEffect(() => {
+    if (!activeDashboard) {
+      setLayouts({ lg: [], md: [], sm: [], xs: [], xxs: [] });
+      return;
+    }
+
+    const initial = buildLayoutsFromComponents(activeDashboard.components);
+
+    // If rendering from processedData (fresh dashboard), always use backend defaults first
+    if (normalizedProcessed) {
+      setLayouts(initial);
+      return;
+    }
+
+    // Otherwise, try to restore saved layouts for persisted dashboards
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Layouts;
+        setLayouts(parsed);
+        return;
+      }
+    } catch (_e) {
+      // ignore parse errors and fall back to initial
+    }
+    setLayouts(initial);
+  }, [activeDashboard, storageKey, normalizedProcessed]);
+
+  const handleLayoutChange = (current: Layout[], all: Layouts) => {
+    setLayouts(all);
+    // Persist per dashboard id
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(all));
+    } catch (_e) { /* ignore */ }
+
+    // Sync back to dashboard state only when using real configuration
+    if (!processedData && dashboardState.configuration && updateComponent) {
+      const byId = new Map(current.map((item) => [item.i, item]));
+      dashboardState.configuration.components.forEach((comp) => {
+        const l = byId.get(String(comp.id));
+        if (l) {
+          updateComponent(comp.id, { position: { x: l.x, y: l.y, width: l.w, height: l.h, minW: l.minW, minH: l.minH } });
+        }
+      });
+    }
+  };
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -212,7 +344,10 @@ const DashboardPreview = ({
     <div
       ref={containerRef}
       className={`h-full overflow-y-auto ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
-      style={style}
+      style={{
+        ...style,
+        ...getDashboardBackgroundStyle(dashboardStylingForContainer || getDefaultChartStyling())
+      }}
       data-theme="dashboard-preview"
     >
       {/* Header removed as per request */}
@@ -239,63 +374,34 @@ const DashboardPreview = ({
           </Alert>
         )}
 
-        {/* Processed Data Dashboard */}
-        {processedData && normalizeDashboard(processedData) && (
+        {/* Responsive Drag & Resize Grid */}
+        {activeDashboard && (
           <div className="space-y-6">
-            {/* Removed Processed Data Dashboard title and badge */}
-            
-            {/* Dynamic Grid Layout for Processed Data */}
-            <div 
-              className="grid gap-6"
-              style={{
-                gridTemplateColumns: `repeat(${normalizeDashboard(processedData)?.layout.grid_columns || 12}, 1fr)`
-              }}
+            <ResponsiveGridLayout
+              className="layout"
+              layouts={layouts}
+              breakpoints={breakpoints}
+              cols={cols}
+              margin={margin}
+              containerPadding={containerPadding}
+              rowHeight={rowHeight}
+              isDraggable
+              isResizable
+              preventCollision
+              isBounded
+              compactType={null}
+              resizeHandles={['se','e','s', 'w','n']}
+              onLayoutChange={handleLayoutChange}
             >
-              {normalizeDashboard(processedData)?.components.map((component) => (
-                <div
-                  key={component.id}
-                  className="animate-fade-in"
-                  style={{
-                    gridColumn: `span ${component.position.width}`,
-                    gridRow: `span ${component.position.height}`
-                  }}
-                >
+              {activeDashboard.components.map((component: any) => (
+                <div key={String(component.id)} className="animate-fade-in">
                   <ChartRenderer
                     component={component}
                     onError={handleComponentError}
                   />
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {/* Dynamic Dashboard Grid */}
-        {!processedData && dashboardState.configuration && (
-          <div className="space-y-6">
-            {/* Dynamic Grid Layout */}
-            <div 
-              className="grid gap-6"
-              style={{
-                gridTemplateColumns: `repeat(${dashboardState.configuration.layout.grid_columns || 12}, 1fr)`
-              }}
-            >
-              {dashboardState.configuration.components.map((component) => (
-                <div
-                  key={component.id}
-                  className="animate-fade-in"
-                  style={{
-                    gridColumn: `span ${component.position.width}`,
-                    gridRow: `span ${component.position.height}`
-                  }}
-                >
-                  <ChartRenderer
-                    component={component}
-                    onError={handleComponentError}
-                  />
-                </div>
-              ))}
-            </div>
+            </ResponsiveGridLayout>
           </div>
         )}
 

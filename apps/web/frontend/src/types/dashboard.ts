@@ -53,6 +53,7 @@ export interface ChartStyling {
   animationEnabled: boolean;
   gridVisible: boolean;
   legendPosition: 'top' | 'bottom' | 'right' | 'none';
+  dashboardBackground?: string;
 }
 
 export interface ChartConfiguration {

@@ -65,14 +65,13 @@ const Table = ({
   const tile = styling?.tile || {};
   const textColor = styling?.headerText || 'hsl(220 9% 14%)';
   const tileStyle = {
-    border: `${(tile.borderWidth ?? 1)}px solid ${tile.borderColor || 'hsl(220 14% 90%)'}`,
     borderRadius: tile.borderRadius ?? 12,
     backgroundColor: tile.background || 'hsl(0 0% 100%)',
     color: textColor
   } as React.CSSProperties;
 
   return (
-    <div className={`p-6 rounded-md animate-fade-in ${className}`} style={{ ...tileStyle, ...style }}>
+    <div className={`rounded-md animate-fade-in h-full ${className}`} style={{ ...tileStyle, ...style, display: 'flex', flexDirection: 'column' }}>
       <div className="mb-4">
         <h3 className="text-lg font-semibold">{title}</h3>
         {description && (
@@ -85,7 +84,7 @@ const Table = ({
           {!hasStructure ? "No columns provided" : "No data available"}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <div className={`grid gap-2 text-xs font-medium pb-2`} 
                style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}>
             {columns.map((column) => (

@@ -83,7 +83,7 @@ const RechartsFunnelChart: React.FC<RechartsFunnelChartProps> = ({
   };
 
   return (
-    <div className={`chart-container ${stylingClasses} ${className}`} style={style}>
+    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '85%', ...style }}>
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-1">{title}</h3>
         {description && (
@@ -91,7 +91,7 @@ const RechartsFunnelChart: React.FC<RechartsFunnelChartProps> = ({
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%">
         <FunnelChart>
           <Tooltip content={<CustomTooltip />} />
           {styling?.legendPosition !== 'none' && (

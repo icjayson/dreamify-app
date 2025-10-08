@@ -109,7 +109,7 @@ const RechartsLineChart: React.FC<RechartsLineChartProps> = ({
   };
 
   return (
-    <div className={`chart-container ${stylingClasses} ${className}`} style={style}>
+    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '85%', ...style }}>
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-1" style={{ color: 'hsl(220 9% 14%)' }}>{title}</h3>
         {description && (
@@ -117,7 +117,7 @@ const RechartsLineChart: React.FC<RechartsLineChartProps> = ({
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%">
         <LineChart
           data={transformedData}
           margin={{

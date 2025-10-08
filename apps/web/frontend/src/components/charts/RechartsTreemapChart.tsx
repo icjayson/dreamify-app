@@ -78,8 +78,23 @@ const RechartsTreemapChart: React.FC<RechartsTreemapChartProps> = ({
 
   const colorFn = (node: any) => palette[(node.index || 0) % palette.length];
 
+  const TreemapContent: React.FC<any> = (props) => {
+    const { x, y, width, height, name } = props;
+    const fill = colorFn(props);
+    return (
+      <g>
+        <rect x={x} y={y} width={width} height={height} style={{ fill, stroke: '#fff' }} />
+        {width > 60 && height > 14 && (
+          <text x={(x || 0) + 4} y={(y || 0) + 14} fill="#fff" fontSize={12} pointerEvents="none">
+            {name}
+          </text>
+        )}
+      </g>
+    );
+  };
+
   return (
-    <div className={`chart-container ${stylingClasses} ${className}`} style={style}>
+    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '85%', ...style }}>
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-1">{title}</h3>
         {description && (
@@ -87,27 +102,14 @@ const RechartsTreemapChart: React.FC<RechartsTreemapChartProps> = ({
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%">
         <Treemap
           data={treemapData}
           dataKey="size"
           stroke="#fff"
           fill="#8884d8"
           isAnimationActive={!!styling?.animationEnabled}
-          content={(props: any) => {
-            const { x, y, width, height, index, name } = props;
-            const fill = colorFn(props);
-            return (
-              <g>
-                <rect x={x} y={y} width={width} height={height} style={{ fill, stroke: '#fff' }} />
-                {width > 60 && height > 14 && (
-                  <text x={x + 4} y={y + 14} fill="#fff" fontSize={12} pointerEvents="none">
-                    {name}
-                  </text>
-                )}
-              </g>
-            );
-          }}
+          content={<TreemapContent />}
         />
       </ResponsiveContainer>
       <Tooltip content={<CustomTooltip />} />

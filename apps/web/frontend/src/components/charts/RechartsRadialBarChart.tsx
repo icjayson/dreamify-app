@@ -79,19 +79,19 @@ const RechartsRadialBarChart: React.FC<RechartsRadialBarChartProps> = ({
   };
 
   return (
-    <div className={`chart-container ${stylingClasses} ${className}`} style={style}>
-      <div className="mb-4">
+    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '100%', ...style }}>
+      <div className="mb-4" style={{ flexShrink: 0 }}>
         <h3 className="text-lg font-semibold mb-1">{title}</h3>
         {description && (
           <p className="text-sm text-muted-foreground">{description}</p>
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height="100%">
         <RadialBarChart
           data={transformedData}
-          innerRadius={20}
-          outerRadius={140}
+          innerRadius="20%"
+          outerRadius="100%"
           startAngle={90}
           endAngle={-270}
         >
@@ -106,7 +106,6 @@ const RechartsRadialBarChart: React.FC<RechartsRadialBarChartProps> = ({
           <RadialBar
             dataKey="value"
             background
-            clockWise
             cornerRadius={6}
             animationDuration={styling?.animationEnabled ? 1000 : 0}
           />

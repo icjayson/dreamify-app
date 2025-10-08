@@ -109,7 +109,7 @@ const RechartsBarChart: React.FC<RechartsBarChartProps> = ({
   };
 
   return (
-    <div className={`chart-container ${stylingClasses} ${className}`} style={style}>
+    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '85%', ...style }}>
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-1">{title}</h3>
         {description && (
@@ -117,7 +117,7 @@ const RechartsBarChart: React.FC<RechartsBarChartProps> = ({
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%">
         <BarChart
           data={transformedData}
           margin={{

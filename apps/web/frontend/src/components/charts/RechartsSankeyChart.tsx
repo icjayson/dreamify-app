@@ -6,7 +6,8 @@ import React from 'react';
 import { Sankey, Tooltip, ResponsiveContainer } from 'recharts';
 import { useChartTheme } from '@/hooks/useChartTheme';
 
-interface SankeyData {
+// Rename to avoid clashing with recharts' internal SankeyData type
+interface SankeyGraph {
   nodes: Array<{ name: string; [k: string]: any }>;
   links: Array<{ source: number | string; target: number | string; value: number }>;
 }
@@ -24,7 +25,7 @@ interface RechartsSankeyChartProps {
     color?: string;
     metadata?: Record<string, any>;
   }>;
-  config?: { data?: SankeyData } & Record<string, any>;
+  config?: { data?: SankeyGraph } & Record<string, any>;
   layout?: Record<string, any>;
   styling?: {
     presetTheme: string;
@@ -56,9 +57,9 @@ const RechartsSankeyChart: React.FC<RechartsSankeyChartProps> = ({
 
   // Normalize config.data: allow string references for source/target
   const sankeyData = React.useMemo(() => {
-    const data: SankeyData | undefined = (config as any)?.data;
+    const data: SankeyGraph | undefined = (config as any)?.data;
     if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.links)) {
-      return { nodes: [], links: [] } as SankeyData;
+      return { nodes: [], links: [] } as SankeyGraph;
     }
     const nameToIndex = new Map<string, number>();
     data.nodes.forEach((n, idx) => nameToIndex.set(n.name, idx));
@@ -67,7 +68,7 @@ const RechartsSankeyChart: React.FC<RechartsSankeyChartProps> = ({
       target: typeof l.target === 'string' ? (nameToIndex.get(l.target) ?? l.target) : l.target,
       value: l.value
     }));
-    return { nodes: data.nodes, links: normalizedLinks } as SankeyData;
+    return { nodes: data.nodes, links: normalizedLinks } as SankeyGraph;
   }, [config]);
 
   const stylingClasses = getStylingClasses();
@@ -94,7 +95,7 @@ const RechartsSankeyChart: React.FC<RechartsSankeyChartProps> = ({
   };
 
   return (
-    <div className={`chart-container ${stylingClasses} ${className}`} style={style}>
+    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '85%', ...style }}>
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-1">{title}</h3>
         {description && (
@@ -102,15 +103,15 @@ const RechartsSankeyChart: React.FC<RechartsSankeyChartProps> = ({
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height="100%">
         <Sankey
-          data={sankeyData}
+          // Cast to any to satisfy Recharts' internal Sankey type without conflicts
+          data={sankeyData as any}
           nodePadding={16}
           nodeWidth={12}
           margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
           linkCurvature={0.5}
           iterations={32}
-          isAnimationActive={!!styling?.animationEnabled}
           node={{
             // color accessor via palette based on node index
             stroke: '#fff',

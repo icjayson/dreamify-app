@@ -1,18 +1,16 @@
 /**
  * ChartRenderer - Component for rendering charts based on configuration
  */
-
 import React, { useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
-import { 
-  ChartType, 
-  ChartConfiguration, 
-  MetricConfiguration, 
+import {
+  ChartType,
+  ChartConfiguration,
+  MetricConfiguration,
   TableConfiguration,
-  DashboardComponent,
-  ChartStyling
+  DashboardComponent
 } from '@/types/dashboard';
 import { createChart, validateChartConfig } from './ChartFactory';
 import ErrorBoundary from '@/components/charts/ErrorBoundary';
@@ -186,6 +184,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
     border: `${(tile.borderWidth ?? 1)}px solid ${tile.borderColor || 'hsl(220 14% 90%)'}`,
     borderRadius: (tile.borderRadius ?? 12) as number,
     backgroundColor: tile.background || 'hsl(0 0% 100%)',
+    height: '100%',
     ...style
   };
 
@@ -200,7 +199,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
       }}
     >
       <div className={`p-6 rounded-md animate-fade-in ${stylingClasses} ${className}`} style={containerStyle}>
-        <div className="chart-content">
+        <div className="chart-content w-full h-full overflow-hidden">
           {chartElement}
         </div>
       </div>

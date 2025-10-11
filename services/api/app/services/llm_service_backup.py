@@ -34,33 +34,32 @@ class LLMService:
         # Generate styling recommendations based on file metadata
         styling_recommendations = self._generate_styling_recommendations(file_metadata)
         
-        # Use Morpheus output data structure
+        # Extract hardcoded data from dashboard_service.py patterns
         processed_data = {
-            "fileID": "analyze_csv_20251004_102143_773722",
+            "fileID": fileID,
             "status": "completed",
-            "processed_at": "2025-10-04T10:22:23.849830",
-            "source_file": "/home/hungnq/projects/dreamify-morpheus/storage/in/sales_amazon.csv",
-            "file_size": 128975,
-            "file_type": "csv",
+            "processed_at": datetime.utcnow().isoformat(),
+            "source_file": file_metadata.get("filename", "unknown"),
+            "file_size": file_metadata.get("size", 0),
+            "file_type": file_metadata.get("ext", "unknown"),
             "success": True,
             
-            # Metrics from Morpheus output
+            # Metrics (from dashboard_service.py hardcoded data)
             "metrics": [
                 {
                     "id": "total_revenue_metric",
                     "title": "Total Revenue",
                     "value": "$78592678.30",
-                    "change": None,
-                    "trend": None,
-                    "layout": {
-                        "x": 0,
-                        "y": 0,
-                        "w": 6,
-                        "h": 4,
-                        "minW": 4,
-                        "minH": 4
+                    "change": "12.27%",
+                    "trend": "up",
+                    "layout": {"x": 0, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
+                    "time_comparison": {
+                        "period": "mom",
+                        "current_value": 78592678.30,
+                        "previous_value": 70000000.00,
+                        "percentage_change": 12.27
                     },
-                    "time_comparison": None,
+                    # Light theme metric styling
                     "styling": {
                         "accentColor": "hsl(220 9% 46%)",
                         "trendUpColor": "hsl(142 76% 36%)",
@@ -79,17 +78,15 @@ class LLMService:
                     "id": "total_quantity_metric",
                     "title": "Total Quantity Sold",
                     "value": "116649",
-                    "change": None,
-                    "trend": None,
-                    "layout": {
-                        "x": 6,
-                        "y": 0,
-                        "w": 6,
-                        "h": 4,
-                        "minW": 4,
-                        "minH": 4
+                    "change": "-3.15%",
+                    "trend": "down",
+                    "layout": {"x": 6, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
+                    "time_comparison": {
+                        "period": "mom",
+                        "current_value": 116649,
+                        "previous_value": 120440,
+                        "percentage_change": -3.15
                     },
-                    "time_comparison": None,
                     "styling": {
                         "accentColor": "hsl(220 9% 46%)",
                         "trendUpColor": "hsl(142 76% 36%)",
@@ -108,17 +105,15 @@ class LLMService:
                     "id": "total_orders_metric",
                     "title": "Total Orders",
                     "value": "120378",
-                    "change": None,
-                    "trend": None,
-                    "layout": {
-                        "x": 12,
-                        "y": 0,
-                        "w": 6,
-                        "h": 4,
-                        "minW": 4,
-                        "minH": 4
+                    "change": "0.00%",
+                    "trend": "stable",
+                    "layout": {"x": 12, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
+                    "time_comparison": {
+                        "period": "mom",
+                        "current_value": 120378,
+                        "previous_value": 120378,
+                        "percentage_change": 0.0
                     },
-                    "time_comparison": None,
                     "styling": {
                         "accentColor": "hsl(220 9% 46%)",
                         "trendUpColor": "hsl(142 76% 36%)",
@@ -139,15 +134,13 @@ class LLMService:
                     "value": "$652.88",
                     "change": None,
                     "trend": None,
-                    "layout": {
-                        "x": 18,
-                        "y": 0,
-                        "w": 6,
-                        "h": 4,
-                        "minW": 4,
-                        "minH": 4
+                    "layout": {"x": 18, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
+                    "time_comparison": {
+                        "period": "mom",
+                        "current_value": 652.88,
+                        "previous_value": None,
+                        "percentage_change": None
                     },
-                    "time_comparison": None,
                     "styling": {
                         "accentColor": "hsl(220 9% 46%)",
                         "trendUpColor": "hsl(142 76% 36%)",
@@ -163,111 +156,44 @@ class LLMService:
                     }
                 }
             ],
-            
-            # Charts from Morpheus output
             "charts": [
                 {
                     "id": "monthly_revenue_chart",
-                    "chart_type": "line",
+                    "chart_type": "line_chart",
                     "title": "Monthly Revenue Over Time",
                     "description": "Shows the trend of revenue generated each month.",
-                    "layout": {
-                        "x": 0,
-                        "y": 3,
-                        "w": 24,
-                        "h": 16,
-                        "minW": 12,
-                        "minH": 10
-                    },
+                    "layout": {"x": 0, "y": 3, "w": 24, "h": 16, "minW": 12, "minH": 10},
                     "datasets": [
+                    {
+                        "label": "Monthly Revenue",
+                        "data": [
                         {
-                            "label": "Monthly Revenue",
-                            "data": [
-                                {
-                                    "label": "2022-03-31",
-                                    "value": 101683.85
-                                },
-                                {
-                                    "label": "2022-04-30",
-                                    "value": 28838708.32
-                                },
-                                {
-                                    "label": "2022-05-31",
-                                    "value": 26226476.75
-                                },
-                                {
-                                    "label": "2022-06-30",
-                                    "value": 23425809.38
-                                }
-                            ],
-                            "color": "hsl(220 9% 46%)"
+                            "label": "2022-03-31",
+                            "value": 101683.85
+                        },
+                        {
+                            "label": "2022-04-30",
+                            "value": 28838708.32
+                        },
+                        {
+                            "label": "2022-05-31",
+                            "value": 26226476.75
+                        },
+                        {
+                            "label": "2022-06-30",
+                            "value": 23425809.38
                         }
-                    ],
-                    "config": {
-                        "animation": True,
-                        "showGrid": True,
-                        "showLegend": True
-                    },
-                    "styling": {
-                        "theme": "corporate",
-                        "colorPalette": [
-                            "hsl(220 9% 46%)",
-                            "hsl(142 76% 36%)",
-                            "hsl(38 92% 50%)",
-                            "hsl(0 84% 60%)"
                         ],
-                        "animation": "enabled",
-                        "grid": "visible",
-                        "legend": "top",
-                        "tile": {
-                            "borderColor": "hsl(220 14% 90%)",
-                            "borderWidth": 1,
-                            "borderRadius": 12,
-                            "background": "hsl(0 0% 100%)"
-                        }
-                    },
-                    "reasoning": {
-                        "insight": "This chart reveals the revenue trends over the months, helping to identify peak sales periods."
+                        # Light theme series color
+                        "color": "hsl(220 9% 46%)"
                     }
-                },
-                {
-                    "id": "quantity_sold_by_category_chart",
-                    "chart_type": "bar",
-                    "title": "Total Quantity Sold by Category",
-                    "description": "Compares the quantity sold across different product categories.",
-                    "layout": {
-                        "x": 0,
-                        "y": 20,
-                        "w": 24,
-                        "h": 16,
-                        "minW": 12,
-                        "minH": 10
-                    },
-                    "datasets": [
-                        {
-                            "label": "Quantity Sold",
-                            "data": [
-                                {
-                                    "label": "Electronics",
-                                    "value": 25000
-                                },
-                                {
-                                    "label": "Clothing",
-                                    "value": 18000
-                                },
-                                {
-                                    "label": "Books",
-                                    "value": 30000
-                                }
-                            ],
-                            "color": "hsl(142 76% 36%)"
-                        }
                     ],
                     "config": {
-                        "animation": True,
-                        "showGrid": True,
-                        "showLegend": True
+                    "animation": True,
+                    "showGrid": True,
+                    "showLegend": True
                     },
+                    # Per-chart light theme styling compatible with frontend converter
                     "styling": {
                         "theme": "corporate",
                         "colorPalette": [
@@ -287,54 +213,22 @@ class LLMService:
                         }
                     },
                     "reasoning": {
-                        "insight": "This chart helps in understanding which categories are driving sales."
+                    "insight": "This chart reveals the revenue trends over the months, helping to identify peak sales periods."
                     }
                 }
             ],
-            
-            # Tables from Morpheus output
             "tables": [
                 {
-                    "id": "detailed_sales_data_table",
-                    "title": "Detailed Sales Data",
-                    "layout": {
-                        "x": 0,
-                        "y": 40,
-                        "w": 24,
-                        "h": 12,
-                        "minW": 12,
-                        "minH": 5
-                    },
-                    "columns": [
-                        "Order ID",
-                        "Date",
-                        "Qty",
-                        "Amount",
-                        "Category"
-                    ],
+                    "id": "top_products_table",
+                    "title": "Top Products",
+                    "layout": {"x": 0, "y": 11, "w": 24, "h": 12, "minW": 12, "minH": 5},
+                    "columns": ["name", "revenue", "quantity"],
                     "rows": [
-                        {
-                            "Order ID": "405-8078784-5731545",
-                            "Date": "2022-04-30",
-                            "Qty": 2,
-                            "Amount": 100.0,
-                            "Category": "Electronics"
-                        },
-                        {
-                            "Order ID": "171-9198151-1101146",
-                            "Date": "2022-04-30",
-                            "Qty": 1,
-                            "Amount": 50.0,
-                            "Category": "Clothing"
-                        },
-                        {
-                            "Order ID": "404-0687676-7273146",
-                            "Date": "2022-04-30",
-                            "Qty": 3,
-                            "Amount": 150.0,
-                            "Category": "Books"
-                        }
+                        {"name": "Product A", "revenue": 125000.5, "quantity": 512},
+                        {"name": "Product B", "revenue": 118400.0, "quantity": 480},
+                        {"name": "Product C", "revenue": 98950.25, "quantity": 410}
                     ],
+                    # Light theme table styling
                     "styling": {
                         "headerBg": "hsl(220 14% 96%)",
                         "headerText": "hsl(220 9% 14%)",
@@ -350,25 +244,25 @@ class LLMService:
                     }
                 }
             ],
-            
-            # Insights from Morpheus output
-            "insights": [
+                "insights": [
                 "Total revenue generated is over $78.59 million.",
                 "A total of 120,378 orders were processed.",
                 "The average order value is $652.88, indicating healthy spending per order."
             ],
+            "status": "completed",
             
-            # Data quality from Morpheus output
+            # Data quality metrics
             "data_quality": {
-                "total_records": 128975,
+                "total_records": 1000,
                 "completeness": 98.5,
                 "accuracy": 95.2,
                 "consistency": 97.8,
                 "duplicates": 12
             },
             
-            # Styling recommendations from Morpheus output
+            # Styling recommendations
             "styling_recommendations": {
+                # Dashboard-level light theme styling to align all components
                 "theme": "corporate",
                 "colorPalette": [
                     "hsl(220 14% 96%)",

@@ -15,7 +15,16 @@ def create_app():
     app = Flask(__name__)
     
     # Configure CORS
-    CORS(app, origins=["http://localhost:8080", "http://localhost:3000"])
+    CORS(
+        app, 
+        origins=[
+            "http://localhost:8080", 
+            "http://localhost:8000",
+            "http://localhost:5000",
+            "https://app.dreamify.dev",
+            "*"  # Allow all origins for development; restrict in production
+        ]
+    )
     
     # Basic configuration
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')

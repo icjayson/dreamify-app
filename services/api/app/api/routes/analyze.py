@@ -3,48 +3,22 @@ Analyze API routes for file processing (Phase 2).
 """
 
 from flask import Blueprint, request, jsonify
-from app.services.llm_service import LLMService
 from app.utils.file_handler import FileHandler
 from config.settings import settings
 import os
 import json
-import threading
-import time
+import requests
 
 
 analyze_bp = Blueprint('analyze', __name__)
-llm_service = LLMService()
 
-
-def _process_file_background(fileID: str, file_metadata: dict):
-    """Background processing function."""
-    try:
-        # Process file with LLM service
-        processed_data = llm_service.process_file(fileID, file_metadata)
-        
-        # Save processed data to file-storage/processed/<fileID>.json
-        processed_path = os.path.join(settings.FILE_PROCESSED_DIR, f"{fileID}.json")
-        with open(processed_path, 'w', encoding='utf-8') as f:
-            json.dump(processed_data, f, ensure_ascii=False, indent=2)
-            
-        print(f"Background processing completed for fileID: {fileID}")
-    except Exception as e:
-        print(f"Background processing failed for fileID {fileID}: {str(e)}")
-        # Save error status
-        error_data = {
-            "fileID": fileID,
-            "status": "error",
-            "error": str(e),
-            "processed_at": time.time()
-        }
-        processed_path = os.path.join(settings.FILE_PROCESSED_DIR, f"{fileID}.json")
-        with open(processed_path, 'w', encoding='utf-8') as f:
-            json.dump(error_data, f, ensure_ascii=False, indent=2)
+# Morpheus LLM service URL
+MORPHEUS_SERVICE_URL = "http://localhost:8000"
 
 
 @analyze_bp.route('/run', methods=['POST', 'OPTIONS'])
 def run_analysis():
-    """Start file processing analysis."""
+    """Start file processing analysis by calling morpheus service."""
     if request.method == 'OPTIONS':
         return jsonify({'success': True}), 200
     
@@ -55,47 +29,43 @@ def run_analysis():
         
         fileID = data['fileID']
         
-        # Check if already processed
-        processed_path = os.path.join(settings.FILE_PROCESSED_DIR, f"{fileID}.json")
-        if os.path.exists(processed_path):
-            return jsonify({
-                'success': True,
-                'data': {
-                    'success': True,
-                    'fileID': fileID,
-                    'status': 'completed',
-                    'message': 'File already processed'
-                }
-            }), 200
-        
-        # Load file metadata
+        # Verify file exists
         try:
             file_metadata = FileHandler.get_upload_metadata(fileID)
         except FileNotFoundError:
             return jsonify({'success': False, 'error': 'File not found'}), 404
         
-        # Check if file exists in uploads
         upload_path = FileHandler.get_upload_path(fileID, file_metadata['ext'])
         if not os.path.exists(upload_path):
             return jsonify({'success': False, 'error': 'Upload file not found'}), 404
         
-        # Start background processing
-        thread = threading.Thread(
-            target=_process_file_background,
-            args=(fileID, file_metadata),
-            daemon=True
-        )
-        thread.start()
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'success': True,
-                'fileID': fileID,
-                'status': 'processing',
-                'message': 'File processing started in background'
-            }
-        }), 200
+        # Call morpheus service
+        try:
+            response = requests.post(
+                f"{MORPHEUS_SERVICE_URL}/run",
+                json={"fileID": fileID},
+                timeout=30
+            )
+            response.raise_for_status()
+            morpheus_result = response.json()
+            
+            return jsonify(morpheus_result), response.status_code
+            
+        except requests.exceptions.ConnectionError:
+            return jsonify({
+                'success': False,
+                'error': 'Morpheus LLM service is not available. Please ensure it is running on port 8000.'
+            }), 503
+        except requests.exceptions.Timeout:
+            return jsonify({
+                'success': False,
+                'error': 'Morpheus service request timed out'
+            }), 504
+        except requests.exceptions.RequestException as e:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to communicate with Morpheus service: {str(e)}'
+            }), 502
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -103,7 +73,7 @@ def run_analysis():
 
 @analyze_bp.route('/status', methods=['POST'])
 def get_analysis_status():
-    """Get processing status and results."""
+    """Get processing status and results from morpheus service."""
     try:
         data = request.get_json()
         if not data or 'fileID' not in data:
@@ -111,6 +81,36 @@ def get_analysis_status():
         
         fileID = data['fileID']
         
+        # Call morpheus service
+        try:
+            response = requests.post(
+                f"{MORPHEUS_SERVICE_URL}/status",
+                json={"fileID": fileID},
+                timeout=30
+            )
+            response.raise_for_status()
+            morpheus_result = response.json()
+            
+            return jsonify(morpheus_result), response.status_code
+            
+        except requests.exceptions.ConnectionError:
+            return jsonify({
+                'success': False,
+                'error': 'Morpheus LLM service is not available'
+            }), 503
+        except requests.exceptions.Timeout:
+            return jsonify({
+                'success': False,
+                'error': 'Morpheus service request timed out'
+            }), 504
+        except requests.exceptions.RequestException as e:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to communicate with Morpheus service: {str(e)}'
+            }), 502
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
         # Check if processed file exists
         processed_path = os.path.join(settings.FILE_PROCESSED_DIR, f"{fileID}.json")
         if not os.path.exists(processed_path):

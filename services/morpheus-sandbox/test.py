@@ -20,7 +20,7 @@ def test_workflow_with_logging():
         workflow = AnalyzeCSVWorkflow()
         
         # Test file path
-        file_path = "/home/hungnq/projects/morpheus/storage/in/sales_amazon.csv"
+        file_path = "/home/hungnq/projects/dreamify-morpheus/storage/in/sales_amazon.csv"
         
         if not os.path.exists(file_path):
             print(f"❌ Test file not found: {file_path}")
@@ -34,9 +34,12 @@ def test_workflow_with_logging():
         
         print("✅ Workflow executed successfully!")
         
-        # Check results
-        if "chart_recommendations" in result:
-            print(f"📊 Chart recommendations: {len(result['chart_recommendations'])}")
+        # Check results (new frontend contract)
+        data = result.get("data") or result
+        if isinstance(data, dict):
+            charts = data.get("charts", [])
+            metrics = data.get("metrics", [])
+            print(f"📊 Charts: {len(charts)} | 📈 Metrics: {len(metrics)}")
         
         if "workflow_output" in result:
             print("📝 Workflow output created successfully")

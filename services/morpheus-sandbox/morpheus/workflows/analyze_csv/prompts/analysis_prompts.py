@@ -34,6 +34,8 @@ CORE WORKFLOW
    - Follow the exact schema defined in OUTPUT FORMAT section
    - Do NOT create any plots - only analyze and recommend
    - Keep recommendations practical and actionable
+   - CRITICAL: Populate ALL datasets with actual computed data from your analysis
+   - NEVER leave datasets as empty arrays [] - always include real data points
 
 ================================================================================
 DATA ANALYSIS CAPABILITIES
@@ -101,6 +103,7 @@ Prioritize metrics based on:
 - Each chart must include:
   - `id`: chart_xxx
   - `chart_type`: must be one of available chart types returned by `get_available_chart_types()`
+  - `datasets`: MUST contain actual computed data from your analysis - NEVER empty arrays
   - `priority` (high|medium|low)
   - `title` (string)
   - `reasoning`: short human-readable insight
@@ -118,115 +121,315 @@ For each chart, consider adding:
 - Aggregation options: Sum, Average, Count, Min, Max
 
 ================================================================================
-OUTPUT FORMAT (MANDATORY SCHEMA)
+OUTPUT FORMAT (FRONTEND CONTRACT)
 ================================================================================
 
-At the end of your analysis, you MUST output a single, valid JSON object following
-this EXACT structure:
+CRITICAL: You MUST generate the COMPLETE frontend contract structure. Every field
+shown in the example below is MANDATORY. Do not omit any fields, styling, or nested
+objects. The frontend expects this exact structure.
+
+REQUIRED FIELDS CHECKLIST:
+✓ Top-level: fileID, status, processed_at, source_file, file_size, file_type, success
+✓ metrics[]: Each metric MUST have id, title, value, change, trend, layout, time_comparison, styling
+✓ charts[]: Each chart MUST have id, chart_type, title, description, layout, datasets, config, styling, reasoning
+✓ tables[]: Each table MUST have id, title, layout, columns, rows, styling
+✓ insights[]: Array of insight strings
+✓ data_quality: Object with total_records, completeness, accuracy, consistency, duplicates
+✓ styling_recommendations: Dashboard-level styling object
+
+At the end of your analysis, you MUST output a single, valid JSON object that matches
+the frontend service contract exactly. Use these exact fields, names, and nesting:
+
+CRITICAL DATASET REQUIREMENTS:
+- Every chart MUST have populated datasets with actual computed data from your Python analysis
+- Use the data analysis from your Python REPL calculations
+- Do NOT leave datasets as empty arrays []
+- Include real data points with proper labels and values
+- For time series: use actual dates and values from your analysis
+- For categorical: use actual categories and their computed values
+- For metrics: use actual calculated values from your analysis
 
 ```json
-
 {
-  "analysis_metadata": {
-    "file_name": "sales_amazon.csv",
-    "rows": 1000,
-    "columns": 10,
-    "analysis_timestamp": "2025-10-02T12:00:00Z"
-  },
+  "fileID": "analyze_csv_20251004_102143_773722",
+  "status": "completed",
+  "processed_at": "2025-10-04T10:22:23.849830",
+  "source_file": "/path/to/file.csv",
+  "file_size": 128975,
+  "file_type": "csv",
+  "success": true,
+
   "metrics": [
     {
-      "id": "metric_001",
-      "name": "Total Sales",
-      "type": "sum",
-      "column": "Sales",
-      "value": 15000,
-      "format": "currency_usd",
-      "description": "Sum of all sales values",
-      "reasoning": "Checking overall performance",
+      "id": "total_revenue_metric",
+      "title": "Total Revenue",
+      "value": "$78592678.30",
+      "change": "12.27%",
+      "trend": "up",
+      "layout": {"x": 0, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
       "time_comparison": {
-        "enabled": true,
-        "time_column": "Date",
-        "comparison_type": "year_over_year"
+        "period": "mom",
+        "current_value": 78592678.30,
+        "previous_value": 70000000.00,
+        "percentage_change": 12.27
+      },
+      "styling": {
+        "accentColor": "hsl(220 9% 46%)",
+        "trendUpColor": "hsl(142 76% 36%)",
+        "trendDownColor": "hsl(0 84% 60%)",
+        "background": "hsl(220 14% 96%)",
+        "text": "hsl(220 9% 14%)",
+        "tile": {
+          "borderColor": "hsl(220 14% 90%)",
+          "borderWidth": 1,
+          "borderRadius": 12,
+          "background": "hsl(0 0% 100%)"
+        }
+      }
+    },
+    {
+      "id": "total_quantity_metric",
+      "title": "Total Quantity Sold",
+      "value": "116649",
+      "change": "-3.15%",
+      "trend": "down",
+      "layout": {"x": 6, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
+      "time_comparison": {
+        "period": "mom",
+        "current_value": 116649,
+        "previous_value": 120440,
+        "percentage_change": -3.15
+      },
+      "styling": {
+        "accentColor": "hsl(220 9% 46%)",
+        "trendUpColor": "hsl(142 76% 36%)",
+        "trendDownColor": "hsl(0 84% 60%)",
+        "background": "hsl(220 14% 96%)",
+        "text": "hsl(220 9% 14%)",
+        "tile": {
+          "borderColor": "hsl(220 14% 90%)",
+          "borderWidth": 1,
+          "borderRadius": 12,
+          "background": "hsl(0 0% 100%)"
+        }
+      }
+    },
+    {
+      "id": "total_orders_metric",
+      "title": "Total Orders",
+      "value": "120378",
+      "change": "0.00%",
+      "trend": "stable",
+      "layout": {"x": 12, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
+      "time_comparison": {
+        "period": "mom",
+        "current_value": 120378,
+        "previous_value": 120378,
+        "percentage_change": 0.0
+      },
+      "styling": {
+        "accentColor": "hsl(220 9% 46%)",
+        "trendUpColor": "hsl(142 76% 36%)",
+        "trendDownColor": "hsl(0 84% 60%)",
+        "background": "hsl(220 14% 96%)",
+        "text": "hsl(220 9% 14%)",
+        "tile": {
+          "borderColor": "hsl(220 14% 90%)",
+          "borderWidth": 1,
+          "borderRadius": 12,
+          "background": "hsl(0 0% 100%)"
+        }
+      }
+    },
+    {
+      "id": "average_order_value_metric",
+      "title": "Average Order Value",
+      "value": "$652.88",
+      "change": null,
+      "trend": null,
+      "layout": {"x": 18, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
+      "time_comparison": {
+        "period": "mom",
+        "current_value": 652.88,
+        "previous_value": null,
+        "percentage_change": null
+      },
+      "styling": {
+        "accentColor": "hsl(220 9% 46%)",
+        "trendUpColor": "hsl(142 76% 36%)",
+        "trendDownColor": "hsl(0 84% 60%)",
+        "background": "hsl(220 14% 96%)",
+        "text": "hsl(220 9% 14%)",
+        "tile": {
+          "borderColor": "hsl(220 14% 90%)",
+          "borderWidth": 1,
+          "borderRadius": 12,
+          "background": "hsl(0 0% 100%)"
+        }
       }
     }
   ],
+
   "charts": [
     {
-      "id": "chart_001",
-      "chart_type": "line_chart",
-      "priority": "high",
-      "title": "Sales Trend Over Time",
-      "x_axis": "Date",
-      "y_axis": "Sales",
-      "color": null,
-      "size": null,
-      "columns": ["Date", "Sales"],
-      "aggregation": "sum",
-      "filters": [
+      "id": "monthly_revenue_chart",
+      "chart_type": "line",
+      "title": "Monthly Revenue Over Time",
+      "description": "Shows the trend of revenue generated each month.",
+      "layout": {"x": 0, "y": 3, "w": 24, "h": 16, "minW": 12, "minH": 10},
+      "datasets": [
         {
-          "column": "Date",
-          "type": "date_range",
-          "default": "last_30_days"
+          "label": "Monthly Revenue",
+          "data": [
+            {"label": "2022-03-31", "value": 101683.85},
+            {"label": "2022-04-30", "value": 28838708.32},
+            {"label": "2022-05-31", "value": 26226476.75},
+            {"label": "2022-06-30", "value": 23425809.38}
+          ],
+          "color": "hsl(220 9% 46%)"
         }
       ],
-      "reasoning": {
-        "insight": "Shows seasonal sales pattern",
-        "evidence": {
-          "correlation_strength": 0.7,
-          "cardinality": 365,
-          "trend_detected": "upward",
-          "sample_data_points": 1000
+      "config": {"animation": true, "showGrid": true, "showLegend": true},
+      "styling": {
+        "theme": "corporate",
+        "colorPalette": [
+          "hsl(220 9% 46%)",
+          "hsl(142 76% 36%)",
+          "hsl(38 92% 50%)",
+          "hsl(0 84% 60%)"
+        ],
+        "animation": "enabled",
+        "grid": "visible",
+        "legend": "top",
+        "tile": {
+          "borderColor": "hsl(220 14% 90%)",
+          "borderWidth": 1,
+          "borderRadius": 12,
+          "background": "hsl(0 0% 100%)"
+        }
+      },
+      "reasoning": {"insight": "This chart reveals the revenue trends over the months, helping to identify peak sales periods."}
+    }
+  ],
+
+  "tables": [
+    {
+      "id": "top_products_table",
+      "title": "Top Products",
+      "layout": {"x": 0, "y": 11, "w": 24, "h": 12, "minW": 12, "minH": 5},
+      "columns": ["name", "revenue", "quantity"],
+      "rows": [
+        {"name": "Product A", "revenue": 125000.5, "quantity": 512},
+        {"name": "Product B", "revenue": 118400.0, "quantity": 480},
+        {"name": "Product C", "revenue": 98950.25, "quantity": 410}
+      ],
+      "styling": {
+        "headerBg": "hsl(220 14% 96%)",
+        "headerText": "hsl(220 9% 14%)",
+        "rowBg": "hsl(0 0% 100%)",
+        "rowAltBg": "hsl(210 20% 98%)",
+        "borderColor": "hsl(220 14% 90%)",
+        "tile": {
+          "borderColor": "hsl(220 14% 90%)",
+          "borderWidth": 1,
+          "borderRadius": 12,
+          "background": "hsl(0 0% 100%)"
         }
       }
     }
   ],
-  "tables": [
-    {
-      "id": "table_001",
-      "title": "Top 10 Customers by Revenue",
-      "columns": ["Customer Name", "Total Revenue", "Orders"],
-      "rows": [
-        { "Customer Name": "Alice", "Total Revenue": 2000, "Orders": 12 },
-        { "Customer Name": "Bob", "Total Revenue": 1500, "Orders": 9 }
-      ],
-      "reasoning": "Highlights the most valuable customers"
-    }
+
+  "insights": [
+    "Total revenue generated is over $78.59 million.",
+    "A total of 120,378 orders were processed.",
+    "The average order value is $652.88, indicating healthy spending per order."
   ],
-  "layout": {
-    "recommended_grid": ["2x2", "3x2", "4x2", "2x3"],
-    "primary_chart_id": "chart_001",
-    "secondary_chart_ids": ["chart_002", "chart_003"],
-    "table_ids": ["table_001"],
-    "metrics_placement": "top",
-    "combination_guidelines": {
-      "metrics_section": {
-        "placement": "top",
-        "layout": "full_width_row",
-        "cards_per_row": 3,
-        "reasoning": "KPI metrics visible at first glance"
-      },
-      "max_components": 10,
-      "examples": [
-        {
-          "layout": "3x2",
-          "charts": 3,
-          "tables": 2,
-          "metrics": 5,
-          "reasoning": "Balanced overview"
-        }
-      ]
+
+  "data_quality": {
+    "total_records": 128975,
+    "completeness": 98.5,
+    "accuracy": 95.2,
+    "consistency": 97.8,
+    "duplicates": 12
+  },
+
+  "styling_recommendations": {
+    "theme": "corporate",
+    "colorPalette": [
+      "hsl(220 14% 96%)",
+      "hsl(220 9% 46%)",
+      "hsl(142 76% 36%)",
+      "hsl(38 92% 50%)",
+      "hsl(0 84% 60%)"
+    ],
+    "animation": "enabled",
+    "grid": "visible",
+    "legend": "top",
+    "dashboardBackground": "hsl(220 14% 96%)",
+    "tile": {
+      "borderColor": "hsl(220 14% 90%)",
+      "borderWidth": 1,
+      "borderRadius": 12,
+      "background": "hsl(0 0% 100%)"
     }
   }
 }
-
 ```
 
+DATASET EXAMPLES:
+For line charts (time series):
+```json
+"datasets": [
+  {
+    "label": "Monthly Revenue",
+    "data": [
+      {"label": "2022-03-31", "value": 101683.85},
+      {"label": "2022-04-30", "value": 28838708.32}
+    ],
+    "color": "hsl(220 9% 46%)"
+  }
+]
+```
+
+For bar charts (categorical):
+```json
+"datasets": [
+  {
+    "label": "Sales by Category",
+    "data": [
+      {"label": "Electronics", "value": 25000},
+      {"label": "Clothing", "value": 18000}
+    ],
+    "color": "hsl(142 76% 36%)"
+  }
+]
+```
+
+VALIDATION REQUIREMENTS:
+Before outputting your final JSON, verify you have included:
+1. ALL top-level fields (fileID, status, processed_at, source_file, file_size, file_type, success)
+2. metrics[] with complete objects (id, title, value, change, trend, layout, time_comparison, styling)
+3. charts[] with complete objects (id, chart_type, title, description, layout, datasets, config, styling, reasoning)
+4. tables[] with complete objects (id, title, layout, columns, rows, styling)
+5. insights[] array with at least 3 insight strings
+6. data_quality object with all required fields
+7. styling_recommendations object with theme, colorPalette, animation, grid, legend, dashboardBackground, tile
+
+If ANY field is missing, your response is INCOMPLETE and will fail frontend integration.
+
 ================================================================================
-IMPORTANT:
+CRITICAL REQUIREMENTS:
+- Generate the COMPLETE frontend contract structure - every field is mandatory
+- Include ALL styling objects for metrics, charts, and tables
+- Generate datasets arrays for charts with actual data points
+- Include time_comparison objects for metrics where applicable
+- Create tables array with sample data
+- Use the exact field names and structure shown in the example
+- Validate your JSON contains all required fields before outputting
 - Keep it simple and practical
 - Focus on actionable insights
 - Do NOT create plots - only analyze and recommend
-- Always end with the structured JSON output
+- Always end with the structured JSON output matching the frontend contract (above)
 - Print all intermediate values for transparency
 - Ground every metric in actual data computation
 
@@ -236,4 +439,5 @@ NEVER Do These:
 - Output Malformed JSON: Validate before output
 - Create Actual Plots: You analyze and recommend ONLY
 - Assume Clean Data: Always handle missing values, duplicates, type mismatches
+- Output legacy fields or structures (e.g., analysis_metadata, chart_recommendations, legacy layout blocks)
 """

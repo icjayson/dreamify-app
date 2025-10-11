@@ -24,6 +24,7 @@ class AnalyzeCSVWorkflow:
         self.messages = []
         self.chart_recommendations = []
         self.metrics = []
+        self.frontend_contract = None
         self.workflow_output = None
 
     def init_messages(self, file_path: str, user_prompt: str = None):
@@ -90,8 +91,8 @@ Do NOT create any visualizations - only analyze and recommend.
                 # Check if the response contains tool calls
                 if not response.tool_calls:
                     logger.info("No more tool calls - analysis complete")
-                    # Extract chart recommendations from final response
-                    self._extract_chart_recommendations(response.content)
+                    # Extract structured frontend contract from final response
+                    self._extract_frontend_contract(response.content)
                     break
 
                 # Process tool calls
@@ -143,62 +144,51 @@ Do NOT create any visualizations - only analyze and recommend.
         
         # Set workflow as completed
         self.workflow_output.set_completed("success")
-        self.workflow_output.output_data = {
-            "chart_recommendations": self.chart_recommendations,
-            "metrics": self.metrics,
-            "insights": ["Analysis completed successfully"]
-        }
-        
-        logger.info("CSV analysis workflow completed successfully")
-        logger.info(f"Final results: {len(self.chart_recommendations)} charts, {len(self.metrics)} metrics")
-        
-        # Return simple results
-        return {
-            "chart_recommendations": self.chart_recommendations,
-            "metrics": self.metrics,
-            "insights": ["Analysis completed successfully"],
-            "workflow_output": self.workflow_output
-        }
+        # Prefer saving the full frontend contract if available
+        if self.frontend_contract:
+            self.workflow_output.output_data = self.frontend_contract
+            logger.info("CSV analysis workflow completed successfully with frontend contract")
+            charts_len = len(self.frontend_contract.get("charts", [])) if isinstance(self.frontend_contract, dict) else 0
+            metrics_len = len(self.frontend_contract.get("metrics", [])) if isinstance(self.frontend_contract, dict) else 0
+            logger.info(f"Final results: {charts_len} charts, {metrics_len} metrics")
+            return {
+                "data": self.frontend_contract,
+                "workflow_output": self.workflow_output
+            }
+        else:
+            # Legacy fallback (should not happen if prompt is followed)
+            self.workflow_output.output_data = {
+                "chart_recommendations": self.chart_recommendations,
+                "metrics": self.metrics,
+                "insights": ["Analysis completed successfully"]
+            }
+            logger.info("CSV analysis workflow completed successfully (legacy fallback)")
+            logger.info(f"Final results: {len(self.chart_recommendations)} charts, {len(self.metrics)} metrics")
+            return {
+                "chart_recommendations": self.chart_recommendations,
+                "metrics": self.metrics,
+                "insights": ["Analysis completed successfully"],
+                "workflow_output": self.workflow_output
+            }
     
-    def _extract_chart_recommendations(self, final_response: str):
-        """Extract structured chart recommendations and metrics from the final LLM response"""
+    def _extract_frontend_contract(self, final_response: str):
+        """Extract the full frontend-contract JSON from the final LLM response"""
         
         logger.info("Extracting structured recommendations from final response")
         
         try:
             # Look for JSON structure in the response
-            json_match = re.search(r'```json\s*(\{.*?\})\s*```', final_response, re.DOTALL)
+            json_match = re.search(r'```json\s*(\{[\s\S]*?\})\s*```', final_response, re.DOTALL)
             
             if json_match:
                 json_str = json_match.group(1)
                 structured_data = json.loads(json_str)
                 
-                # Extract charts
-                if "charts" in structured_data:
-                    self.chart_recommendations = []
-                    for chart in structured_data["charts"]:
-                        recommendation = {
-                            'chart_type': chart.get('chart_type', ''),
-                            'title': chart.get('title', ''),
-                            'columns': chart.get('columns', []),
-                            'x_axis': chart.get('x_axis'),
-                            'y_axis': chart.get('y_axis'),
-                            'color': chart.get('color'),
-                            'size': chart.get('size'),
-                            'metadata': {'title': chart.get('title', '')},
-                            'confidence': 0.9,  # High confidence for structured output
-                            'reasoning': chart.get('reasoning', 'LLM structured recommendation')
-                        }
-                        self.chart_recommendations.append(recommendation)
-                    
-                    logger.info(f"Extracted {len(self.chart_recommendations)} chart recommendations")
-                
-                # Extract metrics
-                if "metrics" in structured_data:
-                    self.metrics = structured_data["metrics"]
-                    logger.info(f"Extracted {len(self.metrics)} metrics")
-                else:
-                    self.metrics = []
+                # Store the entire structured object as the frontend contract
+                self.frontend_contract = structured_data
+                charts_count = len(structured_data.get("charts", [])) if isinstance(structured_data, dict) else 0
+                metrics_count = len(structured_data.get("metrics", [])) if isinstance(structured_data, dict) else 0
+                logger.info(f"Extracted frontend contract with {charts_count} charts and {metrics_count} metrics")
                     
             else:
                 logger.warning("No structured JSON found in response, falling back to simple extraction")
@@ -212,29 +202,10 @@ Do NOT create any visualizations - only analyze and recommend.
             self._fallback_extraction(final_response)
     
     def _fallback_extraction(self, final_response: str):
-        """Fallback extraction method if structured JSON parsing fails"""
-        
+        """Fallback extraction method if structured JSON parsing fails. Sets minimal error contract."""
         logger.info("Using fallback extraction method")
-        
-        # Simple pattern matching to extract recommendations
-        chart_types = ["bar_chart", "line_chart", "scatter_plot", "pie_chart", 
-                      "histogram", "box_plot", "heatmap", "area_chart"]
-        
-        found_charts = []
-        for chart_type in chart_types:
-            if chart_type in final_response.lower():
-                found_charts.append({
-                    'chart_type': chart_type,
-                    'title': f'{chart_type.replace("_", " ").title()}',
-                    'columns': [],
-                    'x_axis': None,
-                    'y_axis': None,
-                    'color': None,
-                    'size': None,
-                    'metadata': {},
-                    'confidence': 0.6,  # Lower confidence for fallback
-                    'reasoning': f"Detected {chart_type} in response text"
-                })
-        
-        self.chart_recommendations = found_charts
-        self.metrics = []  # No metrics in fallback
+        self.frontend_contract = {
+            "status": "failed",
+            "success": False,
+            "insights": ["Failed to parse structured JSON from agent response."],
+        }

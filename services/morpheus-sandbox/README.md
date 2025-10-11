@@ -68,7 +68,7 @@ python test_api.py
   "file_path": "sales_data.csv",
   "chart_recommendations": [
     {
-      "chart_type": "line_chart",
+      "chart_type": "line",
       "title": "Sales Trend Over Time",
       "columns": ["Date", "Sales"],
       "x_axis": "Date",
@@ -79,7 +79,7 @@ python test_api.py
       "reasoning": "Shows temporal trends in sales data"
     },
     {
-      "chart_type": "bar_chart", 
+      "chart_type": "bar", 
       "title": "Sales by Product",
       "columns": ["Product", "Sales"],
       "x_axis": "Product",
@@ -283,7 +283,7 @@ Check console output for workflow execution details and any errors.
 ### Chart Recommendation Object
 ```json
 {
-  "chart_type": "line_chart",           # Chart type identifier
+  "chart_type": "line",           # Chart type identifier
   "columns": ["Date", "Sales"],         # Recommended columns
   "x_axis": "Date",                     # X-axis column (if applicable)
   "y_axis": "Sales",                    # Y-axis column (if applicable)

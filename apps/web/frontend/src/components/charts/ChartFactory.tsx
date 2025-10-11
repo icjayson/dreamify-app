@@ -195,8 +195,6 @@ class ChartFactory {
           styling: chartConfig.styling
         };
 
-      case ChartType.ACTIVITY_FEED:
-        return {};
 
       default:
         return {};

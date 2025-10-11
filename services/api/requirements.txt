@@ -1,4 +1,5 @@
 # Vibe Analytics Studio Backend Dependencies
+pydantic
 
 # Web Framework
 flask>=3.0.0

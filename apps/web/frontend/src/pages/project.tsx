@@ -13,6 +13,12 @@ export default function ProjectPage() {
   const uploadedFile = useChatStore((s) => s.uploadedFile);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
+  
+  // Mirror processed data from store for rendering (optional local state)
+  // Keep compatibility with existing DashboardPreview API
+  if (!processedData && uploadedFile?.processedData) {
+    try { setProcessedData(uploadedFile.processedData); } catch (_e) {}
+  }
 
   return (
     <div className="min-h-screen bg-muted">
@@ -53,7 +59,7 @@ export default function ProjectPage() {
             <div className=" bg-muted h-[calc(100vh-4rem)] min-h-0">
                 <div>
                 <div className="px-1 h-[calc(100vh-4rem)]" data-chat-root>
-                    <ChatInterface onProcessedDataChange={setProcessedData} />
+                    <ChatInterface />
                 </div>
                 </div>
             </div>
@@ -106,9 +112,7 @@ export default function ProjectPage() {
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
               ) : isInitialLoading ? (
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
-              ) : (processedData && processedData.status !== 'completed') ? (
-                <DashboardLoading title="Finalizing Dashboard" description="Applying styling and layout..." durationSec={10} />
-              ) : (processedData && processedData.status === 'completed') ? (
+              ) : (uploadedFile?.status === 'processed' && processedData) ? (
                 <DashboardPreview processedData={processedData} className="h-full overflow-y-auto" />
               ) : (
                 <DashboardLoading title="Preparing Dashboard" description="Please wait..." durationSec={10} />

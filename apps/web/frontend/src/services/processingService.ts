@@ -6,6 +6,7 @@ export interface ProcessingResponse {
     success: boolean;
     status: 'not_processed' | 'processing' | 'completed' | 'error' | 'accepted';
     fileID: string;
+    execution_id?: string; // surfaced from backend /status for linking to final result
     message?: string;
     error?: string;
     [key: string]: any;
@@ -204,7 +205,16 @@ class ProcessingService {
         }
         
         // Check if processing is complete or failed
-        if (status.success && status.data?.status === 'completed' || status.data?.status === 'error') {
+        const hasInlineResult = (() => {
+          const d = status.data as any;
+          if (!d) return false;
+          // Accept either top-level charts/metrics/tables or nested under data
+          const topLevel = (Array.isArray(d.charts) && d.charts.length) || (Array.isArray(d.metrics) && d.metrics.length) || (Array.isArray(d.tables) && d.tables.length);
+          const nested = d.data && ((Array.isArray(d.data.charts) && d.data.charts.length) || (Array.isArray(d.data.metrics) && d.data.metrics.length) || (Array.isArray(d.data.tables) && d.data.tables.length));
+          return Boolean(topLevel || nested);
+        })();
+
+        if ((status.success && status.data?.status === 'completed') || status.data?.status === 'error' || hasInlineResult) {
           return status;
         }
         

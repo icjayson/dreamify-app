@@ -129,6 +129,7 @@ interface UploadedFile {
   size: number;
   ext: string;
   status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error' | 'accepted';
+  executionId?: string;
   processedData?: any;
 }
 
@@ -364,10 +365,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
           (status) => {
             console.log('Polling status update:', status);
 
-            if (status.data?.status === 'completed') {
-              setUploadedFile({ ...uploadedFile, status: 'processed', processedData: status.data });
+            // Capture execution_id when available during accepted/processing
+            const executionId = status.data?.execution_id as string | undefined;
+            if (executionId) {
+              setUploadedFile((prev) => prev ? { ...prev, executionId } : prev);
+            }
+
+            // If JSON result is present inline in status, store it and mark processed
+            const d: any = status.data;
+            const hasTopLevel = d && ((Array.isArray(d.charts) && d.charts.length) || (Array.isArray(d.metrics) && d.metrics.length) || (Array.isArray(d.tables) && d.tables.length));
+            const hasNested = d && d.data && ((Array.isArray(d.data.charts) && d.data.charts.length) || (Array.isArray(d.data.metrics) && d.data.metrics.length) || (Array.isArray(d.data.tables) && d.data.tables.length));
+            if (hasTopLevel || hasNested) {
+              setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: d } : prev);
+            } else if (status.data?.status === 'completed') {
+              setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: d } : prev);
             } else if (status.data?.status === 'error') {
-              setUploadedFile({ ...uploadedFile, status: 'error' });
+              setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
             }
           },
           60, // max attempts (60 seconds)
@@ -376,10 +389,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         console.log('Final polling result:', finalResult);
         
         if (finalResult.data?.success && finalResult.data?.status === 'completed') {
-          // Call the callback to pass processed data to parent component
-          if (onProcessedDataChange) {
-            onProcessedDataChange(finalResult.data);
-          }
           // First successful generation: show initial loading for 10s, then mark shown
           if (!get().hasShownInitialDashboard) {
             set({ isInitialLoading: true });

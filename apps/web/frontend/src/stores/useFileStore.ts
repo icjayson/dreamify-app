@@ -14,7 +14,7 @@ interface UploadedFile {
   filename: string;
   size: number;
   ext: string;
-  status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
+  status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error' | 'accepted';
   processedData?: any;
 }
 
@@ -230,8 +230,6 @@ export const useFileStore = create<FileState>((set, get) => ({
   
   // Validation
   validateClientFile: (file: File): string | null => {
-    const sizeLimit = 50 * 1024 * 1024;
-    if (file.size > sizeLimit) return "File too large. Maximum size: 50MB";
     const ext = file.name.split('.').pop()?.toLowerCase();
     const allowed = ["csv","xlsx","xls","json"];
     if (!ext || !allowed.includes(ext)) return "Invalid file type. Supported: CSV, XLSX, XLS, JSON";

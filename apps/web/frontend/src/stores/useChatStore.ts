@@ -128,7 +128,7 @@ interface UploadedFile {
   filename: string;
   size: number;
   ext: string;
-  status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
+  status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error' | 'accepted';
   processedData?: any;
 }
 
@@ -355,8 +355,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.log('Starting processing for fileID:', uploadedFile.fileID);
       const startResult = await processingService.runProcessing(uploadedFile.fileID);
       console.log('Run processing result:', startResult);
-      
-      if (startResult.data?.success && startResult.data?.status === 'processing') {
+      // processing or accepted
+      if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
         console.log('Processing started, beginning polling...');
         // Poll for completion
         const finalResult = await processingService.pollProcessingStatus(
@@ -371,7 +371,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           },
           60, // max attempts (60 seconds)
-          2000 // 2 second intervals
+          5000 // 5 second intervals
         );
         console.log('Final polling result:', finalResult);
         

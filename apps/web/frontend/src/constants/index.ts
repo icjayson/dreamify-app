@@ -7,7 +7,6 @@ export const APP_CONFIG = {
 
 // File Upload Constants
 export const FILE_CONFIG = {
-  MAX_SIZE: 10 * 1024 * 1024, // 10MB
   ALLOWED_TYPES: ['csv', 'xlsx', 'xls'],
   ALLOWED_MIME_TYPES: [
     'text/csv',
@@ -60,7 +59,6 @@ export const UI_CONFIG = {
 export const ERROR_MESSAGES = {
   FILE_UPLOAD: {
     INVALID_TYPE: 'Please upload a valid CSV or Excel file',
-    TOO_LARGE: 'File size must be less than 10MB',
     UPLOAD_FAILED: 'Failed to upload file. Please try again.',
   },
   API: {

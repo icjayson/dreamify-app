@@ -4,7 +4,7 @@ export interface ProcessingResponse {
   success: boolean;
   data?: {
     success: boolean;
-    status: 'not_processed' | 'processing' | 'completed' | 'error';
+    status: 'not_processed' | 'processing' | 'completed' | 'error' | 'accepted';
     fileID: string;
     message?: string;
     error?: string;

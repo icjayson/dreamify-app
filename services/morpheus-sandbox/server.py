@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from morpheus.workflows.analyze_csv.workflow import AnalyzeCSVWorkflow
+from utils.config import config
 from utils.logger import logger
 from utils.health import check_health
 import os
@@ -28,7 +29,7 @@ class StatusRequest(BaseModel):
     fileID: str
 
 # Configure paths - pointing to dreamify-backend file-storage
-BACKEND_STORAGE_BASE = "/home/ubuntu/projects/dreamify-backend/file-storage"
+BACKEND_STORAGE_BASE = config.storage.local.path
 METADATA_DIR = os.path.join(BACKEND_STORAGE_BASE, "metadata", "uploads")
 UPLOADS_DIR = os.path.join(BACKEND_STORAGE_BASE, "uploads")
 PROCESSED_DIR = os.path.join(BACKEND_STORAGE_BASE, "processed")

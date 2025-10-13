@@ -41,6 +41,9 @@ def run_analysis():
         
         # Call morpheus service
         try:
+            # print endpoint and json data
+            print(f"Calling morpheus service endpoint: {MORPHEUS_SERVICE_URL}/run")
+            print(f"JSON data: {json.dumps({'fileID': fileID}, indent=2)}")
             response = requests.post(
                 f"{MORPHEUS_SERVICE_URL}/run",
                 json={"fileID": fileID},

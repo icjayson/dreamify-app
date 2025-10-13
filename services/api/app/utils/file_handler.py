@@ -15,7 +15,6 @@ class FileHandler:
     """Utility class for handling file uploads and processing."""
     
     ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls', 'json'}
-    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
     
     @staticmethod
     def allowed_file(filename: str) -> bool:
@@ -35,13 +34,10 @@ class FileHandler:
         if not FileHandler.allowed_file(file.filename):
             raise ValueError(f"File type not allowed. Allowed types: {', '.join(FileHandler.ALLOWED_EXTENSIONS)}")
         
-        # Check file size
+        # Get file size for metadata
         file.seek(0, os.SEEK_END)
         file_size = file.tell()
         file.seek(0)  # Reset file pointer
-        
-        if file_size > FileHandler.MAX_FILE_SIZE:
-            raise ValueError(f"File too large. Maximum size: {FileHandler.MAX_FILE_SIZE // (1024*1024)}MB")
         
         return {
             'filename': secure_filename(file.filename),

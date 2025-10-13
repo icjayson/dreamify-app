@@ -25,8 +25,6 @@ class Settings:
     DATABASE_TEST_URL: str = os.getenv("DATABASE_TEST_URL", "sqlite:///test_dreamify_app.db")
     
     # File Upload
-    # Align with FileHandler.MAX_FILE_SIZE (50MB)
-    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", str(50 * 1024 * 1024)))
     UPLOAD_FOLDER: str = os.getenv("UPLOAD_FOLDER", "uploads")
     ALLOWED_EXTENSIONS: List[str] = field(default_factory=lambda: os.getenv("ALLOWED_EXTENSIONS", "csv,xlsx,xls,json").split(","))
 

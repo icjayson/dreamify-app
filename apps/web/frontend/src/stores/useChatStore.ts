@@ -162,6 +162,10 @@ interface ChatState {
   hasShownInitialDashboard: boolean;
   isInitialLoading: boolean;
   
+  // Original file for exports
+  originalFileBlob?: Blob | null;
+  originalFileName?: string | null;
+  
   // Actions
   setInputValue: (value: string) => void;
   setIsTyping: (typing: boolean) => void;
@@ -179,6 +183,7 @@ interface ChatState {
   setIsThemeChanging: (changing: boolean) => void;
   setHasShownInitialDashboard: (flag: boolean) => void;
   setIsInitialLoading: (flag: boolean) => void;
+  setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
   
   // Complex actions
   sendMessage: (content: string) => void;
@@ -212,6 +217,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isThemeChanging: false,
   hasShownInitialDashboard: false,
   isInitialLoading: false,
+  originalFileBlob: null,
+  originalFileName: null,
   
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -234,6 +241,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
   setHasShownInitialDashboard: (flag) => set({ hasShownInitialDashboard: flag }),
   setIsInitialLoading: (flag) => set({ isInitialLoading: flag }),
+  setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   
   // Complex actions
   sendMessage: (content) => {

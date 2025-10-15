@@ -170,6 +170,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
   const handleChatSubmit = async () => {
     if (!inputValue.trim()) return;
+    if (!uploadedFile || uploadedFile.status !== 'uploaded') {
+      toast({ title: "Upload required", description: "Upload a CSV before asking a question.", variant: "destructive" });
+      return;
+    }
     
     // Create user message with file attachment immediately
     const userMessage: Message = {
@@ -186,17 +190,17 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     // Add message to store synchronously before switching views
     addMessage(userMessage);
     
-    // Switch to ChatInterface immediately so user sees their message
-    onGetStarted();
+    // Start processing in background
+    void processFileWithMessage(inputValue.trim(), onProcessedDataChange);
     
-    // Continue with file processing in background
-    await processFileWithMessage(inputValue.trim(), onProcessedDataChange);
+    // Navigate to project workspace for unified chat + dashboard flow
+    navigate('/workspace/project');
   };
 
   const handleFileUpload = (files: FileList | null) => {
+    // Upload alone should not navigate; navigation happens on prompt submit
     if (files && files.length > 0) {
-      // Process file upload
-      onGetStarted();
+      // no-op here; actual upload handled by input change handlers
     }
   };
 

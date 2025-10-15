@@ -343,6 +343,8 @@ const DashboardPreview = ({
   return (
     <div
       ref={containerRef}
+      id="dashboard-preview-root"
+      data-dashboard-root
       className={`h-full overflow-y-auto ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
       style={{
         ...style,

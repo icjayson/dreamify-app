@@ -276,7 +276,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
           </button>
 
           {/* Sidebar */}
-          <aside className="border-r border-border bg-secondary/10 h-full">
+          <aside className="border-r border-border bg-black/10 h-full">
             <div className="p-3">
               {/* User Info */}
               <div className="flex items-center gap-3 p-2 mb-2">

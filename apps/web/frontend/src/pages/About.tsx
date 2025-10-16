@@ -1,14 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { HowItWorksSection } from "@/components/sections/how-it-works-section";
-import { ProblemSolutionSection } from "@/components/sections/problem-solution-section";
-import { ValuePropsSection } from "@/components/sections/value-props-section";
-import { TargetAudienceSection } from "@/components/sections/target-audience-section";
-import { FeaturesShowcaseSection } from "@/components/sections/features-showcase-section";
-import { SocialProofSection } from "@/components/sections/social-proof-section";
-import { CTASection } from "@/components/sections/cta-section";
+import { MissionSection } from "@/components/sections/mission";
+import { ProblemSection } from "@/components/sections/problem";
+import { FeaturesSection } from "@/components/sections/features";
+import { CTAContainerSection } from "@/components/sections/cta";
 import { FooterSection } from "@/components/sections/footer-section";
-import ProjectsSection from '@/components/ProjectsSection';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
 
 const AboutPage = () => {
@@ -56,25 +52,16 @@ const AboutPage = () => {
 
       <main className="relative z-10">
         <div className="relative z-10">
-          <HowItWorksSection />
+          <MissionSection />
         </div>
         <div className="relative z-10">
-          <ProblemSolutionSection />
+          <ProblemSection />
         </div>
         <div className="relative z-10">
-          <ValuePropsSection />
+          <FeaturesSection />
         </div>
         <div className="relative z-10">
-          <TargetAudienceSection />
-        </div>
-        <div className="relative z-10">
-          <FeaturesShowcaseSection />
-        </div>
-        <div className="relative z-10">
-          <SocialProofSection />
-        </div>
-        <div className="relative z-10">
-          <CTASection onGetStarted={onGetStarted} />
+          <CTAContainerSection />
         </div>
         <div className="relative z-10">
           <FooterSection />

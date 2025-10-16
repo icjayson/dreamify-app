@@ -99,7 +99,7 @@ const Header = () => {
         )}
       </SignedIn>
       
-      <div className="2xl:max-w-6xl xl:max-w-4xl lg:max-w-2xl md:w-full flex h-14 items-center justify-between px-4 glass-panel border border-border/30 rounded-2xl mx-auto mt-4">
+      <div className="2xl:max-w-6xl xl:max-w-4xl lg:max-w-2xl md:w-full flex h-14 items-center justify-between px-4 glass-panel rounded-2xl mx-auto mt-4">
         {/* Left side - Logo and brand */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2">

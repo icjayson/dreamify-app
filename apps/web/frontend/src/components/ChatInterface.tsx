@@ -1,15 +1,11 @@
 import { useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { CornerRightUp, Upload, Bot, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, Link, Mic, MicOff, FileText } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, Link, Mic, MicOff, FileText } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from './ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
-
-import { Message } from "@/types/message";
 import { fileService, type UploadResponse } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
 import { useChatStore } from "@/stores/useChatStore";
@@ -266,46 +262,36 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-muted">
-      {/* Chat Header */}
-      <div className="py-2">
-        <div className="flex items-center gap-2 mb-1 px-2 ">
-          <Bot className="w-5 h-5 text-accent" />
-          <span className="font-medium text-sm">Morpheus</span>
-        </div>
-        <p className="text-xs text-muted-foreground px-2">
-          Describe dashboard vision and I'll build it with beautiful animations
-        </p>
-      </div>
 
       {/* Messages Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-4">
         {messages.map((message) => (
           <div
             key={message.id}
             className={`chat-enter flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
           >
-            <div className={`max-w-[85%] flex gap-2 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+            <div className={`max-w-[90%] flex gap-2 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
               <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${
                 message.role === "user" 
-                  ? "bg-primary/20" 
-                  : "bg-accent/20"
+                  ? "bg-black" 
+                  : "bg-transparent"
               }`}>
                 {message.role === "user" ? (
-                  <User className="w-3 h-3 text-primary" />
+                  <User className="w-3 h-3 text-white" />
                 ) : (
-                  <Bot className="w-3 h-3 text-accent" />
+                  <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
                 )}
               </div>
               
-              <div className={`p-3 glass-panel rounded-2xl text-sm whitespace-pre-wrap break-words ${
+              <div className={`rounded-xl text-sm whitespace-pre-wrap break-words ${
                 message.role === "user" 
-                  ? "bg-primary/10 border-primary/20" 
-                  : "bg-card/80 border-border/50"
+                  ? "bg-black p-3" 
+                  : "bg-transparent p-0"
               }`}>
                 {message.attachment && message.attachment.kind === "csv" && (
                   <div className="mb-2">
                     <span
-                      className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-border/40 bg-background/50 text-[11px] text-white/90 w-full"
+                      className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
                       title={message.attachment.name}
                       aria-label="Attached CSV file"
                     >
@@ -333,7 +319,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
           <div className="flex justify-start chat-enter">
             <div className="flex gap-2">
               <div className="w-6 h-6 rounded-md bg-accent/20 flex items-center justify-center">
-                <Bot className="w-3 h-3 text-accent" />
+                <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
               </div>
               <Card className="p-3 glass-panel bg-card/80 border-border/50">
                 <div className="flex items-center gap-2">
@@ -361,7 +347,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
               <button
                 key={index}
                 onClick={() => setInputValue(prompt.text)}
-                className="px-2 py-1 text-xs bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-all duration-200 flex items-center gap-1"
+                className="px-2 py-1 text-xs text-white/30 border border-white/10 rounded-full hover:bg-white/10 transition-all duration-200 flex items-center gap-1"
               >
                 <prompt.icon className="w-3 h-3 flex-shrink-0" />
                 <span className="truncate">{prompt.text}</span>
@@ -375,13 +361,13 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
       <div className="mt-auto">
         {uploadedFile && (
           <div className="mx-2 mt-4 mb-2">
-            <div className="glass-panel rounded-xl border border-border/30 py-2 px-4">
+            <div className="bg-black rounded-xl py-2 px-4">
               <div className="flex items-center justify-between gap-2">
                 {/* Left side - File info */}
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   {/* File Icon */}
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 rounded-lg bg-background/50 border border-border/30 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg border border-white/20 bg-white/10 flex items-center justify-center">
                       <FileText className="w-4 h-4 text-white" />
                     </div>
                   </div>
@@ -417,7 +403,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                   <Button
                     onClick={() => window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank')}
                     disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
-                    className="button-gradient px-2 py-0 text-xs disabled:opacity-50 whitespace-nowrap"
+                    className="text-xs bg-[#292929] text-white p-2 disabled:opacity-50 whitespace-nowrap"
                   >
                     Preview
                   </Button>
@@ -434,9 +420,9 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
         )}
 
         {/* Input Area */}
-        <div className="m-2 bg-card/30">
+        <div className="m-2">
         {/* Main Chat Input with Hero Section Styling */}
-        <div className="w-full min-h-[60px] text-sm p-4 glass-panel rounded-2xl resize-none transition-all duration-300">
+        <div className="w-full min-h-[60px] text-sm p-4 pb-2 bg-[#292929] rounded-xl resize-none transition-all duration-300">
           {/* Textarea Row */}
           <div className="relative mb-3">
             <TextareaAutosize
@@ -470,7 +456,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
               {/* Upload Button - Icon only */}
               <button
                 onClick={handleFileUpload}
-                className="button-outline p-2 flex items-center justify-center"
+                className="p-2 flex items-center justify-center border border-white/30 rounded-md"
               >
                 <Upload className="w-4 h-4" />
               </button>
@@ -479,7 +465,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
               <div className="relative data-source-dropdown">
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="button-outline p-2 flex items-center justify-center gap-1"
+                  className="p-2 flex items-center justify-center gap-1 border border-white/30 rounded-md"
                   aria-expanded={dropdownOpen}
                   aria-haspopup="true"
                   aria-label="Connect data source"
@@ -572,6 +558,18 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
               }
 
               setUploadedFile({ fileID: res.fileID, filename: res.filename, size: res.size, ext: res.ext, status: 'uploaded' });
+              try {
+                // Persist original file for CSV export if it's CSV
+                if ((file.name.split('.').pop() || '').toLowerCase() === 'csv') {
+                  // store in chat store for export
+                  // lazy import to avoid circulars
+                  const { useChatStore } = await import('@/stores/useChatStore');
+                  useChatStore.getState().setOriginalFile({ blob: file, name: file.name });
+                } else {
+                  const { useChatStore } = await import('@/stores/useChatStore');
+                  useChatStore.getState().setOriginalFile(null);
+                }
+              } catch (_err) {}
               toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
             } catch (_e) {
               setUploadedFile({ 

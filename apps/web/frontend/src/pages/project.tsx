@@ -6,13 +6,19 @@ import DashboardPreview from "@/components/DashboardPreview";
 import DashboardLoading from "@/components/DashboardLoading";
 import { useChatStore } from "@/stores/useChatStore";
 import BlankState from "@/components/BlankState";
+import { useUser } from "@clerk/clerk-react";
+import PublishModal from "@/components/PublishModal";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
   const [processedData, setProcessedData] = useState<any>(null);
+  const [isPublishOpen, setIsPublishOpen] = useState(false);
   const uploadedFile = useChatStore((s) => s.uploadedFile);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
+  const { user } = useUser();
+  const displayName = user?.username || user?.fullName || user?.firstName || "you";
+
   
   // Mirror processed data from store for rendering (optional local state)
   // Keep compatibility with existing DashboardPreview API
@@ -24,30 +30,22 @@ export default function ProjectPage() {
     <div className="min-h-screen bg-muted">
       {/* Header */}
       <div className="px-4 py-2">
-        <div className="grid grid-cols-4 items-center h-10">
-          <div className="col-span-1">
-            <div className="flex items-center gap-3">
-              <img src="/logo-watermark.png" alt="Dreamify" className="w-12 h-6 object-contain" />
-              <span className="font-regular text-sm truncate">project-name</span>
+        <div className="flex items-center justify-between h-10">
+          <div className="flex items-center gap-3 min-w-0">
+            <button aria-label="Go back" onClick={() => navigate('/')} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm text-white/70 truncate" title={displayName}>{displayName}</span>
+              <span className="text-sm text-white/50">›</span>
+              <span className="font-regular text-sm truncate" title="project-name">project-name</span>
             </div>
           </div>
-          <div className="col-span-3">
-            <div className="flex items-center justify-between h-10">
-              <button onClick={() => navigate('/')} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </button>
-              <div className="flex items-center gap-2">
-                <button onClick={() => { try { window.dispatchEvent(new Event('amazon-dashboard:export-view')); } catch (_e) {} }} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
-                  <Download className="w-4 h-4" />
-                  <span>Export View</span>
-                </button>
-                <button onClick={() => { try { if (processedData) { sessionStorage.setItem('project_preview_data', JSON.stringify(processedData)); } } catch (_e) {} window.open('/workspace/project/preview', '_blank'); }} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center">
-                  <span>Publish</span>
-                  <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
-                </button>
-              </div>
-            </div>
+          <div className="flex items-center">
+            <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center">              <span>Publish</span>
+              <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
+            </button>
           </div>
         </div>
       </div>
@@ -121,6 +119,8 @@ export default function ProjectPage() {
           </div>
         </div>
       </div>
+      {/* Publish Modal */}
+      {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} />}
     </div>
   );
 }

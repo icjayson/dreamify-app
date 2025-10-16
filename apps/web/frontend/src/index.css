@@ -37,7 +37,7 @@
     --secondary-foreground: 0 0% 95%;
 
     /* Muted elements */
-    --muted: 220 27% 12%;
+    --muted: 0 0% 10%;
     --muted-foreground: 220 9% 55%;
 
     /* Accent - Cyan highlight */
@@ -51,7 +51,7 @@
     --warning: 38 92% 50%;
 
     /* Interactive states */
-    --border: 220 27% 18%;
+    --border: 0 0% 24%;
     --input: 220 27% 12%;
     --ring: 221 78% 43%;
 
@@ -114,17 +114,9 @@
 @layer components {
   /* Glass morphism effect */
   .glass-panel {
-    background: hsl(var(--primary) / 0.1);
+    background: rgba(255, 255, 255, 0.05);
     outline: 1px solid rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.2);
-  }
-
-  /* Opaque variant for scrolled header */
-  .glass-panel-opaque {
-    background: hsl(var(--muted) / 0.8);
-    outline: 1px solid rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.3);
-    transition: var(--animation-smooth);
   }
 
   .shadow-header {

@@ -141,16 +141,9 @@ export const FooterSection = () => {
 
         {/* Bottom bar */}
         <div className="pt-4 border-t border-border">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+          <div className="flex justify-between items-center">
             <div className="text-muted-foreground text-sm">
               © 2025 Dreamify. All rights reserved. Made with ✨ for data storytellers.
-            </div>
-            
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-              <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
-                All systems operational
-              </div>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import HomePage from "@/pages/HomePage";
-import { useChatStore } from "@/stores/useChatStore";
+import { useChatStore } from "@/chat/useChatStore";
 
 const Index = () => {
   // Always render HomePage on "/"; hero chat will navigate to /workspace/project upon submit

@@ -3,29 +3,22 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, Upload, Database, CornerRightUp, Plus, Mic, MicOff, Link, FileText } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { SignedIn } from "@clerk/clerk-react";
+import { SignedIn, useAuth } from "@clerk/clerk-react";
 import { ChevronRight } from "lucide-react";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useToast } from "@/hooks/use-toast";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBar from '@/components/ui/recording-bar';
-import { useChatStore } from "@/stores/useChatStore";
-import { useFileStore } from "@/stores/useFileStore";
+import { useChatStore } from "@/chat/useChatStore";
+import { useFileStore } from "@/chat/useFileStore";
 import { fileService, type UploadResponse } from "@/services/fileService";
 import { Message } from "@/types/message";
-import { ProblemSolutionSection } from '@/components/sections/problem-solution-section';
-import { ValuePropsSection } from '@/components/sections/value-props-section';
-import { TargetAudienceSection } from '@/components/sections/target-audience-section';
-import { HowItWorksSection } from '@/components/sections/how-it-works-section';
-import { FeaturesShowcaseSection } from '@/components/sections/features-showcase-section';
-import { SocialProofSection } from '@/components/sections/social-proof-section';
-import { CTASection } from '@/components/sections/cta-section';
-import { FooterSection } from '@/components/sections/footer-section';
+import { FooterSection } from '@/components/homepage-section/footer-section';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
-import ScrollStack from '../../../src/ui/lightswind/scroll-stack';
-import ProjectsSection from '@/components/ProjectsSection';
-import ProjectsSidebar from '@/components/ProjectsSidebar';
+import ProjectsSection from '@/components/homepage-section/ProjectsSection';
+import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
 
 interface HomePageProps {
@@ -35,6 +28,7 @@ interface HomePageProps {
 
 const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
   // Mock recent projects
   const [recentProjects, setRecentProjects] = useState<Array<{ id: string; title: string }>>([
     { id: 'p1', title: 'Marketing Dashboard' },
@@ -85,6 +79,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [lottieData, setLottieData] = useState(null);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
   
   // Toast hook
   const { toast } = useToast();
@@ -169,6 +164,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   }, [dropdownOpen]);
 
   const handleChatSubmit = async () => {
+    // Gate by auth: show waitlist modal if not signed in
+    if (!isSignedIn) {
+      setWaitlistOpen(true);
+      return;
+    }
     if (!inputValue.trim()) return;
     if (!uploadedFile || uploadedFile.status !== 'uploaded') {
       toast({ title: "Upload required", description: "Upload a CSV before asking a question.", variant: "destructive" });
@@ -446,7 +446,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         <div className="text-center mb-8 animate-slide-up">
           {/* Row 1: The AI Data Analyst with gradient styling */}
           <h1 className="text-5xl md:text-7xl font-bold mb-6 font-instrument-serif">
-            <span className="px-3 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
+            <span className="px-0 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
               The AI Data Analyst
             </span>
           </h1>
@@ -712,14 +712,31 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     <ProjectsSidebar
       open={projectsOpen}
       onClose={closeProjects}
-      recents={recentProjects}
       onNewProject={() => navigate('/workspace/project')}
-      onOpenProject={openProject}
-      onRenameProject={renameProject}
-      onDeleteProject={deleteProject}
+
     />
     <ProjectsSection />
     <FooterSection />
+    {/* Waitlist modal for signed-out users */}
+    <Dialog open={waitlistOpen} onOpenChange={setWaitlistOpen}>
+      <DialogContent className="bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6 w-full max-w-[92vw] sm:max-w-xl">
+        <DialogTitle className="text-2xl md:text-3xl font-semibold text-white">Join the waitlist to get early access</DialogTitle>
+        <DialogDescription className="text-white/70 mt-1 text-sm md:text-base">
+          Be among the first to try Dreamify when it's ready.
+        </DialogDescription>
+        <div className="mt-6 flex items-center gap-4">
+          <img src="/logo-watermark.png" alt="Dreamify" className="w-16 h-16 rounded-lg object-contain bg-transparent" />
+          <div className="ml-auto">
+            <Button
+              onClick={() => { setWaitlistOpen(false); navigate('/waitlist'); }}
+              className="button-gradient px-5 py-2 rounded-xl"
+            >
+              Go to waitlist
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 );
 };

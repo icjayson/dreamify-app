@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Star, CreditCard, Bell, LogOut, User as UserIcon } from "lucide-react";
+import { Star, CreditCard, Bell, LogOut, LogIn, User as UserIcon } from "lucide-react";
 import { useClerk, useUser, UserProfile } from "@clerk/clerk-react";
+import { useNavigate } from "react-router-dom";
 import { dark } from "@clerk/themes";
 import { useUserSync } from "@/hooks/useUserSync";
-import AccountSettings from "@/components/AccountSettings";
+import AccountSettings from "@/components/homepage-section/AccountSettings";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 type AccountCenterTab = "pricing" | "account" | "billing" | "notifications";
@@ -79,7 +80,8 @@ const Placeholder: React.FC<{ title: string; icon?: React.ReactNode }> = ({ titl
 
 const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab, onChangeTab, onClose }) => {
   const { signOut } = useClerk();
-  const { user } = useUser();
+  const navigate = useNavigate();
+  const { user, isSignedIn } = useUser();
   const { supabaseUser } = useUserSync();
 
   const [dragY, setDragY] = useState(0);
@@ -122,7 +124,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
   useEffect(() => {
     if (open) {
       const isDesktopOrUp = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width: 640px)').matches;
-      setMobileActiveTab(activeTab);
+      setMobileActiveTab(isSignedIn ? activeTab : 'pricing');
       setDragY(0);
       // On mobile (< sm), open directly into the content sheet for the selected tab
       setIsShowingMobileContent(!isDesktopOrUp);
@@ -159,12 +161,19 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
   const email = supabaseUser?.email || user?.primaryEmailAddress?.emailAddress || "user@example.com";
   const avatarUrl = supabaseUser?.image_url || user?.imageUrl;
 
-  const sidebarItems = useMemo(() => ([
-    { key: "pricing" as AccountCenterTab, label: "Pricing", icon: <Star className="w-4 h-4" /> },
-    { key: "account" as AccountCenterTab, label: "Manage Account", icon: <UserIcon className="w-4 h-4" /> },
-    { key: "billing" as AccountCenterTab, label: "Billing", icon: <CreditCard className="w-4 h-4" /> },
-    { key: "notifications" as AccountCenterTab, label: "Notifications", icon: <Bell className="w-4 h-4" /> },
-  ]), []);
+  const sidebarItems = useMemo(() => {
+    const items = [
+      { key: "pricing" as AccountCenterTab, label: "Pricing", icon: <Star className="w-4 h-4" /> },
+    ];
+    if (isSignedIn) {
+      items.push(
+        { key: "account" as AccountCenterTab, label: "Manage Account", icon: <UserIcon className="w-4 h-4" /> },
+        { key: "billing" as AccountCenterTab, label: "Billing", icon: <CreditCard className="w-4 h-4" /> },
+        { key: "notifications" as AccountCenterTab, label: "Notifications", icon: <Bell className="w-4 h-4" /> },
+      );
+    }
+    return items;
+  }, [isSignedIn]);
 
   if (!open) return null;
 
@@ -221,13 +230,23 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
                       ))}
                     </div>
                     <div className="border-t border-border my-3"></div>
-                    <button
-                      onClick={async () => { await signOut(); onClose(); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-white/80 hover:bg-black"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Log out</span>
-                    </button>
+                    {isSignedIn ? (
+                      <button
+                        onClick={async () => { await signOut(); onClose(); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-white/80 hover:bg-black"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Log out</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { onClose(); navigate('/login'); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-white/80 hover:bg-black"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        <span>Login</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -247,12 +266,12 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
                   </div>
 
                   {/* Content body */}
-                  <div className="flex-1 overflow-y-auto">
-                    {mobileActiveTab === "pricing" && <PricingContent />}
-                    {mobileActiveTab === "account" && <AccountSettings />}
-                    {mobileActiveTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-white" />} />}
-                    {mobileActiveTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-white" />} />}
-                  </div>
+            <div className="flex-1 overflow-y-auto">
+              {(isSignedIn ? mobileActiveTab : 'pricing') === "pricing" && <PricingContent />}
+              {isSignedIn && mobileActiveTab === "account" && <AccountSettings />}
+              {isSignedIn && mobileActiveTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-white" />} />}
+              {isSignedIn && mobileActiveTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-white" />} />}
+            </div>
                 </div>
               )}
             </div>
@@ -306,22 +325,32 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
                 ))}
               </div>
               <div className="border-t border-border my-3"></div>
-              <button
-                onClick={async () => { await signOut(); onClose(); }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-white/80 hover:bg-black"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Log out</span>
-              </button>
+              {isSignedIn ? (
+                <button
+                  onClick={async () => { await signOut(); onClose(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-white/80 hover:bg-black"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Log out</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => { onClose(); navigate('/login'); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-white/80 hover:bg-black"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Login</span>
+                </button>
+              )}
             </div>
           </aside>
 
           {/* Content */}
           <section className="h-full overflow-y-auto">
-            {activeTab === "pricing" && <PricingContent />}
-            {activeTab === "account" && <AccountSettings />}
-            {activeTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-white" />} />}
-            {activeTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-white" />} />}
+            {(isSignedIn ? activeTab : 'pricing') === "pricing" && <PricingContent />}
+            {isSignedIn && activeTab === "account" && <AccountSettings />}
+            {isSignedIn && activeTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-white" />} />}
+            {isSignedIn && activeTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-white" />} />}
           </section>
         </div>
       </div>

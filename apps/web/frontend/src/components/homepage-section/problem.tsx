@@ -1,8 +1,10 @@
 import { useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 export const ProblemSection = () => {
   const { isVisible, ref } = useIntersectionObserver({ threshold: 0.1 });
+  const navigate = useNavigate();
 
   const leftVideoRef = useRef<HTMLVideoElement | null>(null);
   const rightVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -38,8 +40,8 @@ export const ProblemSection = () => {
             <div aria-hidden className="absolute inset-0 z-10 bg-black/60 opacity-100 transition-opacity duration-300 pointer-events-none group-hover:opacity-0" />
             <div className="flex items-center justify-between gap-4 relative z-20">
               <h1 className="text-3xl md:text-4xl font-semibold font-instrument-serif text-white">Old Way</h1>
-              <button className="button-outline px-4 py-2 rounded-lg inline-flex items-center justify-center text-sm group/cta">
-                <span>Try for free</span>
+              <button onClick={() => navigate('/waitlist')} className="button-outline px-4 py-2 rounded-lg inline-flex items-center justify-center text-sm group/cta">
+                <span>Join waitlist</span>
                 <span aria-hidden className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/cta:w-4 group-hover/cta:opacity-100 group-hover/cta:ml-2">→</span>
               </button>
             </div>
@@ -78,8 +80,8 @@ export const ProblemSection = () => {
             <div aria-hidden className="absolute inset-0 z-10 bg-black/60 opacity-100 transition-opacity duration-300 pointer-events-none group-hover:opacity-0" />
             <div className="flex items-center justify-between gap-4 relative z-20">
               <h1 className="text-3xl md:text-4xl font-semibold font-instrument-serif text-white">Dreamify Way</h1>
-              <button className="button-gradient px-4 py-2 rounded-lg inline-flex items-center justify-center text-sm group/cta">
-                <span>Try for free</span>
+              <button onClick={() => navigate('/waitlist')} className="button-gradient px-4 py-2 rounded-lg inline-flex items-center justify-center text-sm group/cta">
+                <span>Join waitlist</span>
                 <span aria-hidden className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/cta:w-4 group-hover/cta:opacity-100 group-hover/cta:ml-2">→</span>
               </button>
             </div>

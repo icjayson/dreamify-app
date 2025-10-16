@@ -4,12 +4,12 @@ import { Card } from "@/components/ui/card";
 import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, Link, Mic, MicOff, FileText } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
-import RecordingBarSidebar from './ui/recording-bar-sidebar';
+import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { fileService, type UploadResponse } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
-import { useChatStore } from "@/stores/useChatStore";
-import { useFileStore } from "@/stores/useFileStore";
+import { useChatStore } from "@/chat/useChatStore";
+import { useFileStore } from "@/chat/useFileStore";
 
 interface ChatInterfaceProps {
   onProcessedDataChange?: (data: any) => void;
@@ -563,10 +563,10 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                 if ((file.name.split('.').pop() || '').toLowerCase() === 'csv') {
                   // store in chat store for export
                   // lazy import to avoid circulars
-                  const { useChatStore } = await import('@/stores/useChatStore');
+                  const { useChatStore } = await import('@/chat/useChatStore');
                   useChatStore.getState().setOriginalFile({ blob: file, name: file.name });
                 } else {
-                  const { useChatStore } = await import('@/stores/useChatStore');
+                  const { useChatStore } = await import('@/chat/useChatStore');
                   useChatStore.getState().setOriginalFile(null);
                 }
               } catch (_err) {}

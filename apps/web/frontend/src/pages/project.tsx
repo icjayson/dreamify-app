@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, SquareArrowOutUpRight } from "lucide-react";
-import ChatInterface from "@/components/ChatInterface";
-import DashboardPreview from "@/components/DashboardPreview";
-import DashboardLoading from "@/components/DashboardLoading";
-import { useChatStore } from "@/stores/useChatStore";
-import BlankState from "@/components/BlankState";
+import ChatInterface from "@/chat/ChatInterface";
+import DashboardPreview from "@/components/project-section/DashboardPreview";
+import DashboardLoading from "@/components/project-section/DashboardLoading";
+import { useChatStore } from "@/chat/useChatStore";
+import BlankState from "@/components/project-section/BlankState";
 import { useUser } from "@clerk/clerk-react";
-import PublishModal from "@/components/PublishModal";
+import PublishModal from "@/components/project-section/PublishModal";
 
 export default function ProjectPage() {
   const navigate = useNavigate();

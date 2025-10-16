@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
-import Header from "./components/Header";
+import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -14,7 +14,7 @@ import WorkspacePage from "./pages/workspace";
 import ProjectPage from "./pages/project";
 import PreviewPage from "./pages/preview.tsx";
 import WaitlistPage from "./pages/Waitlist.tsx";
-import { useChatStore } from "./stores/useChatStore";
+import { useChatStore } from "./chat/useChatStore";
 
 const queryClient = new QueryClient();
 

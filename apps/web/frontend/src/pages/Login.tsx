@@ -12,7 +12,8 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6 relative overflow-hidden">
-      <WaveBackground backdropBlurAmount="md" className="absolute inset-0 z-0" />
+      <WaveBackground 
+      className="absolute inset-0 z-0" />
       <div className="absolute inset-0 bg-black/60 z-1"></div>
 
       {/* Back button */}

@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Bell, Plus, Search, Flame, Circle, Menu, PanelLeft } from "lucide-react";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
-import WorkspaceSidebar from "@/components/WorkspaceSidebar";
-import ProjectCard from "@/components/ProjectCard";
+import WorkspaceSidebar from "@/components/project-section/WorkspaceSidebar";
+import ProjectCard from "@/components/project-section/ProjectCard";
 import { useUserSync } from "@/hooks/useUserSync";
 
 const HARDCODED_WORKSPACE = {

@@ -71,10 +71,10 @@ export function MissionSection() {
           style={{ transitionDelay: "320ms" }}
         >
           <Link
-            to="/login"
+            to="/waitlist"
             className="button-gradient px-6 py-3 rounded-lg inline-flex items-center justify-center group"
           >
-            <span>Try for free</span>
+            <span>Join waitlist</span>
             <span
               aria-hidden="true"
               className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover:w-4 group-hover:opacity-100 group-hover:ml-2"

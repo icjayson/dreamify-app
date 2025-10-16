@@ -1,10 +1,10 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import AmazonDashboard from "@/components/Amazon_Dashboard";
-import AmazonDashboardDark from "@/components/Amazon_Dashboard_Dark";
-import DashboardLoading from "@/components/DashboardLoading";
-import { useChatStore } from "@/stores/useChatStore";
-import DashboardPreview from "@/components/DashboardPreview";
+import AmazonDashboard from "@/components/project-section/Amazon_Dashboard";
+import AmazonDashboardDark from "@/components/project-section/Amazon_Dashboard_Dark";
+import DashboardLoading from "@/components/project-section/DashboardLoading";
+import { useChatStore } from "@/chat/useChatStore";
+import DashboardPreview from "@/components/project-section/DashboardPreview";
 
 export default function PreviewPage() {
   const navigate = useNavigate();

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRotatingText } from "@/hooks/useRotatingText";
 import { Link as LinkIcon, Upload } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
-import { useChatStore } from "@/stores/useChatStore";
+import { useChatStore } from "@/chat/useChatStore";
 
 interface BlankStateProps {
   subtexts: string[];

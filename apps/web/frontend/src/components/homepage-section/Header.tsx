@@ -1,13 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LogIn, User as UserIcon, Star, CreditCard, Bell, ChevronsUpDown, LogOut, PanelLeftOpen } from "lucide-react";
+import { LogIn, User as UserIcon, Star, CreditCard, Bell, ChevronsUpDown, LogOut, PanelLeftOpen, Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, useUser, useClerk, UserProfile } from "@clerk/clerk-react";
 import { useUserSync } from "@/hooks/useUserSync";
 import { dark } from "@clerk/themes";
 import { cn } from "@/lib/utils";
-import AccountCenterModal from "@/components/AccountCenterModal";
+import AccountCenterModal from "@/components/homepage-section/AccountCenterModal";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 const Header = () => {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ const Header = () => {
   const { signOut } = useClerk();
   const { supabaseUser, isSyncing } = useUserSync();
   const [showProjectsBtn, setShowProjectsBtn] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     const handleOpen = () => setShowProjectsBtn(false);
@@ -117,11 +119,19 @@ const Header = () => {
             
             {/* Logo for non-signed-in users - show on all screen sizes */}
             <SignedOut>
-              <div className="w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
+              <div className="w-12 md:w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
+                {/* Small screens: watermark */}
+                <img 
+                  src="/logo-watermark.png"
+                  alt="Dreamify Logo"
+                  className="block md:hidden w-full h-full object-contain"
+                  onClick={() => navigate("/")}
+                />
+                {/* md and up: original horizon logo */}
                 <img 
                   src="/logo-horizon.png"
-                  alt="Dreamify Logo" 
-                  className="w-full h-full object-contain"
+                  alt="Dreamify Logo"
+                  className="hidden md:block w-full h-full object-contain"
                   onClick={() => navigate("/")}
                 />
               </div>
@@ -143,6 +153,14 @@ const Header = () => {
                 </div>
               )}
             </SignedIn>
+            {/* Mobile menu trigger (small screens) */}
+            <button
+              className="md:hidden inline-flex items-center justify-center ml-1 p-2 rounded-md hover:bg-white/10 transition-colors"
+              aria-label="Open menu"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu className="w-5 h-5 text-white" />
+            </button>
           </div>
           <nav className="hidden md:flex items-center space-x-4 ml-8">
             <button
@@ -263,6 +281,33 @@ const Header = () => {
           </SignedIn>
         </div>
       </div>
+
+      {/* Mobile sidebar (Sheet) */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="md:hidden w-[60vw] max-w-xs bg-muted border-r border-border p-4 z-[300]" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <div className="space-y-2">
+            <button
+              onClick={() => { setMobileNavOpen(false); navigate('/about'); }}
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
+            >
+              About
+            </button>
+            <a
+              href="#community"
+              onClick={() => setMobileNavOpen(false)}
+              className="block w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
+            >
+              Community
+            </a>
+            <button
+              onClick={() => { setMobileNavOpen(false); setAccountCenterTab('pricing'); setAccountCenterOpen(true); }}
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
+            >
+              Pricing
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
       {userProfileOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div 

@@ -13,7 +13,8 @@ export default function WaitlistPage() {
       <style dangerouslySetInnerHTML={{ __html: `header { display: none !important; }` }} />
 
       {/* Background */}
-      <WaveBackground backdropBlurAmount="md" className="absolute inset-0 z-0" />
+      <WaveBackground 
+      className="absolute inset-0 z-0" />
       <div className="absolute inset-0 bg-black/60 z-1"></div>
 
       {/* Back button */}

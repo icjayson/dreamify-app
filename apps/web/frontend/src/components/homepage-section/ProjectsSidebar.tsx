@@ -12,6 +12,15 @@ interface ProjectsSidebarProps {
   onDeleteProject?: (id: string) => void;
 }
 
+// Default recent projects used when no recents are provided
+const DEFAULT_RECENTS: Array<{ id: string; title: string }> = [
+  { id: 'p1', title: 'Marketing Dashboard' },
+  { id: 'p2', title: 'Sales Overview' },
+  { id: 'p3', title: 'Product Analytics' },
+  { id: 'p4', title: 'Finance KPI Board' },
+  { id: 'p5', title: 'Operations Metrics' },
+];
+
 const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewProject, recents, onOpenProject, onRenameProject, onDeleteProject }) => {
   const [sidebarShown, setSidebarShown] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -64,7 +73,14 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
 
   if (!shouldRender) return null;
 
-  const hasRecents = Array.isArray(recents) && recents.length > 0;
+  const computedRecents = recents ?? DEFAULT_RECENTS;
+  const hasRecents = Array.isArray(computedRecents) && computedRecents.length > 0;
+
+  // Safe no-op handlers used when not provided
+  const safeNewProject = onNewProject ?? (() => {});
+  const safeOpenProject = onOpenProject ?? ((id: string) => {});
+  const safeRenameProject = onRenameProject ?? ((id: string, newTitle: string) => {});
+  const safeDeleteProject = onDeleteProject ?? ((id: string) => {});
 
   return (
     <div className="fixed inset-0 z-[150]" role="dialog" aria-modal="true">
@@ -81,7 +97,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
         </div>
         <button
           className="button-outline w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-2"
-          onClick={onNewProject}
+          onClick={safeNewProject}
         >
           <SquarePlus className="w-4 h-4 text-white/70" />
           <span>New project</span>
@@ -89,17 +105,17 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
         <div className="flex-1 overflow-y-auto space-y-2">
         <div className="text-white/50 text-xs mt-10 mb-4">Recents</div>
           {hasRecents ? (
-            recents!.map((item) => (
+            computedRecents.map((item) => (
               <div
                 key={item.id}
                 className="group relative w-full rounded-md hover:bg-black/40 transition-colors"
-                onClick={() => onOpenProject?.(item.id)}
+                onClick={() => safeOpenProject(item.id)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onOpenProject?.(item.id);
+                    safeOpenProject(item.id);
                   }
                 }}
               >
@@ -109,7 +125,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
                   aria-label="Open project"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onOpenProject?.(item.id);
+                    safeOpenProject(item.id);
                   }}
                 >
                   <SquareArrowOutUpRight className="w-4 h-4 text-white/80" />
@@ -213,7 +229,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
                     onClick={() => {
                       const v = dialog.value.trim();
                       if (v && dialog.itemId) {
-                        onRenameProject?.(dialog.itemId, v);
+                        safeRenameProject(dialog.itemId, v);
                         toast({
                           title: "Project renamed",
                           description: `"${dialog.itemTitle}" → "${v}"`,
@@ -241,7 +257,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
                     className="px-3 py-1.5 text-xs rounded-md bg-red-600/80 hover:bg-red-600 text-white"
                     onClick={() => {
                       if (dialog.itemId) {
-                        onDeleteProject?.(dialog.itemId);
+                        safeDeleteProject(dialog.itemId);
                         toast({
                           title: "Project deleted",
                           description: `"${dialog.itemTitle}" was removed`,

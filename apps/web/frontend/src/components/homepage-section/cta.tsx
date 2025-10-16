@@ -1,7 +1,9 @@
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
+import { useNavigate } from "react-router-dom";
 
 export const CTAContainerSection = () => {
   const { isVisible, ref } = useIntersectionObserver({ threshold: 0.1 });
+  const navigate = useNavigate();
 
   return (
     <section className="py-36 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
@@ -31,8 +33,8 @@ export const CTAContainerSection = () => {
             </p>
 
             <div className="mt-16 flex items-center gap-4">
-              <button className="button-outline px-6 md:px-7 py-3 rounded-xl inline-flex items-center justify-center text-sm md:text-base group">
-                <span>Try for free</span>
+              <button onClick={() => navigate('/waitlist')} className="button-outline px-6 md:px-7 py-3 rounded-xl inline-flex items-center justify-center text-sm md:text-base group">
+                <span>Join waitlist</span>
                 <span aria-hidden className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover:w-4 group-hover:opacity-100 group-hover:ml-2">→</span>
               </button>
             </div>

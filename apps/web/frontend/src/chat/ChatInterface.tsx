@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import LoadingPanel from "@/chat/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, Link, Mic, MicOff, FileText } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -326,10 +326,13 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
                       aria-label="Open dashboard"
                       onClick={() => { onSwitchToDashboard && onSwitchToDashboard(); }}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(); } }}
-                      className="w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none"
+                      className="w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between"
                     >
-                      <div className="text-sm font-medium text-white">Dashboard</div>
-                      <div className="text-xs text-white/70 mt-0.5">Source: {message.dashboardCard.sourceFileName}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-white truncate">Dashboard</div>
+                        <div className="text-xs text-white/70 mt-0.5 truncate">Source: {message.dashboardCard.sourceFileName}</div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-white/60 flex-shrink-0 ml-2" />
                     </div>
                   ) : (
                     <div

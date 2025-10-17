@@ -17,7 +17,8 @@ const generateAIResponse = async (
   userPrompt: string,
   processedData: any,
   messagesSnapshot: Message[],
-  updateMessages: (updater: (prev: Message[]) => Message[]) => void
+  updateMessages: (updater: (prev: Message[]) => Message[]) => void,
+  uploadedFileName?: string
 ) => {
   console.log('generateAIResponse called with:', { userPrompt, hasProcessedData: !!processedData, messageCount: messagesSnapshot.length });
   
@@ -52,7 +53,7 @@ const generateAIResponse = async (
       id: (Date.now() + 2).toString(),
       role: "assistant",
       content: "",
-      dashboardCard: { sourceFileName: "dashboard" },
+      dashboardCard: { sourceFileName: uploadedFileName || "dashboard" },
       timestamp: new Date(),
     };
     
@@ -276,7 +277,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Get updated messages after adding user message
         const updatedMessages = get().messages;
         console.log('No file - Updated messages before AI call:', updatedMessages.map(m => ({ id: m.id, role: m.role, content: m.content.substring(0, 50) })));
-        await generateAIResponse(content, null, updatedMessages, updateMessages);
+        await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
       } finally {
         setIsTyping(false);
       }
@@ -368,14 +369,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           ]));
         } else {
-          await generateAIResponse(content, null, updatedMessages, updateMessages);
+          await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
         }
       } else {
-        await generateAIResponse(content, null, updatedMessages, updateMessages);
+        await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
       }
     } catch (error) {
       console.error('Processing error:', error);
-      await generateAIResponse(content, null, updatedMessages, updateMessages);
+      await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
     } finally {
       setIsTyping(false);
       setIsProcessing(false);

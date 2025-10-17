@@ -13,6 +13,7 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const [processedData, setProcessedData] = useState<any>(null);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'dashboard'>('chat');
   const uploadedFile = useChatStore((s) => s.uploadedFile);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
@@ -49,23 +50,42 @@ export default function ProjectPage() {
           </div>
         </div>
       </div>
+      {/* Top Tabs (sm only) */}
+      <div className="lg:hidden px-4 pb-2">
+        <div className="w-full rounded-xl border border-white/15 bg-background/70 backdrop-blur p-1 flex">
+          <button
+            onClick={() => setActiveTab('chat')}
+            aria-pressed={activeTab === 'chat'}
+            className={`flex-1 py-0 rounded-lg text-sm transition-all ${activeTab === 'chat' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+          >
+            Chat
+          </button>
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            aria-pressed={activeTab === 'dashboard'}
+            className={`flex-1 py-0 rounded-lg text-sm transition-all ${activeTab === 'dashboard' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+          >
+            Dashboard
+          </button>
+        </div>
+      </div>
 
       {/* Content */}
         {/* chatinterface */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 h-[calc(100vh-4rem)]">
-            <div className="lg:col-span-1">
-            <div className=" bg-muted h-[calc(100vh-4rem)] min-h-0">
+        <div className="grid grid-cols-1 lg:grid-cols-4 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
+            <div className={`${activeTab === 'chat' ? 'block' : 'hidden'} lg:col-span-1 lg:block`}>
+            <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
                 <div>
-                <div className="px-1 h-[calc(100vh-4rem)]" data-chat-root>
-                    <ChatInterface />
+                <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
+                    <ChatInterface onSwitchToDashboard={() => setActiveTab('dashboard')} />
                 </div>
                 </div>
             </div>
         </div>
       
         {/* blank placeholder */}
-        <div className="lg:col-span-3">
-           <div className="m-2 ml-0 mt-0 rounded-lg border border-white/20 h-[calc(100vh-4rem)]">
+        <div className={`${activeTab === 'dashboard' ? 'block' : 'hidden'} lg:col-span-3 lg:block`}>
+           <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]">
             {!hasPolledStatus ? (
               <BlankState
                 subtexts={[

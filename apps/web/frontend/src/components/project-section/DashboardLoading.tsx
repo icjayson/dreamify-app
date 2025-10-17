@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Database, Github, Globe, MessageCircle } from "lucide-react";
 
 interface DashboardLoadingProps {
   className?: string;
@@ -10,40 +10,64 @@ interface DashboardLoadingProps {
   durationSec?: number;
 }
 
-export default function DashboardLoading({ className = "", style = {} as React.CSSProperties, title = "Changing Theme", description = "Please wait while we update your dashboard...", durationSec = 10 }: DashboardLoadingProps) {
+export default function DashboardLoading({ className = "", style = {} as React.CSSProperties, title = "Preparing dashboard", description = "Please wait while we update your dashboard...", durationSec = 10 }: DashboardLoadingProps) {
+  const features = [
+    { text: "Connect data sources", icon: Database, faded: true },
+    { text: "AI analyzes your data", icon: MessageCircle, faded: false },
+    { text: "Generate beautiful dashboards", icon: Globe, faded: false },
+    { text: "Deploy instantly", icon: Github, faded: false }
+  ];
+
+  const [currentFeature, setCurrentFeature] = React.useState(features[0]);
+  
+  React.useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const randomIndex = Math.floor(Math.random() * features.length);
+      setCurrentFeature(features[randomIndex]);
+    }, 1500);
+    return () => window.clearInterval(intervalId);
+  }, [features]);
+
   return (
     <div className={`flex items-center justify-center h-full ${className}`} style={style}>
       <motion.div 
-        className="flex flex-col items-center gap-4 p-8 bg-background rounded-lg border border-border shadow-sm"
+        className="flex flex-col items-center gap-4 p-8 shadow-sm w-80"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.3 }}
       >
+        {/* Logo */}
         <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
         >
-          <Loader2 className="h-8 w-8 text-primary" />
+          <img 
+            src="/logo-watermark.png" 
+            alt="Logo" 
+            className="w-16 h-16 object-contain"
+          />
         </motion.div>
-        
+
+        {/* Title (no animation) */}
         <div className="text-center">
           <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
-        
-        <motion.div 
-          className="w-48 h-1 bg-muted rounded-full overflow-hidden"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-        >
-          <motion.div
-            className="h-full bg-primary rounded-full"
-            initial={{ width: "0%" }}
-            animate={{ width: "100%" }}
-            transition={{ duration: durationSec, ease: "linear" }}
-          />
-        </motion.div>
+
+         {/* Random feature display */}
+         <div className="w-full mt-2">
+           <motion.div
+             key={currentFeature.text}
+             initial={{ opacity: 0, y: 8 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ duration: 0.3 }}
+             className="flex items-center justify-center gap-3 px-3 py-2 w-full text-center"
+           >
+             <currentFeature.icon className="w-4 h-4 text-primary flex-shrink-0" />
+             <span className="text-sm text-foreground truncate">{currentFeature.text}</span>
+           </motion.div>
+         </div>
       </motion.div>
     </div>
   );

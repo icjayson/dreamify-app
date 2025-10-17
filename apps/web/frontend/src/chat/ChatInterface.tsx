@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import LoadingPanel from "@/chat/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, Link, Mic, MicOff, FileText } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
@@ -59,9 +58,10 @@ const RollingText = () => {
 
 interface ChatInterfaceProps {
   onProcessedDataChange?: (data: any) => void;
+  onSwitchToDashboard?: () => void;
 }
 
-const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
+const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInterfaceProps) => {
   // Zustand stores
   const {
     inputValue,
@@ -213,39 +213,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
   };
 
 
-  const getContextualResponse = (input: string): string => {
-    const lowerInput = input.toLowerCase();
-    
-    // Data upload responses
-    if (lowerInput.includes('upload') || lowerInput.includes('data') || lowerInput.includes('csv')) {
-      return "Great! I can help you upload your data. Please drag your CSV, Excel, or JSON file here, or click the upload button. I support files up to 100MB and can automatically detect your data structure.";
-    }
-    
-    // Revenue/MRR requests
-    if (lowerInput.includes('revenue') || lowerInput.includes('mrr') || lowerInput.includes('sales')) {
-      return "Perfect! I'll create a stunning revenue dashboard with animated line charts showing your growth trends. I can include MRR growth rates, cohort analysis, and forecasting. Should I also add conversion funnels?";
-    }
-    
-    // Dashboard creation
-    if (lowerInput.includes('dashboard') || lowerInput.includes('chart') || lowerInput.includes('visualiz')) {
-      return "I'll build your interactive dashboard with smooth animations! I can create line charts, bar charts, funnels, and geographic visualizations. What specific metrics would you like to focus on first?";
-    }
-    
-    // Animation/motion requests
-    if (lowerInput.includes('animation') || lowerInput.includes('motion') || lowerInput.includes('smooth')) {
-      return "Excellent! I'll add cinematic animations with staggered entrance effects, hover interactions, and smooth transitions. Your dashboard will have that premium feel with 60fps performance.";
-    }
-    
-    // General responses
-    const generalResponses = [
-      "I can see you want to visualize your data beautifully! Let me create an interactive dashboard with motion effects. What type of data are you working with?",
-      "Perfect! I'll help you build a stunning analytics dashboard. I can handle revenue metrics, user engagement, conversion funnels, and more. What's your primary use case?",
-      "Great question! I specialize in creating motion-rich dashboards that tell compelling data stories. Should I start with your key performance indicators?",
-      "I'll transform your raw data into beautiful, animated visualizations. Do you have existing data to upload, or should I create a demo with sample metrics?"
-    ];
-    
-    return generalResponses[Math.floor(Math.random() * generalResponses.length)];
-  };
+
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -351,10 +319,24 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
                       </span>
                     </div>
                   )}
-                  <div
-                    className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
-                    dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
-                  />
+                  {message.role === 'assistant' && message.dashboardCard ? (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Open dashboard"
+                      onClick={() => { onSwitchToDashboard && onSwitchToDashboard(); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(); } }}
+                      className="w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none"
+                    >
+                      <div className="text-sm font-medium text-white">Dashboard</div>
+                      <div className="text-xs text-white/70 mt-0.5">Source: {message.dashboardCard.sourceFileName}</div>
+                    </div>
+                  ) : (
+                    <div
+                      className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
+                      dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
+                    />
+                  )}
                   <span className="text-xs text-muted-foreground mt-1 block">
                     {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
@@ -386,15 +368,14 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
       {messages.length <= 1 && (
         <div className="mt-auto">
           <p className="text-xs mx-2 text-muted-foreground mb-2">Quick starts:</p>
-          <div className="flex flex-wrap gap-2 mx-2">
+          <div className="flex flex-wrap w-full items-start gap-2 mx-2 pr-3">
             {suggestedPrompts.slice(0, 4).map((prompt, index) => (
               <button
                 key={index}
                 onClick={() => setInputValue(prompt.text)}
-                className="px-2 py-1 text-xs text-white/30 border border-white/10 rounded-full hover:bg-white/10 transition-all duration-200 flex items-center gap-1"
+                className="inline-flex self-start px-2 py-1 text-xs text-white/30 border border-white/10 rounded-xl hover:bg-white/10 transition-all duration-200 text-left whitespace-normal break-words leading-snug overflow-hidden box-border max-w-full"
               >
-                <prompt.icon className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{prompt.text}</span>
+                <span className="block min-w-0 break-words">{prompt.text}</span>
               </button>
             ))}
           </div>

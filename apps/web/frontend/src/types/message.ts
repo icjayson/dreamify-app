@@ -8,4 +8,7 @@ export interface Message {
     name: string;
     mime?: string;
   };
+  dashboardCard?: {
+    sourceFileName: string;
+  };
 }

@@ -23,6 +23,33 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
   const originalFileBlob = useChatStore(s => s.originalFileBlob);
   const originalFileName = useChatStore(s => s.originalFileName);
 
+  // Detect desktop screens so we only mount one container: Sheet (mobile) or Dialog (desktop)
+  const [isDesktop, setIsDesktop] = useState<boolean>(false);
+  useEffect(() => {
+    const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 640px)') : null;
+    const update = () => setIsDesktop(!!mq && mq.matches);
+    update();
+    if (mq) {
+      try {
+        mq.addEventListener('change', update);
+      } catch {
+        // Safari fallback
+        // @ts-ignore
+        mq.addListener(update);
+      }
+    }
+    return () => {
+      if (mq) {
+        try {
+          mq.removeEventListener('change', update);
+        } catch {
+          // @ts-ignore
+          mq.removeListener(update);
+        }
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     setActiveTab('share');
@@ -169,30 +196,28 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
 
   return (
     <>
-      {/* Mobile: bottom sheet (sm:hidden) */}
-      {open && (
-        <div className="sm:hidden">
-          <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="bottom" className="h-[80vh] w-full bg-muted border-t border-white/10 rounded-t-2xl overflow-hidden p-0">
-              {/* Drag handle */}
-              <div className="w-full flex justify-center pt-2 pb-1 select-none">
-                <div className="h-1.5 w-12 rounded-full bg-white/20" />
+      {/* Mobile: bottom sheet - ONLY mounted on screens < sm */}
+      {open && !isDesktop && (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+          <SheetContent side="bottom" className="h-[80vh] w-full bg-muted border-t border-white/10 rounded-t-2xl overflow-hidden p-0">
+            {/* Drag handle */}
+            <div className="w-full flex justify-center pt-2 pb-1 select-none">
+              <div className="h-1.5 w-12 rounded-full bg-white/20" />
+            </div>
+            {/* Panel content */}
+            <div className="relative z-10 w-full h-[calc(80vh-20px)] overflow-hidden">
+              <div className="relative w-full h-full bg-muted overflow-hidden">
+                {InnerContent}
               </div>
-              {/* Panel content */}
-              <div className="relative z-10 w-full h-[calc(80vh-20px)] overflow-hidden">
-                <div className="relative w-full h-full bg-muted overflow-hidden">
-                  {InnerContent}
-                </div>
-              </div>
-            </SheetContent>
-          </Sheet>
-        </div>
+            </div>
+          </SheetContent>
+        </Sheet>
       )}
 
-      {/* Desktop/Tablet: centered dialog (hidden on mobile) */}
-      {open && (
-        <div className="hidden sm:flex fixed inset-0 z-50 items-center justify-center">
-          <div className="fixed inset-0 bg-black/60 hidden sm:block" onClick={close} />
+      {/* Desktop/Tablet: centered dialog - ONLY mounted on screens >= sm */}
+      {open && isDesktop && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/60" onClick={close} />
           <div className="relative w-full max-w-lg mx-4 md:mx-0 bg-muted rounded-2xl border border-white/10 shadow-xl overflow-hidden">
             {InnerContent}
           </div>

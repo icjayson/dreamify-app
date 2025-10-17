@@ -12,7 +12,7 @@ const detectThemeChange = (message: string): 'light' | 'dark' | null => {
   return 'dark';
 };
 
-// Helper function for AI response generation using functional updates
+// Helper function for AI response generation - simplified without Ollama
 const generateAIResponse = async (
   userPrompt: string,
   processedData: any,
@@ -22,7 +22,6 @@ const generateAIResponse = async (
   console.log('generateAIResponse called with:', { userPrompt, hasProcessedData: !!processedData, messageCount: messagesSnapshot.length });
   
   // Check if there's already an assistant message for this specific user prompt to avoid duplicates
-  // Only check the very last message to avoid blocking responses after initial message
   const lastMessage = messagesSnapshot[messagesSnapshot.length - 1];
   const hasRecentAssistantMessage = lastMessage && lastMessage.role === 'assistant' && lastMessage.content.trim() !== '';
   if (hasRecentAssistantMessage) {
@@ -32,91 +31,37 @@ const generateAIResponse = async (
   
   console.log('Proceeding with AI response generation...');
 
-  // Stream response from local Ollama (proxied via /ollama)
+  // Always return success message
+  const getContextualResponse = (input: string): string => {
+    return "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.";
+  };
+
   try {
-    const controller = new AbortController();
-    const signal = controller.signal;
+    const response = getContextualResponse(userPrompt);
     
-    // Build system messages based on processed data
-    const systemMessages = [] as Array<{ role: string; content: string }>;
-    if (processedData) {
-      systemMessages.push({
-        role: "system", 
-        content: `You have access to processed data analysis. Use this data to answer the user's question about their uploaded file.\n\nProcessed Data:\n${JSON.stringify(processedData, null, 2)}`
-      });
-    }
-    
-    const response = await fetch("/ollama/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "qwen2.5-coder:7b",
-        stream: true,
-        messages: [
-          ...systemMessages,
-          ...messagesSnapshot.map((m) => ({ role: m.role, content: m.content })),
-          { role: "user", content: userPrompt }
-        ],
-      }),
-      signal,
-    });
-
-    if (!response.body) {
-      throw new Error("No response body from Ollama");
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
-    let assistantId = (Date.now() + 1).toString();
-    let assistantContent = "";
-
-    // Append placeholder assistant message once using functional update
-    updateMessages((prev) => ([
-      ...prev,
-      {
-        id: assistantId,
-        role: "assistant" as const,
-        content: "",
-        timestamp: new Date(),
-      },
-    ]));
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // Parse server-sent lines (each line is a JSON object)
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line);
-          if (event.message && event.message.content) {
-            assistantContent += event.message.content;
-            // Update the assistant placeholder progressively using functional update
-            updateMessages((prev) => prev.map((m) => (
-              m.id === assistantId
-                ? { ...m, content: assistantContent, timestamp: new Date() }
-                : m
-            )));
-          }
-          if (event.done) {
-            break;
-          }
-        } catch (_e) {
-          // Ignore malformed lines
-        }
-      }
-    }
-  } catch (_error) {
+    // Add success message
     const aiMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content: response,
+      timestamp: new Date(),
+    };
+    
+    // Add dashboard card
+    const dashboardCardMessage: Message = {
       id: (Date.now() + 2).toString(),
       role: "assistant",
-      content: "There was an error contacting the local model. Ensure Ollama is running on 127.0.0.1:11434 and the model qwen2.5-coder:7b is pulled (ollama pull qwen2.5-coder:7b).",
+      content: "",
+      dashboardCard: { sourceFileName: "dashboard" },
+      timestamp: new Date(),
+    };
+    
+    updateMessages((prev) => [...prev, aiMessage, dashboardCardMessage]);
+  } catch (_error) {
+    const aiMessage: Message = {
+      id: (Date.now() + 3).toString(),
+      role: "assistant",
+      content: "I'm here to help you create beautiful dashboards! Please let me know what you'd like to visualize.",
       timestamp: new Date(),
     };
     updateMessages((prev) => [...prev, aiMessage]);
@@ -405,27 +350,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }, 10000);
           }
           
-          // Check if this is the first user prompt with a file (fixed response logic)
-          const hasUserPrompt = updatedMessages.some((m) => m.role === 'user');
-          const hasFixedReply = updatedMessages.some((m) => m.id === '2');
-          
-          if (hasUserPrompt && !hasFixedReply) {
-            // First user prompt with file - add fixed response
-            updateMessages((prev) => ([
-              ...prev,
-              {
-                id: '2',
-                role: 'assistant',
-                content: "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.",
-                timestamp: new Date(),
-              }
-            ]));
-          } else {
-            // Subsequent turns - generate AI response
-            console.log('Subsequent turn - generating AI response');
-            console.log('Updated messages before AI call:', updatedMessages.map(m => ({ id: m.id, role: m.role, content: m.content.substring(0, 50) })));
-            await generateAIResponse(content, finalResult.data, updatedMessages, updateMessages);
-          }
+          // Always add success message and dashboard card when dashboard is completed
+          updateMessages((prev) => ([
+            ...prev,
+            {
+              id: '2',
+              role: 'assistant',
+              content: "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.",
+              timestamp: new Date(),
+            },
+            {
+              id: (Date.now() + 3).toString(),
+              role: 'assistant',
+              content: "",
+              dashboardCard: { sourceFileName: uploadedFile.filename },
+              timestamp: new Date(),
+            }
+          ]));
         } else {
           await generateAIResponse(content, null, updatedMessages, updateMessages);
         }

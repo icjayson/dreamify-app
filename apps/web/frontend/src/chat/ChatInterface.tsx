@@ -1,4 +1,5 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
+import LoadingPanel from "@/chat/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, Link, Mic, MicOff, FileText } from "lucide-react";
@@ -11,6 +12,51 @@ import { useToast } from "@/hooks/use-toast";
 import { useChatStore } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 
+// Rolling multiline log for loading animation
+const RollingText = () => {
+  const actions = [
+    "Thinking...",
+    "Analyzing data...",
+    "Reading CSV...",
+    "Detecting patterns...",
+    "Calculating metrics...",
+    "Processing insights...",
+    "Designing charts...",
+    "Optimizing layout...",
+    "Adding animations...",
+    "Structuring components...",
+    "Applying themes...",
+    "Testing responsiveness...",
+    "Building dashboard...",
+    "Finalizing...",
+    "Almost ready..."
+  ];
+  const [lines, setLines] = useState<string[]>([]);
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLines((prev) => {
+        const next = [...prev, actions[idx]];
+        // keep last 8 lines
+        return next.slice(-8);
+      });
+      setIdx((p) => (p + 1) % actions.length);
+    }, 2400);
+    return () => clearInterval(interval);
+  }, [actions, idx]);
+
+  return (
+    <div className="space-y-1">
+      {lines.map((line, i) => (
+        <div key={`${i}-${line}`} className={`text-sm ${i === lines.length - 1 ? 'active-breathing' : ''} animate-fade-in-300`}>
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 interface ChatInterfaceProps {
   onProcessedDataChange?: (data: any) => void;
 }
@@ -20,6 +66,7 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
   const {
     inputValue,
     isTyping,
+    isProcessing,
     messages,
     uploadedFile,
     dropdownOpen,
@@ -265,75 +312,72 @@ const ChatInterface = ({ onProcessedDataChange }: ChatInterfaceProps) => {
 
       {/* Messages Area */}
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`chat-enter flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div className={`max-w-[90%] flex gap-2 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-              <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${
-                message.role === "user" 
-                  ? "bg-black" 
-                  : "bg-transparent"
-              }`}>
-                {message.role === "user" ? (
-                  <User className="w-3 h-3 text-white" />
-                ) : (
-                  <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
-                )}
-              </div>
-              
-              <div className={`rounded-xl text-sm whitespace-pre-wrap break-words ${
-                message.role === "user" 
-                  ? "bg-black p-3" 
-                  : "bg-transparent p-0"
-              }`}>
-                {message.attachment && message.attachment.kind === "csv" && (
-                  <div className="mb-2">
-                    <span
-                      className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
-                      title={message.attachment.name}
-                      aria-label="Attached CSV file"
-                    >
-                      <span className="inline-flex items-center gap-1 text-white/70">
-                        <FileText className="w-3 h-3 text-white/80" />
-                        Attached file
-                      </span>
-                      <span className="truncate w-full">{message.attachment.name}</span>
-                    </span>
-                  </div>
-                )}
-                <div
-                  className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
-                  dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
-                />
-                <span className="text-xs text-muted-foreground mt-1 block">
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {isTyping && (
-          <div className="flex justify-start chat-enter">
-            <div className="flex gap-2">
-              <div className="w-6 h-6 rounded-md bg-accent/20 flex items-center justify-center">
-                <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
-              </div>
-              <Card className="p-3 glass-panel bg-card/80 border-border/50">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce"></div>
-                    <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
-                  <span className="text-sm text-accent">Morpheus is analyzing...</span>
+        {messages.map((message, index) => (
+          <>
+            <div
+              key={message.id}
+              className={`chat-enter flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div className={`max-w-[90%] flex gap-2 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${
+                  message.role === "user" 
+                    ? "bg-black" 
+                    : "bg-transparent"
+                }`}>
+                  {message.role === "user" ? (
+                    <User className="w-3 h-3 text-white" />
+                  ) : (
+                    <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
+                  )}
                 </div>
-              </Card>
+                
+                <div className={`rounded-xl text-sm whitespace-pre-wrap break-words ${
+                  message.role === "user" 
+                    ? "bg-black p-3" 
+                    : "bg-transparent p-0"
+                }`}>
+                  {message.attachment && message.attachment.kind === "csv" && (
+                    <div className="mb-2">
+                      <span
+                        className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
+                        title={message.attachment.name}
+                        aria-label="Attached CSV file"
+                      >
+                        <span className="inline-flex items-center gap-1 text-white/70">
+                          <FileText className="w-3 h-3 text-white/80" />
+                          Attached file
+                        </span>
+                        <span className="truncate w-full">{message.attachment.name}</span>
+                      </span>
+                    </div>
+                  )}
+                  <div
+                    className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
+                    dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
+                  />
+                  <span className="text-xs text-muted-foreground mt-1 block">
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+            {/* Inline Loading Panel under the last user message that started analysis */}
+            {message.role === 'user'
+              && index === messages.length - 1
+              && uploadedFile
+              && (isProcessing || uploadedFile.status === 'processing') && (
+                <div className={`flex justify-start mt-1`}>
+                  <div className={`ml-8`}>
+                    <LoadingPanel
+                      isActive={true}
+                      stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
+                      mode={'dashboard'}
+                    />
+                  </div>
+                </div>
+            )}
+          </>
+        ))}
 
         <div ref={messagesEndRef} />
       </div>

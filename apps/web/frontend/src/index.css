@@ -269,9 +269,85 @@
     }
   }
 
+  /* Breathing glow animation for loading dots */
+  @keyframes breathing-glow {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+    }
+    50% {
+      transform: scale(1.1);
+      opacity: 0.7;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+    }
+  }
+
+  /* Text breathing glow animation (soft, uses text-shadow to avoid hard boxes) */
+  @keyframes text-breathing-glow {
+    0%, 100% {
+      transform: scale(1.0);
+      opacity: 1;
+      text-shadow: 0 0 4px rgba(255, 255, 255, 0.15), 0 0 10px rgba(255, 255, 255, 0.12);
+    }
+    50% {
+      transform: scale(1.01);
+      opacity: 0.95;
+      text-shadow: 0 0 6px rgba(255, 255, 255, 0.25), 0 0 14px rgba(255, 255, 255, 0.20);
+    }
+  }
+
+  /* Smooth fade-in for appended lines */
+  @keyframes fade-in-300 {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in-300 { animation: fade-in-300 300ms ease forwards; }
+
   /* Glow effect */
   .glow-primary {
     box-shadow: 0 0 30px hsl(var(--primary) / 0.3);
+  }
+
+  /* ================= Loading Panel Enhancements ================ */
+  @keyframes gradient-sweep {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+
+  .text-gradient-sweep {
+    background: linear-gradient(90deg,
+      rgba(255,255,255,0.95),
+      rgba(134,222,255,0.9),
+      rgba(195,153,255,0.9),
+      rgba(255,255,255,0.95)
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradient-sweep 3.6s ease-in-out infinite;
+  }
+
+  @keyframes caret-blink {
+    50% { opacity: 0; }
+  }
+  .caret::after {
+    content: "";
+    display: inline-block;
+    width: 1px;
+    height: 1em;
+    background: currentColor;
+    margin-left: 4px;
+    opacity: .6;
+    animation: caret-blink 1s steps(2, jump-none) infinite;
+  }
+
+  .active-breathing { animation: text-breathing-glow 2s ease-in-out infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .text-gradient-sweep { animation: none; }
+    .active-breathing { animation: none; }
   }
 
   /* New scroll-triggered animations */

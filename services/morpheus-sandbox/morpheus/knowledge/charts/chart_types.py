@@ -219,6 +219,32 @@ CHART_TYPES = {
     },
 }
 
+# Layout defaults per visualization kind for LLM output generation.
+# Intentionally only specify minimum height floors; minW remains flexible.
+# These values are in grid units assuming a 24-column grid system.
+LAYOUT_DEFAULTS: Dict[str, Dict[str, int]] = {
+    # Charts with heavier legends/axes or radial layouts benefit from taller floors
+    "line": {"minH": 12},
+    "area": {"minH": 12},
+    "pie": {"minH": 12},
+    "donut": {"minH": 12},
+    "radial_bar": {"minH": 12},
+    "treemap": {"minH": 12},
+    "sankey": {"minH": 12},
+
+    # Other charts render well at a 10-row minimum
+    "bar": {"minH": 10},
+    "scatter": {"minH": 10},
+    "composed": {"minH": 10},
+    "radar": {"minH": 10},
+    "funnel": {"minH": 10},
+    "geographic": {"minH": 10},
+
+    # Non-chart components for reference
+    "table": {"minH": 10},
+    "metric": {"minH": 4},
+}
+
 def get_chart_types() -> Dict[str, Any]:
     """Get all available chart types with their metadata."""
     return CHART_TYPES
@@ -230,3 +256,21 @@ def is_chart_type_supported(chart_type: str) -> bool:
 def get_chart_metadata(chart_type: str) -> Optional[Dict[str, Any]]:
     """Get metadata for a specific chart type."""
     return CHART_TYPES.get(chart_type)
+
+
+def get_layout_defaults(chart_type: str) -> Dict[str, int]:
+    """Return layout default constraints for a chart/component type.
+
+    Currently exposes only minimum height (minH). If a type is unknown,
+    returns a safe default of {"minH": 10} suitable for most charts.
+    """
+    return LAYOUT_DEFAULTS.get(chart_type, {"minH": 10})
+
+
+def get_min_height(chart_type: str) -> int:
+    """Convenience helper to fetch the minH floor for a given type."""
+    defaults = get_layout_defaults(chart_type)
+    try:
+        return int(defaults.get("minH", 10))
+    except Exception:
+        return 10

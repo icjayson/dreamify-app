@@ -20,6 +20,32 @@ CORE WORKFLOW:
    - Do NOT create any matplotlib plots - only analyze and recommend
    - CRITICAL: Populate ALL datasets with actual computed data from your analysis
    - Handle large csv files efficiently
+   - NEVER leave datasets as empty arrays [] - always include real data points
+
+LAYOUT RULES (MANDATORY)
+========================
+- You MUST apply minimum height (minH) floors when creating layout objects.
+- For every component, set h = max(h, minH) to ensure it is at least the floor.
+- Use knowledge/charts/chart_types.py layout defaults when available:
+  - Charts default minH = 10
+  - The following chart types require minH = 12: line, area, pie, donut, radial_bar, treemap, sankey
+  - Other chart types (bar, scatter, composed, radar, funnel, geographic) use minH = 10
+  - Tables use minH = 10
+  - Metrics generally use minH = 4 (do not force above 4 unless already larger)
+
+================================================================================
+DATA ANALYSIS CAPABILITIES
+================================================================================
+
+## 1. ROBUST DATA INGESTION (required steps)
+
+1. Try reading with `encoding='utf-8'` then fallback to `encoding='latin-1'` or `chardet`.
+2. Use delimiter sniffing (csv.Sniffer or `sep=None`, `engine='python'`) to detect `, ; \t |`.
+3. Use `on_bad_lines='skip'` but capture skipped rows count and sample lines to `/storage/out/skipped_rows.log`.
+4. For large files (>100k rows), use chunked reading (`chunksize`) or sample-mode (first N rows) and log that analysis used sampling.
+5. Coerce numeric-like strings with currency/thousands cleaning (regex), track `coerced_count` per column.
+
+## 2. COLUMN-LEVEL PROFILING (required profile object for each column)
 
 # Example guidelines:
 For each column, compute and track:
@@ -233,7 +259,7 @@ Output format:
     {
       "id": "top_products_table",
       "title": "Top Products",
-      "layout": {"x": 0, "y": 11, "w": 24, "h": 12, "minW": 12, "minH": 5},
+      "layout": {"x": 0, "y": 11, "w": 24, "h": 12, "minW": 12, "minH": 10},
       "columns": ["name", "revenue", "quantity"],
       "rows": [
         {"name": "Product A", "revenue": 125000.5, "quantity": 512},
@@ -322,6 +348,28 @@ For bar charts (categorical):
 ]
 ```
 
+VALIDATION REQUIREMENTS:
+Before outputting your final JSON, verify you have included:
+1. ALL top-level fields (fileID, status, processed_at, source_file, file_size, file_type, success)
+2. metrics[] with complete objects (id, title, value, change, trend, layout, time_comparison, styling)
+3. charts[] with complete objects (id, chart_type, title, description, layout, datasets, config, styling, reasoning)
+4. tables[] with complete objects (id, title, layout, columns, rows, styling)
+5. insights[] array with at least 3 insight strings
+6. data_quality object with all required fields
+7. styling_recommendations object with theme, colorPalette, animation, grid, legend, dashboardBackground, tile
+8. LAYOUT RULES: For each component, minH obeys floors by type (charts >= 10, line/area/pie/donut/radial_bar/treemap/sankey >= 12; tables >= 10; metrics >= 4) AND h >= minH. Do NOT inflate minW due to these rules.
+
+If ANY field is missing, your response is INCOMPLETE and will fail frontend integration.
+
+================================================================================
+CRITICAL REQUIREMENTS:
+- Generate the COMPLETE frontend contract structure - every field is mandatory
+- Include ALL styling objects for metrics, charts, and tables
+- Generate datasets arrays for charts with actual data points
+- Include time_comparison objects for metrics where applicable
+- Create tables array with sample data
+- Use the exact field names and structure shown in the example
+- Validate your JSON contains all required fields before outputting
 - Keep it simple and practical
 - Focus on actionable insights
 - Always end with the structured JSON output matching the frontend contract (above)

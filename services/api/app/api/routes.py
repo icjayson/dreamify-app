@@ -7,6 +7,7 @@ from app.core.analytics import AnalyticsService
 from app.utils.file_handler import FileHandler
 
 api_bp = Blueprint('api', __name__)
+print("DEBUG: API blueprint created")
 
 # Import and register dashboard routes
 try:
@@ -24,13 +25,30 @@ except ImportError as e:
     print(f"Warning: Could not import analyze routes: {e}")
     # Continue without analyze routes for now
 
-# Import and register user routes
+# Import and register stripe routes
 try:
-    from app.api.routes.user_routes import user_bp
-    api_bp.register_blueprint(user_bp)
+    print("DEBUG: Attempting to import Stripe routes...")
+    from app.api.routes.stripe import stripe_bp
+    print("DEBUG: Stripe routes imported successfully")
+    print(f"DEBUG: Stripe blueprint name: {stripe_bp.name}")
+    print(f"DEBUG: Stripe blueprint url_prefix: {stripe_bp.url_prefix}")
+    
+    print("DEBUG: Registering Stripe blueprint with API blueprint...")
+    api_bp.register_blueprint(stripe_bp, url_prefix='/stripe')
+    print("DEBUG: Stripe blueprint registered successfully with prefix /stripe")
+    
+    # Debug: List all routes in the API blueprint
+    print("DEBUG: API blueprint routes after Stripe registration:")
+    for rule in api_bp.deferred_functions:
+        print(f"  - {rule}")
+        
 except ImportError as e:
-    print(f"Warning: Could not import user routes: {e}")
-    # Continue without user routes for now
+    print(f"Warning: Could not import stripe routes: {e}")
+    # Continue without stripe routes for now
+except Exception as e:
+    print(f"Error registering Stripe routes: {e}")
+    import traceback
+    traceback.print_exc()
 
 @api_bp.route('/analytics/dashboard', methods=['POST'])
 def create_dashboard():

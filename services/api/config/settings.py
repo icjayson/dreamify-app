@@ -44,9 +44,6 @@ class Settings:
     API_VERSION: str = os.getenv("API_VERSION", "v1")
     API_PREFIX: str = os.getenv("API_PREFIX", "/api")
     
-    # Supabase
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    SERVICE_KEY: str = os.getenv("SERVICE_KEY", "")
     
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

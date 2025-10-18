@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
+import { Elements } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
 import Index from "./pages/Index";
@@ -14,9 +16,14 @@ import WorkspacePage from "./pages/workspace";
 import ProjectPage from "./pages/project";
 import PreviewPage from "./pages/preview.tsx";
 import WaitlistPage from "./pages/Waitlist.tsx";
+import SuccessPage from "./pages/SuccessPage";
+import CancelPage from "./pages/CancelPage";
 import { useChatStore } from "./chat/useChatStore";
 
 const queryClient = new QueryClient();
+
+// Initialize Stripe
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 const AppContent = () => {
   const { messages } = useChatStore();
@@ -51,6 +58,8 @@ const AppContent = () => {
             <PreviewPage />
           </SignedIn>
         } />
+        <Route path="/success" element={<SuccessPage />} />
+        <Route path="/cancel" element={<CancelPage />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -60,11 +69,13 @@ const AppContent = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <AppContent />
-    </TooltipProvider>
+    <Elements stripe={stripePromise}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <AppContent />
+      </TooltipProvider>
+    </Elements>
   </QueryClientProvider>
 );
 

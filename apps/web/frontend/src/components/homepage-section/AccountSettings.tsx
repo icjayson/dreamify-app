@@ -132,7 +132,6 @@ const AccountSettings: React.FC = () => {
       // Sync local inputs with latest values
       setFirstName(updated.firstName || "");
       setLastName(updated.lastName || "");
-      // Note: Supabase mirror will refresh via useUserSync effect listening on Clerk user changes
     } finally {
       setIsSavingProfile(false);
     }

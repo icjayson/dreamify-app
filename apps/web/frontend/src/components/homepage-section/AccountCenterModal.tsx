@@ -3,9 +3,9 @@ import { Star, CreditCard, Bell, LogOut, LogIn, User as UserIcon } from "lucide-
 import { useClerk, useUser, UserProfile } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { dark } from "@clerk/themes";
-import { useUserSync } from "@/hooks/useUserSync";
 import AccountSettings from "@/components/homepage-section/AccountSettings";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useSubscription } from "@/hooks/useSubscription";
 
 type AccountCenterTab = "pricing" | "account" | "billing" | "notifications";
 
@@ -17,8 +17,26 @@ interface AccountCenterModalProps {
 }
 
 const PricingContent: React.FC = () => {
+  const { upgradeToPro, isLoading, error } = useSubscription();
+
+  const handleUpgrade = async (plan: string) => {
+    if (plan === 'pro') {
+      await upgradeToPro();
+    }
+  };
+
+  const handleContactSales = () => {
+    // TODO: Implement contact sales functionality
+    console.log('Contact sales clicked');
+  };
+
   return (
     <div className="w-full">
+      {error && (
+        <div className="px-4 py-3 mb-4 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
+      )}
       <div className="px-2 sm:px-4 pt-8 pb-4 border-b border-border text-center">
         <h2 className="text-2xl md:text-3xl font-semibold text-white">Choose your plan</h2>
         <p className="text-sm text-white/70 mt-2">Start with our free tier and upgrade as you grow to unlock higher limits, better support, and more features.</p>
@@ -49,7 +67,13 @@ const PricingContent: React.FC = () => {
             <li>Remove the Dreamify badge</li>
             <li>User roles & permissions</li>
           </ul>
-          <button className="mt-auto w-full button-gradient rounded-md py-2 text-sm">Upgrade to Pro</button>
+          <button 
+            onClick={() => handleUpgrade('pro')}
+            disabled={isLoading}
+            className="mt-auto w-full button-gradient rounded-md py-2 text-sm disabled:opacity-50"
+          >
+            {isLoading ? 'Processing...' : 'Upgrade to Pro'}
+          </button>
         </div>
         <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/5 to-white/0 p-5 h-full flex flex-col">
           <h3 className="text-lg font-semibold text-white">Enterprise</h3>
@@ -61,7 +85,12 @@ const PricingContent: React.FC = () => {
             <li>Group-based access control</li>
             <li>Custom design systems</li>
           </ul>
-          <button className="mt-auto w-full button-outline rounded-md py-2 text-sm">Contact sales</button>
+          <button 
+            onClick={handleContactSales}
+            className="mt-auto w-full button-outline rounded-md py-2 text-sm"
+          >
+            Contact sales
+          </button>
         </div>
       </div>
     </div>
@@ -82,7 +111,6 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
   const { signOut } = useClerk();
   const navigate = useNavigate();
   const { user, isSignedIn } = useUser();
-  const { supabaseUser } = useUserSync();
 
   const [dragY, setDragY] = useState(0);
   const draggingRef = useRef(false);
@@ -157,9 +185,9 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
   };
 
-  const displayName = supabaseUser?.full_name || user?.fullName || user?.firstName || "User";
-  const email = supabaseUser?.email || user?.primaryEmailAddress?.emailAddress || "user@example.com";
-  const avatarUrl = supabaseUser?.image_url || user?.imageUrl;
+  const displayName = user?.fullName || user?.firstName || "User";
+  const email = user?.primaryEmailAddress?.emailAddress || "user@example.com";
+  const avatarUrl = user?.imageUrl;
 
   const sidebarItems = useMemo(() => {
     const items = [

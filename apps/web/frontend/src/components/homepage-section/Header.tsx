@@ -4,7 +4,6 @@ import { LogIn, User as UserIcon, Star, CreditCard, Bell, ChevronsUpDown, LogOut
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, useUser, useClerk, UserProfile } from "@clerk/clerk-react";
-import { useUserSync } from "@/hooks/useUserSync";
 import { dark } from "@clerk/themes";
 import { cn } from "@/lib/utils";
 import AccountCenterModal from "@/components/homepage-section/AccountCenterModal";
@@ -20,7 +19,6 @@ const Header = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user } = useUser();
   const { signOut } = useClerk();
-  const { supabaseUser, isSyncing } = useUserSync();
   const [showProjectsBtn, setShowProjectsBtn] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -64,9 +62,9 @@ const Header = () => {
     };
   }, [userProfileOpen]);
 
-  const displayName = supabaseUser?.full_name || user?.fullName || user?.firstName || "User";
-  const email = supabaseUser?.email || user?.primaryEmailAddress?.emailAddress || "user@example.com";
-  const avatarUrl = supabaseUser?.image_url || user?.imageUrl;
+  const displayName = user?.fullName || user?.firstName || "User";
+  const email = user?.primaryEmailAddress?.emailAddress || "user@example.com";
+  const avatarUrl = user?.imageUrl;
 
   const toggleUserMenu = () => setUserMenuOpen(prev => !prev);
   const handleManageAccount = () => {

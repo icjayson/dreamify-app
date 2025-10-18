@@ -5,7 +5,6 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbSeparator } from 
 import { Card, CardContent } from "@/components/ui/card";
 import WorkspaceSidebar from "@/components/project-section/WorkspaceSidebar";
 import ProjectCard from "@/components/project-section/ProjectCard";
-import { useUserSync } from "@/hooks/useUserSync";
 
 const HARDCODED_WORKSPACE = {
   orgName: "My Workspace",
@@ -26,13 +25,6 @@ export default function WorkspacePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const navigate = useNavigate();
   
-  // Initialize user sync when workspace loads
-  const { refreshUser, isSyncing } = useUserSync();
-  
-  useEffect(() => {
-    // Trigger user sync when workspace page loads
-    refreshUser();
-  }, [refreshUser]);
 
   return (
     <div className="min-h-screen">

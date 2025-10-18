@@ -44,7 +44,7 @@ export default function ProjectPage() {
             </div>
           </div>
           <div className="flex items-center">
-            <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center">              <span>Publish</span>
+            <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center"><span>Publish</span>
               <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
             </button>
           </div>

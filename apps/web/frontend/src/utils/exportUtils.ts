@@ -1,60 +1,90 @@
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 
-export async function captureDashboardAsPdf(rootEl: HTMLElement, options?: { filename?: string }) {
-  const filename = options?.filename || `dashboard-${new Date().toISOString().slice(0,16).replace(/[:-]/g, '').replace('T','-')}.pdf`;
+// Simple PDF export function that captures the original dashboard directly
+export async function exportDashboardAsPdf() {
+  const dashboardEl = document.getElementById('dashboard-preview-root');
+  if (!dashboardEl) {
+    console.error('Dashboard preview root not found');
+    return;
+  }
 
-  const scale = Math.min(2, window.devicePixelRatio || 1.5);
-  const canvas = await html2canvas(rootEl, { scale, backgroundColor: '#ffffff', useCORS: true, logging: false });
+  console.log('Dashboard element found:', dashboardEl);
+  console.log('Dashboard dimensions:', {
+    width: dashboardEl.scrollWidth,
+    height: dashboardEl.scrollHeight,
+    offsetWidth: dashboardEl.offsetWidth,
+    offsetHeight: dashboardEl.offsetHeight
+  });
 
-  const imgData = canvas.toDataURL('image/png');
-  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  // Wait for any pending renders
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Use html2canvas directly with the original dashboard
+  const html2canvas = (await import('html2canvas')).default;
+  const jsPDF = (await import('jspdf')).default;
+  
+  console.log('Starting html2canvas capture...');
+  
+  const canvas = await html2canvas(dashboardEl, {
+    scale: 1.5,
+    backgroundColor: '#ffffff',
+    useCORS: true,
+    logging: true,
+    allowTaint: true,
+    foreignObjectRendering: true,
+    scrollX: -475,
+    scrollY: -60,
+    width: dashboardEl.scrollWidth,
+    height: dashboardEl.scrollHeight
+  });
+
+  console.log('Canvas created:', {
+    width: canvas.width,
+    height: canvas.height
+  });
+
+  if (canvas.width === 0 || canvas.height === 0) {
+    console.error('Canvas is empty - no content captured');
+    return;
+  }
+
+  // Create PDF
+  const pdf = new jsPDF({ 
+    orientation: 'portrait', 
+    unit: 'mm', 
+  });
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 10; // mm
-  const usableWidth = pageWidth - margin * 2;
+  const margin = 0;
+  const usableWidth = pageWidth - (margin * 2);
+  const usableHeight = pageHeight - (margin * 2);
 
+  // Calculate image dimensions to fit the page
   const imgWidth = usableWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width * 0.264583; // px to mm
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-  let y = margin;
-  let remainingHeight = imgHeight;
+  console.log('PDF dimensions:', {
+    pageWidth,
+    pageHeight,
+    imgWidth,
+    imgHeight
+  });
 
-  const pageImgHeight = pageHeight - margin * 2;
-
-  // If the content fits on one page
-  if (imgHeight <= pageImgHeight) {
-    pdf.addImage(imgData, 'PNG', margin, y, imgWidth, imgHeight, undefined, 'FAST');
+  // If image fits on one page, add it directly
+  if (imgHeight <= usableHeight) {
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth, imgHeight);
   } else {
-    // Slice vertically across pages
-    const viewportHeightPx = Math.round((pageImgHeight / 0.264583) * (canvas.width / imgWidth));
-    let offsetPx = 0;
-    while (remainingHeight > 0) {
-      const sliceCanvas = document.createElement('canvas');
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = Math.min(viewportHeightPx, canvas.height - offsetPx);
-      const ctx = sliceCanvas.getContext('2d');
-      if (!ctx) break;
-      ctx.drawImage(canvas, 0, offsetPx, canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height);
-      const sliceData = sliceCanvas.toDataURL('image/png');
-      const sliceHeightMm = (sliceCanvas.height * imgWidth) / sliceCanvas.width * 0.264583;
-      if (y + sliceHeightMm > pageHeight - margin) {
-        pdf.addPage();
-        y = margin;
-      }
-      pdf.addImage(sliceData, 'PNG', margin, y, imgWidth, sliceHeightMm, undefined, 'FAST');
-      y += sliceHeightMm;
-      offsetPx += sliceCanvas.height;
-      remainingHeight -= sliceHeightMm;
-      if (offsetPx < canvas.height) {
-        pdf.addPage();
-        y = margin;
-      }
-    }
+    // If image is too tall, scale it down to fit
+    const scaledHeight = usableHeight;
+    const scaledWidth = (canvas.width * scaledHeight) / canvas.height;
+    const xOffset = (pageWidth - scaledWidth) / 2;
+    
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', xOffset, margin, scaledWidth, scaledHeight);
   }
 
-  pdf.save(filename);
+  console.log('Saving PDF...');
+  pdf.save(`dashboard-${new Date().toISOString().slice(0,10)}.pdf`);
+  console.log('PDF saved successfully');
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

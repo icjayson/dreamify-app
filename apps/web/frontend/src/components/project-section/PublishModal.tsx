@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Check, Copy, Mail, Globe, Shield, Loader2, Download } from 'lucide-react';
+import { X, Check, Copy, Mail, Globe, Shield, Loader2, Download, SquareArrowOutUpRight, Edit3 } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { captureDashboardAsPdf, downloadBlob } from '@/utils/exportUtils';
+import { exportDashboardAsPdf, downloadBlob } from '@/utils/exportUtils';
 import { useChatStore } from '@/chat/useChatStore';
 
 interface PublishModalProps {
@@ -20,8 +20,11 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
   const [available, setAvailable] = useState<boolean | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invited, setInvited] = useState<string[]>([]);
+  const [isEditingSlug, setIsEditingSlug] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const originalFileBlob = useChatStore(s => s.originalFileBlob);
   const originalFileName = useChatStore(s => s.originalFileName);
+  const uploadedFile = useChatStore(s => s.uploadedFile);
 
   // Detect desktop screens so we only mount one container: Sheet (mobile) or Dialog (desktop)
   const [isDesktop, setIsDesktop] = useState<boolean>(false);
@@ -85,14 +88,40 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
   };
 
   const handleExportPdf = async () => {
-    const el = document.getElementById('dashboard-preview-root');
-    if (!el) return;
-    await captureDashboardAsPdf(el, { filename: `dashboard-${new Date().toISOString().slice(0,10)}.pdf` });
+    setIsExportingPdf(true);
+    
+    try {
+      await exportDashboardAsPdf();
+    } catch (error) {
+      console.error('PDF export failed:', error);
+      // You could add a toast notification here
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const handleExportCsv = () => {
     if (!originalFileBlob || !originalFileName) return;
     downloadBlob(originalFileBlob, originalFileName);
+  };
+
+  const handleOpenPublishedDashboard = () => {
+    try {
+      if (uploadedFile?.processedData) {
+        sessionStorage.setItem('project_preview_data', JSON.stringify(uploadedFile.processedData));
+      }
+    } catch (_e) {
+      // ignore errors
+    }
+    window.open('/workspace/project/preview', '_blank');
+  };
+
+  const handleEditSlug = () => {
+    setIsEditingSlug(true);
+  };
+
+  const handleSaveSlug = () => {
+    setIsEditingSlug(false);
   };
 
   const InnerContent = (
@@ -120,17 +149,51 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
             <div>
               <div className="text-sm font-medium mb-2">Website Address</div>
               <div className="flex items-center gap-2">
-                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-black">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-black group hover:bg-black/80 transition-all duration-200">
                   <Globe className="w-4 h-4"/>
-                  <input
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/-{2,}/g, '-').replace(/^-/,'').replace(/-$/,''))}
-                    placeholder="your-dashboard"
-                    className="bg-transparent outline-none text-sm flex-1"
-                  />
-                  <span className="text-sm text-muted-foreground">.{BASE_DOMAIN}</span>
+                  {isEditingSlug ? (
+                    <input
+                      value={slug}
+                      onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/-{2,}/g, '-').replace(/^-/,'').replace(/-$/,''))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveSlug()}
+                      placeholder="your-dashboard"
+                      className="bg-transparent outline-none text-sm flex-1"
+                      autoFocus
+                    />
+                  ) : (
+                    <button 
+                      onClick={handleOpenPublishedDashboard}
+                      className="text-sm text-white group-hover:underline cursor-pointer flex items-center transition-all duration-200 flex-1"
+                    >
+                      {slug}.{BASE_DOMAIN}
+                    </button>
+                  )}
+                  {!isEditingSlug && (
+                    <button 
+                      onClick={handleOpenPublishedDashboard}
+                      className="text-muted-foreground hover:text-white transition-colors duration-200 ml-auto"
+                    >
+                      <SquareArrowOutUpRight className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                <button onClick={handleCopy} className="button-outline h-9 px-3 flex items-center gap-2 text-sm"><Copy className="w-4 h-4"/>Copy</button>
+                <button 
+                  onClick={isEditingSlug ? handleSaveSlug : handleEditSlug} 
+                  className="button-outline h-9 px-3 flex items-center gap-2 text-sm"
+                >
+                  {isEditingSlug ? (
+                    <>
+                      <Check className="w-4 h-4"/>
+                      Done
+                    </>
+                  ) : (
+                    <>
+                      <Edit3 className="w-4 h-4"/>
+                      Edit
+                    </>
+                  )}
+                </button>
+                <button onClick={handleCopy} className="button-outline h-9 px-3 flex items-center gap-2 text-sm"><Copy className="w-4 h-4"/></button>
               </div>
               <div className="h-5 mt-1 text-xs">
                 {!slug || !isValidSlug(slug) ? (
@@ -182,7 +245,23 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
         {activeTab === 'export' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={handleExportPdf} className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 flex items-center justify-center gap-2"><Download className="w-4 h-4"/>Export PDF</button>
+              <button 
+                onClick={handleExportPdf} 
+                disabled={isExportingPdf}
+                className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isExportingPdf ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin"/>
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4"/>
+                    Export PDF
+                  </>
+                )}
+              </button>
               <button onClick={handleExportCsv} disabled={!originalFileBlob} className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"><Download className="w-4 h-4"/>Export CSV</button>
             </div>
             {!originalFileBlob && (

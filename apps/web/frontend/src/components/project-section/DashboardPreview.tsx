@@ -94,14 +94,36 @@ const DashboardPreview = ({
 
     // Charts (Morpheus: chart_type + config axis)
     const typeMap: Record<string, string> = {
+      // Direct mappings for current LLM output
+      line: 'line',
+      bar: 'bar',
+      pie: 'pie',
+      area: 'area',
+      scatter: 'scatter',
+      composed: 'composed',
+      radar: 'radar',
+      radial_bar: 'radial_bar',
+      funnel: 'funnel',
+      treemap: 'treemap',
+      sankey: 'sankey',
+      donut: 'donut',
+      geographic: 'geographic',
+      table: 'table',
+      metric: 'metric',
+      
+      // Legacy mappings for backward compatibility
       line_chart: 'line',
       bar_chart: 'bar',
       pie_chart: 'pie',
       area_chart: 'area',
       scatter_chart: 'scatter',
       composed_chart: 'composed',
-      geographic: 'geographic',
-      table: 'table'
+      radar_chart: 'radar',
+      radial_bar_chart: 'radial_bar',
+      funnel_chart: 'funnel',
+      treemap_chart: 'treemap',
+      sankey_chart: 'sankey',
+      donut_chart: 'donut'
     };
     if (Array.isArray(data.charts)) {
       data.charts.forEach((c: any, idx: number) => {

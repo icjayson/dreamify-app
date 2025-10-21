@@ -7,7 +7,7 @@ A full-stack analytics platform for data processing, visualization, and insights
 ```
 dreamify-app/
 ├── frontend/          # React + TypeScript + Vite frontend
-├── backend/           # Python + Flask backend
+├── ../dreamify-backend/ # Python + FastAPI backend
 ├── docs/              # Project documentation
 ├── scripts/           # Utility scripts
 └── shared/            # Shared types and utilities
@@ -33,7 +33,7 @@ dreamify-app/
 
 ### Backend
 - Python 3.8+
-- Flask web framework
+- FastAPI web framework
 - Pandas for data processing
 - NumPy for numerical operations
 - Pytest for testing
@@ -62,9 +62,9 @@ dreamify-app/
 
 3. **Setup Backend**
    ```bash
-   cd backend
+   cd ../dreamify-backend
    pip install -r requirements.txt
-   python -m flask run
+   python -m app.main
    ```
 
 4. **Environment Configuration**
@@ -85,8 +85,8 @@ npm run lint         # Run ESLint
 
 ### Backend Development
 ```bash
-cd backend
-python -m flask run  # Start development server
+cd ../dreamify-backend
+python -m app.main    # Start development server
 pytest               # Run tests
 black .              # Format code
 ```
@@ -102,9 +102,9 @@ black .              # Format code
 - **Types**: TypeScript type definitions
 
 ### Backend Architecture
-- **API Routes**: RESTful endpoints
+- **API Routes**: FastAPI RESTful endpoints with automatic OpenAPI documentation
 - **Core**: Business logic and analytics
-- **Models**: Data models and schemas
+- **Models**: Pydantic data models and schemas
 - **Services**: Service layer for business operations
 - **Utils**: Utility functions and helpers
 - **Config**: Application configuration

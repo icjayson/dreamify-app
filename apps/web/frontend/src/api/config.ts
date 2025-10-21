@@ -9,24 +9,24 @@ export const API_CONFIG = {
 // API Endpoints
 export const API_ENDPOINTS = {
   // File Upload
-  UPLOAD_FILE: '/api/upload',
+  UPLOAD_FILE: '/api/v1/files/upload',
   
   // Analytics
-  ANALYTICS: '/api/analytics',
-  ANALYTICS_SUMMARY: '/api/analytics/summary',
-  ANALYTICS_CHARTS: '/api/analytics/charts',
+  ANALYTICS: '/api/v1/analytics',
+  ANALYTICS_SUMMARY: '/api/v1/analytics/summary',
+  ANALYTICS_CHARTS: '/api/v1/analytics/charts',
   ANALYTICS_DATA: '/api/v1/analytics/data',
   
-  // Dashboard (keep base URL unchanged; align paths with backend)
-  DASHBOARD_GENERATE: '/api/dashboard/generate',
-  DASHBOARD_CONFIG: '/api/dashboard/config',
-  DASHBOARD_REFRESH: '/api/dashboard/refresh',
-  DASHBOARD_CHART_DATA: '/api/dashboard/chart-data',
-  DASHBOARD_LIST: '/api/dashboard/list',
-  DASHBOARD_DELETE: '/api/dashboard/delete',
+  // Dashboard (aligned with FastAPI backend)
+  DASHBOARD_GENERATE: '/api/v1/dashboard/generate',
+  DASHBOARD_CONFIG: '/api/v1/dashboard/config',
+  DASHBOARD_REFRESH: '/api/v1/dashboard/refresh',
+  DASHBOARD_CHART_DATA: '/api/v1/dashboard/chart-data',
+  DASHBOARD_LIST: '/api/v1/dashboard/list',
+  DASHBOARD_DELETE: '/api/v1/dashboard/delete',
   
   // Health Check
-  HEALTH: '/api/health',
+  HEALTH: '/health',
 } as const;
 
 // HTTP Methods

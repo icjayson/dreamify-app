@@ -1,6 +1,6 @@
-# Vibe Analytics Studio Backend
+# Dreamify Backend
 
-A Flask-based backend for the AI-powered dashboard platform.
+A FastAPI-based backend for the AI-powered dashboard platform.
 
 ## 🚀 Quick Start
 
@@ -35,7 +35,14 @@ A Flask-based backend for the AI-powered dashboard platform.
 
 5. **Run the application:**
    ```bash
-   python app/main.py
+   # FastAPI (recommended)
+   python -m app.main
+   
+   # Or using uvicorn directly
+   uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload
+   
+   # Or using the startup script
+   python start.py
    ```
 
 The server will start on `http://localhost:5000`
@@ -46,10 +53,15 @@ The server will start on `http://localhost:5000`
 backend/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # Main application entry point
+│   ├── main.py              # FastAPI app
 │   ├── api/
 │   │   ├── __init__.py
-│   │   └── routes.py        # API endpoints
+│   │   ├── routes.py        # FastAPI routes
+│   │   └── routes/
+│   │       ├── stripe.py    # FastAPI Stripe routes
+│   │       ├── dashboard.py # FastAPI dashboard routes
+│   │       ├── files.py     # FastAPI files routes
+│   │       └── analyze.py   # FastAPI analyze routes
 │   ├── core/
 │   │   ├── __init__.py
 │   │   └── analytics.py     # Core business logic
@@ -62,6 +74,7 @@ backend/
 ├── tests/                   # Test files
 ├── requirements.txt         # Python dependencies
 ├── env.example             # Environment variables template
+├── start.py                # Startup script
 ├── .gitignore              # Git ignore rules
 └── README.md               # This file
 ```
@@ -72,15 +85,17 @@ backend/
 
 Copy `env.example` to `.env` and configure the following variables:
 
-- `SECRET_KEY`: Flask secret key
-- `DEBUG`: Enable debug mode (True/False)
-- `PORT`: Server port (default: 5000)
+- `FASTAPI_SECRET_KEY`: FastAPI secret key
+- `FASTAPI_DEBUG`: Enable debug mode (True/False)
+- `FASTAPI_PORT`: Server port (default: 5000)
 - `CORS_ORIGINS`: Allowed CORS origins
 
 ### API Endpoints
 
 - `GET /` - Root endpoint with API information
 - `GET /health` - Health check endpoint
+- `GET /api/v1/docs` - Interactive API documentation (Swagger UI)
+- `GET /api/v1/redoc` - Alternative API documentation (ReDoc)
 - `POST /api/v1/analytics/dashboard` - Create analytics dashboard
 - `POST /api/v1/analytics/data` - Upload data for analysis
 - `GET /api/v1/analytics/insights` - Get analytics insights
@@ -90,7 +105,14 @@ Copy `env.example` to `.env` and configure the following variables:
 Run tests using pytest:
 
 ```bash
+# Run all tests
 pytest tests/
+
+# Run API tests
+pytest tests/test_api.py
+
+# Run with coverage
+pytest tests/ --cov=app
 ```
 
 ## 📊 Features
@@ -100,6 +122,9 @@ pytest tests/
 - **Insights Generation**: AI-powered insights from uploaded data
 - **Dashboard Creation**: Generate dashboard configurations
 - **RESTful API**: Clean API design with proper error handling
+- **Interactive Documentation**: Built-in Swagger UI and ReDoc
+- **Type Safety**: Full Pydantic model validation
+- **Async Support**: High-performance async/await support
 
 ## 🔒 Security
 
@@ -112,9 +137,10 @@ pytest tests/
 
 ### Adding New Endpoints
 
-1. Add route in `app/api/routes.py`
+1. Add route in `app/api/routes.py` or create new router in `app/api/routes/`
 2. Implement business logic in `app/core/`
 3. Add tests in `tests/`
+4. Update Pydantic models in `app/models/` if needed
 
 ### Code Style
 
@@ -124,4 +150,4 @@ pytest tests/
 
 ## 📝 License
 
-This project is part of Vibe Analytics Studio.
+This project is part of Dreamify.

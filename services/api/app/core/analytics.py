@@ -1,5 +1,5 @@
 """
-Core analytics service for Vibe Analytics Studio.
+Core analytics service for Dreamify.
 """
 
 import pandas as pd

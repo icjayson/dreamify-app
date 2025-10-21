@@ -1,8 +1,8 @@
 """
-Dashboard API routes for dynamic dashboard generation.
+FastAPI Dashboard routes for dynamic dashboard generation.
 """
 
-from flask import Blueprint, request, jsonify
+from fastapi import APIRouter, HTTPException, Path
 from app.services.dashboard_service import DashboardService
 from app.models.dashboard_models import (
     DashboardGenerationRequest,
@@ -15,31 +15,19 @@ from app.models.dashboard_models import (
 import time
 import logging
 
-# Create blueprint
-dashboard_bp = Blueprint('dashboard', __name__)
+# Create router
+router = APIRouter()
 
 # Initialize dashboard service
 dashboard_service = DashboardService()
 
 logger = logging.getLogger(__name__)
 
-
-@dashboard_bp.route('/generate', methods=['POST'])
-def generate_dashboard():
+@router.post("/generate", response_model=DashboardGenerationResponse, tags=["dashboard"])
+async def generate_dashboard(dashboard_request: DashboardGenerationRequest):
     """Generate a new dashboard configuration based on data source."""
     try:
         start_time = time.time()
-        
-        # Validate request data
-        request_data = request.get_json()
-        if not request_data:
-            return jsonify({
-                'success': False,
-                'error': 'No request data provided'
-            }), 400
-        
-        # Create request model
-        dashboard_request = DashboardGenerationRequest(**request_data)
         
         # Generate dashboard configuration
         dashboard_config = dashboard_service.generate_dashboard_config(
@@ -59,63 +47,38 @@ def generate_dashboard():
             metadata={'generated_at': time.time()}
         )
         
-        return jsonify(response.dict()), 200
+        return response
         
     except ValueError as e:
         logger.error(f"Validation error in generate_dashboard: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': f'Invalid request data: {str(e)}'
-        }), 400
+        raise HTTPException(status_code=400, detail=f'Invalid request data: {str(e)}')
     except Exception as e:
         logger.error(f"Error in generate_dashboard: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error'
-        }), 500
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@dashboard_bp.route('/config/<dashboard_id>', methods=['GET'])
-def get_dashboard_config(dashboard_id: str):
+@router.get("/config/{dashboard_id}", tags=["dashboard"])
+async def get_dashboard_config(dashboard_id: str = Path(..., description="Dashboard ID")):
     """Retrieve dashboard configuration by ID."""
     try:
         dashboard_config = dashboard_service.get_dashboard_config(dashboard_id)
         
         if not dashboard_config:
-            return jsonify({
-                'success': False,
-                'error': 'Dashboard configuration not found'
-            }), 404
+            raise HTTPException(status_code=404, detail="Dashboard configuration not found")
         
-        return jsonify({
+        return {
             'success': True,
             'dashboard_config': dashboard_config.dict()
-        }), 200
+        }
         
     except Exception as e:
         logger.error(f"Error in get_dashboard_config: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error'
-        }), 500
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@dashboard_bp.route('/refresh', methods=['POST'])
-def refresh_dashboard():
+@router.post("/refresh", response_model=DashboardRefreshResponse, tags=["dashboard"])
+async def refresh_dashboard(refresh_request: DashboardRefreshRequest):
     """Refresh dashboard data and configuration."""
     try:
         start_time = time.time()
-        
-        # Validate request data
-        request_data = request.get_json()
-        if not request_data:
-            return jsonify({
-                'success': False,
-                'error': 'No request data provided'
-            }), 400
-        
-        # Create request model
-        refresh_request = DashboardRefreshRequest(**request_data)
         
         # Refresh dashboard
         dashboard_config = dashboard_service.refresh_dashboard(
@@ -133,37 +96,19 @@ def refresh_dashboard():
             metadata={'refreshed_at': refresh_time}
         )
         
-        return jsonify(response.dict()), 200
+        return response
         
     except ValueError as e:
         logger.error(f"Validation error in refresh_dashboard: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': f'Invalid request data: {str(e)}'
-        }), 400
+        raise HTTPException(status_code=400, detail=f'Invalid request data: {str(e)}')
     except Exception as e:
         logger.error(f"Error in refresh_dashboard: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error'
-        }), 500
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@dashboard_bp.route('/chart-data', methods=['POST'])
-def get_chart_data():
+@router.post("/chart-data", response_model=ChartDataResponse, tags=["dashboard"])
+async def get_chart_data(chart_request: ChartDataRequest):
     """Get specific chart data with optional filtering."""
     try:
-        # Validate request data
-        request_data = request.get_json()
-        if not request_data:
-            return jsonify({
-                'success': False,
-                'error': 'No request data provided'
-            }), 400
-        
-        # Create request model
-        chart_request = ChartDataRequest(**request_data)
-        
         # Get chart data
         chart_data = dashboard_service.get_chart_data(
             chart_id=chart_request.chart_id,
@@ -178,62 +123,45 @@ def get_chart_data():
             metadata={'requested_at': time.time()}
         )
         
-        return jsonify(response.dict()), 200
+        return response
         
     except ValueError as e:
         logger.error(f"Validation error in get_chart_data: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': f'Invalid request data: {str(e)}'
-        }), 400
+        raise HTTPException(status_code=400, detail=f'Invalid request data: {str(e)}')
     except Exception as e:
         logger.error(f"Error in get_chart_data: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error'
-        }), 500
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@dashboard_bp.route('/list', methods=['GET'])
-def list_dashboards():
+@router.get("/list", tags=["dashboard"])
+async def list_dashboards():
     """List all available dashboard configurations."""
     try:
         dashboards = dashboard_service.list_dashboards()
         
-        return jsonify({
+        return {
             'success': True,
             'dashboards': dashboards,
             'count': len(dashboards)
-        }), 200
+        }
         
     except Exception as e:
         logger.error(f"Error in list_dashboards: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error'
-        }), 500
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@dashboard_bp.route('/delete/<dashboard_id>', methods=['DELETE'])
-def delete_dashboard(dashboard_id: str):
+@router.delete("/delete/{dashboard_id}", tags=["dashboard"])
+async def delete_dashboard(dashboard_id: str = Path(..., description="Dashboard ID")):
     """Delete a dashboard configuration."""
     try:
         success = dashboard_service.delete_dashboard(dashboard_id)
         
         if not success:
-            return jsonify({
-                'success': False,
-                'error': 'Dashboard configuration not found'
-            }), 404
+            raise HTTPException(status_code=404, detail="Dashboard configuration not found")
         
-        return jsonify({
+        return {
             'success': True,
             'message': 'Dashboard configuration deleted successfully'
-        }), 200
+        }
         
     except Exception as e:
         logger.error(f"Error in delete_dashboard: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error'
-        }), 500
+        raise HTTPException(status_code=500, detail="Internal server error")

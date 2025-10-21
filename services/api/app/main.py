@@ -1,197 +1,112 @@
 """
-Main application entry point for Vibe Analytics Studio Backend.
+Main FastAPI application entry point for Dreamify Backend.
 """
 
-from flask import Flask
-from flask_cors import CORS
-from flask_restx import Api, Resource, fields
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import os
+import logging
 
 # Load environment variables
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 def create_app():
-    """Create and configure the Flask application."""
-    app = Flask(__name__)
+    """Create and configure the FastAPI application."""
+    app = FastAPI(
+        title="Dreamify Analytics API",
+        description="API for Dreamify Analytics Platform with Stripe integration",
+        version="1.0.0",
+        docs_url="/api/v1/docs",
+        redoc_url="/api/v1/redoc",
+        openapi_url="/api/v1/openapi.json"
+    )
     
     # Configure CORS
-    CORS(
-        app, 
-        origins=[
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
             "http://localhost:8080", 
             "http://localhost:8000",
             "http://localhost:5000",
+            "http://localhost:3000",
+            "http://localhost:5173",
             "https://app.dreamify.dev",
             "*"  # Allow all origins for development; restrict in production
-        ]
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     
-    # Basic configuration
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
-    app.config['DEBUG'] = os.getenv('DEBUG', 'True').lower() == 'true'
+    # Import and register routers
+    try:
+        from app.api.routes import router as main_router
+        app.include_router(main_router, prefix="/api/v1")
+        logger.info("Main API router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import main router: {e}")
     
-    # Initialize Flask-RESTX API
-    api = Api(
-        app,
-        version='1.0',
-        title='Dreamify Analytics API',
-        description='API for Dreamify Analytics Platform with Stripe integration',
-        doc='/docs/',
-        prefix='/api/v1'
-    )
+    try:
+        from app.api.route_modules.stripe import router as stripe_router
+        app.include_router(stripe_router, prefix="/api/v1/stripe", tags=["stripe"])
+        logger.info("Stripe router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import stripe router: {e}")
     
-    # Create Stripe namespace for Swagger documentation
-    stripe_ns = api.namespace('stripe', description='Stripe payment operations')
+    try:
+        from app.api.route_modules.dashboard import router as dashboard_router
+        app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
+        logger.info("Dashboard router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import dashboard router: {e}")
     
-    # Register blueprints
-    print("DEBUG: Importing API blueprint...")
-    from app.api.routes import api_bp
-    print("DEBUG: API blueprint imported successfully")
-    print(f"DEBUG: API blueprint name: {api_bp.name}")
+    try:
+        from app.api.route_modules.files import router as files_router
+        app.include_router(files_router, prefix="/api/v1/files", tags=["files"])
+        logger.info("Files router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import files router: {e}")
     
-    print("DEBUG: Registering API blueprint with main app...")
-    app.register_blueprint(api_bp, url_prefix='/api/v1')
-    print("DEBUG: API blueprint registered successfully with prefix /api/v1")
+    try:
+        from app.api.route_modules.analyze import router as analyze_router
+        app.include_router(analyze_router, prefix="/api/v1/analyze", tags=["analyze"])
+        logger.info("Analyze router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import analyze router: {e}")
     
-    # Debug: List all routes in the main app
-    print("DEBUG: Main app routes after registration:")
-    for rule in app.url_map.iter_rules():
-        if 'stripe' in rule.rule:
-            print(f"  - {rule.methods} {rule.rule}")
-    
-    # Add Stripe endpoints to Swagger documentation
-    @stripe_ns.route('/products')
-    class Products(Resource):
-        @stripe_ns.doc('get_products')
-        def get(self):
-            """Get available subscription products."""
-            try:
-                from app.config.stripe_config import get_all_subscription_plans
-                plans = get_all_subscription_plans()
-                return {
-                    'success': True,
-                    'products': plans
-                }, 200
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': 'Internal server error'
-                }, 500
-
-    @stripe_ns.route('/subscriptions')
-    class Subscriptions(Resource):
-        @stripe_ns.doc('get_subscriptions')
-        def get(self):
-            """Get user subscriptions."""
-            try:
-                from flask import request
-                user_id = request.args.get('user_id')
-                if not user_id:
-                    return {
-                        'success': False,
-                        'error': 'user_id parameter is required'
-                    }, 400
-                
-                return {
-                    'success': True,
-                    'subscriptions': []
-                }, 200
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': 'Internal server error'
-                }, 500
-
-    @stripe_ns.route('/credits/usage')
-    class CreditUsage(Resource):
-        @stripe_ns.doc('get_credit_usage')
-        def get(self):
-            """Get credit usage for a user."""
-            try:
-                from flask import request
-                from app.models.stripe_models import SubscriptionTier
-                
-                user_id = request.args.get('user_id')
-                subscription_tier_str = request.args.get('subscription_tier', 'sandbox')
-                
-                if not user_id:
-                    return {
-                        'success': False,
-                        'error': 'user_id parameter is required'
-                    }, 400
-                
-                try:
-                    subscription_tier = SubscriptionTier(subscription_tier_str)
-                except ValueError:
-                    return {
-                        'success': False,
-                        'error': f'Invalid subscription tier: {subscription_tier_str}'
-                    }, 400
-                
-                from app.services.stripe_service import StripeService
-                stripe_service = StripeService()
-                response = stripe_service.get_credit_usage(user_id, subscription_tier)
-                
-                if response.success:
-                    return response.dict(), 200
-                else:
-                    return response.dict(), 400
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': 'Internal server error'
-                }, 500
-
-    @stripe_ns.route('/checkout/sessions')
-    class CheckoutSessions(Resource):
-        @stripe_ns.doc('create_checkout_session')
-        def post(self):
-            """Create a Stripe checkout session."""
-            try:
-                from flask import request
-                from app.models.stripe_models import CreateCheckoutSessionRequest
-                
-                data = request.get_json()
-                if not data:
-                    return {
-                        'success': False,
-                        'error': 'No request data provided'
-                    }, 400
-                
-                from app.services.stripe_service import StripeService
-                stripe_service = StripeService()
-                checkout_request = CreateCheckoutSessionRequest(**data)
-                response = stripe_service.create_checkout_session(checkout_request)
-                
-                if response.success:
-                    return response.dict(), 201
-                else:
-                    return response.dict(), 400
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': 'Internal server error'
-                }, 500
-    
-    @app.route('/health')
-    def health_check():
-        """Health check endpoint."""
-        return {'status': 'healthy', 'service': 'vibe-analytics-backend'}
-    
-    @app.route('/')
-    def index():
+    # Root endpoint
+    @app.get("/", tags=["root"])
+    async def root():
         """Root endpoint."""
         return {
-            'message': 'Welcome to Vibe Analytics Studio Backend',
-            'version': '1.0.0',
-            'docs': '/api/v1/docs'
+            "message": "Welcome to Dreamify Backend",
+            "version": "1.0.0",
+            "docs": "/api/v1/docs"
         }
+    
+    # Health check endpoint
+    @app.get("/health", tags=["health"])
+    async def health_check():
+        """Health check endpoint."""
+        return {"status": "healthy", "service": "dreamify-backend"}
     
     return app
 
+# Create the FastAPI app instance
 app = create_app()
 
 if __name__ == "__main__":
+    import uvicorn
     port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=app.config["DEBUG"])
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=True
+    )

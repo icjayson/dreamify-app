@@ -1,93 +1,44 @@
 """
-API routes for Vibe Analytics Studio.
+FastAPI routes for Dreamify.
 """
 
-from flask import Blueprint, request, jsonify
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from app.core.analytics import AnalyticsService
 from app.utils.file_handler import FileHandler
+from app.models.response_models import SuccessResponse, ErrorResponse
+import logging
 
-api_bp = Blueprint('api', __name__)
-print("DEBUG: API blueprint created")
+# Create router
+router = APIRouter()
 
-# Import and register dashboard routes
-try:
-    from app.api.routes.dashboard import dashboard_bp
-    api_bp.register_blueprint(dashboard_bp, url_prefix='/dashboard')
-except ImportError as e:
-    print(f"Warning: Could not import dashboard routes: {e}")
-    # Continue without dashboard routes for now
+logger = logging.getLogger(__name__)
 
-# Import and register analyze routes
-try:
-    from app.api.routes.analyze import analyze_bp
-    api_bp.register_blueprint(analyze_bp, url_prefix='/analyze')
-except ImportError as e:
-    print(f"Warning: Could not import analyze routes: {e}")
-    # Continue without analyze routes for now
-
-# Import and register stripe routes
-try:
-    print("DEBUG: Attempting to import Stripe routes...")
-    from app.api.routes.stripe import stripe_bp
-    print("DEBUG: Stripe routes imported successfully")
-    print(f"DEBUG: Stripe blueprint name: {stripe_bp.name}")
-    print(f"DEBUG: Stripe blueprint url_prefix: {stripe_bp.url_prefix}")
-    
-    print("DEBUG: Registering Stripe blueprint with API blueprint...")
-    api_bp.register_blueprint(stripe_bp, url_prefix='/stripe')
-    print("DEBUG: Stripe blueprint registered successfully with prefix /stripe")
-    
-    # Debug: List all routes in the API blueprint
-    print("DEBUG: API blueprint routes after Stripe registration:")
-    for rule in api_bp.deferred_functions:
-        print(f"  - {rule}")
-        
-except ImportError as e:
-    print(f"Warning: Could not import stripe routes: {e}")
-    # Continue without stripe routes for now
-except Exception as e:
-    print(f"Error registering Stripe routes: {e}")
-    import traceback
-    traceback.print_exc()
-
-@api_bp.route('/analytics/dashboard', methods=['POST'])
-def create_dashboard():
+@router.post("/analytics/dashboard", response_model=SuccessResponse, tags=["analytics"])
+async def create_dashboard():
     """Create a new analytics dashboard."""
     try:
-        data = request.get_json()
         # TODO: Implement dashboard creation logic
-        return jsonify({
-            'message': 'Dashboard creation endpoint',
-            'status': 'success'
-        }), 200
+        return SuccessResponse(
+            message="Dashboard creation endpoint",
+            status="success"
+        )
     except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'status': 'error'
-        }), 500
+        logger.error(f"Error in create_dashboard: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@api_bp.route('/analytics/data', methods=['POST'])
-def upload_data():
+@router.post("/analytics/data", response_model=SuccessResponse, tags=["analytics"])
+async def upload_data(file: UploadFile = File(...)):
     """Upload data for analysis."""
     try:
-        if 'file' not in request.files:
-            return jsonify({
-                'error': 'No file provided',
-                'status': 'error'
-            }), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({
-                'error': 'No file selected',
-                'status': 'error'
-            }), 400
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file selected")
         
         # Validate file using FileHandler
         file_info = FileHandler.validate_file(file)
         
         # Read file content
-        file_content = file.read()
+        file_content = await file.read()
         
         # Process file with CSVProcessor
         from app.core.analytics import CSVProcessor
@@ -95,9 +46,9 @@ def upload_data():
         result = processor.process_upload(file_content, file_info['filename'])
         
         if result['success']:
-            return jsonify({
-                'success': True,
-                'data': {
+            return SuccessResponse(
+                success=True,
+                data={
                     'filename': file_info['filename'],
                     'metadata': result['metadata'],
                     'column_analysis': result['column_analysis'],
@@ -105,39 +56,28 @@ def upload_data():
                     'visualization_suggestions': result['visualization_suggestions'],
                     'business_insights': result['business_insights']
                 },
-                'message': 'File processed successfully'
-            }), 200
+                message="File processed successfully"
+            )
         else:
-            return jsonify({
-                'success': False,
-                'error': result['errors'][0] if result['errors'] else 'Processing failed',
-                'status': 'error'
-            }), 400
+            error_msg = result['errors'][0] if result['errors'] else 'Processing failed'
+            raise HTTPException(status_code=400, detail=error_msg)
             
     except ValueError as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'status': 'error'
-        }), 400
+        logger.error(f"Validation error in upload_data: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'status': 'error'
-        }), 500
+        logger.error(f"Error in upload_data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@api_bp.route('/analytics/insights', methods=['GET'])
-def get_insights():
+@router.get("/analytics/insights", response_model=SuccessResponse, tags=["analytics"])
+async def get_insights():
     """Get analytics insights."""
     try:
         # TODO: Implement insights generation logic
-        return jsonify({
-            'message': 'Insights endpoint',
-            'status': 'success'
-        }), 200
+        return SuccessResponse(
+            message="Insights endpoint",
+            status="success"
+        )
     except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'status': 'error'
-        }), 500
+        logger.error(f"Error in get_insights: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

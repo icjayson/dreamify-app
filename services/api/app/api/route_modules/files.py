@@ -1,40 +1,40 @@
 """
-Files API routes for upload, listing, deletion, and preview (Phase 1).
+FastAPI Files routes for upload, listing, deletion, and preview (Phase 1).
 """
 
-from flask import Blueprint, request, jsonify, Response
-from werkzeug.utils import secure_filename
+from fastapi import APIRouter, HTTPException, UploadFile, File, Path
+from fastapi.responses import HTMLResponse
 from app.utils.file_handler import FileHandler
 from config.settings import settings
 import os
 import json
 import pandas as pd
+import logging
 
+# Create router
+router = APIRouter()
 
-files_bp = Blueprint('files', __name__)
+logger = logging.getLogger(__name__)
 
-
-@files_bp.route('/upload', methods=['POST'])
-def upload_file():
+@router.post("/upload", tags=["files"])
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a file for processing."""
     try:
-        if 'file' not in request.files:
-            return jsonify({'success': False, 'error': 'No file provided'}), 400
-
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file selected")
 
         # Validate type and size using existing utility
         info = FileHandler.validate_file(file)
 
         fileID = FileHandler.generate_file_id()
-        print(f"File ID: {fileID}")
+        logger.info(f"File ID: {fileID}")
         ext = info['extension']
         upload_path = FileHandler.get_upload_path(fileID, ext)
 
         # Persist file to storage
-        file.seek(0)
-        file.save(upload_path)
+        file_content = await file.read()
+        with open(upload_path, 'wb') as f:
+            f.write(file_content)
 
         metadata = {
             'fileID': fileID,
@@ -45,41 +45,45 @@ def upload_file():
         }
         FileHandler.save_upload_metadata(fileID, metadata)
 
-        return jsonify({
+        return {
             'success': True,
             'fileID': fileID,
             'filename': info['filename'],
             'size': info['size'],
             'ext': ext,
-        }), 200
+        }
 
     except ValueError as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        logger.error(f"Validation error in upload_file: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Error in upload_file: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@files_bp.route('', methods=['GET'])
-def list_files():
+@router.get("", tags=["files"])
+async def list_files():
+    """List all uploaded files."""
     try:
         files = FileHandler.list_uploads()
-        return jsonify({'success': True, 'files': files}), 200
+        return {'success': True, 'files': files}
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Error in list_files: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@files_bp.route('/<fileID>', methods=['DELETE'])
-def delete_file(fileID: str):
+@router.delete("/{fileID}", tags=["files"])
+async def delete_file(fileID: str = Path(..., description="File ID")):
+    """Delete an uploaded file."""
     try:
         deleted = FileHandler.delete_upload_set(fileID)
         if not deleted:
-            return jsonify({'success': False, 'error': 'File not found'}), 404
-        return jsonify({'success': True}), 200
+            raise HTTPException(status_code=404, detail="File not found")
+        return {'success': True}
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
+        logger.error(f"Error in delete_file: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 def _render_html_table_from_dataframe(df: pd.DataFrame, title: str) -> str:
+    """Render HTML table from DataFrame."""
     # Limit to first 20 rows
     df = df.head(20)
     table_html = df.to_html(classes='table table-sm', index=False, border=0)
@@ -105,20 +109,20 @@ def _render_html_table_from_dataframe(df: pd.DataFrame, title: str) -> str:
 """
     return html
 
-
-@files_bp.route('/preview/<fileID>', methods=['GET'])
-def preview_file(fileID: str):
+@router.get("/preview/{fileID}", response_class=HTMLResponse, tags=["files"])
+async def preview_file(fileID: str = Path(..., description="File ID")):
+    """Preview an uploaded file as HTML."""
     try:
         try:
             meta = FileHandler.get_upload_metadata(fileID)
         except FileNotFoundError:
-            return Response("<h3>File not found</h3>", status=404, mimetype='text/html')
+            return HTMLResponse("<h3>File not found</h3>", status_code=404)
 
         ext = meta.get('ext')
         filename = meta.get('filename', fileID)
         path = FileHandler.get_upload_path(fileID, ext)
         if not os.path.exists(path):
-            return Response("<h3>File not found</h3>", status=404, mimetype='text/html')
+            return HTMLResponse("<h3>File not found</h3>", status_code=404)
 
         # Render HTML preview
         if ext == 'csv':
@@ -146,12 +150,11 @@ def preview_file(fileID: str):
                     df = pd.DataFrame({'value': [str(data)]})
                 html = _render_html_table_from_dataframe(df, filename)
             except Exception as e:
-                return Response(f"<h3>Error reading JSON: {str(e)}</h3>", status=400, mimetype='text/html')
+                return HTMLResponse(f"<h3>Error reading JSON: {str(e)}</h3>", status_code=400)
         else:
-            return Response("<h3>Invalid file type. Supported: CSV, XLSX, XLS, JSON</h3>", status=400, mimetype='text/html')
+            return HTMLResponse("<h3>Invalid file type. Supported: CSV, XLSX, XLS, JSON</h3>", status_code=400)
 
-        return Response(html, status=200, mimetype='text/html')
+        return HTMLResponse(html, status_code=200)
     except Exception as e:
-        return Response(f"<h3>Error generating preview: {str(e)}</h3>", status=500, mimetype='text/html')
-
-
+        logger.error(f"Error in preview_file: {str(e)}")
+        return HTMLResponse(f"<h3>Error generating preview: {str(e)}</h3>", status_code=500)

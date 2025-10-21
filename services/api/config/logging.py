@@ -92,8 +92,8 @@ def log_request(request, response=None, error=None):
     Log HTTP request/response
     
     Args:
-        request: Flask request object
-        response: Flask response object
+        request: FastAPI request object
+        response: FastAPI response object
         error: Exception if any
     """
     log_data = {

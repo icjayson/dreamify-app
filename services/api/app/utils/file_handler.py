@@ -1,5 +1,5 @@
 """
-File handling utilities for Vibe Analytics Studio.
+File handling utilities for Dreamify.
 """
 
 import pandas as pd
@@ -34,10 +34,17 @@ class FileHandler:
         if not FileHandler.allowed_file(file.filename):
             raise ValueError(f"File type not allowed. Allowed types: {', '.join(FileHandler.ALLOWED_EXTENSIONS)}")
         
-        # Get file size for metadata
-        file.seek(0, os.SEEK_END)
-        file_size = file.tell()
-        file.seek(0)  # Reset file pointer
+        # Get file size for metadata (supports FastAPI UploadFile)
+        try:
+            # Prefer underlying file-like object if present (FastAPI UploadFile)
+            raw_file = getattr(file, 'file', None) or file
+            # Move to end, read position, then reset
+            raw_file.seek(0, os.SEEK_END)
+            file_size = raw_file.tell()
+            raw_file.seek(0)
+        except Exception:
+            # Fallback: unknown size
+            file_size = 0
         
         return {
             'filename': secure_filename(file.filename),

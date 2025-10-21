@@ -1,8 +1,8 @@
 """
-Vibe Analytics Studio Backend Application
+Dreamify Backend Application
 
-A Flask-based backend for AI-powered dashboard platform.
+A FastAPI-based backend for AI-powered dashboard platform.
 """
 
 __version__ = "1.0.0"
-__author__ = "Vibe Analytics Studio Team"
+__author__ = "Dreamify Team"

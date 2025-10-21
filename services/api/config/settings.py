@@ -11,14 +11,14 @@ class Settings:
     """Application settings"""
     
     # Application
-    APP_NAME: str = "Dreamify App Analytics"
+    APP_NAME: str = "Dreamify"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = os.getenv("FLASK_DEBUG", "true").lower() == "true"
-    SECRET_KEY: str = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
+    DEBUG: bool = os.getenv("FASTAPI_DEBUG", "true").lower() == "true"
+    SECRET_KEY: str = os.getenv("FASTAPI_SECRET_KEY", "dev-secret-key")
     
     # Server
-    HOST: str = os.getenv("FLASK_HOST", "0.0.0.0")
-    PORT: int = int(os.getenv("FLASK_PORT", "5000"))
+    HOST: str = os.getenv("FASTAPI_HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("FASTAPI_PORT", "5000"))
     
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///dreamify_app.db")
@@ -65,7 +65,7 @@ class Settings:
     def _validate_settings(self):
         """Validate required settings"""
         if not self.SECRET_KEY or self.SECRET_KEY == "dev-secret-key":
-            print("Warning: Using default secret key. Set FLASK_SECRET_KEY for production.")
+            print("Warning: Using default secret key. Set FASTAPI_SECRET_KEY for production.")
         
         if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == "jwt-secret-key":
             print("Warning: Using default JWT secret key. Set JWT_SECRET_KEY for production.")

@@ -419,6 +419,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     return () => window.removeEventListener('open-projects', openProjects as EventListener);
   }, []);
 
+
   // sidebar show/animation is handled inside ProjectsSidebar component
 
   const closeProjects = () => {
@@ -737,6 +738,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         </div>
       </DialogContent>
     </Dialog>
+
   </div>
 );
 };

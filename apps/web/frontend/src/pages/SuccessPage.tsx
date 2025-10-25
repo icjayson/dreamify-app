@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle, ArrowRight, Home } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CheckCircle, ArrowRight, Home, User, Clock } from 'lucide-react';
+import WaveBackground from '../../../src/ui/lightswind/wave-background';
 
 const SuccessPage: React.FC = () => {
   const navigate = useNavigate();
@@ -16,65 +15,116 @@ const SuccessPage: React.FC = () => {
     }
   }, [searchParams]);
 
-  const handleGoToWorkspace = () => {
-    navigate('/workspace');
+  const handleCreateNewProject = () => {
+    navigate('/workspace/project');
   };
 
-  const handleGoHome = () => {
+  const handleBackToHome = () => {
     navigate('/');
   };
 
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-            <CheckCircle className="w-8 h-8 text-green-600" />
-          </div>
-          <CardTitle className="text-2xl font-bold text-green-600">
-            Payment Successful!
-          </CardTitle>
-          <CardDescription className="text-gray-600">
-            Thank you for upgrading to Pro! Your subscription is now active.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {sessionId && (
-            <div className="text-sm text-gray-500 text-center">
-              Session ID: {sessionId}
-            </div>
-          )}
-          
-          <div className="space-y-3">
-            <h3 className="font-semibold text-gray-900">What's next?</h3>
-            <ul className="text-sm text-gray-600 space-y-1">
-              <li>• Access to 100 monthly credits</li>
-              <li>• 5 daily credits (up to 150/month)</li>
-              <li>• 30-day data retention</li>
-              <li>• Custom domains</li>
-              <li>• Remove the Dreamify badge</li>
-            </ul>
-          </div>
 
-          <div className="flex flex-col gap-2">
-            <Button 
-              onClick={handleGoToWorkspace}
-              className="w-full"
-            >
-              <ArrowRight className="w-4 h-4 mr-2" />
-              Go to Workspace
-            </Button>
-            <Button 
-              onClick={handleGoHome}
-              variant="outline"
-              className="w-full"
-            >
-              <Home className="w-4 h-4 mr-2" />
-              Back to Home
-            </Button>
+  return (
+    <div className="min-h-screen overflow-y-auto">
+      {/* Hide global header on this page */}
+      <style dangerouslySetInnerHTML={{ __html: `header { display: none !important; }` }} />
+      
+      {/* Fixed WaveBackground Component for entire page */}
+      <WaveBackground 
+        className="fixed inset-0 z-0"
+      />
+      
+      {/* Fixed overlay for better text readability */}
+      <div className="fixed inset-0 bg-black/60 z-1"></div>
+
+      <div className="relative z-10 min-h-screen flex items-center justify-center">
+        <div className=" rounded-xl sm:rounded-2xl p-4 sm:p-6 w-[90vw] max-w-sm sm:max-w-md mx-4 sm:mx-0">
+          <div className="w-full">
+            <div className="text-center mb-6">
+              <div className="mx-auto mb-4 w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-green-500" />
+              </div>
+              <h2 className="text-xl sm:text-3xl font-bold text-green-500 mb-2">
+                Payment Successful
+              </h2>
+              <p className="text-sm sm:text-base font-light text-white/50">
+                Congratulations! Your payment was received and your account has been created successfully.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {/* Subscription Details Card */}
+              <div className="bg-white/50 border border-white/20 rounded-xl mb-6">
+                <div className="flex items-center gap-3 p-4">
+                  <img 
+                    src="/logo-watermark.png" 
+                    alt="Dreamify Logo" 
+                    className="w-8 h-8 object-contain"
+                  />
+                  <h3 className="text-lg font-semibold text-muted">Dreamify Pro</h3>
+                </div>
+
+                <div className="bg-muted rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-white/70" />
+                    <span className="text-sm font-medium text-white">PRO plan</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-white">$25</span>
+                    <span className="text-sm text-white/60"> / month</span>
+                  </div>
+                </div>
+
+                <ul className="space-y-2 mb-4">
+                  <li className="flex items-center gap-2 text-sm text-white/70">
+                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
+                    <span>100 monthly credits</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-white/70">
+                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
+                    <span>5 daily credits (up to 150/month)</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-white/70">
+                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
+                    <span>30-day data retention</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-white/70">
+                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
+                    <span>Custom domains</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-white/70">
+                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
+                    <span>Remove the Dreamify badge</span>
+                  </li>
+                </ul>
+
+                <div className="flex items-center gap-2 text-sm text-white/60">
+                  <Clock className="w-4 h-4" />
+                  <span>Monthly subscription</span>
+                </div>
+              </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:gap-3">
+                <button 
+                  onClick={handleCreateNewProject}
+                  className="button-gradient rounded-xl text-sm sm:text-base py-2 flex items-center justify-center"
+                >
+                  <ArrowRight className="w-4 h-4 mr-2" />
+                  Create new project
+                </button>
+                <button 
+                  onClick={handleBackToHome}
+                  className="button-outline rounded-xl text-sm sm:text-base py-2 flex items-center justify-center"
+                >
+                  <Home className="w-4 h-4 mr-2" />
+                  Back to Home
+                </button>
+              </div>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };

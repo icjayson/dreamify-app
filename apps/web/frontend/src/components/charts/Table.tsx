@@ -1,4 +1,5 @@
 import { TableColumn } from "@/types/dashboard";
+import { useState, useMemo } from "react";
 
 interface TopProductsTableProps {
   title: string;
@@ -60,6 +61,10 @@ const Table = ({
   className = "",
   style = {}
 }: TopProductsTableProps) => {
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const pageSize = 10;
+
   const hasStructure = Array.isArray(columns) && columns.length > 0;
   const hasData = Array.isArray(data) && data.length > 0;
   const tile = styling?.tile || {};
@@ -69,6 +74,48 @@ const Table = ({
     backgroundColor: tile.background || 'hsl(0 0% 100%)',
     color: textColor
   } as React.CSSProperties;
+
+  // Sort data
+  const sortedData = useMemo(() => {
+    if (!sortConfig || !hasData) return data;
+    
+    return [...data].sort((a, b) => {
+      const aValue = a[sortConfig.key];
+      const bValue = b[sortConfig.key];
+      
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  }, [data, sortConfig, hasData]);
+
+  // Paginate data
+  const paginatedData = useMemo(() => {
+    const startIndex = currentPage * pageSize;
+    return sortedData.slice(startIndex, startIndex + pageSize);
+  }, [sortedData, currentPage, pageSize]);
+
+  const totalPages = Math.ceil(sortedData.length / pageSize);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        return prev.direction === 'asc' 
+          ? { key, direction: 'desc' }
+          : null;
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const getSortIcon = (key: string) => {
+    if (sortConfig?.key !== key) return '';
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
+  };
 
   return (
     <div className={`rounded-md animate-fade-in h-full ${className}`} style={{ ...tileStyle, ...style, display: 'flex', flexDirection: 'column' }}>
@@ -84,37 +131,84 @@ const Table = ({
           {!hasStructure ? "No columns provided" : "No data available"}
         </div>
       ) : (
-        <div className="space-y-3" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          <div className={`grid gap-2 text-xs font-medium pb-2`} 
-               style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}>
-            {columns.map((column) => (
-              <span key={column.key} style={{ textAlign: column.align || 'left', color: styling?.headerText || textColor, background: styling?.headerBg }}>
-                {column.label}
-              </span>
-            ))}
+        <div className="flex-1 overflow-hidden">
+          <div className="overflow-hidden rounded-md border" style={{ borderColor: styling?.borderColor || textColor }}>
+            <table className="w-full">
+              <thead 
+                style={{ 
+                  backgroundColor: styling?.headerBg || 'hsl(220 14% 96%)',
+                  color: styling?.headerText || textColor 
+                }}
+              >
+                <tr>
+                  {columns.map((column) => (
+                    <th
+                      key={column.key}
+                      className="h-12 px-4 text-left align-middle font-medium cursor-pointer hover:bg-opacity-80 transition-colors"
+                      style={{ textAlign: column.align || 'left' }}
+                      onClick={() => handleSort(column.key)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{column.label}</span>
+                        <span className="text-xs opacity-60">{getSortIcon(column.key)}</span>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedData.map((row, index) => (
+                  <tr
+                    key={index}
+                    className="animate-slide-up border-b transition-colors hover:bg-opacity-50"
+                    style={{ 
+                      animationDelay: `${index * 100}ms`,
+                      backgroundColor: index % 2 === 1 ? styling?.rowAltBg : styling?.rowBg,
+                      borderBottomColor: styling?.borderColor || textColor
+                    }}
+                  >
+                    {columns.map((column) => (
+                      <td
+                        key={column.key}
+                        className="p-4 align-middle"
+                        style={{ textAlign: column.align || 'left' }}
+                      >
+                        <div className={`${column.key === 'name' ? 'font-medium truncate' : ''}`}>
+                          {formatCellValue(row[column.key], column.type)}
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          {data.map((row, index) => (
-            <div 
-              key={index} 
-              className={`grid gap-2 text-sm py-2 rounded transition-colors animate-slide-up`}
-              style={{ 
-                gridTemplateColumns: `repeat(${columns.length}, 1fr)`,
-                animationDelay: `${index * 100}ms`,
-                background: index % 2 === 1 ? styling?.rowAltBg : styling?.rowBg
-              }}
-            >
-              {columns.map((column) => (
-                <span 
-                  key={column.key} 
-                  className={`${column.key === 'name' ? 'font-medium truncate' : ''}`}
-                  style={{ textAlign: column.align || 'left', color: 'inherit' }}
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-end space-x-2 py-4">
+              <div className="text-muted-foreground flex-1 text-sm">
+                Showing {currentPage * pageSize + 1} to{" "}
+                {Math.min((currentPage + 1) * pageSize, sortedData.length)} of {sortedData.length} entries
+              </div>
+              <div className="space-x-2">
+                <button
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+                  disabled={currentPage === 0}
                 >
-                  {formatCellValue(row[column.key], column.type)}
-                </span>
-              ))}
+                  Previous
+                </button>
+                <button
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+                  disabled={currentPage >= totalPages - 1}
+                >
+                  Next
+                </button>
+              </div>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>

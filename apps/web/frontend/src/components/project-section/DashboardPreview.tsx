@@ -166,8 +166,12 @@ const DashboardPreview = ({
     }
 
     // Tables (Morpheus: columns string[] + rows objects)
-    if (Array.isArray(data.tables)) {
-      data.tables.forEach((t: any, idx: number) => {
+    // Check both top-level and nested data.tables
+    const tablesToProcess = Array.isArray(data.tables) ? data.tables : 
+                           (data.data && Array.isArray(data.data.tables)) ? data.data.tables : [];
+    
+    if (tablesToProcess.length > 0) {
+      tablesToProcess.forEach((t: any, idx: number) => {
         const layout = t?.layout;
         const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
         components.push({

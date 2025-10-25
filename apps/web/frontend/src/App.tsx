@@ -16,8 +16,8 @@ import WorkspacePage from "./pages/workspace";
 import ProjectPage from "./pages/project";
 import PreviewPage from "./pages/preview.tsx";
 import WaitlistPage from "./pages/Waitlist.tsx";
-import SuccessPage from "./pages/SuccessPage";
 import CancelPage from "./pages/CancelPage";
+import SuccessPage from "./pages/SuccessPage";
 import { useChatStore } from "./chat/useChatStore";
 
 const queryClient = new QueryClient();
@@ -58,8 +58,8 @@ const AppContent = () => {
             <PreviewPage />
           </SignedIn>
         } />
-        <Route path="/success" element={<SuccessPage />} />
         <Route path="/cancel" element={<CancelPage />} />
+        <Route path="/success" element={<SuccessPage />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

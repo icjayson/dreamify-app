@@ -1,5 +1,4 @@
 import { useNavigate, Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { SignIn } from "@clerk/clerk-react";
 import { dark } from '@clerk/themes';
 import { CheckCircle2, ArrowLeft } from "lucide-react";

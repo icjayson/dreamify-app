@@ -18,6 +18,42 @@ interface AccountCenterModalProps {
 
 const PricingContent: React.FC = () => {
   const { upgradeToPro, isLoading, error } = useSubscription();
+  const { isSignedIn } = useUser();
+  const navigate = useNavigate();
+  const [isUpgrading, setIsUpgrading] = useState(false);
+
+  // Check for intended action when component mounts
+  useEffect(() => {
+    if (isSignedIn) {
+      const intendedAction = sessionStorage.getItem('intendedAction');
+      if (intendedAction === 'upgrade-pro') {
+        // Clear the intended action
+        sessionStorage.removeItem('intendedAction');
+        // Trigger the Pro upgrade
+        setIsUpgrading(true);
+        upgradeToPro().finally(() => setIsUpgrading(false));
+      }
+    }
+  }, [isSignedIn, upgradeToPro]);
+
+  const handleGetStarted = () => {
+    navigate('/login');
+  };
+
+  const handleProUpgrade = async () => {
+    if (isSignedIn) {
+      setIsUpgrading(true);
+      try {
+        await upgradeToPro();
+      } finally {
+        setIsUpgrading(false);
+      }
+    } else {
+      // Store intent to upgrade to Pro after login
+      sessionStorage.setItem('intendedAction', 'upgrade-pro');
+      navigate('/login');
+    }
+  };
 
   const handleUpgrade = async (plan: string) => {
     if (plan === 'pro') {
@@ -51,7 +87,12 @@ const PricingContent: React.FC = () => {
             <li>User roles & permissions</li>
             <li>7-day data retention</li>
           </ul>
-          <button className="mt-auto w-full button-outline rounded-md py-2 text-sm">Current plan</button>
+          <button 
+            onClick={isSignedIn ? undefined : handleGetStarted}
+            className="mt-auto w-full button-outline rounded-md py-2 text-sm"
+          >
+            {isSignedIn ? 'Current plan' : 'Get Started'}
+          </button>
         </div>
         <div className="rounded-xl border border-primary/30 bg-gradient-to-b from-primary/20 to-primary/5 p-5 ring-1 ring-primary/20 h-full flex flex-col">
           <div className="flex items-center justify-between">
@@ -68,11 +109,11 @@ const PricingContent: React.FC = () => {
             <li>User roles & permissions</li>
           </ul>
           <button 
-            onClick={() => handleUpgrade('pro')}
-            disabled={isLoading}
+            onClick={handleProUpgrade}
+            disabled={isUpgrading}
             className="mt-auto w-full button-gradient rounded-md py-2 text-sm disabled:opacity-50"
           >
-            {isLoading ? 'Processing...' : 'Upgrade to Pro'}
+            {isUpgrading ? 'Processing...' : (isSignedIn ? 'Upgrade to Pro' : 'Get Started')}
           </button>
         </div>
         <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/5 to-white/0 p-5 h-full flex flex-col">

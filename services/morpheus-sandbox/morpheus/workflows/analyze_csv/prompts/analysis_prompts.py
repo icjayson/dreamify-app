@@ -91,6 +91,22 @@ Key metrics to compute: Prioritize metrics based on:
   - `reasoning`: short human-readable insight
   - `evidence`: {n_rows, n_nonnull_x, n_nonnull_y, cardinality_x, correlation_xy (nullable), trend_detected (nullable), sample_points}
   - `layout`: {x, y, w, h, minW, minH}
+
+# Table formatting requirements (CRITICAL)
+- For ALL tables, transform raw CSV column names into natural, human-readable labels
+- Examples of transformations:
+  - `orderId` → `Order ID`
+  - `qty` → `Quantity`
+  - `amount` → `Amount`
+  - `status` → `Status`
+  - `category` → `Category`
+  - `date` → `Date`
+  - `user_id` → `User ID`
+  - `subscription_type` → `Subscription Type`
+  - `is_churned` → `Churned`
+- Use proper capitalization and spacing
+- Make column names descriptive and professional
+- NEVER use raw CSV field names in table columns
   
 For each chart, consider adding:
 - Date range filters: For temporal data
@@ -260,11 +276,11 @@ Output format:
       "id": "top_products_table",
       "title": "Top Products",
       "layout": {"x": 0, "y": 11, "w": 24, "h": 12, "minW": 12, "minH": 10},
-      "columns": ["name", "revenue", "quantity"],
+      "columns": ["Product Name", "Revenue", "Quantity"],
       "rows": [
-        {"name": "Product A", "revenue": 125000.5, "quantity": 512},
-        {"name": "Product B", "revenue": 118400.0, "quantity": 480},
-        {"name": "Product C", "revenue": 98950.25, "quantity": 410}
+        {"Product Name": "Product A", "Revenue": 125000.5, "Quantity": 512},
+        {"Product Name": "Product B", "Revenue": 118400.0, "Quantity": 480},
+        {"Product Name": "Product C", "Revenue": 98950.25, "Quantity": 410}
       ],
       "styling": {
         "headerBg": "hsl(220 14% 96%)",
@@ -358,6 +374,7 @@ Before outputting your final JSON, verify you have included:
 6. data_quality object with all required fields
 7. styling_recommendations object with theme, colorPalette, animation, grid, legend, dashboardBackground, tile
 8. LAYOUT RULES: For each component, minH obeys floors by type (charts >= 10, line/area/pie/donut/radial_bar/treemap/sankey >= 12; tables >= 10; metrics >= 4) AND h >= minH. Do NOT inflate minW due to these rules.
+9. TABLE COLUMN NAMING: Verify ALL table columns use natural, human-readable names (e.g., "Order ID" not "orderId", "Quantity" not "qty"). NO raw CSV field names allowed.
 
 If ANY field is missing, your response is INCOMPLETE and will fail frontend integration.
 
@@ -368,10 +385,11 @@ CRITICAL REQUIREMENTS:
 - Generate datasets arrays for charts with actual data points
 - Include time_comparison objects for metrics where applicable
 - Create tables array with sample data
-- Use the exact field names and structure shown in the example
+- Use the exact structure shown in the example
 - Validate your JSON contains all required fields before outputting
 - Keep it simple and practical
 - Focus on actionable insights
 - Always end with the structured JSON output matching the frontend contract (above)
 - Print all intermediate values for transparency
+- CRITICAL: Transform ALL table column names from raw CSV field names to natural, human-readable labels (e.g., "Order ID" not "orderId", "Quantity" not "qty")
 """

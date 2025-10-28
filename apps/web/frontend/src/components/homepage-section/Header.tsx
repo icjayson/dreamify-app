@@ -226,22 +226,22 @@ const Header = () => {
 
               {/* User Menu Dropdown */}
               <div className={cn(
-                "absolute right-0 top-full mt-2 z-50 bg-muted border border-border rounded-lg shadow-lg w-64 transition-all duration-200 ease-in-out",
+                "absolute right-0 top-full mt-2 z-50 bg-muted border border-border rounded-lg shadow-lg min-w-64 w-auto max-w-80 transition-all duration-200 ease-in-out",
                 userMenuOpen ? "opacity-100 translate-y-0 scale-100" : "opacity-0 -translate-y-2 scale-95 pointer-events-none"
               )}>
                 <div className="p-2">
                   {/* User Info Header */}
                   <div className="flex items-center gap-3 p-2 mb-2">
-                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
+                    <div className="w-8 h-8 shrink-0 aspect-square bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
                       {avatarUrl ? (
                         <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
                       ) : (
                         <UserIcon className="w-4 h-4 text-white" />
                       )}
                     </div>
-                    <div className="flex flex-col items-start justify-start">
-                      <p className="text-sm font-medium text-foreground">{displayName}</p>
-                      <p className="text-xs text-muted-foreground">{email}</p>
+                    <div className="flex flex-col items-start justify-start min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground break-words">{displayName}</p>
+                      <p className="text-xs text-muted-foreground break-words">{email}</p>
                     </div>
                   </div>
 

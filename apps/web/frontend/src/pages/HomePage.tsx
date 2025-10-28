@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Upload, Database, CornerRightUp, Plus, Mic, MicOff, Link, FileText } from "lucide-react";
+import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, useAuth } from "@clerk/clerk-react";
@@ -18,6 +18,7 @@ import { FooterSection } from '@/components/homepage-section/footer-section';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
 import ProjectsSection from '@/components/homepage-section/ProjectsSection';
 import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
+import TemplateModal from '@/components/homepage-section/TemplateModal';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
 
@@ -58,12 +59,14 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     detectedLanguage,
     uploadedFile,
     isProcessing,
+    selectedTemplate,
     setInputValue,
     setSelectedDataSource,
     setDropdownOpen,
     setUploadedFile,
     setIsListening,
     setDetectedLanguage,
+    setSelectedTemplate,
     sendMessage,
     addMessage,
     processFileWithMessage
@@ -86,8 +89,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   
   // File upload integration
   const { uploadState: legacyUploadState, uploadCSVFile, uploadExcelFile } = useFileUpload();
-  const csvInputRef = useRef<HTMLInputElement>(null);
-  const excelInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const placeholders = [
     "Tell me about your data or describe the dashboard you want...",
@@ -106,6 +108,21 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     { name: "HubSpot", icon: "/hubspot.jpeg" },
     { name: "PostgreSQL", icon: "/PostgreSQL.png" }
   ];
+
+  // Function to get colors for each data source
+  const getDataSourceColors = (sourceName: string) => {
+    const colors: { [key: string]: { bg: string; border: string; text: string; hover: string } } = {
+      "Google Sheets": { bg: "bg-green-500", border: "border-green-400", text: "text-white", hover: "hover:bg-green-600" },
+      "GA4": { bg: "bg-orange-500", border: "border-orange-400", text: "text-white", hover: "hover:bg-orange-600" },
+      "Meta": { bg: "bg-blue-600", border: "border-blue-500", text: "text-white", hover: "hover:bg-blue-700" },
+      "Airtable": { bg: "bg-blue-400", border: "border-blue-300", text: "text-white", hover: "hover:bg-blue-500" },
+      "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
+      "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
+      "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
+      "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" }
+    };
+    return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
+  };
 
   const scrollStackCards = [
     {
@@ -185,6 +202,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         kind: "csv", 
         name: uploadedFile.filename 
       } : undefined,
+      template: selectedTemplate || undefined,
     };
     
     // Add message to store synchronously before switching views
@@ -224,67 +242,26 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     console.log('Plus button clicked');
   };
 
-  const handleCSVClick = () => {
-    csvInputRef.current?.click();
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
   };
 
-  const handleExcelClick = () => {
-    excelInputRef.current?.click();
+  const handleCloneTemplateClick = () => {
+    setTemplateModalOpen(true);
   };
 
-  const handleCSVFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    const validationError = validateClientFile(file);
-    if (validationError) {
-      toast({ title: "Upload error", description: validationError, variant: "destructive" });
-      return;
-    }
-    
-    try {
-      // Create new file object for upload
-      const newFile = { 
-        fileID: 'pending', 
-        filename: file.name, 
-        size: file.size, 
-        ext: (file.name.split('.').pop() || '').toLowerCase(), 
-        status: 'uploading' as const 
-      };
-      
-      // Replace behavior: if an uploaded file exists, we'll delete it after new upload succeeds
-      setUploadedFile(newFile);
-
-      const res: UploadResponse = await fileService.uploadFile(file);
-      if (!res.success || !res.fileID || !res.ext || res.size === undefined || !res.filename) {
-        setUploadedFile({ ...newFile, status: 'error' });
-        toast({ title: "Upload failed", description: res.error || 'Upload failed', variant: "destructive" });
-        return;
-      }
-
-      // Delete previous file if different
-      if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
-        void fileService.deleteFile(uploadedFile.fileID);
-      }
-
-      setUploadedFile({ fileID: res.fileID, filename: res.filename, size: res.size, ext: res.ext, status: 'uploaded' });
-      toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
-    } catch (_e) {
-      setUploadedFile({ 
-        fileID: 'error', 
-        filename: file.name, 
-        size: file.size, 
-        ext: (file.name.split('.').pop() || '').toLowerCase(), 
-        status: 'error' 
-      });
-      toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
-    }
-    
-    // Reset input
-    event.target.value = '';
+  const handleTemplateSelect = (template: { id: string; title: string; description: string; image: string; category: string }) => {
+    setSelectedTemplate(template);
+    setInputValue(`Use ${template.title} template to make `);
+    console.log('Template selected:', template);
   };
 
-  const handleExcelFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTemplateRemove = () => {
+    setSelectedTemplate(null);
+    setInputValue('');
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     
@@ -412,6 +389,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   };
 
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
 
   useEffect(() => {
     const openProjects = () => setProjectsOpen(true);
@@ -562,31 +540,48 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
               onConfirm={handleRecordingConfirm}
             />
             
+            {/* Template Tag Row - Mobile Only */}
+            {selectedTemplate && (
+              <div className="flex justify-start mb-3 lg:hidden">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
+                  <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                  </div>
+                  <span className="text-sm font-medium">{selectedTemplate.title}</span>
+                  <button
+                    onClick={handleTemplateRemove}
+                    className="w-4 h-4 flex items-center justify-center hover:bg-muted-foreground/20 rounded-sm transition-colors"
+                    aria-label="Remove template"
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+            
             {/* Buttons Row */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               {/* Left side buttons */}
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Hidden file inputs */}
+                {/* Hidden file input */}
                 <input
                   type="file"
-                  ref={csvInputRef}
-                  accept=".csv"
-                  onChange={handleCSVFileSelect}
+                  ref={fileInputRef}
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileSelect}
                   className="hidden"
-                  aria-label="Select CSV file"
-                />
-                <input
-                  type="file"
-                  ref={excelInputRef}
-                  accept=".xlsx,.xls"
-                  onChange={handleExcelFileSelect}
-                  className="hidden"
-                  aria-label="Select Excel file"
+                  aria-label="Select file"
                 />
 
-                {/* CSV Button */}
+                {/* Attach Button */}
                 <button
-                  onClick={handleCSVClick}
+                  onClick={handleAttachClick}
                   disabled={uploadState.isUploading}
                   className="px-3 py-1.5 text-sm button-outline rounded-md disabled:opacity-50 flex items-center gap-2"
                   onMouseEnter={(e) => {
@@ -597,41 +592,42 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   onMouseLeave={(e) => {
                     e.currentTarget.classList.remove('btn-primary-hover');
                   }}
-                  aria-label="Upload CSV file"
+                  aria-label="Attach file"
                 >
                   <Upload className="w-4 h-4" />
-                  <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'CSV'}</span>
+                  <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'Attach'}</span>
                 </button>
 
-                {/* Excel Button */}
+                {/* Clone Template Button */}
                 <button
-                  onClick={handleExcelClick}
-                  disabled={uploadState.isUploading}
-                  className="px-3 py-1.5 text-sm button-outline rounded-md disabled:opacity-50 flex items-center gap-2"
+                  onClick={handleCloneTemplateClick}
+                  className="px-3 py-1.5 text-sm button-outline rounded-md flex items-center gap-2"
                   onMouseEnter={(e) => {
-                    if (!uploadState.isUploading) {
-                      e.currentTarget.classList.add('btn-primary-hover');
-                    }
+                    e.currentTarget.classList.add('btn-primary-hover');
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.classList.remove('btn-primary-hover');
                   }}
-                  aria-label="Upload Excel file"
+                  aria-label="Clone template"
                 >
-                  <Database className="w-4 h-4" />
-                  <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'Excel'}</span>
+                  <LayoutTemplate className="w-4 h-4" />
+                  <span className="hidden sm:inline">Template</span>
                 </button>
 
                 {/* Connect Data Source Dropdown */}
                 <div className="relative data-source-dropdown">
                   <Button
                     onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="button-gradient rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto"
+                    className={`rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto ${
+                      selectedDataSource 
+                        ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
+                        : 'button-gradient'
+                    }`}
                     aria-expanded={dropdownOpen}
                     aria-haspopup="true"
                     aria-label="Connect data source"
                   >
-                    <span className="hidden sm:inline">{selectedDataSource || "Connect your data source"}</span>
+                    <span className="hidden sm:inline">{selectedDataSource || "Connect data source"}</span>
                     <Link className={`w-4 h-4 transition-transform duration-200 ${
                       dropdownOpen ? 'rotate-180' : ''
                     }`} />
@@ -654,6 +650,29 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     </div>
                   )}
                 </div>
+
+                {/* Selected Template Tag - Desktop Only */}
+                {selectedTemplate && (
+                  <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
+                    <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                    </div>
+                    <span className="text-sm font-medium">{selectedTemplate.title}</span>
+                    <button
+                      onClick={handleTemplateRemove}
+                      className="w-4 h-4 flex items-center justify-center hover:bg-muted-foreground/20 rounded-sm transition-colors"
+                      aria-label="Remove template"
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
               
               {/* Right side buttons */}
@@ -716,7 +735,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       onNewProject={() => navigate('/workspace/project')}
 
     />
-    <ProjectsSection />
+    <TemplateModal
+      open={templateModalOpen}
+      onClose={() => setTemplateModalOpen(false)}
+      onTemplateSelect={handleTemplateSelect}
+    />
     <FooterSection />
     {/* Waitlist modal for signed-out users */}
     <Dialog open={waitlistOpen} onOpenChange={setWaitlistOpen}>

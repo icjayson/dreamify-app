@@ -125,7 +125,7 @@ export const EXTENDED_COLOR_PALETTES: Record<ChartPresetTheme, string[]> = {
  */
 export function getDashboardBackgroundStyle(styling: ChartStyling): React.CSSProperties {
   return {
-    backgroundColor: styling.dashboardBackground || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.CORPORATE][0],
+    backgroundColor: styling.dashboardBackground || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.VIBRANT][0],
     // Ensure background doesn't interfere with parent border styling
     border: 'none',
     borderRadius: 'inherit'
@@ -232,12 +232,12 @@ export function convertLLMStylingToChartStyling(
   }
 ): ChartStyling {
   return {
-    presetTheme: llmStyling.theme || CHART_PRESET_THEMES.CORPORATE,
-    colorPalette: llmStyling.colorPalette || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.CORPORATE],
+    presetTheme: llmStyling.theme || CHART_PRESET_THEMES.VIBRANT  ,
+    colorPalette: llmStyling.colorPalette || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.VIBRANT],
     animationEnabled: llmStyling.animation !== 'none',
     gridVisible: llmStyling.grid !== 'hidden',
     legendPosition: (llmStyling.legend as 'top' | 'bottom' | 'right' | 'none') || 'top',
-    dashboardBackground: llmStyling.dashboardBackground || llmStyling.colorPalette?.[0] || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.CORPORATE][0]
+    dashboardBackground: llmStyling.dashboardBackground || llmStyling.colorPalette?.[0] || THEME_COLOR_PALETTES[CHART_PRESET_THEMES.VIBRANT][0]
   };
 }
 
@@ -275,7 +275,7 @@ export function validateChartStyling(styling: ChartStyling): {
 /**
  * Get default chart styling for a theme
  */
-export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_THEMES.CORPORATE): ChartStyling {
+export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_THEMES.VIBRANT): ChartStyling {
   return {
     presetTheme: theme,
     colorPalette: THEME_COLOR_PALETTES[theme],

@@ -112,6 +112,9 @@ interface ChatState {
   originalFileBlob?: Blob | null;
   originalFileName?: string | null;
   
+  // Template state
+  selectedTemplate: { id: string; title: string; description: string; image: string; category: string } | null;
+  
   // Actions
   setInputValue: (value: string) => void;
   setIsTyping: (typing: boolean) => void;
@@ -130,6 +133,7 @@ interface ChatState {
   setHasShownInitialDashboard: (flag: boolean) => void;
   setIsInitialLoading: (flag: boolean) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
+  setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
   
   // Complex actions
   sendMessage: (content: string) => void;
@@ -165,6 +169,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isInitialLoading: false,
   originalFileBlob: null,
   originalFileName: null,
+  selectedTemplate: null,
   
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -188,6 +193,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setHasShownInitialDashboard: (flag) => set({ hasShownInitialDashboard: flag }),
   setIsInitialLoading: (flag) => set({ isInitialLoading: flag }),
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
+  setSelectedTemplate: (template) => set({ selectedTemplate: template }),
   
   // Complex actions
   sendMessage: (content) => {
@@ -200,6 +206,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         kind: "csv", 
         name: get().uploadedFile!.filename 
       } : undefined,
+      template: get().selectedTemplate || undefined,
     };
     
     set((state) => ({
@@ -227,6 +234,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: "user",
         content: content.trim(),
         timestamp: new Date(),
+        template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
       
@@ -267,6 +275,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           role: "user",
           content: content.trim(),
           timestamp: new Date(),
+          template: get().selectedTemplate || undefined,
         };
         addMessage(userMessage);
       }
@@ -294,6 +303,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content: content.trim(),
         timestamp: new Date(),
         attachment: { kind: "csv", name: uploadedFile.filename },
+        template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
     }

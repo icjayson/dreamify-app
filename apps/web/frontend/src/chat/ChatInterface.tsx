@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import LoadingPanel from "@/chat/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -10,6 +10,7 @@ import { fileService, type UploadResponse } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
 import { useChatStore } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
+import TemplateModal from "@/components/homepage-section/TemplateModal";
 
 // Rolling multiline log for loading animation
 const RollingText = () => {
@@ -62,6 +63,9 @@ interface ChatInterfaceProps {
 }
 
 const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInterfaceProps) => {
+  // Template state
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+
   // Zustand stores
   const {
     inputValue,
@@ -73,6 +77,7 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
     selectedDataSource,
     isListening,
     detectedLanguage,
+    selectedTemplate,
     setInputValue,
     setIsTyping,
     setMessages,
@@ -83,6 +88,7 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
     setIsListening,
     setTranscript,
     setDetectedLanguage,
+    setSelectedTemplate,
     sendMessage,
     clearInput,
     processFileWithMessage
@@ -232,6 +238,21 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
     console.log('Data source selected:', source);
   };
 
+  const handleCloneTemplateClick = () => {
+    setTemplateModalOpen(true);
+  };
+
+  const handleTemplateSelect = (template: { id: string; title: string; description: string; image: string; category: string }) => {
+    setSelectedTemplate(template);
+    setInputValue(`Use ${template.title} template to make `);
+    console.log('Template selected:', template);
+  };
+
+  const handleTemplateRemove = () => {
+    setSelectedTemplate(null);
+    setInputValue('');
+  };
+
   const handleMicClick = () => {
     if (!speechSupported) {
       toast({
@@ -265,6 +286,21 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
   };
 
 
+
+  // Function to get colors for each data source
+  const getDataSourceColors = (sourceName: string) => {
+    const colors: { [key: string]: { bg: string; border: string; text: string; hover: string } } = {
+      "Google Sheets": { bg: "bg-green-500", border: "border-green-400", text: "text-white", hover: "hover:bg-green-600" },
+      "GA4": { bg: "bg-orange-500", border: "border-orange-400", text: "text-white", hover: "hover:bg-orange-600" },
+      "Meta": { bg: "bg-blue-600", border: "border-blue-500", text: "text-white", hover: "hover:bg-blue-700" },
+      "Airtable": { bg: "bg-blue-400", border: "border-blue-300", text: "text-white", hover: "hover:bg-blue-500" },
+      "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
+      "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
+      "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
+      "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" }
+    };
+    return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
+  };
 
   const suggestedPrompts = [
     { text: "Act as a Data Analyst: challenge assumptions and list caveats.", icon: Database },
@@ -316,6 +352,21 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
                           Attached file
                         </span>
                         <span className="truncate w-full">{message.attachment.name}</span>
+                      </span>
+                    </div>
+                  )}
+                  {message.template && (
+                    <div className="mb-2">
+                      <span
+                        className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
+                        title={message.template.title}
+                        aria-label="Selected template"
+                      >
+                        <span className="inline-flex items-center gap-1 text-white/70">
+                          <LayoutTemplate className="w-3 h-3 text-white/80" />
+                          Template
+                        </span>
+                        <span className="truncate w-full">{message.template.title}</span>
                       </span>
                     </div>
                   )}
@@ -477,6 +528,31 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
             onConfirm={handleRecordingConfirm}
           />
           
+          {/* Template Tag Row */}
+          {selectedTemplate && (
+            <div className="flex justify-start mb-1">
+              <div className="flex items-center gap-2 px-2 py-2 rounded-md bg-muted border border-border text-white">
+                <div className="w-3 h-3 grid grid-cols-2 gap-0.5">
+                  <div className="w-1 h-1 bg-white rounded-sm"></div>
+                  <div className="w-1 h-1 bg-white rounded-sm"></div>
+                  <div className="w-1 h-1 bg-white rounded-sm"></div>
+                  <div className="w-1 h-1 bg-white rounded-sm"></div>
+                </div>
+                <span className="text-xs font-medium">{selectedTemplate.title}</span>
+                <button
+                  onClick={handleTemplateRemove}
+                  className="w-3 h-3 flex items-center justify-center hover:bg-muted-foreground/20 rounded-sm transition-colors"
+                  aria-label="Remove template"
+                >
+                  <svg className="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+          
           {/* Buttons Row */}
           <div className="flex items-center justify-between">
             {/* Left side - File Upload and Data Connector Buttons */}
@@ -489,19 +565,32 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
                 <Upload className="w-4 h-4" />
               </button>
 
+              {/* Template Button */}
+              <button
+                onClick={handleCloneTemplateClick}
+                className="p-2 flex items-center justify-center border border-white/30 rounded-md"
+                aria-label="Choose template"
+              >
+                <LayoutTemplate className="w-4 h-4" />
+              </button>
+
               {/* Data Connector Dropup */}
               <div className="relative data-source-dropdown">
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="p-2 flex items-center justify-center gap-1 border border-white/30 rounded-md"
+                  className={`p-2 flex items-center justify-center gap-1 rounded-md transition-all duration-200 ${
+                    selectedDataSource 
+                      ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
+                      : 'border border-white/30'
+                  }`}
                   aria-expanded={dropdownOpen}
                   aria-haspopup="true"
                   aria-label="Connect data source"
                 >
                   <Link className="w-4 h-4" />
-                  <ChevronUp className={`w-3 h-3 text-white/60 ${
-                    dropdownOpen ? 'rotate-180' : ''
-                  }`} />
+                  <ChevronUp className={`w-3 h-3 transition-transform duration-200 ${
+                    selectedDataSource ? 'text-white' : 'text-white/60'
+                  } ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 
                 {dropdownOpen && (
@@ -612,6 +701,13 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
           }}
         />
       </div>
+
+      {/* Template Modal */}
+      <TemplateModal
+        open={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        onTemplateSelect={handleTemplateSelect}
+      />
     </div>
   );
 };

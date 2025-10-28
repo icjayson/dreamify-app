@@ -212,8 +212,8 @@ export function useResponsiveChartTheme() {
     }
     
     if (isTablet) {
-      // Use corporate theme for tablet
-      return CHART_PRESET_THEMES.CORPORATE;
+      // Use dark theme for tablet
+      return CHART_PRESET_THEMES.DARK;
     }
     
     return baseTheme;

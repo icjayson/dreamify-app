@@ -80,6 +80,13 @@ def create_app():
     except ImportError as e:
         logger.error(f"Failed to import analyze router: {e}")
     
+    try:
+        from app.api.route_modules.auth import router as auth_router
+        app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+        logger.info("Auth router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import auth router: {e}")
+    
     # Root endpoint
     @app.get("/", tags=["root"])
     async def root():

@@ -1,24 +1,55 @@
 """
-FastAPI Files routes for upload, listing, deletion, and preview (Phase 1).
+FastAPI Files routes for upload, listing, deletion, and preview with S3 and database.
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Path
+from fastapi import APIRouter, HTTPException, UploadFile, File, Path, Depends, Form
 from fastapi.responses import HTMLResponse
+from sqlalchemy.orm import Session
 from app.utils.file_handler import FileHandler
-from config.settings import settings
-import os
+from app.dependencies.auth import require_user
+from utils.postgres.db import get_db
+from utils.postgres.repos import users, projects, assets, files as files_repo
+from utils.s3.client import upload_bytes, download_bytes, delete_object, compute_sha256_checksum
+from utils.s3.paths import build_asset_key, build_metadata_key
+from utils.config import config
+import uuid
 import json
 import pandas as pd
 import logging
+from typing import Dict, Any, Optional
 
 # Create router
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
+
+def get_or_create_default_project(db: Session, user_id: str):
+    """Get or create a default project for the user."""
+    user_projects = projects.get_projects_for_user(db, user_id)
+    
+    # If user has projects, return the first one
+    if user_projects:
+        return user_projects[0]
+    
+    # Create a default project
+    default_project = projects.create_project(
+        db=db,
+        user_id=user_id,
+        name="Default Project",
+        description="Default project for file uploads"
+    )
+    return default_project
+
+
 @router.post("/upload", tags=["files"])
-async def upload_file(file: UploadFile = File(...)):
-    """Upload a file for processing."""
+async def upload_file(
+    file: UploadFile = File(...),
+    project_id: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    clerk_user_id: str = Depends(require_user)
+):
+    """Upload a file for processing. Saves to S3 and stores metadata in database."""
     try:
         if not file.filename:
             raise HTTPException(status_code=400, detail="No file selected")
@@ -26,58 +57,196 @@ async def upload_file(file: UploadFile = File(...)):
         # Validate type and size using existing utility
         info = FileHandler.validate_file(file)
 
-        fileID = FileHandler.generate_file_id()
-        logger.info(f"File ID: {fileID}")
-        ext = info['extension']
-        upload_path = FileHandler.get_upload_path(fileID, ext)
-
-        # Persist file to storage
+        # Read file content
         file_content = await file.read()
-        with open(upload_path, 'wb') as f:
-            f.write(file_content)
-
+        file_size = len(file_content)
+        
+        # Generate IDs
+        file_id = str(uuid.uuid4())
+        asset_id = str(uuid.uuid4())
+        ext = info['extension']
+        
+        # Get or create project
+        if project_id:
+            try:
+                project = projects.get_project_by_id(db, uuid.UUID(project_id))
+                if not project or project.user_id != clerk_user_id:
+                    raise HTTPException(status_code=403, detail="Project not found or access denied")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid project ID")
+        else:
+            project = get_or_create_default_project(db, clerk_user_id)
+        
+        # Build S3 keys
+        s3_bucket = config.aws.s3.USER_ASSETS_BUCKET
+        version = config.aws.s3.USER_ASSETS_BUCKET_VERSION
+        
+        asset_key = build_asset_key(
+            version=version,
+            user_id=clerk_user_id,
+            project_id=str(project.id),
+            asset_id=asset_id,
+            file_id=file_id,
+            extension=ext
+        )
+        
+        # Determine content type
+        content_type_map = {
+            'csv': 'text/csv',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'xls': 'application/vnd.ms-excel',
+            'json': 'application/json'
+        }
+        content_type = content_type_map.get(ext, 'application/octet-stream')
+        
+        # Compute checksum
+        checksum = compute_sha256_checksum(file_content)
+        
+        # Upload to S3
+        upload_bytes(
+            bucket=s3_bucket,
+            key=asset_key,
+            data=file_content,
+            content_type=content_type
+        )
+        
+        # Create asset record
+        asset = assets.create_asset(
+            db=db,
+            project_id=project.id,
+            user_id=clerk_user_id,
+            s3_bucket=s3_bucket,
+            s3_key=asset_key,
+            version=version,
+            content_type=content_type,
+            size_bytes=file_size,
+            checksum_sha256=checksum,
+            status="uploaded"
+        )
+        
+        # Prepare metadata
         metadata = {
-            'fileID': fileID,
+            'fileID': file_id,
             'filename': info['filename'],
             'ext': ext,
-            'size': info['size'],
+            'size': file_size,
             'created_at': pd.Timestamp.utcnow().isoformat(),
         }
-        FileHandler.save_upload_metadata(fileID, metadata)
-
+        
+        # Create file record
+        file_record = files_repo.create_file(
+            db=db,
+            asset_id=asset.id,
+            original_filename=info['filename'],
+            extension=ext,
+            file_metadata=metadata,
+            rows=None,  # Will be populated after processing
+            columns=None
+        )
+        
+        # Return response in legacy format for backward compatibility
         return {
             'success': True,
-            'fileID': fileID,
+            'fileID': file_id,
             'filename': info['filename'],
-            'size': info['size'],
+            'size': file_size,
             'ext': ext,
         }
 
     except ValueError as e:
         logger.error(f"Validation error in upload_file: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in upload_file: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("", tags=["files"])
-async def list_files():
-    """List all uploaded files."""
+async def list_files(
+    project_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    clerk_user_id: str = Depends(require_user)
+):
+    """List all uploaded files for the current user."""
     try:
-        files = FileHandler.list_uploads()
-        return {'success': True, 'files': files}
+        # Get user's assets
+        user = users.get_user(db, clerk_user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # If project_id provided, filter by project
+        if project_id:
+            try:
+                project = projects.get_project_by_id(db, uuid.UUID(project_id))
+                if not project or project.user_id != clerk_user_id:
+                    raise HTTPException(status_code=403, detail="Project not found or access denied")
+                project_assets = assets.list_assets_for_project(db, project.id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid project ID")
+        else:
+            # Get all projects for user and collect assets
+            user_projects = projects.get_projects_for_user(db, clerk_user_id)
+            project_assets = []
+            for project in user_projects:
+                project_assets.extend(assets.list_assets_for_project(db, project.id))
+        
+        # Convert to response format
+        files_list = []
+        for asset in project_assets:
+            asset_files = files_repo.list_files_for_asset(db, asset.id)
+            for file_record in asset_files:
+                files_list.append({
+                    'fileID': str(file_record.id),
+                    'filename': file_record.original_filename,
+                    'ext': file_record.extension,
+                    'size': asset.size_bytes,
+                    'created_at': asset.created_at.isoformat() if asset.created_at else None,
+                })
+        
+        return {'success': True, 'files': files_list}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in list_files: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.delete("/{fileID}", tags=["files"])
-async def delete_file(fileID: str = Path(..., description="File ID")):
-    """Delete an uploaded file."""
+async def delete_file(
+    fileID: str = Path(..., description="File ID"),
+    db: Session = Depends(get_db),
+    clerk_user_id: str = Depends(require_user)
+):
+    """Delete an uploaded file from S3 and database."""
     try:
-        deleted = FileHandler.delete_upload_set(fileID)
-        if not deleted:
+        # Get file record
+        try:
+            file_uuid = uuid.UUID(fileID)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid file ID")
+        
+        file_record = files_repo.get_file(db, file_uuid)
+        if not file_record:
             raise HTTPException(status_code=404, detail="File not found")
+        
+        # Get asset
+        asset = assets.get_asset(db, file_record.asset_id)
+        if not asset or asset.user_id != clerk_user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Delete from S3
+        try:
+            delete_object(asset.s3_bucket, asset.s3_key)
+        except Exception as e:
+            logger.warning(f"Failed to delete S3 object: {str(e)}")
+        
+        # Delete file record (cascade will handle asset if needed)
+        files_repo.delete_file(db, file_uuid)
+        
         return {'success': True}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in delete_file: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -110,31 +279,50 @@ def _render_html_table_from_dataframe(df: pd.DataFrame, title: str) -> str:
     return html
 
 @router.get("/preview/{fileID}", response_class=HTMLResponse, tags=["files"])
-async def preview_file(fileID: str = Path(..., description="File ID")):
-    """Preview an uploaded file as HTML."""
+async def preview_file(
+    fileID: str = Path(..., description="File ID"),
+    db: Session = Depends(get_db),
+    clerk_user_id: str = Depends(require_user)
+):
+    """Preview an uploaded file as HTML. Fetches from S3."""
     try:
+        # Get file record
         try:
-            meta = FileHandler.get_upload_metadata(fileID)
+            file_uuid = uuid.UUID(fileID)
+        except ValueError:
+            return HTMLResponse("<h3>Invalid file ID</h3>", status_code=400)
+        
+        file_record = files_repo.get_file(db, file_uuid)
+        if not file_record:
+            return HTMLResponse("<h3>File not found</h3>", status_code=404)
+        
+        # Get asset
+        asset = assets.get_asset(db, file_record.asset_id)
+        if not asset or asset.user_id != clerk_user_id:
+            return HTMLResponse("<h3>Access denied</h3>", status_code=403)
+        
+        filename = file_record.original_filename
+        ext = file_record.extension
+        
+        # Download from S3
+        try:
+            file_content = download_bytes(asset.s3_bucket, asset.s3_key)
         except FileNotFoundError:
-            return HTMLResponse("<h3>File not found</h3>", status_code=404)
-
-        ext = meta.get('ext')
-        filename = meta.get('filename', fileID)
-        path = FileHandler.get_upload_path(fileID, ext)
-        if not os.path.exists(path):
-            return HTMLResponse("<h3>File not found</h3>", status_code=404)
-
+            return HTMLResponse("<h3>File not found in storage</h3>", status_code=404)
+        
         # Render HTML preview
         if ext == 'csv':
-            df = pd.read_csv(path)
+            import io
+            df = pd.read_csv(io.BytesIO(file_content))
             html = _render_html_table_from_dataframe(df, filename)
         elif ext in ['xlsx', 'xls']:
-            df = pd.read_excel(path)
+            import io
+            df = pd.read_excel(io.BytesIO(file_content))
             html = _render_html_table_from_dataframe(df, filename)
         elif ext == 'json':
             try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+                import io
+                data = json.loads(file_content.decode('utf-8'))
                 # Convert to DataFrame sensibly
                 if isinstance(data, list):
                     df = pd.DataFrame(data)
@@ -155,6 +343,8 @@ async def preview_file(fileID: str = Path(..., description="File ID")):
             return HTMLResponse("<h3>Invalid file type. Supported: CSV, XLSX, XLS, JSON</h3>", status_code=400)
 
         return HTMLResponse(html, status_code=200)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in preview_file: {str(e)}")
         return HTMLResponse(f"<h3>Error generating preview: {str(e)}</h3>", status_code=500)

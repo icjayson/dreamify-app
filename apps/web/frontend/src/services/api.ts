@@ -20,10 +20,15 @@ export interface ApiError {
 class ApiClient {
   private baseURL: string;
   private timeout: number;
+  private authTokenProvider?: () => Promise<string | null>;
 
   constructor() {
     this.baseURL = API_CONFIG.BASE_URL;
     this.timeout = API_CONFIG.TIMEOUT;
+  }
+
+  public setAuthTokenProvider(provider: () => Promise<string | null>) {
+    this.authTokenProvider = provider;
   }
 
   private async request<T>(
@@ -32,14 +37,25 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
     
-    const defaultOptions: RequestInit = {
-      headers: {
-        'Content-Type': CONTENT_TYPES.JSON,
-        ...options.headers,
-      },
-    };
+    const defaultOptions: RequestInit = { headers: { 'Content-Type': CONTENT_TYPES.JSON } };
 
-    const config = { ...defaultOptions, ...options };
+    // Merge provided options
+    const config: RequestInit = { ...defaultOptions, ...options };
+
+    // Attach Authorization if available
+    try {
+      if (this.authTokenProvider) {
+        const token = await this.authTokenProvider();
+        if (token) {
+          config.headers = {
+            ...(config.headers as Record<string, string>),
+            Authorization: `Bearer ${token}`,
+          };
+        }
+      }
+    } catch (_) {
+      // ignore token retrieval errors; request proceeds unauthenticated
+    }
 
     try {
       const response = await fetch(url, config);
@@ -98,11 +114,20 @@ class ApiClient {
     const url = `${this.baseURL}${endpoint}`;
     
     try {
-      const { headers, ...restOptions } = options || {};
+      const restOptions = { ...(options || {}) };
+      const headers: Record<string, string> = {};
+      // Attach Authorization if available
+      try {
+        if (this.authTokenProvider) {
+          const token = await this.authTokenProvider();
+          if (token) headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (_) {}
+
       const response = await fetch(url, {
         method: HTTP_METHODS.POST,
         body: formData,
-        // Don't set Content-Type header for FormData - let browser handle it
+        headers, // let browser set multipart boundary, we only add Authorization
         ...restOptions,
       });
       

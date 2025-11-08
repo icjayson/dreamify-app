@@ -207,7 +207,7 @@ const DashboardPreview = ({
     return dashboardConfig;
   };
 
-  // Apply dashboard-level styling to container to decouple from global theme
+  // Apply dashboard-level styling to container
   const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData]);
   useEffect(() => {
     if (containerRef.current && dashboardStylingForContainer) {
@@ -366,6 +366,27 @@ const DashboardPreview = ({
     console.error('Chart component error:', error, component);
   };
 
+  // Extract dashboard metadata (handle both nested and top-level dashboard object)
+  const dashboardMetadata = useMemo(() => {
+    // Try top-level first (correct structure)
+    if (processedData?.dashboard) {
+      return {
+        title: processedData.dashboard.title,
+        description: processedData.dashboard.description,
+        styling: processedData.dashboard.styling
+      };
+    }
+    // Fallback to nested structure (if backend wraps it)
+    if (processedData?.data?.dashboard) {
+      return {
+        title: processedData.data.dashboard.title,
+        description: processedData.data.dashboard.description,
+        styling: processedData.data.dashboard.styling
+      };
+    }
+    return null;
+  }, [processedData]);
+
   return (
     <div
       ref={containerRef}
@@ -378,7 +399,25 @@ const DashboardPreview = ({
       }}
       data-theme="dashboard-preview"
     >
-      {/* Header removed as per request */}
+      {/* Dashboard Header with Title and Description */}
+      {dashboardMetadata && (
+        <div className="px-6 pt-6 pb-4 border-b" style={{ borderColor: 'var(--border-card-color)' }}>
+          <h1 
+            className="text-3xl font-bold mb-2" 
+            style={{ color: 'var(--highlight-color)' }}
+          >
+            {dashboardMetadata.title}
+          </h1>
+          {dashboardMetadata.description && (
+            <p 
+              className="text-base opacity-90" 
+              style={{ color: 'var(--description-color)' }}
+            >
+              {dashboardMetadata.description}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Main Dashboard Content */}
       <div className="p-6">

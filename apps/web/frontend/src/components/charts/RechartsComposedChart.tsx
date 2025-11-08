@@ -112,9 +112,9 @@ const RechartsComposedChart: React.FC<RechartsComposedChartProps> = ({
   return (
     <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '85%', ...style }}>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold mb-1">{title}</h3>
+        <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }}>{title}</h3>
         {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p className="text-sm" style={{ color: 'var(--description-color)' }}>{description}</p>
         )}
       </div>
 
@@ -131,23 +131,20 @@ const RechartsComposedChart: React.FC<RechartsComposedChartProps> = ({
           <CartesianGrid 
             strokeDasharray="3 3" 
             className="chart-grid"
-            stroke="hsl(var(--chart-grid-color))"
-            strokeOpacity="var(--chart-grid-opacity)"
           />
           <XAxis 
             dataKey="label" 
             className="chart-axis"
-            tick={{ fill: 'hsl(var(--chart-axis-text))' }}
+            tick={{ fill: 'var(--element-color)' }}
           />
           <YAxis 
             className="chart-axis"
-            tick={{ fill: 'hsl(var(--chart-axis-text))' }}
+            tick={{ fill: 'var(--element-color)' }}
           />
           <Tooltip content={<CustomTooltip />} />
           {styling?.legendPosition !== 'none' && (
             <Legend 
               className="chart-legend"
-              wrapperStyle={{ color: 'hsl(var(--chart-legend-text))' }}
               verticalAlign={styling?.legendPosition === 'top' ? 'top' : 'bottom'}
             />
           )}

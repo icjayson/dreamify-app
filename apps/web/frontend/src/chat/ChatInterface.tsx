@@ -480,7 +480,18 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
                 {/* Right side - Actions */}
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <Button
-                    onClick={() => window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank')}
+                    onClick={async () => {
+                      try {
+                        const { useAuth } = await import('@clerk/clerk-react');
+                        const token = await useAuth().getToken();
+                        const url = token
+                          ? `/api/v1/files/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
+                          : `/api/v1/files/preview/${uploadedFile.fileID}`;
+                        window.open(url, '_blank');
+                      } catch {
+                        window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank');
+                      }
+                    }}
                     disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
                     className="text-xs bg-[#292929] text-white p-2 disabled:opacity-50 whitespace-nowrap"
                   >

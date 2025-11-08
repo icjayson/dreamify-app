@@ -1,5 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 
+/* Import chart theme presets */
+@import './styles/chart-presets.css';
+
 /* Hide side and bottom resize handle glyphs but keep resize functionality */
 .react-resizable-handle-e,
 .react-resizable-handle-s,

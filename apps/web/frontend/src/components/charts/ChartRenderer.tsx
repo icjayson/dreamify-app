@@ -14,7 +14,7 @@ import {
 } from '@/types/dashboard';
 import { createChart, validateChartConfig } from './ChartFactory';
 import ErrorBoundary from '@/components/charts/ErrorBoundary';
-import { getChartStylingClasses } from '@/utils/chartStyling';
+import { getChartStylingClasses, resolveColorToken, convertLLMStylingToChartStyling } from '@/utils/chartStyling';
 
 interface ChartRendererProps {
   component: DashboardComponent;
@@ -176,14 +176,31 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
 
   // Get styling classes for the chart
   const chartConfig = config as ChartConfiguration;
-  const stylingClasses = chartConfig.styling ? getChartStylingClasses(chartConfig.styling) : '';
+  
+  // Convert Morpheus styling to ChartStyling format if needed
+  let stylingClasses = '';
+  if (chartConfig.styling) {
+    const morpheusStyling = chartConfig.styling as any;
+    // Check if it's already converted (has presetTheme) or needs conversion (has theme)
+    if (morpheusStyling.presetTheme) {
+      stylingClasses = getChartStylingClasses(morpheusStyling);
+    } else if (morpheusStyling.theme) {
+      const converted = convertLLMStylingToChartStyling(morpheusStyling);
+      stylingClasses = getChartStylingClasses(converted);
+    }
+  }
 
   // Compute tile styles from styling
   const tile = (chartConfig as any)?.styling?.tile || {};
+  
+  // Resolve semantic color tokens to CSS variables
+  const borderColor = tile.borderColor ? resolveColorToken(tile.borderColor) : 'var(--border-card-color)';
+  const backgroundColor = tile.background ? resolveColorToken(tile.background) : 'var(--bg-card-color)';
+  
   const containerStyle: React.CSSProperties = {
-    border: `${(tile.borderWidth ?? 1)}px solid ${tile.borderColor || 'hsl(220 14% 90%)'}`,
+    border: `${(tile.borderWidth ?? 1)}px solid ${borderColor}`,
     borderRadius: (tile.borderRadius ?? 12) as number,
-    backgroundColor: tile.background || 'hsl(0 0% 100%)',
+    backgroundColor: backgroundColor,
     height: '100%',
     ...style
   };

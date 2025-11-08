@@ -494,7 +494,18 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                       {/* Right side - Actions */}
                       <div className="flex flex-col items-end gap-0 flex-shrink-0">
                         <Button
-                          onClick={() => window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank')}
+                          onClick={async () => {
+                            try {
+                              const { useAuth } = await import('@clerk/clerk-react');
+                              const token = await useAuth().getToken();
+                              const url = token 
+                                ? `/api/v1/files/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
+                                : `/api/v1/files/preview/${uploadedFile.fileID}`;
+                              window.open(url, '_blank');
+                            } catch {
+                              window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank');
+                            }
+                          }}
                           disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
                           className="button-gradient px-4 py-0 text-xs disabled:opacity-50 whitespace-nowrap"
                         >

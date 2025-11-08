@@ -1,119 +1,104 @@
 /**
- * Chart Preset Themes - CSS Custom Properties for Dynamic Chart Styling
- * Integrates with existing design system and glass morphism effects
+ * Chart Theme Presets - CSS Custom Properties for Dynamic Chart Styling
+ * Color Component Prefix System with 5 curated themes
  */
 
-@layer components {
-  /* Corporate Theme - Professional, clean, business-focused */
-  .chart-preset-corporate {
-    --chart-primary: 220 14% 96%;
-    --chart-secondary: 220 9% 46%;
-    --chart-accent: 220 14% 96%;
-    --chart-success: 142 76% 36%;
-    --chart-warning: 38 92% 50%;
-    --chart-error: 0 84% 60%;
+/* OCEAN Theme - Vibrant blue, professional */
+.chart-theme-ocean {
+  --highlight-color: #3b82f6;
+  --bg-dashboard-color: #0f172a;
+  --bg-card-color: #a5a5a5;
+  --border-card-color: #ffffff;
+  --title-color: #000000;
+  --description-color: #4e4e4e;
+  --element-color: #2b2e32;
     
-    --chart-grid-color: 220 13% 91%;
-    --chart-grid-opacity: 0.3;
-    --chart-tooltip-bg: 0 0% 100%;
-    --chart-tooltip-border: 220 13% 91%;
-    --chart-tooltip-text: 220 9% 46%;
-    --chart-legend-text: 220 9% 46%;
-    --chart-axis-text: 220 9% 46%;
+    /* RGB variants for opacity manipulation */
+    --highlight-color-rgb: 59, 130, 246;
+    --element-color-rgb: 100, 116, 139;
     
     --chart-animation-duration: 0.8s;
     --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
     --chart-hover-scale: 1.02;
   }
 
-  /* Vibrant Theme - Colorful, energetic, modern */
-  .chart-preset-vibrant {
-    --chart-primary: 261 83% 58%;
-    --chart-secondary: 193 100% 50%;
-    --chart-accent: 142 76% 36%;
-    --chart-success: 142 76% 36%;
-    --chart-warning: 38 92% 50%;
-    --chart-error: 0 84% 60%;
+/* FOREST Theme - Emerald green, natural */
+.chart-theme-forest {
+    --highlight-color: #10b981;
+    --bg-dashboard-color: #064e3b;
+    --bg-card-color: #065f46;
+    --border-card-color: #047857;
+    --title-color: #f0fdf4;
+    --description-color: #d1fae5;
+    --element-color: #6ee7b7;
     
-    --chart-grid-color: 261 83% 58%;
-    --chart-grid-opacity: 0.2;
-    --chart-tooltip-bg: 220 27% 8%;
-    --chart-tooltip-border: 261 83% 58%;
-    --chart-tooltip-text: 0 0% 98%;
-    --chart-legend-text: 0 0% 98%;
-    --chart-axis-text: 0 0% 98%;
+    /* RGB variants for opacity manipulation */
+    --highlight-color-rgb: 16, 185, 129;
+    --element-color-rgb: 110, 231, 183;
     
-    --chart-animation-duration: 1.2s;
-    --chart-animation-easing: cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    --chart-hover-scale: 1.05;
+    --chart-animation-duration: 0.8s;
+    --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+    --chart-hover-scale: 1.02;
   }
 
-  /* Minimal Theme - Clean, simple, focused */
-  .chart-preset-minimal {
-    --chart-primary: 220 9% 46%;
-    --chart-secondary: 220 9% 46%;
-    --chart-accent: 220 9% 46%;
-    --chart-success: 220 9% 46%;
-    --chart-warning: 220 9% 46%;
-    --chart-error: 220 9% 46%;
+/* SUNSET Theme - Amber, warm */
+.chart-theme-sunset {
+    --highlight-color: #f59e0b;
+    --bg-dashboard-color: #431407;
+    --bg-card-color: #7c2d12;
+    --border-card-color: #9a3412;
+    --title-color: #fffbeb;
+    --description-color: #fef3c7;
+    --element-color: #fbbf24;
     
-    --chart-grid-color: 220 13% 91%;
-    --chart-grid-opacity: 0.1;
-    --chart-tooltip-bg: 0 0% 100%;
-    --chart-tooltip-border: 220 13% 91%;
-    --chart-tooltip-text: 220 9% 46%;
-    --chart-legend-text: 220 9% 46%;
-    --chart-axis-text: 220 9% 46%;
+    /* RGB variants for opacity manipulation */
+    --highlight-color-rgb: 245, 158, 11;
+    --element-color-rgb: 251, 191, 36;
     
-    --chart-animation-duration: 0.4s;
-    --chart-animation-easing: ease-out;
-    --chart-hover-scale: 1.01;
+    --chart-animation-duration: 0.8s;
+    --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+    --chart-hover-scale: 1.02;
   }
 
-  /* Dark Theme - High contrast, modern, sleek */
-  .chart-preset-dark {
-    --chart-primary: 261 83% 70%;
-    --chart-secondary: 193 100% 60%;
-    --chart-accent: 142 76% 50%;
-    --chart-success: 142 76% 50%;
-    --chart-warning: 38 92% 60%;
-    --chart-error: 0 84% 70%;
+/* MIDNIGHT Theme - Purple, sleek */
+.chart-theme-midnight {
+    --highlight-color: #8b5cf6;
+    --bg-dashboard-color: #0c0a09;
+    --bg-card-color: #1c1917;
+    --border-card-color: #292524;
+    --title-color: #fafaf9;
+    --description-color: #d6d3d1;
+    --element-color: #78716c;
     
-    --chart-grid-color: 220 27% 18%;
-    --chart-grid-opacity: 0.4;
-    --chart-tooltip-bg: 220 27% 8%;
-    --chart-tooltip-border: 220 27% 18%;
-    --chart-tooltip-text: 0 0% 98%;
-    --chart-legend-text: 0 0% 98%;
-    --chart-axis-text: 0 0% 98%;
+    /* RGB variants for opacity manipulation */
+    --highlight-color-rgb: 139, 92, 246;
+    --element-color-rgb: 120, 113, 108;
     
     --chart-animation-duration: 1s;
     --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
     --chart-hover-scale: 1.03;
   }
 
-  /* Colorful Theme - Diverse, playful, engaging */
-  .chart-preset-colorful {
-    --chart-primary: 261 83% 58%;
-    --chart-secondary: 193 100% 50%;
-    --chart-accent: 142 76% 36%;
-    --chart-success: 142 76% 36%;
-    --chart-warning: 38 92% 50%;
-    --chart-error: 0 84% 60%;
+/* SAKURA Theme - Pink, elegant */
+.chart-theme-sakura {
+    --highlight-color: #ec4899;
+    --bg-dashboard-color: #4a044e;
+    --bg-card-color: #701a75;
+    --border-card-color: #86198f;
+    --title-color: #fdf4ff;
+    --description-color: #f5d0fe;
+    --element-color: #e879f9;
     
-    --chart-grid-color: 261 83% 58%;
-    --chart-grid-opacity: 0.15;
-    --chart-tooltip-bg: 220 27% 8%;
-    --chart-tooltip-border: 261 83% 58%;
-    --chart-tooltip-text: 0 0% 98%;
-    --chart-legend-text: 0 0% 98%;
-    --chart-axis-text: 0 0% 98%;
+    /* RGB variants for opacity manipulation */
+    --highlight-color-rgb: 236, 72, 153;
+    --element-color-rgb: 232, 121, 249;
     
-    --chart-animation-duration: 1.5s;
+    --chart-animation-duration: 1.2s;
     --chart-animation-easing: cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    --chart-hover-scale: 1.08;
+    --chart-hover-scale: 1.05;
   }
 
+@layer components {
   /* Chart Animation Classes */
   .chart-animate-fade-in {
     animation: chartFadeIn var(--chart-animation-duration, 0.8s) var(--chart-animation-easing, cubic-bezier(0.4, 0, 0.2, 1)) forwards;
@@ -137,31 +122,30 @@
 
   /* Chart Grid Styling */
   .chart-grid {
-    stroke: hsl(var(--chart-grid-color, 220 13% 91%));
-    stroke-opacity: var(--chart-grid-opacity, 0.3);
+    stroke: rgba(var(--element-color-rgb), 0.75);
     stroke-width: 1;
   }
 
   /* Chart Tooltip Styling */
   .chart-tooltip {
-    background-color: hsl(var(--chart-tooltip-bg, 0 0% 100%));
-    border: 1px solid hsl(var(--chart-tooltip-border, 220 13% 91%));
+    background-color: var(--bg-card-color);
+    border: 1px solid var(--border-card-color);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     padding: 8px 12px;
     font-size: 12px;
-    color: hsl(var(--chart-tooltip-text, 220 9% 46%));
+    color: var(--description-color);
   }
 
   /* Chart Legend Styling */
   .chart-legend {
-    color: hsl(var(--chart-legend-text, 220 9% 46%));
+    color: var(--description-color);
     font-size: 12px;
   }
 
   /* Chart Axis Styling */
   .chart-axis {
-    color: hsl(var(--chart-axis-text, 220 9% 46%));
+    color: var(--element-color);
     font-size: 11px;
   }
 

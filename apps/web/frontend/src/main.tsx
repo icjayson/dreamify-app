@@ -1,10 +1,11 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
-import { ClerkProvider } from '@clerk/clerk-react'
+import { ClerkProvider, useAuth } from '@clerk/clerk-react'
 import { BrowserRouter } from 'react-router-dom'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
+import { apiClient } from '@/services/api'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 if (!PUBLISHABLE_KEY) {
@@ -12,6 +13,19 @@ if (!PUBLISHABLE_KEY) {
 }
 
 const AppWithRouter = () => {
+  const TokenBridge = () => {
+    const { getToken } = useAuth();
+    // Update token provider on each render to ensure latest function is used
+    apiClient.setAuthTokenProvider(async () => {
+      try {
+        return await getToken();
+      } catch {
+        return null;
+      }
+    });
+    return null;
+  };
+
   return (
     <BrowserRouter>
       <ClerkProvider 
@@ -19,6 +33,7 @@ const AppWithRouter = () => {
         afterSignOutUrl="/"
         afterSignInUrl="/workspace"
       >
+        <TokenBridge />
         <App />
       </ClerkProvider>
     </BrowserRouter>

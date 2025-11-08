@@ -35,14 +35,15 @@ const MetricCard = ({
   className = "",
   style = {}
 }: MetricCardProps) => {
-  const borderColor = styling?.tile?.borderColor || 'hsl(220 14% 90%)';
+  // Use CSS variables for all colors with semantic tokens as fallback
+  const borderColor = 'var(--border-card-color)';
   const borderWidth = styling?.tile?.borderWidth ?? 1;
   const borderRadius = styling?.tile?.borderRadius ?? 12;
-  const background = styling?.tile?.background || 'hsl(0 0% 100%)';
-  const valueColor = styling?.accentColor;
+  const background = 'var(--bg-card-color)'; // Always use CSS variable for card background
+  const valueColor = 'var(--highlight-color)';
   const trendUp = styling?.trendUpColor || 'hsl(142 76% 36%)';
   const trendDown = styling?.trendDownColor || 'hsl(0 84% 60%)';
-  const textColor = styling?.text;
+  const textColor = 'var(--title-color)';
   // Derive display change and direction
   const pct = typeof timeComparison?.percentage_change === 'number' ? timeComparison!.percentage_change : null;
   const hasPct = pct !== null && isFinite(pct as number);
@@ -55,12 +56,12 @@ const MetricCard = ({
 
   return (
     <div className={`rounded-md hover:scale-105 transition-all duration-300 animate-fade-in h-full ${className}`}
-      style={{ borderRadius, backgroundColor: background, ...style }}>
+      style={{ borderRadius, backgroundColor: background, border: `${borderWidth}px solid ${borderColor}`, ...style }}>
       <div className="space-y-2">
-        <p className="text-sm" style={{ color: textColor || 'inherit' }}>{title}</p>
+        <p className="text-sm" style={{ color: textColor }}>{title}</p>
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-2xl font-bold" style={{ color: valueColor || 'inherit' }}>{value}</p>
+            <p className="text-2xl font-bold" style={{ color: valueColor }}>{value}</p>
             {(displayChange && direction) && (
               <div className="flex items-center gap-2 mt-1">
                 {direction === 'up' && (
@@ -70,13 +71,13 @@ const MetricCard = ({
                   <TrendingDown className="w-3 h-3" aria-label="trend down" style={{ color: trendDown }} />
                 )}
                 {direction === 'stable' && (
-                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: textColor || 'hsl(220 9% 46%)' }} />
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: textColor }} />
                 )}
-                <span className="text-xs font-medium" style={{ color: direction === 'up' ? trendUp : direction === 'down' ? trendDown : (textColor || 'inherit') }}>
+                <span className="text-xs font-medium" style={{ color: direction === 'up' ? trendUp : direction === 'down' ? trendDown : textColor }}>
                   {displayChange}
                 </span>
                 {periodLabel && (
-                  <span className="text-[10px] opacity-75" style={{ color: textColor || 'inherit' }}>{periodLabel}</span>
+                  <span className="text-[10px] opacity-75" style={{ color: textColor }}>{periodLabel}</span>
                 )}
               </div>
             )}

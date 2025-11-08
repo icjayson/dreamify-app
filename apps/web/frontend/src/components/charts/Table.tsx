@@ -68,11 +68,12 @@ const Table = ({
   const hasStructure = Array.isArray(columns) && columns.length > 0;
   const hasData = Array.isArray(data) && data.length > 0;
   const tile = styling?.tile || {};
-  const textColor = styling?.headerText || 'hsl(220 9% 14%)';
+  const titleColor = 'var(--title-color)';
+  const descriptionColor = 'var(--description-color)';
   const tileStyle = {
     borderRadius: tile.borderRadius ?? 12,
-    backgroundColor: tile.background || 'hsl(0 0% 100%)',
-    color: textColor
+    backgroundColor: 'var(--bg-card-color)',
+    color: titleColor
   } as React.CSSProperties;
 
   // Sort data
@@ -120,9 +121,9 @@ const Table = ({
   return (
     <div className={`rounded-md animate-fade-in h-full ${className}`} style={{ ...tileStyle, ...style, display: 'flex', flexDirection: 'column' }}>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold">{title}</h3>
+        <h3 className="text-lg font-semibold" style={{ color: titleColor }}>{title}</h3>
         {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p className="text-sm" style={{ color: descriptionColor }}>{description}</p>
         )}
       </div>
 
@@ -132,12 +133,12 @@ const Table = ({
         </div>
       ) : (
         <div className="flex-1 overflow-hidden">
-          <div className="overflow-hidden rounded-md border" style={{ borderColor: styling?.borderColor || textColor }}>
+          <div className="overflow-hidden rounded-md border" style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}>
             <table className="w-full">
               <thead 
                 style={{ 
-                  backgroundColor: styling?.headerBg || 'hsl(220 14% 96%)',
-                  color: styling?.headerText || textColor 
+                  backgroundColor: styling?.headerBg || 'var(--highlight-color)',
+                  color: styling?.headerText || titleColor 
                 }}
               >
                 <tr>
@@ -163,8 +164,9 @@ const Table = ({
                     className="animate-slide-up border-b transition-colors hover:bg-opacity-50"
                     style={{ 
                       animationDelay: `${index * 100}ms`,
-                      backgroundColor: index % 2 === 1 ? styling?.rowAltBg : styling?.rowBg,
-                      borderBottomColor: styling?.borderColor || textColor
+                      backgroundColor: index % 2 === 1 ? styling?.rowAltBg : styling?.rowBg || 'transparent',
+                      borderBottomColor: 'var(--element-color)',
+                      color: descriptionColor
                     }}
                   >
                     {columns.map((column) => (

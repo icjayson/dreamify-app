@@ -15,11 +15,12 @@ def create_file(
     file_metadata: Optional[Dict[str, Any]] = None,
     rows: Optional[int] = None,
     columns: Optional[int] = None,
-    processed_json_s3_key: Optional[str] = None
+    processed_json_s3_key: Optional[str] = None,
+    file_id: Optional[uuid.UUID] = None,
 ) -> File:
-    """Create a new file."""
+    """Create a new file. If file_id is provided, use it as the primary key."""
     file = File(
-        id=uuid.uuid4(),
+        id=file_id or uuid.uuid4(),
         asset_id=asset_id,
         original_filename=original_filename,
         extension=extension,

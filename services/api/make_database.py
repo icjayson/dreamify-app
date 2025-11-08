@@ -12,6 +12,7 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.postgres.db import engine, Base
+from utils.postgres.models import User, Session, Project, Chat, Asset, File  # Import all models so they're registered
 from utils.config import config
 
 logging.basicConfig(level=logging.INFO)

@@ -1,7 +1,7 @@
 """
 Authentication dependencies for FastAPI routes.
 """
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, status, Query
 from typing import Optional
 from app.auth.clerk import verify_clerk_jwt, get_clerk_user_id_from_token
 
@@ -49,4 +49,49 @@ def require_user(authorization: Optional[str] = Header(None)) -> str:
             detail=f"Authentication failed: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def require_user_header_or_query_token(
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = Query(None)
+) -> str:
+    """
+    Require authenticated user via Authorization header or 'token' query parameter.
+    - If Authorization: Bearer <token> is present, verify and return user id.
+    - Else if token query param is present, verify and return user id.
+    - Else 401.
+    """
+    # Try header first
+    if authorization:
+        try:
+            scheme, bearer = authorization.split(" ", 1)
+            if scheme.lower() != "bearer":
+                raise ValueError("Invalid authorization scheme")
+            return get_clerk_user_id_from_token(bearer)
+        except Exception as e:
+            # Fall through to query token if provided
+            if not token:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Authentication failed: {str(e)}",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+    # Fallback to query token
+    if token:
+        try:
+            return get_clerk_user_id_from_token(token)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Authentication failed: {str(e)}",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    # Nothing provided
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authorization header or token query parameter required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 

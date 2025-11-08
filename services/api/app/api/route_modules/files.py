@@ -6,9 +6,10 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Path, Depends, F
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from app.utils.file_handler import FileHandler
-from app.dependencies.auth import require_user
+from app.dependencies.auth import require_user, require_user_header_or_query_token
 from utils.postgres.db import get_db
 from utils.postgres.repos import users, projects, assets, files as files_repo
+from utils.postgres.models import User
 from utils.s3.client import upload_bytes, download_bytes, delete_object, compute_sha256_checksum
 from utils.s3.paths import build_asset_key, build_metadata_key
 from utils.config import config
@@ -65,6 +66,31 @@ async def upload_file(
         file_id = str(uuid.uuid4())
         asset_id = str(uuid.uuid4())
         ext = info['extension']
+        
+        # Ensure user exists in database before creating project
+        # This prevents foreign key constraint violations
+        # Create user if not exists, ensuring it's committed before project creation
+        try:
+            # Check if user exists first
+            existing_user = users.get_user(db, clerk_user_id)
+            if not existing_user:
+                # User doesn't exist, create it
+                new_user = User(
+                    id=clerk_user_id,
+                    email="",  # Can be updated later from Clerk
+                    name=None,
+                    image_url=None
+                )
+                db.add(new_user)
+                db.commit()  # Commit user creation before creating project
+                db.refresh(new_user)
+                logger.info(f"Created new user: {clerk_user_id}")
+            else:
+                logger.info(f"User already exists: {clerk_user_id}")
+        except Exception as e:
+            db.rollback()  # Rollback on error
+            logger.error(f"Failed to get or create user: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
         
         # Get or create project
         if project_id:
@@ -134,6 +160,8 @@ async def upload_file(
         }
         
         # Create file record
+        file_uuid = uuid.UUID(file_id)
+        logger.info(f"Creating file record with file_id: {file_id} (UUID: {file_uuid})")
         file_record = files_repo.create_file(
             db=db,
             asset_id=asset.id,
@@ -141,8 +169,18 @@ async def upload_file(
             extension=ext,
             file_metadata=metadata,
             rows=None,  # Will be populated after processing
-            columns=None
+            columns=None,
+            processed_json_s3_key=None,
+            file_id=file_uuid
         )
+        logger.info(f"File record created successfully with id: {file_record.id}")
+        
+        # Verify file can be retrieved immediately
+        verify_file = files_repo.get_file(db, file_uuid)
+        if not verify_file:
+            logger.error(f"File record not found immediately after creation! file_id: {file_id}")
+            raise HTTPException(status_code=500, detail="File record creation failed")
+        logger.info(f"File record verified: {verify_file.id}")
         
         # Return response in legacy format for backward compatibility
         return {
@@ -170,10 +208,8 @@ async def list_files(
 ):
     """List all uploaded files for the current user."""
     try:
-        # Get user's assets
-        user = users.get_user(db, clerk_user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        # Ensure user exists in database
+        users.get_or_create_user_by_clerk_id(db, clerk_user_id)
         
         # If project_id provided, filter by project
         if project_id:
@@ -282,7 +318,7 @@ def _render_html_table_from_dataframe(df: pd.DataFrame, title: str) -> str:
 async def preview_file(
     fileID: str = Path(..., description="File ID"),
     db: Session = Depends(get_db),
-    clerk_user_id: str = Depends(require_user)
+    clerk_user_id: str = Depends(require_user_header_or_query_token)
 ):
     """Preview an uploaded file as HTML. Fetches from S3."""
     try:

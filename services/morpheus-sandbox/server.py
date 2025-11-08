@@ -2,12 +2,14 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional
 from morpheus.workflows.analyze_csv.workflow import AnalyzeCSVWorkflow
-from utils.config import config
 from utils.logger import logger
 from utils.health import check_health
+from utils.s3_client import download_bytes
 import os
 import json
+import tempfile
 from pathlib import Path
 
 app = FastAPI()
@@ -24,37 +26,58 @@ app.add_middleware(
 # Pydantic models for request/response
 class RunRequest(BaseModel):
     fileID: str
+    s3_bucket: Optional[str] = None
+    s3_key: Optional[str] = None
+    extension: Optional[str] = None
 
 class StatusRequest(BaseModel):
     fileID: str
 
 # Configure paths - pointing to dreamify-backend file-storage
-BACKEND_STORAGE_BASE = config.storage.local.path
+BACKEND_STORAGE_BASE = "/Users/quangnguyen/Documents/Dreamify/dreamify-backend/file-storage"
 METADATA_DIR = os.path.join(BACKEND_STORAGE_BASE, "metadata", "uploads")
 UPLOADS_DIR = os.path.join(BACKEND_STORAGE_BASE, "uploads")
 PROCESSED_DIR = os.path.join(BACKEND_STORAGE_BASE, "processed")
 
-def _process_file_background(fileID: str):
+def _process_file_background(fileID: str, s3_bucket: Optional[str] = None, s3_key: Optional[str] = None, extension: Optional[str] = None):
     """Background processing function for workflow execution."""
     processed_path = os.path.join(PROCESSED_DIR, f"{fileID}.json")
+    temp_file_path = None
     
     try:
         logger.info(f"Starting background processing for fileID: {fileID}")
         
-        # Load file metadata
-        metadata_path = os.path.join(METADATA_DIR, f"{fileID}.json")
-        if not os.path.exists(metadata_path):
-            raise FileNotFoundError(f"Metadata {metadata_path} not found for fileID: {fileID}")
+        # Determine file extension
+        file_ext = extension or 'csv'
         
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        
-        # Get actual file path
-        file_ext = metadata.get('ext', 'csv')
-        file_path = os.path.join(UPLOADS_DIR, f"{fileID}.{file_ext}")
-        
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Upload file not found: {file_path}")
+        # Get file content - either from S3 or local file system (for backward compatibility)
+        if s3_bucket and s3_key:
+            # Download from S3
+            logger.info(f"Downloading file from S3: s3://{s3_bucket}/{s3_key}")
+            file_content = download_bytes(s3_bucket, s3_key)
+            
+            # Save to temporary file for processing
+            temp_dir = tempfile.gettempdir()
+            temp_file_path = os.path.join(temp_dir, f"{fileID}.{file_ext}")
+            with open(temp_file_path, 'wb') as f:
+                f.write(file_content)
+            
+            logger.info(f"File downloaded from S3 and saved to temporary file: {temp_file_path}")
+            file_path = temp_file_path
+        else:
+            # Fallback to local file system (for backward compatibility)
+            logger.info(f"Using local file system for fileID: {fileID}")
+            metadata_path = os.path.join(METADATA_DIR, f"{fileID}.json")
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+                file_ext = metadata.get('ext', 'csv')
+            else:
+                logger.warning(f"Metadata not found, using default extension: {file_ext}")
+            
+            file_path = os.path.join(UPLOADS_DIR, f"{fileID}.{file_ext}")
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"Upload file not found: {file_path}")
         
         logger.info(f"Processing file: {file_path}")
         
@@ -62,12 +85,15 @@ def _process_file_background(fileID: str):
         workflow = AnalyzeCSVWorkflow()
         result = workflow.execute(file_path, "Analyze this data file")
         
+        # Get file size
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        
         # Prepare processed data
         processed_data = {
             "fileID": fileID,
             "status": "completed",
             "processed_at": datetime.now().isoformat(),
-            "file_size": metadata.get('size', 0),
+            "file_size": file_size,
             "file_type": file_ext,
             "data": result.get("data", {}),
             "charts": result.get("data", {}).get("charts", []),
@@ -104,6 +130,14 @@ def _process_file_background(fileID: str):
         }
         with open(processed_path, 'w', encoding='utf-8') as f:
             json.dump(error_data, f, ensure_ascii=False, indent=2)
+    finally:
+        # Clean up temporary file if it was created
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+                logger.info(f"Cleaned up temporary file: {temp_file_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary file {temp_file_path}: {str(e)}")
 
 
 @app.post("/run")
@@ -114,7 +148,11 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
     """
     try:
         fileID = request.fileID
-        logger.info(f"Received run request for fileID: {fileID}")
+        s3_bucket = request.s3_bucket
+        s3_key = request.s3_key
+        extension = request.extension
+        
+        logger.info(f"Received run request for fileID: {fileID}, s3_bucket: {s3_bucket}, s3_key: {s3_key}, extension: {extension}")
         
         # Check if already processed
         processed_path = os.path.join(PROCESSED_DIR, f"{fileID}.json")
@@ -132,30 +170,39 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
                     }
                 }
         
-        # Verify file exists
-        metadata_path = os.path.join(METADATA_DIR, f"{fileID}.json")
-        if not os.path.exists(metadata_path):
-            logger.error(f"Metadata not found for fileID: {fileID}")
-            raise HTTPException(status_code=404, detail="File metadata not found")
+        # Determine file extension
+        file_ext = extension or 'csv'
         
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
+        # If using S3, verify we have the required information
+        if s3_bucket and s3_key:
+            logger.info(f"Using S3 for file retrieval: s3://{s3_bucket}/{s3_key}")
+        else:
+            # Fallback to local file system (for backward compatibility)
+            logger.info(f"Using local file system for fileID: {fileID}")
+            metadata_path = os.path.join(METADATA_DIR, f"{fileID}.json")
+            if not os.path.exists(metadata_path):
+                logger.error(f"Metadata not found for fileID: {fileID}")
+                raise HTTPException(status_code=404, detail="File metadata not found. Please provide s3_bucket and s3_key.")
+            
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            file_ext = metadata.get('ext', 'csv')
         
         # Create initial status file
         initial_status = {
             "fileID": fileID,
             "status": "accepted",
             "processed_at": datetime.now().isoformat(),
-            "file_size": metadata.get('size', 0),
-            "file_type": metadata.get('ext', 'csv')
+            "file_size": 0,  # Will be updated after processing
+            "file_type": file_ext
         }
         
         os.makedirs(PROCESSED_DIR, exist_ok=True)
         with open(processed_path, 'w', encoding='utf-8') as f:
             json.dump(initial_status, f, ensure_ascii=False, indent=2)
         
-        # Add background task
-        background_tasks.add_task(_process_file_background, fileID)
+        # Add background task with S3 information
+        background_tasks.add_task(_process_file_background, fileID, s3_bucket, s3_key, extension)
         
         logger.info(f"Background processing started for fileID: {fileID}")
         

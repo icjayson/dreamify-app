@@ -7,12 +7,28 @@ from botocore.exceptions import ClientError
 from utils.logger import logger
 import os
 
+def _mask_credential(value: Optional[str]) -> str:
+    if not value:
+        return "missing"
+    if len(value) <= 8:
+        return "***"
+    return f"{value[:4]}***{value[-4:]}"
+
 def get_s3_client():
     """Get configured S3 client."""
+    # Check HOME directory for potential issues
+    home_dir = os.getenv('HOME')
+    if home_dir:
+        if not os.path.exists(home_dir):
+            logger.warning(f"HOME environment variable points to non-existent directory: {home_dir}")
+        elif not os.access(home_dir, os.R_OK):
+            logger.warning(f"HOME environment variable points to non-readable directory: {home_dir}")
+    
     # Get AWS credentials from environment variables first, then try config
     aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
     aws_region = os.getenv('AWS_DEFAULT_REGION', 'ap-southeast-1')
+    credential_source = "environment"
     
     # If not in environment, try to load from config (if available)
     if not aws_access_key_id or not aws_secret_access_key:
@@ -25,11 +41,22 @@ def get_s3_client():
                     aws_secret_access_key = config.aws.access_key.AWS_SECRET_ACCESS_KEY
                 if not aws_region or aws_region == 'ap-southeast-1':  # Use config if default region
                     aws_region = config.aws.access_key.AWS_DEFAULT_REGION
+                credential_source = "config"
+                logger.info(
+                    "Loaded AWS credentials from config file (access_key_id=%s)",
+                    _mask_credential(aws_access_key_id),
+                )
         except Exception as e:
             logger.warning(f"Failed to load AWS credentials from config: {str(e)}")
     
-    # If still not found, boto3 will use default credentials chain (IAM role, etc.)
+    # If still not found, raise descriptive error
     if aws_access_key_id and aws_secret_access_key:
+        logger.info(
+            "Using AWS credentials from %s (access_key_id=%s, region=%s)",
+            credential_source,
+            _mask_credential(aws_access_key_id),
+            aws_region,
+        )
         return boto3.client(
             's3',
             aws_access_key_id=aws_access_key_id,
@@ -37,9 +64,12 @@ def get_s3_client():
             region_name=aws_region
         )
     else:
-        # Use default credentials chain
-        logger.warning("AWS credentials not found in environment or config, using default credentials chain")
-        return boto3.client('s3', region_name=aws_region)
+        error_msg = (
+            "AWS credentials not found in environment variables or config. "
+            "Please export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or populate config/config.yaml."
+        )
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
 
 
 def download_bytes(bucket: str, key: str) -> bytes:
@@ -53,14 +83,29 @@ def download_bytes(bucket: str, key: str) -> bytes:
     Returns:
         File data as bytes
     """
-    s3_client = get_s3_client()
+    try:
+        s3_client = get_s3_client()
+    except Exception as e:
+        logger.error(f"Failed to create S3 client: {str(e)}")
+        raise RuntimeError(f"Failed to initialize S3 client: {str(e)}") from e
     
     try:
+        logger.info(f"Downloading from S3: s3://{bucket}/{key}")
         response = s3_client.get_object(Bucket=bucket, Key=key)
-        return response['Body'].read()
+        data = response['Body'].read()
+        logger.info(f"Successfully downloaded {len(data)} bytes from S3")
+        return data
+    except PermissionError as e:
+        error_msg = f"Permission denied accessing S3 or credentials: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from e
     except ClientError as e:
         if e.response['Error']['Code'] == 'NoSuchKey':
             raise FileNotFoundError(f"Object not found: s3://{bucket}/{key}")
         logger.error(f"S3 download error: {str(e)}")
         raise
+    except Exception as e:
+        error_msg = f"Unexpected error downloading from S3: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from e
 

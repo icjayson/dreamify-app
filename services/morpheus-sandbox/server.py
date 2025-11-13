@@ -7,6 +7,7 @@ from morpheus.workflows.analyze_csv.workflow import AnalyzeCSVWorkflow
 from utils.logger import logger
 from utils.health import check_health
 from utils.s3_client import download_bytes
+from utils.config import config
 import os
 import json
 import tempfile
@@ -34,10 +35,16 @@ class StatusRequest(BaseModel):
     fileID: str
 
 # Configure paths - pointing to dreamify-backend file-storage
-BACKEND_STORAGE_BASE = "/Users/quangnguyen/Documents/Dreamify/dreamify-backend/file-storage"
+# Calculate path relative to morpheus project directory
+MORPHEUS_PROJECT_DIR = Path(__file__).parent.absolute()
+BACKEND_STORAGE_BASE = MORPHEUS_PROJECT_DIR.parent / "dreamify-backend" / "file-storage"
+BACKEND_STORAGE_BASE = str(BACKEND_STORAGE_BASE)
 METADATA_DIR = os.path.join(BACKEND_STORAGE_BASE, "metadata", "uploads")
 UPLOADS_DIR = os.path.join(BACKEND_STORAGE_BASE, "uploads")
 PROCESSED_DIR = os.path.join(BACKEND_STORAGE_BASE, "processed")
+logger.info(
+    "Config AWS credentials present: %s", "yes" if getattr(config, "aws", None) else "no"
+)
 
 def _process_file_background(fileID: str, s3_bucket: Optional[str] = None, s3_key: Optional[str] = None, extension: Optional[str] = None):
     """Background processing function for workflow execution."""
@@ -54,13 +61,29 @@ def _process_file_background(fileID: str, s3_bucket: Optional[str] = None, s3_ke
         if s3_bucket and s3_key:
             # Download from S3
             logger.info(f"Downloading file from S3: s3://{s3_bucket}/{s3_key}")
-            file_content = download_bytes(s3_bucket, s3_key)
+            try:
+                file_content = download_bytes(s3_bucket, s3_key)
+            except Exception as e:
+                error_msg = f"Failed to download file from S3: {str(e)}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg) from e
             
             # Save to temporary file for processing
             temp_dir = tempfile.gettempdir()
+            logger.info(f"Using temporary directory: {temp_dir}")
             temp_file_path = os.path.join(temp_dir, f"{fileID}.{file_ext}")
-            with open(temp_file_path, 'wb') as f:
-                f.write(file_content)
+            logger.info(f"Writing temporary file: {temp_file_path}")
+            try:
+                with open(temp_file_path, 'wb') as f:
+                    f.write(file_content)
+            except PermissionError as e:
+                error_msg = f"Permission denied writing temporary file {temp_file_path}: {str(e)}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg) from e
+            except OSError as e:
+                error_msg = f"OS error writing temporary file {temp_file_path}: {str(e)}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg) from e
             
             logger.info(f"File downloaded from S3 and saved to temporary file: {temp_file_path}")
             file_path = temp_file_path
@@ -197,9 +220,34 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
             "file_type": file_ext
         }
         
-        os.makedirs(PROCESSED_DIR, exist_ok=True)
-        with open(processed_path, 'w', encoding='utf-8') as f:
-            json.dump(initial_status, f, ensure_ascii=False, indent=2)
+        # Ensure processed directory exists with better error handling
+        try:
+            logger.info(f"Creating/verifying processed directory: {PROCESSED_DIR}")
+            os.makedirs(PROCESSED_DIR, exist_ok=True)
+            logger.info(f"Processed directory ready: {PROCESSED_DIR}")
+        except PermissionError as e:
+            error_msg = f"Permission denied creating processed directory {PROCESSED_DIR}: {str(e)}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
+        except OSError as e:
+            error_msg = f"OS error creating processed directory {PROCESSED_DIR}: {str(e)}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
+        
+        # Write initial status file with better error handling
+        try:
+            logger.info(f"Writing initial status file: {processed_path}")
+            with open(processed_path, 'w', encoding='utf-8') as f:
+                json.dump(initial_status, f, ensure_ascii=False, indent=2)
+            logger.info(f"Initial status file written successfully")
+        except PermissionError as e:
+            error_msg = f"Permission denied writing to {processed_path}: {str(e)}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
+        except OSError as e:
+            error_msg = f"OS error writing to {processed_path}: {str(e)}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Add background task with S3 information
         background_tasks.add_task(_process_file_background, fileID, s3_bucket, s3_key, extension)

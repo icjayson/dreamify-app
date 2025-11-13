@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { SignedIn, useAuth } from "@clerk/clerk-react";
+import { SignedIn, useAuth, useUser } from "@clerk/clerk-react";
 import { ChevronRight } from "lucide-react";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
@@ -21,7 +21,6 @@ import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
 import TemplateModal from '@/components/homepage-section/TemplateModal';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
-
 interface HomePageProps {
   onGetStarted: () => void;
   onProcessedDataChange?: (data: any) => void;
@@ -29,7 +28,26 @@ interface HomePageProps {
 
 const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const navigate = useNavigate();
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, getToken } = useAuth();
+  const { user: clerkUser } = useUser();
+  const [user, setUser] = useState<any | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (isSignedIn && clerkUser) {
+      setUser(clerkUser);
+      getToken().then((tokenValue) => {
+        setToken(tokenValue);
+        console.log('User:', clerkUser);
+        console.log('Token:', tokenValue);
+      }).catch((error) => {
+        console.error('Failed to get token:', error);
+      });
+    } else {
+      setUser(null);
+      setToken(null);
+    }
+  }, [isSignedIn, clerkUser, getToken]);
   // Mock recent projects
   const [recentProjects, setRecentProjects] = useState<Array<{ id: string; title: string }>>([
     { id: 'p1', title: 'Marketing Dashboard' },
@@ -496,8 +514,8 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                         <Button
                           onClick={async () => {
                             try {
-                              const { useAuth } = await import('@clerk/clerk-react');
                               const token = await useAuth().getToken();
+                              // save token to _token.json filejson
                               const url = token 
                                 ? `/api/v1/files/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
                                 : `/api/v1/files/preview/${uploadedFile.fileID}`;

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Path, Depends, F
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from app.utils.file_handler import FileHandler
-from app.dependencies.auth import require_user, require_user_header_or_query_token
+from app.dependencies.auth import require_user
 from utils.postgres.db import get_db
 from utils.postgres.repos import users, projects, assets, files as files_repo
 from utils.postgres.models import User
@@ -318,7 +318,7 @@ def _render_html_table_from_dataframe(df: pd.DataFrame, title: str) -> str:
 async def preview_file(
     fileID: str = Path(..., description="File ID"),
     db: Session = Depends(get_db),
-    clerk_user_id: str = Depends(require_user_header_or_query_token)
+    clerk_user_id: str = Depends(require_user)
 ):
     """Preview an uploaded file as HTML. Fetches from S3."""
     try:

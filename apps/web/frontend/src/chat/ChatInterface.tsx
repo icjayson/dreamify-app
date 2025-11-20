@@ -1,5 +1,4 @@
 import { useRef, useEffect, useState } from "react";
-import LoadingPanel from "@/chat/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
@@ -13,7 +12,13 @@ import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 
 // Rolling multiline log for loading animation
-const RollingText = () => {
+interface RollingTextProps {
+  isActive: boolean;
+  stopSignal: boolean;
+  successText?: string;
+}
+
+const RollingText = ({ isActive, stopSignal, successText = "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need." }: RollingTextProps) => {
   const actions = [
     "Thinking...",
     "Analyzing data...",
@@ -32,27 +37,58 @@ const RollingText = () => {
     "Almost ready..."
   ];
   const [lines, setLines] = useState<string[]>([]);
-  const [idx, setIdx] = useState(0);
+  const idxRef = useRef(0);
+  const [started, setStarted] = useState(false);
+  const [stopped, setStopped] = useState(false);
 
+  // Start when becoming active the first time
   useEffect(() => {
+    if (!started && isActive) {
+      setStarted(true);
+      setStopped(false);
+      setLines([]);
+      idxRef.current = 0;
+    }
+  }, [isActive, started]);
+
+  // Handle rolling text interval
+  useEffect(() => {
+    if (!started || stopped) return;
     const interval = setInterval(() => {
       setLines((prev) => {
-        const next = [...prev, actions[idx]];
+        const next = [...prev, actions[idxRef.current]];
+        idxRef.current = (idxRef.current + 1) % actions.length;
         // keep last 8 lines
         return next.slice(-8);
       });
-      setIdx((p) => (p + 1) % actions.length);
     }, 2400);
     return () => clearInterval(interval);
-  }, [actions, idx]);
+  }, [started, stopped]);
+
+  // Stop when stopSignal becomes true
+  useEffect(() => {
+    if (started && !stopped && stopSignal) {
+      setStopped(true);
+      setLines((prev) => [...prev, successText].slice(-8));
+    }
+  }, [stopSignal, started, stopped, successText]);
+
+  // Render nothing until started
+  if (!started && lines.length === 0) return null;
 
   return (
-    <div className="space-y-1">
-      {lines.map((line, i) => (
-        <div key={`${i}-${line}`} className={`text-sm ${i === lines.length - 1 ? 'active-breathing' : ''} animate-fade-in-300`}>
-          {line}
-        </div>
-      ))}
+    <div className="space-y-1 text-white">
+      {lines.map((line, i) => {
+        const isLast = i === lines.length - 1 && !stopped;
+        return (
+          <div
+            key={`${i}-${line}`}
+            className={`text-sm animate-fade-in-300 ${isLast ? 'active-breathing text-gradient-sweep caret' : 'text-white/90'}`}
+          >
+            {line}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -397,17 +433,17 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
                 </div>
               </div>
             </div>
-            {/* Inline Loading Panel under the last user message that started analysis */}
+            {/* Inline Rolling Text under the last user message that started analysis */}
             {message.role === 'user'
               && index === messages.length - 1
               && uploadedFile
               && (isProcessing || uploadedFile.status === 'processing') && (
                 <div className={`flex justify-start mt-1`}>
                   <div className={`ml-8`}>
-                    <LoadingPanel
-                      isActive={true}
+                    <RollingText
+                      isActive={isProcessing || uploadedFile.status === 'processing'}
                       stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
-                      mode={'dashboard'}
+                      successText="Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need."
                     />
                   </div>
                 </div>

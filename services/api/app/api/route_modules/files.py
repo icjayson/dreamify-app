@@ -2,7 +2,7 @@
 FastAPI Files routes for upload, listing, deletion, and preview with S3 and database.
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Path, Depends, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Path, Depends, Form, Body
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from app.utils.file_handler import FileHandler
@@ -18,6 +18,7 @@ import json
 import pandas as pd
 import logging
 from typing import Dict, Any, Optional
+from pydantic import BaseModel
 
 # Create router
 router = APIRouter()
@@ -247,6 +248,41 @@ async def list_files(
         logger.error(f"Error in list_files: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class ProcessedKeyUpdate(BaseModel):
+    processed_json_s3_key: str
+
+@router.put("/{fileID}/processed-key", tags=["files"])
+async def update_processed_key(
+    fileID: str = Path(..., description="File ID"),
+    update_data: ProcessedKeyUpdate = Body(...),
+    db: Session = Depends(get_db)
+):
+    """Update the processed_json_s3_key for a file record. Internal service endpoint."""
+    try:
+        # Get file record
+        try:
+            file_uuid = uuid.UUID(fileID)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid file ID")
+        
+        file_record = files_repo.get_file(db, file_uuid)
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Update file record
+        files_repo.update_file(
+            db=db,
+            file_id=file_uuid,
+            processed_json_s3_key=update_data.processed_json_s3_key
+        )
+        
+        return {'success': True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in update_processed_key: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{fileID}", tags=["files"])
 async def delete_file(

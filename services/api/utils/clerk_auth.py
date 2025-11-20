@@ -87,3 +87,7 @@ def clerk_auth_jwt(request: Request):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
+
+
+

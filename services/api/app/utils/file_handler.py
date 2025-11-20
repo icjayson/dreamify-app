@@ -9,7 +9,9 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from werkzeug.utils import secure_filename
-from config.settings import settings
+from utils.config import get_settings
+
+settings = get_settings()
 
 class FileHandler:
     """Utility class for handling file uploads and processing."""
@@ -100,24 +102,60 @@ class FileHandler:
 
     @staticmethod
     def get_upload_path(fileID: str, ext: str) -> str:
-        """Get absolute path for the uploaded file based on configured storage dir."""
+        """
+        DEPRECATED: Get absolute path for the uploaded file based on configured storage dir.
+        Local file storage is no longer used. Files are stored in S3.
+        """
+        import warnings
+        warnings.warn(
+            "get_upload_path is deprecated. Local file storage is no longer used. Files are stored in S3.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         filename = f"{fileID}.{ext}"
         return os.path.join(settings.FILE_UPLOADS_DIR, filename)
 
     @staticmethod
     def _get_upload_metadata_path(fileID: str) -> str:
+        """
+        DEPRECATED: Local metadata storage is no longer used. Metadata is stored in database.
+        """
+        import warnings
+        warnings.warn(
+            "_get_upload_metadata_path is deprecated. Local metadata storage is no longer used.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return os.path.join(settings.FILE_METADATA_UPLOADS_DIR, f"{fileID}.json")
 
     @staticmethod
     def save_upload_metadata(fileID: str, metadata: Dict[str, Any]) -> None:
-        """Persist upload metadata as JSON under metadata/uploads/<fileID>.json."""
+        """
+        DEPRECATED: Persist upload metadata as JSON under metadata/uploads/<fileID>.json.
+        Local metadata storage is no longer used. Metadata is stored in database.
+        """
+        import warnings
+        warnings.warn(
+            "save_upload_metadata is deprecated. Local metadata storage is no longer used. Metadata is stored in database.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         path = FileHandler._get_upload_metadata_path(fileID)
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
 
     @staticmethod
     def get_upload_metadata(fileID: str) -> Dict[str, Any]:
-        """Load metadata for a given fileID."""
+        """
+        DEPRECATED: Load metadata for a given fileID.
+        Local metadata storage is no longer used. Metadata is stored in database.
+        """
+        import warnings
+        warnings.warn(
+            "get_upload_metadata is deprecated. Local metadata storage is no longer used. Metadata is stored in database.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         path = FileHandler._get_upload_metadata_path(fileID)
         if not os.path.exists(path):
             raise FileNotFoundError("File not found")
@@ -126,7 +164,16 @@ class FileHandler:
 
     @staticmethod
     def list_uploads() -> List[Dict[str, Any]]:
-        """List all uploads based on metadata files."""
+        """
+        DEPRECATED: List all uploads based on metadata files.
+        Local metadata storage is no longer used. Use database queries instead.
+        """
+        import warnings
+        warnings.warn(
+            "list_uploads is deprecated. Local metadata storage is no longer used. Use database queries instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         uploads: List[Dict[str, Any]] = []
         directory = settings.FILE_METADATA_UPLOADS_DIR
         if not os.path.isdir(directory):
@@ -152,7 +199,16 @@ class FileHandler:
 
     @staticmethod
     def delete_upload_set(fileID: str) -> bool:
-        """Delete the uploaded file and its metadata. Return True if any file was removed."""
+        """
+        DEPRECATED: Delete the uploaded file and its metadata. Return True if any file was removed.
+        Local file storage is no longer used. Files are stored in S3.
+        """
+        import warnings
+        warnings.warn(
+            "delete_upload_set is deprecated. Local file storage is no longer used. Files are stored in S3.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         removed_any = False
         # Remove file
         try:

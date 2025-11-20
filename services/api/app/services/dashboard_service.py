@@ -25,6 +25,9 @@ from app.models.dashboard_models import (
 )
 from app.core.analytics import CSVProcessor
 from app.utils.chart_data_processor import ChartDataProcessor
+from utils.s3.client import download_bytes
+from utils.postgres.repos import files as files_repo, assets
+from utils.postgres.db import SessionLocal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -195,19 +198,54 @@ class DashboardService:
         return False
     
     def _get_processed_data(self, data_source: str) -> Dict[str, Any]:
-        """Get processed data from data source."""
-        # Try to load from file-storage/processed/{data_source}.json
+        """Get processed data from data source. Reads from S3 using File record."""
         try:
-            backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-            processed_dir = os.path.join(backend_root, 'file-storage', 'processed')
-            candidate_path = os.path.join(processed_dir, f'{data_source}.json')
-            if os.path.exists(candidate_path):
-                with open(candidate_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+            # Get file record from database
+            file_uuid = uuid.UUID(data_source)
+            # Create a database session
+            db = SessionLocal()
+            try:
+                file_record = files_repo.get_file(db, file_uuid)
+                if not file_record:
+                    logger.warning(f"File not found for data_source: {data_source}")
+                    return self._get_empty_processed_data(data_source)
+                
+                # Check if processed JSON exists in S3
+                if not file_record.processed_json_s3_key:
+                    logger.warning(f"File {data_source} has no processed_json_s3_key")
+                    return self._get_empty_processed_data(data_source)
+                
+                # Get asset to find S3 bucket
+                asset = assets.get_asset(db, file_record.asset_id)
+                if not asset:
+                    logger.warning(f"Asset not found for file {data_source}")
+                    return self._get_empty_processed_data(data_source)
+                
+                # Download processed JSON from S3
+                try:
+                    processed_data_bytes = download_bytes(asset.s3_bucket, file_record.processed_json_s3_key)
+                    processed_data = json.loads(processed_data_bytes.decode('utf-8'))
+                    # Extract the 'data' field if it exists, otherwise use the whole structure
+                    if 'data' in processed_data:
+                        return processed_data['data']
+                    return processed_data
+                except FileNotFoundError:
+                    logger.warning(f"Processed JSON not found in S3 for file {data_source}")
+                    return self._get_empty_processed_data(data_source)
+                except Exception as e:
+                    logger.warning(f"Failed to download processed data from S3: {e}")
+                    return self._get_empty_processed_data(data_source)
+            finally:
+                db.close()
+        except ValueError:
+            logger.warning(f"Invalid file ID format: {data_source}")
+            return self._get_empty_processed_data(data_source)
         except Exception as e:
             logger.warning(f"Failed to load processed data for {data_source}: {e}")
-        
-        # Fallback to empty-safe structure
+            return self._get_empty_processed_data(data_source)
+    
+    def _get_empty_processed_data(self, data_source: str) -> Dict[str, Any]:
+        """Return empty processed data structure."""
         return {
             'metrics': [],
             'charts': [],

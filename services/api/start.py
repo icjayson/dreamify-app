@@ -4,17 +4,15 @@ Startup script for FastAPI application.
 """
 
 import uvicorn
-import os
-from dotenv import load_dotenv
+from utils.config import get_settings
 
-# Load environment variables
-load_dotenv()
+settings = get_settings()
 
 if __name__ == "__main__":
-    # Get configuration from environment variables
-    host = os.getenv("FASTAPI_HOST", "0.0.0.0")
-    port = int(os.getenv("FASTAPI_PORT", "5000"))
-    debug = os.getenv("FASTAPI_DEBUG", "true").lower() == "true"
+    # Get configuration from config.yaml
+    host = settings.HOST
+    port = settings.PORT
+    debug = settings.DEBUG
     
     print(f"Starting FastAPI server on {host}:{port}")
     print(f"Debug mode: {debug}")

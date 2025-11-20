@@ -2,14 +2,9 @@
 Stripe configuration module for Dreamify Analytics Platform.
 """
 
-import os
 import stripe
 from typing import Optional
-from dotenv import load_dotenv
-from app.config.settings import settings
-
-# Load environment variables
-load_dotenv()
+from utils.config import config
 
 
 class StripeConfig:
@@ -17,15 +12,15 @@ class StripeConfig:
     
     def __init__(self):
         """Initialize Stripe configuration."""
-        self.publishable_key = os.getenv('STRIPE_PUBLISHABLE_KEY')
-        self.secret_key = os.getenv('STRIPE_SECRET_KEY')
-        self.webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+        self.publishable_key = config.stripe.publishable_key
+        self.secret_key = config.stripe.secret_key
+        self.webhook_secret = config.stripe.webhook_secret
         
         # Configure Stripe API key
         if self.secret_key:
             stripe.api_key = self.secret_key
         else:
-            raise ValueError("STRIPE_SECRET_KEY environment variable is required")
+            raise ValueError("Stripe secret_key is required in config.yaml")
     
     def get_publishable_key(self) -> Optional[str]:
         """Get Stripe publishable key for frontend."""

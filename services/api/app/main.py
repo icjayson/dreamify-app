@@ -5,12 +5,10 @@ Main FastAPI application entry point for Dreamify Backend.
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
-import os
+from utils.config import get_settings
 import logging
 
-# Load environment variables
-load_dotenv()
+settings = get_settings()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,15 +28,7 @@ def create_app():
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:8080", 
-            "http://localhost:8000",
-            "http://localhost:5000",
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "https://app.dreamify.dev",
-            "*"  # Allow all origins for development; restrict in production
-        ],
+        allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -110,7 +100,7 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 5000))
+    port = settings.PORT
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",

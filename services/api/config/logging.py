@@ -5,7 +5,7 @@ import logging
 import logging.handlers
 import os
 from typing import Optional
-from config.settings import get_settings
+from utils.config import get_settings
 
 settings = get_settings()
 

@@ -6,12 +6,13 @@ from typing import Optional
 from morpheus.workflows.analyze_csv.workflow import AnalyzeCSVWorkflow
 from utils.logger import logger
 from utils.health import check_health
-from utils.s3_client import download_bytes
+from utils.s3_client import download_bytes, get_s3_client
 from utils.config import config
 import os
 import json
 import tempfile
 from pathlib import Path
+import requests
 
 app = FastAPI()
 
@@ -34,73 +35,98 @@ class RunRequest(BaseModel):
 class StatusRequest(BaseModel):
     fileID: str
 
-# Configure paths - pointing to dreamify-backend file-storage
-# Calculate path relative to morpheus project directory
-MORPHEUS_PROJECT_DIR = Path(__file__).parent.absolute()
-BACKEND_STORAGE_BASE = MORPHEUS_PROJECT_DIR.parent / "dreamify-backend" / "file-storage"
-BACKEND_STORAGE_BASE = str(BACKEND_STORAGE_BASE)
-METADATA_DIR = os.path.join(BACKEND_STORAGE_BASE, "metadata", "uploads")
-UPLOADS_DIR = os.path.join(BACKEND_STORAGE_BASE, "uploads")
-PROCESSED_DIR = os.path.join(BACKEND_STORAGE_BASE, "processed")
+# Backend API URL for updating file records
+BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:8001")
+
 logger.info(
     "Config AWS credentials present: %s", "yes" if getattr(config, "aws", None) else "no"
 )
 
+def _parse_s3_key(s3_key: str) -> dict:
+    """Parse S3 key to extract version, user_id, project_id, asset_id, file_id, extension."""
+    # Format: {version}/users/{user_id}/projects/{project_id}/assets/{asset_id}/{file_id}.{extension}
+    parts = s3_key.split('/')
+    if len(parts) < 7:
+        raise ValueError(f"Invalid S3 key format: {s3_key}")
+    
+    version = parts[0]
+    user_id = parts[2]
+    project_id = parts[4]
+    asset_id = parts[6]
+    filename = parts[7] if len(parts) > 7 else ""
+    
+    if '.' in filename:
+        file_id, extension = filename.rsplit('.', 1)
+    else:
+        file_id = filename
+        extension = ""
+    
+    return {
+        'version': version,
+        'user_id': user_id,
+        'project_id': project_id,
+        'asset_id': asset_id,
+        'file_id': file_id,
+        'extension': extension
+    }
+
+def _build_processed_json_key(version: str, user_id: str, project_id: str, asset_id: str, file_id: str) -> str:
+    """Build S3 key for processed JSON file."""
+    return f"{version}/users/{user_id}/projects/{project_id}/assets/{asset_id}/processed/{file_id}.json"
+
+def _upload_bytes_to_s3(bucket: str, key: str, data: bytes, content_type: str = 'application/json'):
+    """Upload bytes to S3."""
+    s3_client = get_s3_client()
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=data,
+        ContentType=content_type
+    )
+
 def _process_file_background(fileID: str, s3_bucket: Optional[str] = None, s3_key: Optional[str] = None, extension: Optional[str] = None):
     """Background processing function for workflow execution."""
-    processed_path = os.path.join(PROCESSED_DIR, f"{fileID}.json")
     temp_file_path = None
+    processed_json_s3_key = None
     
     try:
         logger.info(f"Starting background processing for fileID: {fileID}")
         
+        # Require S3 information
+        if not s3_bucket or not s3_key:
+            raise ValueError("S3 bucket and key are required. Local file system fallback is no longer supported.")
+        
         # Determine file extension
         file_ext = extension or 'csv'
         
-        # Get file content - either from S3 or local file system (for backward compatibility)
-        if s3_bucket and s3_key:
-            # Download from S3
-            logger.info(f"Downloading file from S3: s3://{s3_bucket}/{s3_key}")
-            try:
-                file_content = download_bytes(s3_bucket, s3_key)
-            except Exception as e:
-                error_msg = f"Failed to download file from S3: {str(e)}"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg) from e
-            
-            # Save to temporary file for processing
-            temp_dir = tempfile.gettempdir()
-            logger.info(f"Using temporary directory: {temp_dir}")
-            temp_file_path = os.path.join(temp_dir, f"{fileID}.{file_ext}")
-            logger.info(f"Writing temporary file: {temp_file_path}")
-            try:
-                with open(temp_file_path, 'wb') as f:
-                    f.write(file_content)
-            except PermissionError as e:
-                error_msg = f"Permission denied writing temporary file {temp_file_path}: {str(e)}"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg) from e
-            except OSError as e:
-                error_msg = f"OS error writing temporary file {temp_file_path}: {str(e)}"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg) from e
-            
-            logger.info(f"File downloaded from S3 and saved to temporary file: {temp_file_path}")
-            file_path = temp_file_path
-        else:
-            # Fallback to local file system (for backward compatibility)
-            logger.info(f"Using local file system for fileID: {fileID}")
-            metadata_path = os.path.join(METADATA_DIR, f"{fileID}.json")
-            if os.path.exists(metadata_path):
-                with open(metadata_path, 'r') as f:
-                    metadata = json.load(f)
-                file_ext = metadata.get('ext', 'csv')
-            else:
-                logger.warning(f"Metadata not found, using default extension: {file_ext}")
-            
-            file_path = os.path.join(UPLOADS_DIR, f"{fileID}.{file_ext}")
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"Upload file not found: {file_path}")
+        # Download from S3
+        logger.info(f"Downloading file from S3: s3://{s3_bucket}/{s3_key}")
+        try:
+            file_content = download_bytes(s3_bucket, s3_key)
+        except Exception as e:
+            error_msg = f"Failed to download file from S3: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg) from e
+        
+        # Save to temporary file for processing
+        temp_dir = tempfile.gettempdir()
+        logger.info(f"Using temporary directory: {temp_dir}")
+        temp_file_path = os.path.join(temp_dir, f"{fileID}.{file_ext}")
+        logger.info(f"Writing temporary file: {temp_file_path}")
+        try:
+            with open(temp_file_path, 'wb') as f:
+                f.write(file_content)
+        except PermissionError as e:
+            error_msg = f"Permission denied writing temporary file {temp_file_path}: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg) from e
+        except OSError as e:
+            error_msg = f"OS error writing temporary file {temp_file_path}: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg) from e
+        
+        logger.info(f"File downloaded from S3 and saved to temporary file: {temp_file_path}")
+        file_path = temp_file_path
         
         logger.info(f"Processing file: {file_path}")
         
@@ -110,6 +136,20 @@ def _process_file_background(fileID: str, s3_bucket: Optional[str] = None, s3_ke
         
         # Get file size
         file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        
+        # Parse S3 key to extract components for building processed JSON key
+        try:
+            key_parts = _parse_s3_key(s3_key)
+            processed_json_s3_key = _build_processed_json_key(
+                version=key_parts['version'],
+                user_id=key_parts['user_id'],
+                project_id=key_parts['project_id'],
+                asset_id=key_parts['asset_id'],
+                file_id=key_parts['file_id']
+            )
+        except Exception as e:
+            logger.error(f"Failed to parse S3 key or build processed JSON key: {str(e)}")
+            raise
         
         # Prepare processed data
         processed_data = {
@@ -133,9 +173,26 @@ def _process_file_background(fileID: str, s3_bucket: Optional[str] = None, s3_ke
             processed_data["workflow_output_path"] = str(workflow_output_file)
             logger.info(f"Workflow output saved to: {workflow_output_file}")
         
-        # Save processed data
-        with open(processed_path, 'w', encoding='utf-8') as f:
-            json.dump(processed_data, f, ensure_ascii=False, indent=2)
+        # Save processed data to S3
+        processed_json_bytes = json.dumps(processed_data, ensure_ascii=False, indent=2).encode('utf-8')
+        logger.info(f"Uploading processed JSON to S3: s3://{s3_bucket}/{processed_json_s3_key}")
+        _upload_bytes_to_s3(s3_bucket, processed_json_s3_key, processed_json_bytes, 'application/json')
+        logger.info(f"Processed JSON uploaded successfully to S3")
+        
+        # Update File record with processed_json_s3_key via backend API
+        try:
+            update_url = f"{BACKEND_API_URL}/api/v1/files/{fileID}/processed-key"
+            response = requests.put(
+                update_url,
+                json={"processed_json_s3_key": processed_json_s3_key},
+                timeout=10
+            )
+            if response.status_code == 200:
+                logger.info(f"Updated File record with processed_json_s3_key: {processed_json_s3_key}")
+            else:
+                logger.warning(f"Failed to update File record: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.warning(f"Failed to update File record via API: {str(e)}")
         
         logger.info(f"Background processing completed successfully for fileID: {fileID}")
         
@@ -144,15 +201,20 @@ def _process_file_background(fileID: str, s3_bucket: Optional[str] = None, s3_ke
         import traceback
         logger.error(traceback.format_exc())
         
-        # Save error status
-        error_data = {
-            "fileID": fileID,
-            "status": "error",
-            "error": str(e),
-            "processed_at": datetime.now().isoformat()
-        }
-        with open(processed_path, 'w', encoding='utf-8') as f:
-            json.dump(error_data, f, ensure_ascii=False, indent=2)
+        # Save error status to S3 if we have the key
+        if processed_json_s3_key and s3_bucket:
+            try:
+                error_data = {
+                    "fileID": fileID,
+                    "status": "error",
+                    "error": str(e),
+                    "processed_at": datetime.now().isoformat()
+                }
+                error_json_bytes = json.dumps(error_data, ensure_ascii=False, indent=2).encode('utf-8')
+                _upload_bytes_to_s3(s3_bucket, processed_json_s3_key, error_json_bytes, 'application/json')
+                logger.info(f"Error status saved to S3: s3://{s3_bucket}/{processed_json_s3_key}")
+            except Exception as upload_error:
+                logger.error(f"Failed to save error status to S3: {str(upload_error)}")
     finally:
         # Clean up temporary file if it was created
         if temp_file_path and os.path.exists(temp_file_path):
@@ -177,77 +239,42 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
         
         logger.info(f"Received run request for fileID: {fileID}, s3_bucket: {s3_bucket}, s3_key: {s3_key}, extension: {extension}")
         
-        # Check if already processed
-        processed_path = os.path.join(PROCESSED_DIR, f"{fileID}.json")
-        if os.path.exists(processed_path):
-            with open(processed_path, 'r') as f:
-                existing_data = json.load(f)
-            if existing_data.get('status') == 'completed':
-                return {
-                    'success': True,
-                    'data': {
-                        'success': True,
-                        'fileID': fileID,
-                        'status': 'completed',
-                        'message': 'File already processed'
-                    }
-                }
+        # Require S3 information
+        if not s3_bucket or not s3_key:
+            raise HTTPException(status_code=400, detail="S3 bucket and key are required. Local file system fallback is no longer supported.")
         
         # Determine file extension
         file_ext = extension or 'csv'
         
-        # If using S3, verify we have the required information
-        if s3_bucket and s3_key:
-            logger.info(f"Using S3 for file retrieval: s3://{s3_bucket}/{s3_key}")
-        else:
-            # Fallback to local file system (for backward compatibility)
-            logger.info(f"Using local file system for fileID: {fileID}")
-            metadata_path = os.path.join(METADATA_DIR, f"{fileID}.json")
-            if not os.path.exists(metadata_path):
-                logger.error(f"Metadata not found for fileID: {fileID}")
-                raise HTTPException(status_code=404, detail="File metadata not found. Please provide s3_bucket and s3_key.")
-            
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-            file_ext = metadata.get('ext', 'csv')
-        
-        # Create initial status file
-        initial_status = {
-            "fileID": fileID,
-            "status": "accepted",
-            "processed_at": datetime.now().isoformat(),
-            "file_size": 0,  # Will be updated after processing
-            "file_type": file_ext
-        }
-        
-        # Ensure processed directory exists with better error handling
+        # Check if already processed by querying S3
         try:
-            logger.info(f"Creating/verifying processed directory: {PROCESSED_DIR}")
-            os.makedirs(PROCESSED_DIR, exist_ok=True)
-            logger.info(f"Processed directory ready: {PROCESSED_DIR}")
-        except PermissionError as e:
-            error_msg = f"Permission denied creating processed directory {PROCESSED_DIR}: {str(e)}"
-            logger.error(error_msg)
-            raise HTTPException(status_code=500, detail=error_msg)
-        except OSError as e:
-            error_msg = f"OS error creating processed directory {PROCESSED_DIR}: {str(e)}"
-            logger.error(error_msg)
-            raise HTTPException(status_code=500, detail=error_msg)
-        
-        # Write initial status file with better error handling
-        try:
-            logger.info(f"Writing initial status file: {processed_path}")
-            with open(processed_path, 'w', encoding='utf-8') as f:
-                json.dump(initial_status, f, ensure_ascii=False, indent=2)
-            logger.info(f"Initial status file written successfully")
-        except PermissionError as e:
-            error_msg = f"Permission denied writing to {processed_path}: {str(e)}"
-            logger.error(error_msg)
-            raise HTTPException(status_code=500, detail=error_msg)
-        except OSError as e:
-            error_msg = f"OS error writing to {processed_path}: {str(e)}"
-            logger.error(error_msg)
-            raise HTTPException(status_code=500, detail=error_msg)
+            key_parts = _parse_s3_key(s3_key)
+            processed_json_s3_key = _build_processed_json_key(
+                version=key_parts['version'],
+                user_id=key_parts['user_id'],
+                project_id=key_parts['project_id'],
+                asset_id=key_parts['asset_id'],
+                file_id=key_parts['file_id']
+            )
+            # Try to download processed JSON from S3
+            try:
+                processed_data_bytes = download_bytes(s3_bucket, processed_json_s3_key)
+                existing_data = json.loads(processed_data_bytes.decode('utf-8'))
+                if existing_data.get('status') == 'completed':
+                    return {
+                        'success': True,
+                        'data': {
+                            'success': True,
+                            'fileID': fileID,
+                            'status': 'completed',
+                            'message': 'File already processed'
+                        }
+                    }
+            except FileNotFoundError:
+                # Not processed yet, continue
+                pass
+        except Exception as e:
+            logger.warning(f"Could not check for existing processed file: {str(e)}")
         
         # Add background task with S3 information
         background_tasks.add_task(_process_file_background, fileID, s3_bucket, s3_key, extension)
@@ -275,33 +302,52 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
 async def get_workflow_status(request: StatusRequest):
     """
     Get processing status and results for a file.
+    Note: This endpoint now requires the file to be queried from backend database
+    to get S3 information. For now, returns processing status.
     """
     try:
         fileID = request.fileID
         logger.info(f"Received status request for fileID: {fileID}")
         
-        # Check if processed file exists
-        processed_path = os.path.join(PROCESSED_DIR, f"{fileID}.json")
-        if not os.path.exists(processed_path):
-            return {
-                'success': True,
-                'data': {
-                    'success': True,
-                    'fileID': fileID,
-                    'status': 'processing',
-                    'message': 'File is being processed'
-                }
-            }
+        # Try to get file info from backend API to retrieve processed JSON from S3
+        try:
+            backend_url = f"{BACKEND_API_URL}/api/v1/files/{fileID}"
+            response = requests.get(backend_url, timeout=10)
+            if response.status_code == 200:
+                file_info = response.json()
+                # If file has processed_json_s3_key, try to download from S3
+                if file_info.get('processed_json_s3_key'):
+                    try:
+                        # Get asset info to find bucket
+                        asset_response = requests.get(
+                            f"{BACKEND_API_URL}/api/v1/assets/{file_info.get('asset_id')}",
+                            timeout=10
+                        )
+                        if asset_response.status_code == 200:
+                            asset_info = asset_response.json()
+                            s3_bucket = asset_info.get('s3_bucket')
+                            if s3_bucket:
+                                processed_data_bytes = download_bytes(s3_bucket, file_info['processed_json_s3_key'])
+                                processed_data = json.loads(processed_data_bytes.decode('utf-8'))
+                                logger.info(f"Status retrieved for fileID: {fileID}, status: {processed_data.get('status')}")
+                                return {
+                                    'success': True,
+                                    'data': processed_data
+                                }
+                    except Exception as e:
+                        logger.warning(f"Failed to retrieve processed data from S3: {str(e)}")
+        except Exception as e:
+            logger.warning(f"Failed to query backend API: {str(e)}")
         
-        # Load processed data
-        with open(processed_path, 'r', encoding='utf-8') as f:
-            processed_data = json.load(f)
-        
-        logger.info(f"Status retrieved for fileID: {fileID}, status: {processed_data.get('status')}")
-        
+        # Return processing status if we can't find processed data
         return {
             'success': True,
-            'data': processed_data
+            'data': {
+                'success': True,
+                'fileID': fileID,
+                'status': 'processing',
+                'message': 'File is being processed'
+            }
         }
         
     except Exception as e:

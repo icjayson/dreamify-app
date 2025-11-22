@@ -79,24 +79,24 @@ class TestFastAPIApp:
         assert "/api/v1/dashboard/generate" in paths
         assert "/api/v1/dashboard/list" in paths
     
-    def test_files_endpoints_exist(self):
-        """Test that files endpoints are registered."""
+    def test_user_asset_endpoints_exist(self):
+        """Test that user asset endpoints are registered."""
         response = self.client.get("/api/v1/openapi.json")
         assert response.status_code == 200
         openapi_spec = response.json()
         
         # Check that files endpoints exist
         paths = openapi_spec.get("paths", {})
-        assert "/api/v1/files/upload" in paths
-        assert "/api/v1/files" in paths
+        assert "/api/v1/user/asset/upload" in paths
+        assert "/api/v1/user/asset/list" in paths
     
-    def test_analyze_endpoints_exist(self):
-        """Test that analyze endpoints are registered."""
+    def test_morpheus_endpoints_exist(self):
+        """Test that morpheus endpoints are registered."""
         response = self.client.get("/api/v1/openapi.json")
         assert response.status_code == 200
         openapi_spec = response.json()
         
         # Check that analyze endpoints exist
         paths = openapi_spec.get("paths", {})
-        assert "/api/v1/analyze/run" in paths
-        assert "/api/v1/analyze/status" in paths
+        assert "/api/v1/morpheus/chat" in paths
+        assert "/api/v1/morpheus/node-status" in paths

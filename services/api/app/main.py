@@ -57,25 +57,32 @@ def create_app():
         logger.error(f"Failed to import dashboard router: {e}")
     
     try:
-        from app.api.route_modules.files import router as files_router
-        app.include_router(files_router, prefix="/api/v1/files", tags=["files"])
-        logger.info("Files router registered successfully")
-    except ImportError as e:
-        logger.error(f"Failed to import files router: {e}")
-    
-    try:
-        from app.api.route_modules.analyze import router as analyze_router
-        app.include_router(analyze_router, prefix="/api/v1/analyze", tags=["analyze"])
-        logger.info("Analyze router registered successfully")
-    except ImportError as e:
-        logger.error(f"Failed to import analyze router: {e}")
-    
-    try:
         from app.api.route_modules.auth import router as auth_router
         app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
         logger.info("Auth router registered successfully")
     except ImportError as e:
         logger.error(f"Failed to import auth router: {e}")
+
+    try:
+        from app.api.route_modules.user import router as user_router
+        app.include_router(user_router, prefix="/api/v1")
+        logger.info("User router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import user router: {e}")
+
+    try:
+        from app.api.route_modules.morpheus import router as morpheus_router
+        app.include_router(morpheus_router, prefix="/api/v1")
+        logger.info("Morpheus router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Morpheus router: {e}")
+ 
+    try:
+        from app.api.route_modules.conversation import router as conversation_router
+        app.include_router(conversation_router, prefix="/api/v1", tags=["conversation"])
+        logger.info("Conversation router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Conversation router: {e}")
     
     # Root endpoint
     @app.get("/", tags=["root"])

@@ -26,8 +26,7 @@ from app.models.dashboard_models import (
 from app.core.analytics import CSVProcessor
 from app.utils.chart_data_processor import ChartDataProcessor
 from utils.s3.client import download_bytes
-from utils.postgres.repos import files as files_repo, assets
-from utils.postgres.db import SessionLocal
+from utils.dynamodb.repos import assets as assets_repo
 import logging
 
 logger = logging.getLogger(__name__)
@@ -200,46 +199,28 @@ class DashboardService:
     def _get_processed_data(self, data_source: str) -> Dict[str, Any]:
         """Get processed data from data source. Reads from S3 using File record."""
         try:
-            # Get file record from database
-            file_uuid = uuid.UUID(data_source)
-            # Create a database session
-            db = SessionLocal()
+            asset = assets_repo.get_asset_by_id(data_source)
+            if not asset:
+                logger.warning(f"Asset not found for data_source: {data_source}")
+                return self._get_empty_processed_data(data_source)
+
+            processed_key = asset.get("processed_json_s3_key")
+            if not processed_key:
+                logger.warning(f"Asset {data_source} missing processed_json_s3_key")
+                return self._get_empty_processed_data(data_source)
+
             try:
-                file_record = files_repo.get_file(db, file_uuid)
-                if not file_record:
-                    logger.warning(f"File not found for data_source: {data_source}")
-                    return self._get_empty_processed_data(data_source)
-                
-                # Check if processed JSON exists in S3
-                if not file_record.processed_json_s3_key:
-                    logger.warning(f"File {data_source} has no processed_json_s3_key")
-                    return self._get_empty_processed_data(data_source)
-                
-                # Get asset to find S3 bucket
-                asset = assets.get_asset(db, file_record.asset_id)
-                if not asset:
-                    logger.warning(f"Asset not found for file {data_source}")
-                    return self._get_empty_processed_data(data_source)
-                
-                # Download processed JSON from S3
-                try:
-                    processed_data_bytes = download_bytes(asset.s3_bucket, file_record.processed_json_s3_key)
-                    processed_data = json.loads(processed_data_bytes.decode('utf-8'))
-                    # Extract the 'data' field if it exists, otherwise use the whole structure
-                    if 'data' in processed_data:
-                        return processed_data['data']
-                    return processed_data
-                except FileNotFoundError:
-                    logger.warning(f"Processed JSON not found in S3 for file {data_source}")
-                    return self._get_empty_processed_data(data_source)
-                except Exception as e:
-                    logger.warning(f"Failed to download processed data from S3: {e}")
-                    return self._get_empty_processed_data(data_source)
-            finally:
-                db.close()
-        except ValueError:
-            logger.warning(f"Invalid file ID format: {data_source}")
-            return self._get_empty_processed_data(data_source)
+                processed_data_bytes = download_bytes(asset["s3_bucket"], processed_key)
+                processed_data = json.loads(processed_data_bytes.decode("utf-8"))
+                if "data" in processed_data:
+                    return processed_data["data"]
+                return processed_data
+            except FileNotFoundError:
+                logger.warning(f"Processed JSON not found in S3 for asset {data_source}")
+                return self._get_empty_processed_data(data_source)
+            except Exception as e:
+                logger.warning(f"Failed to download processed data from S3: {e}")
+                return self._get_empty_processed_data(data_source)
         except Exception as e:
             logger.warning(f"Failed to load processed data for {data_source}: {e}")
             return self._get_empty_processed_data(data_source)

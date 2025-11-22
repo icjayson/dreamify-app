@@ -10,3 +10,4 @@ seaborn==0.13.0
 pyyaml==6.0.1
 python-multipart==0.0.6
 boto3
+aiohttp

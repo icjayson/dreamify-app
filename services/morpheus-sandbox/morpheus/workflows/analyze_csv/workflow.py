@@ -8,6 +8,7 @@ from utils.config import load_config
 from utils.logger import logger
 import json
 import re
+from typing import Any, Dict, Optional
 
 class AnalyzeCSVWorkflow:
     
@@ -27,31 +28,57 @@ class AnalyzeCSVWorkflow:
         self.frontend_contract = None
         self.workflow_output = None
 
-    def init_messages(self, file_path: str, user_prompt: str = None):
-        """Initialize conversation with system prompt and user request"""
-        if user_prompt is None:
-            user_prompt = f"Please analyze the CSV file at '{file_path}' and recommend appropriate chart types for visualization."
-        
-        self.messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=f"""
+    def init_messages(
+        self,
+        file_path: str,
+        conversation: Dict[str, Any],
+        dashboards: Dict[str, Any],
+        user_prompt: Optional[str] = None,
+    ):
+        """Initialize conversation history with prior nodes and latest request."""
+        self.messages = [SystemMessage(content=SYSTEM_PROMPT)]
+
+        for node in conversation.get("nodes", []):
+            content_text = self._render_node_contents(node, dashboards)
+            if not content_text:
+                continue
+            role = (node.get("role") or "").lower()
+            if role == "user":
+                self.messages.append(HumanMessage(content=content_text))
+            elif role == "assistant":
+                self.messages.append(AIMessage(content=content_text))
+
+        effective_prompt = (
+            user_prompt
+            or conversation.get("metadata", {}).get("prompt")
+            or f"Please analyze the CSV file at '{file_path}' and recommend appropriate chart types for visualization."
+        )
+
+        instruction = f"""
 Analyze this CSV file and recommend chart types: {file_path}
 
-User request: {user_prompt}
+Latest user request: {effective_prompt}
 
 Steps:
 1. Use Python REPL to load and analyze the CSV file. Always use print for receiving Python REPL tool output.
-2. Use get_available_chart_types to see what charts are available  
+2. Use get_available_chart_types to see what charts are available
 3. Based on your analysis, recommend specific chart types with reasoning
 4. Calculate key metrics from the data (totals, averages, counts, etc.)
 5. IMPORTANT: End your response with the structured JSON format as specified in the system prompt
 
 Do NOT create any visualizations - only analyze and recommend.
-""")
-        ]
+""".strip()
+
+        self.messages.append(HumanMessage(content=instruction))
         return self.messages
     
-    def execute(self, file_path: str, user_prompt: str = None):
+    def execute(
+        self,
+        file_path: str,
+        conversation: Dict[str, Any],
+        dashboards: Dict[str, Any],
+        user_prompt: Optional[str] = None,
+    ):
         """Execute the CSV analysis workflow"""
         
         # Create workflow output instance
@@ -59,14 +86,20 @@ Do NOT create any visualizations - only analyze and recommend.
             workflow_name="analyze_csv",
             input_data={
                 "file_path": file_path,
-                "user_prompt": user_prompt
+                "conversation_id": conversation.get("conversation_id"),
+                "project_id": conversation.get("project_id"),
+                "user_prompt": user_prompt or conversation.get("metadata", {}).get("prompt"),
             }
         )
         
-        logger.info(f"Starting CSV analysis workflow for file: {file_path}")
+        logger.info(
+            "Starting CSV analysis workflow for file: %s (conversation=%s)",
+            file_path,
+            conversation.get("conversation_id"),
+        )
         
         # Initialize messages
-        self.init_messages(file_path, user_prompt)
+        self.init_messages(file_path, conversation, dashboards, user_prompt)
         
         # Add initial messages to workflow output
         for msg in self.messages:
@@ -150,10 +183,12 @@ Do NOT create any visualizations - only analyze and recommend.
             logger.info("CSV analysis workflow completed successfully with frontend contract")
             charts_len = len(self.frontend_contract.get("charts", [])) if isinstance(self.frontend_contract, dict) else 0
             metrics_len = len(self.frontend_contract.get("metrics", [])) if isinstance(self.frontend_contract, dict) else 0
+            summary = self._build_summary(charts_len, metrics_len)
             logger.info(f"Final results: {charts_len} charts, {metrics_len} metrics")
             return {
                 "data": self.frontend_contract,
-                "workflow_output": self.workflow_output
+                "workflow_output": self.workflow_output,
+                "summary": summary,
             }
         else:
             # Legacy fallback (should not happen if prompt is followed)
@@ -162,13 +197,17 @@ Do NOT create any visualizations - only analyze and recommend.
                 "metrics": self.metrics,
                 "insights": ["Analysis completed successfully"]
             }
+            charts_len = len(self.chart_recommendations)
+            metrics_len = len(self.metrics)
+            summary = self._build_summary(charts_len, metrics_len)
             logger.info("CSV analysis workflow completed successfully (legacy fallback)")
-            logger.info(f"Final results: {len(self.chart_recommendations)} charts, {len(self.metrics)} metrics")
+            logger.info(f"Final results: {charts_len} charts, {metrics_len} metrics")
             return {
                 "chart_recommendations": self.chart_recommendations,
                 "metrics": self.metrics,
                 "insights": ["Analysis completed successfully"],
-                "workflow_output": self.workflow_output
+                "workflow_output": self.workflow_output,
+                "summary": summary,
             }
     
     def _extract_frontend_contract(self, final_response: str):
@@ -209,3 +248,26 @@ Do NOT create any visualizations - only analyze and recommend.
             "success": False,
             "insights": ["Failed to parse structured JSON from agent response."],
         }
+
+    def _render_node_contents(self, node: Dict[str, Any], dashboards: Dict[str, Any]) -> str:
+        chunks = []
+        for content in node.get("contents", []):
+            content_type = (content.get("type") or "").lower()
+            data = content.get("data") or {}
+            if content_type == "text":
+                text = data.get("text")
+                if text:
+                    chunks.append(str(text).strip())
+            elif content_type == "dashboard":
+                dash_id = data.get("dashboard_id")
+                if dash_id and dash_id in dashboards:
+                    dash_payload = dashboards[dash_id]
+                    dash_block = json.dumps(dash_payload, ensure_ascii=False, indent=2)
+                    chunks.append(f"Attached dashboard ({dash_id}):\n{dash_block}")
+        return "\n\n".join(chunk for chunk in chunks if chunk).strip()
+
+    def _build_summary(self, charts_len: int, metrics_len: int) -> str:
+        return (
+            f"Generated dashboard with {charts_len} chart(s) "
+            f"and {metrics_len} metric(s)."
+        )

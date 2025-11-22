@@ -107,9 +107,19 @@ class ApiClient {
   }
 
   // File upload
-  async uploadFile<T>(endpoint: string, file: File, options?: RequestInit): Promise<ApiResponse<T>> {
+  async uploadFile<T>(
+    endpoint: string,
+    file: File,
+    options?: RequestInit,
+    extraFields?: Record<string, string>
+  ): Promise<ApiResponse<T>> {
     const formData = new FormData();
     formData.append('file', file);
+    if (extraFields) {
+      for (const [key, value] of Object.entries(extraFields)) {
+        formData.append(key, value);
+      }
+    }
 
     const url = `${this.baseURL}${endpoint}`;
     
@@ -153,6 +163,8 @@ export const api = {
   post: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.post<T>(endpoint, data, options),
   put: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.put<T>(endpoint, data, options),
   delete: <T>(endpoint: string, options?: RequestInit) => apiClient.delete<T>(endpoint, options),
-  uploadFile: <T>(endpoint: string, file: File, options?: RequestInit) => apiClient.uploadFile<T>(endpoint, file, options),
-  uploadAnalyticsFile: (file: File, options?: RequestInit) => apiClient.uploadFile<UploadResponse>('/api/v1/analytics/data', file, options),
+  uploadFile: <T>(endpoint: string, file: File, options?: RequestInit, extraFields?: Record<string, string>) =>
+    apiClient.uploadFile<T>(endpoint, file, options, extraFields),
+  uploadAnalyticsFile: (file: File, options?: RequestInit) =>
+    apiClient.uploadFile<UploadResponse>('/api/v1/analytics/data', file, options),
 };

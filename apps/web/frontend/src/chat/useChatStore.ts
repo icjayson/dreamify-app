@@ -75,7 +75,8 @@ interface UploadedFile {
   size: number;
   ext: string;
   status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error' | 'accepted';
-  executionId?: string;
+  projectId?: string;
+  conversationId?: string;
   processedData?: any;
 }
 
@@ -316,34 +317,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       // Start processing with user prompt
       setUploadedFile({ ...uploadedFile, status: 'processing' });
+      const projectId = uploadedFile.projectId;
+      if (!projectId) {
+        throw new Error('Project context missing for uploaded file');
+      }
       
       console.log('Starting processing for fileID:', uploadedFile.fileID);
-      const startResult = await processingService.runProcessing(uploadedFile.fileID);
+      const startResult = await processingService.runProcessing(projectId, uploadedFile.fileID, content);
       console.log('Run processing result:', startResult);
       // processing or accepted
       if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
+        const conversationId = startResult.data?.conversation_id;
+        if (conversationId) {
+          setUploadedFile((prev) => prev ? { ...prev, conversationId } : prev);
+        }
         console.log('Processing started, beginning polling...');
         // Poll for completion
         const finalResult = await processingService.pollProcessingStatus(
           uploadedFile.fileID,
+          projectId,
+          conversationId,
           (status) => {
-            console.log('Polling status update:', status);
-
-            // Capture execution_id when available during accepted/processing
-            const executionId = status.data?.execution_id as string | undefined;
-            if (executionId) {
-              setUploadedFile((prev) => prev ? { ...prev, executionId } : prev);
-            }
-
-            // If JSON result is present inline in status, store it and mark processed
-            const d: any = status.data;
-            const hasTopLevel = d && ((Array.isArray(d.charts) && d.charts.length) || (Array.isArray(d.metrics) && d.metrics.length) || (Array.isArray(d.tables) && d.tables.length));
-            const hasNested = d && d.data && ((Array.isArray(d.data.charts) && d.data.charts.length) || (Array.isArray(d.data.metrics) && d.data.metrics.length) || (Array.isArray(d.data.tables) && d.data.tables.length));
-            if (hasTopLevel || hasNested) {
-              setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: d } : prev);
-            } else if (status.data?.status === 'completed') {
-              setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: d } : prev);
-            } else if (status.data?.status === 'error') {
+            // Update status based on workflow status
+            const workflowStatus = status.data?.workflow_status?.status;
+            if (workflowStatus === 'processing') {
+              setUploadedFile((prev) => prev ? { ...prev, status: 'processing' } : prev);
+            } else if (workflowStatus === 'error') {
               setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
             }
           },
@@ -352,7 +351,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         );
         console.log('Final polling result:', finalResult);
         
-        if (finalResult.data?.success && finalResult.data?.status === 'completed') {
+        if (finalResult.data?.success && finalResult.data?.status === 'completed' && finalResult.data?.dashboard_data) {
+          setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: finalResult.data?.dashboard_data } : prev);
           // First successful generation: show initial loading for 10s, then mark shown
           if (!get().hasShownInitialDashboard) {
             set({ isInitialLoading: true });
@@ -379,6 +379,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           ]));
         } else {
+          if (finalResult.data?.status === 'error') {
+            setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
+          }
           await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
         }
       } else {

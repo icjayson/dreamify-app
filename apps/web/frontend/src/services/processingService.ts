@@ -1,4 +1,5 @@
 import { api } from './api';
+import { conversationService, ConversationChatRequest } from './conversationService';
 
 export interface ProcessingResponse {
   success: boolean;
@@ -6,259 +7,205 @@ export interface ProcessingResponse {
     success: boolean;
     status: 'not_processed' | 'processing' | 'completed' | 'error' | 'accepted';
     fileID: string;
-    execution_id?: string; // surfaced from backend /status for linking to final result
+    conversation_id?: string;
     message?: string;
     error?: string;
+    processed_data?: any;
+    dashboard_data?: any;
     [key: string]: any;
   };
 }
 
-export interface ProcessedData {
-  fileID: string;
-  status: string;
-  processed_at: string;
-  source_file: string;
-  file_size: number;
-  file_type: string;
-  metrics: Array<{
-    id: string;
-    title: string;
-    value: string;
-    change: string;
-    trend: string;
-  }>;
-  charts: Array<{
-    id: string;
-    type: string;
-    title: string;
-    description: string;
-    datasets: any[];
-    config: any;
-  }>;
-  tables: Array<{
-    id: string;
-    title: string;
-    description: string;
-    columns: any[];
-    data: any[];
-  }>;
-  insights: string[];
-  data_quality: {
-    total_records: number;
-    completeness: number;
-    accuracy: number;
-    consistency: number;
-    duplicates: number;
-  };
-  styling_recommendations?: {
-    preset_theme: string;
-    color_palette: string[];
-    animation_enabled: boolean;
-    grid_visible: boolean;
-    legend_position: string;
-    data_context?: string;
-    audience?: string;
-    reasoning?: {
-      context: string;
-      audience: string;
-      theme: string;
-    };
-  };
-}
-
 class ProcessingService {
-  private baseUrl = '/api/v1/analyze';
-
-  /**
-   * Start processing analysis for a file
-   */
-  async runProcessing(fileID: string): Promise<ProcessingResponse> {
+  async runProcessing(
+    projectId: string,
+    assetId: string,
+    prompt: string,
+    conversationId?: string
+  ): Promise<ProcessingResponse> {
     try {
-      console.log('ProcessingService: Calling /run endpoint for fileID:', fileID);
-      const response = await api.post<ProcessingResponse>(
-        `${this.baseUrl}/run`,
-        { fileID }
-      );
-      console.log('ProcessingService: /run response:', response);
-
-      if (response.success && response.data) {
-        // The response.data contains the ProcessingResponse
-        const processingResponse = response.data;
-        console.log('ProcessingService: Parsed processing response:', processingResponse);
-        
-        // Ensure required fields are present
-        if (processingResponse.data?.fileID && processingResponse.success) {
-          return processingResponse;
-        } else {
-          console.error('ProcessingService: Invalid response structure:', processingResponse);
-          return {
-            success: false,
+      const request: ConversationChatRequest = {
+        conversation_id: conversationId,
+        project_id: projectId,
+        asset_id: assetId,
+        user_node_contents: [
+          {
+            type: 'text',
             data: {
-              success: false,
-              status: 'error',
-              fileID,
-              error: 'Invalid response structure from server'
-            }
-          };
-        }
-      } else {
-        console.error('ProcessingService: /run failed:', response);
-        return {
-          success: false,
-          data: { 
-            success: false,
-            status: 'error',
-            fileID,
-            error: response.error || 'Failed to start processing'
-          }
-        };
-      }
+              text: prompt,
+            },
+          },
+        ],
+      };
+      const response = await conversationService.sendChatMessage(request);
+      return {
+        success: true,
+        data: {
+          success: true,
+          status: 'accepted',
+          fileID: assetId,
+          conversation_id: response.conversation_id,
+        },
+      };
     } catch (error) {
-      console.error('ProcessingService: /run exception:', error);
       return {
         success: false,
         data: {
           success: false,
           status: 'error',
-          fileID,
-          error: error instanceof Error ? error.message : 'Unknown error occurred'
-        }
+          fileID: assetId,
+          error: error instanceof Error ? error.message : 'Unknown error occurred',
+        },
       };
     }
   }
 
-  /**
-   * Get processing status and results
-   */
-  async getProcessed(fileID: string): Promise<ProcessingResponse> {
+  async getWorkflowStatus(
+    conversationId: string,
+    projectId: string
+  ): Promise<ProcessingResponse> {
     try {
-      console.log('ProcessingService: Calling /status endpoint for fileID:', fileID);
-      const response = await api.post<ProcessingResponse>(
-        `${this.baseUrl}/status`,
-        { fileID }
-      );
-      console.log('ProcessingService: /status response:', response);
+      const workflowStatus = await conversationService.getWorkflowStatus(conversationId, projectId);
+      return {
+        success: true,
+        data: {
+          success: true,
+          status: workflowStatus.status === 'completed' ? 'completed' : 
+                  workflowStatus.status === 'error' ? 'error' : 'processing',
+          fileID: '', // Not needed for workflow status
+          conversation_id: conversationId,
+          workflow_status: workflowStatus,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: {
+          success: false,
+          status: 'error',
+          fileID: '',
+          conversation_id: conversationId,
+          error: error instanceof Error ? error.message : 'Unable to fetch workflow status',
+        },
+      };
+    }
+  }
 
-      if (response.success && response.data) {
-        // The response.data contains the ProcessingResponse
-        const processingResponse = response.data;
-        console.log('ProcessingService: Parsed status response:', processingResponse);
+  async pollProcessingStatus(
+    assetId: string,
+    projectId: string,
+    conversationId?: string,
+    onStatusUpdate?: (status: ProcessingResponse) => void,
+    maxAttempts: number = 30,
+    intervalMs: number = 5000
+  ): Promise<ProcessingResponse> {
+    if (!conversationId) {
+      return {
+        success: false,
+        data: {
+          success: false,
+          status: 'error',
+          fileID: assetId,
+          error: 'Conversation ID is required for polling',
+        },
+      };
+    }
+
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      try {
+        const status = await this.getWorkflowStatus(conversationId, projectId);
+        if (onStatusUpdate) {
+          onStatusUpdate(status);
+        }
+
+        const workflowStatus = status.data?.workflow_status?.status;
         
-        // Ensure required fields are present
-        if (processingResponse.data?.fileID && processingResponse.success) {
-          return processingResponse;
-        } else {
-          console.error('ProcessingService: Invalid status response structure:', processingResponse);
+        if (workflowStatus === 'completed') {
+          // Get dashboard data when workflow is completed
+          try {
+            const dashboardData = await conversationService.getDashboardData(conversationId, projectId);
+            if (dashboardData) {
+              return {
+                success: true,
+                data: {
+                  success: true,
+                  status: 'completed',
+                  fileID: assetId,
+                  conversation_id: conversationId,
+                  dashboard_data: dashboardData.dashboard_data,
+                },
+              };
+            } else {
+              // Workflow completed but no dashboard (shouldn't happen, but handle gracefully)
+              return {
+                success: true,
+                data: {
+                  success: true,
+                  status: 'completed',
+                  fileID: assetId,
+                  conversation_id: conversationId,
+                },
+              };
+            }
+          } catch (error) {
+            return {
+              success: false,
+              data: {
+                success: false,
+                status: 'error',
+                fileID: assetId,
+                conversation_id: conversationId,
+                error: error instanceof Error ? error.message : 'Unable to load dashboard data',
+              },
+            };
+          }
+        }
+
+        if (workflowStatus === 'error') {
+          const errorMsg = status.data?.workflow_status?.metadata?.error || 'Processing failed';
           return {
             success: false,
             data: {
               success: false,
               status: 'error',
-              fileID,
-              error: 'Invalid response structure from server'
-            }
+              fileID: assetId,
+              conversation_id: conversationId,
+              error: errorMsg,
+            },
           };
         }
-      } else {
-        console.error('ProcessingService: /status failed:', response);
+
+        // Continue polling if status is 'processing' or other intermediate states
+
+      } catch (error) {
         return {
           success: false,
           data: {
             success: false,
             status: 'error',
-            fileID,
-            error: response.error || 'Failed to get processing status'
-          }
+            fileID: assetId,
+            conversation_id: conversationId,
+            error: error instanceof Error ? error.message : 'Unknown error occurred',
+          },
         };
       }
-    } catch (error) {
-      console.error('ProcessingService: /status exception:', error);
-      return {
-        success: false,
-        data: {
-          success: false,
-          status: 'error',
-          fileID,
-          error: error instanceof Error ? error.message : 'Unknown error occurred'
-        }
-      };
-    }
-  }
 
-  /**
-   * Poll processing status until completion
-   */
-  async pollProcessingStatus(
-    fileID: string,
-    onStatusUpdate?: (status: ProcessingResponse) => void,
-    maxAttempts: number = 30,
-    intervalMs: number = 5000
-  ): Promise<ProcessingResponse> {
-    let attempts = 0;
-    
-    while (attempts < maxAttempts) {
-      try {
-        const status = await this.getProcessed(fileID);
-        
-        if (onStatusUpdate) {
-          onStatusUpdate(status);
-        }
-        
-        // Check if processing is complete or failed
-        const hasInlineResult = (() => {
-          const d = status.data as any;
-          if (!d) return false;
-          // Accept either top-level charts/metrics/tables or nested under data
-          const topLevel = (Array.isArray(d.charts) && d.charts.length) || (Array.isArray(d.metrics) && d.metrics.length) || (Array.isArray(d.tables) && d.tables.length);
-          const nested = d.data && ((Array.isArray(d.data.charts) && d.data.charts.length) || (Array.isArray(d.data.metrics) && d.data.metrics.length) || (Array.isArray(d.data.tables) && d.data.tables.length));
-          return Boolean(topLevel || nested);
-        })();
-
-        if ((status.success && status.data?.status === 'completed') || status.data?.status === 'error' || hasInlineResult) {
-          return status;
-        }
-        
-        // Validate that we have a valid status response
-        if (!status.data?.success && status.data?.error) {
-          console.warn(`Processing error for fileID ${fileID}:`, status.data.error);
-        }
-        
-        // Wait before next poll
-        await new Promise(resolve => setTimeout(resolve, intervalMs));
-        attempts++;
-      } catch (error) {
-        console.error(`Error during polling attempt ${attempts + 1} for fileID ${fileID}:`, error);
-        
-        // If we get multiple consecutive errors, fail early
-        if (attempts >= 3) {
-          return {
-            success: false,
-            data: {
-              success: false,
-              status: 'error',
-              fileID,
-              error: `Polling failed after ${attempts + 1} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`
-            }
-          };
-        }
-        
-        // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, intervalMs));
-        attempts++;
-      }
+      attempts += 1;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
-    
+
     return {
       success: false,
       data: {
         success: false,
         status: 'error',
-        fileID,
-        error: 'Processing timeout - maximum attempts reached'
-      }
+        fileID: assetId,
+        conversation_id: conversationId,
+        error: 'Processing timed out',
+      },
     };
   }
 }
 
-// Export singleton instance
 export const processingService = new ProcessingService();

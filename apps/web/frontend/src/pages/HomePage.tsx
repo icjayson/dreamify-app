@@ -13,6 +13,7 @@ import RecordingBar from '@/components/ui/recording-bar';
 import { useChatStore } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import { fileService, type UploadResponse } from "@/services/fileService";
+import { projectService } from "@/services/projectService";
 import { Message } from "@/types/message";
 import { FooterSection } from '@/components/homepage-section/footer-section';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
@@ -48,25 +49,135 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       setToken(null);
     }
   }, [isSignedIn, clerkUser, getToken]);
-  // Mock recent projects
-  const [recentProjects, setRecentProjects] = useState<Array<{ id: string; title: string }>>([
-    { id: 'p1', title: 'Marketing Dashboard' },
-    { id: 'p2', title: 'Sales Overview' },
-    { id: 'p3', title: 'Product Analytics' },
-    { id: 'p4', title: 'Finance KPI Board' },
-    { id: 'p5', title: 'Operations Metrics' },
-  ]);
+  
+  // Toast hook
+  const { toast } = useToast();
+  
+  const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
 
-  const openProject = (_id: string) => {
-    navigate('/workspace/project');
+  // Fetch projects on mount when signed in
+  useEffect(() => {
+    if (isSignedIn) {
+      setIsLoadingProjects(true);
+      projectService.listProjects()
+        .then((response) => {
+          if (response.success) {
+            const mappedProjects = response.projects.map((p) => ({
+              id: p.id,
+              title: p.name,
+            }));
+            setProjects(mappedProjects);
+          } else {
+            toast({
+              title: "Failed to load projects",
+              description: response.error || "Could not fetch your projects",
+              variant: "destructive",
+            });
+          }
+        })
+        .catch((error) => {
+          console.error('Error fetching projects:', error);
+          toast({
+            title: "Error",
+            description: "Failed to load projects. Please try again.",
+            variant: "destructive",
+          });
+        })
+        .finally(() => {
+          setIsLoadingProjects(false);
+        });
+    } else {
+      setProjects([]);
+    }
+  }, [isSignedIn, toast]);
+
+  const refreshProjects = async () => {
+    if (!isSignedIn) return;
+    try {
+      const response = await projectService.listProjects();
+      if (response.success) {
+        const mappedProjects = response.projects.map((p) => ({
+          id: p.id,
+          title: p.name,
+        }));
+        setProjects(mappedProjects);
+      }
+    } catch (error) {
+      console.error('Error refreshing projects:', error);
+    }
   };
 
-  const renameProject = (id: string, newTitle: string) => {
-    setRecentProjects((prev) => prev.map((p) => (p.id === id ? { ...p, title: newTitle } : p)));
+  const openProject = (id: string) => {
+    navigate(`/workspace/project?projectId=${id}`);
   };
 
-  const deleteProject = (id: string) => {
-    setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+  const renameProject = async (id: string, newTitle: string) => {
+    try {
+      const response = await projectService.updateProject(id, newTitle);
+      if (response.success) {
+        await refreshProjects();
+      } else {
+        toast({
+          title: "Failed to rename project",
+          description: response.error || "Could not update project name",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error renaming project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to rename project. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteProject = async (id: string) => {
+    try {
+      const response = await projectService.deleteProject(id);
+      if (response.success) {
+        await refreshProjects();
+      } else {
+        toast({
+          title: "Failed to delete project",
+          description: response.error || "Could not delete project",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete project. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleNewProject = async () => {
+    try {
+      const response = await projectService.createProject("Untitled Project");
+      if (response.success && response.project) {
+        // Reset chat store for new project
+        useChatStore.getState().resetChat();
+        navigate(`/workspace/project?projectId=${response.project.id}`);
+      } else {
+        toast({
+          title: "Failed to create project",
+          description: response.error || "Could not create new project",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error creating project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create project. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
   // Zustand stores
   const {
@@ -101,9 +212,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const [dragOver, setDragOver] = useState(false);
   const [lottieData, setLottieData] = useState(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
-  
-  // Toast hook
-  const { toast } = useToast();
   
   // File upload integration
   const { uploadState: legacyUploadState, uploadCSVFile, uploadExcelFile } = useFileUpload();
@@ -226,11 +334,21 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     // Add message to store synchronously before switching views
     addMessage(userMessage);
     
+    // Ensure projectId exists before navigation
+    if (!uploadedFile.projectId) {
+      toast({ 
+        title: "Project error", 
+        description: "Project context missing. Please try uploading the file again.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     // Start processing in background
     void processFileWithMessage(inputValue.trim(), onProcessedDataChange);
     
     // Navigate to project workspace for unified chat + dashboard flow
-    navigate('/workspace/project');
+    navigate(`/workspace/project?projectId=${uploadedFile.projectId}`);
   };
 
   const handleFileUpload = (files: FileList | null) => {
@@ -314,7 +432,18 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         void fileService.deleteFile(uploadedFile.fileID);
       }
 
-      setUploadedFile({ fileID: res.fileID, filename: res.filename, size: res.size, ext: res.ext, status: 'uploaded' });
+      const fallbackFilename = res.filename ?? file.name;
+      const fallbackSize = res.size ?? file.size;
+      const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
+
+      setUploadedFile({ 
+        fileID: res.fileID, 
+        filename: fallbackFilename, 
+        size: fallbackSize, 
+        ext: fallbackExt, 
+        status: 'uploaded',
+        projectId: res.asset?.project_id
+      });
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
     } catch (_e) {
       setUploadedFile({ 
@@ -761,8 +890,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     <ProjectsSidebar
       open={projectsOpen}
       onClose={closeProjects}
-      onNewProject={() => navigate('/workspace/project')}
-
+      onNewProject={handleNewProject}
+      recents={projects}
+      onOpenProject={openProject}
+      onRenameProject={renameProject}
+      onDeleteProject={deleteProject}
     />
     <TemplateModal
       open={templateModalOpen}

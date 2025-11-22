@@ -1,16 +1,19 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Download, SquareArrowOutUpRight } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
 import { useChatStore } from "@/chat/useChatStore";
+import { useFileStore } from "@/chat/useFileStore";
 import BlankState from "@/components/project-section/BlankState";
 import { useUser } from "@clerk/clerk-react";
 import PublishModal from "@/components/project-section/PublishModal";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('projectId');
   const [processedData, setProcessedData] = useState<any>(null);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'dashboard'>('chat');
@@ -20,6 +23,15 @@ export default function ProjectPage() {
   const { user } = useUser();
   const displayName = user?.username || user?.fullName || user?.firstName || "you";
 
+  // Reset chat and file store when projectId changes
+  useEffect(() => {
+    if (projectId) {
+      // Reset chat store for new project
+      useChatStore.getState().resetChat();
+      // Reset file store
+      useFileStore.getState().resetFileState();
+    }
+  }, [projectId]);
   
   // Mirror processed data from store for rendering (optional local state)
   // Keep compatibility with existing DashboardPreview API

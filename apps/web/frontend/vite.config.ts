@@ -9,13 +9,8 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     proxy: {
-      "/ollama": {
-        target: "http://127.0.0.1:11434",
-        changeOrigin: true,
-        rewrite: (pathStr) => pathStr.replace(/^\/ollama/, ""),
-      },
       "/api": {
-        target: "http://127.0.0.1:5000",
+        target: "http://127.0.0.1:5001",
         changeOrigin: true,
         rewrite: (pathStr) => pathStr.replace(/^\/api/, "/api"),
       },

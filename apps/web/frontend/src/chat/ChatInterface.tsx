@@ -710,9 +710,13 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
               setUploadedFile(newFile);
 
               const res: UploadResponse = await fileService.uploadFile(file);
-              if (!res.success || !res.fileID || !res.ext || res.size === undefined || !res.filename) {
+              if (!res.success || !res.fileID || res.asset?.status !== 'uploaded') {
                 setUploadedFile({ ...newFile, status: 'error' });
-                toast({ title: "Upload failed", description: res.error || 'Upload failed', variant: "destructive" });
+                toast({
+                  title: "Upload failed",
+                  description: res.error || `Unexpected upload status: ${res.asset?.status ?? 'unknown'}`,
+                  variant: "destructive"
+                });
                 return;
               }
 
@@ -721,7 +725,18 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
                 void fileService.deleteFile(uploadedFile.fileID);
               }
 
-              setUploadedFile({ fileID: res.fileID, filename: res.filename, size: res.size, ext: res.ext, status: 'uploaded' });
+              const fallbackFilename = res.filename ?? file.name;
+              const fallbackSize = res.size ?? file.size;
+              const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
+
+              setUploadedFile({ 
+                fileID: res.fileID, 
+                filename: fallbackFilename, 
+                size: fallbackSize, 
+                ext: fallbackExt, 
+                status: 'uploaded',
+                projectId: res.asset?.project_id 
+              });
               try {
                 // Persist original file for CSV export if it's CSV
                 if ((file.name.split('.').pop() || '').toLowerCase() === 'csv') {

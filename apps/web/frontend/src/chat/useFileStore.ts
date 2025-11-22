@@ -138,22 +138,26 @@ export const useFileStore = create<FileState>((set, get) => ({
   
   processFile: async (fileID: string) => {
     try {
-      const startResult = await processingService.runProcessing(fileID);
-      if (startResult.success && startResult.data?.status === 'processing') {
+      const assetRes = await fileService.getAsset(fileID);
+      if (!assetRes.success || !assetRes.asset) {
+        return;
+      }
+      const projectId = assetRes.asset.project_id;
+      const startResult = await processingService.runProcessing(projectId, fileID, 'Analyze this data file');
+      if (startResult.success && startResult.data?.status && startResult.data.status !== 'error') {
         const finalResult = await processingService.pollProcessingStatus(
           fileID,
-          (status) => {
-            // Handle status updates if needed
-          },
-          30, // max attempts (30 seconds)
-          1000 // 1 second intervals
+          projectId,
+          startResult.data?.conversation_id,
+          undefined,
+          30,
+          1000
         );
-        
         if (finalResult.success && finalResult.data?.status === 'completed') {
           set((state) => ({
             uploadState: {
               ...state.uploadState,
-              processedData: finalResult.data
+              processedData: finalResult.data?.processed_data || finalResult.data
             }
           }));
         }

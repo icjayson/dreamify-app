@@ -90,6 +90,7 @@ interface ChatState {
   
   // File state
   uploadedFile: UploadedFile | null;
+  currentConversationId: string | null;
   
   // Processing state
   isProcessing: boolean;
@@ -122,6 +123,7 @@ interface ChatState {
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
   setUploadedFile: (file: UploadedFile | null | ((prev: UploadedFile | null) => UploadedFile | null)) => void;
+  setCurrentConversationId: (conversationId: string | null) => void;
   setDropdownOpen: (open: boolean) => void;
   setSelectedDataSource: (source: string) => void;
   setIsListening: (listening: boolean) => void;
@@ -158,6 +160,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isTyping: false,
   messages: initialMessages,
   uploadedFile: null,
+  currentConversationId: null,
   isProcessing: false,
   dropdownOpen: false,
   selectedDataSource: "",
@@ -182,6 +185,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setUploadedFile: (file) => set((state) => ({ 
     uploadedFile: typeof file === 'function' ? file(state.uploadedFile) : file 
   })),
+  setCurrentConversationId: (conversationId) => set({ currentConversationId: conversationId }),
   setDropdownOpen: (open) => set({ dropdownOpen: open }),
   setSelectedDataSource: (source) => set({ selectedDataSource: source }),
   setIsListening: (listening) => set({ isListening: listening }),
@@ -220,7 +224,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void) => {
     const state = get();
-    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme } = state;
+    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId } = state;
     
     // Text-only message path: allow theme change after initial dashboard shown, only if currently light
     const isTextOnly = !uploadedFile || uploadedFile.status !== 'uploaded';
@@ -323,13 +327,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       
       console.log('Starting processing for fileID:', uploadedFile.fileID);
-      const startResult = await processingService.runProcessing(projectId, uploadedFile.fileID, content);
+      const startResult = await processingService.runProcessing(projectId, uploadedFile.fileID, content, uploadedFile.conversationId || currentConversationId || undefined);
       console.log('Run processing result:', startResult);
       // processing or accepted
       if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
         const conversationId = startResult.data?.conversation_id;
         if (conversationId) {
           setUploadedFile((prev) => prev ? { ...prev, conversationId } : prev);
+          setCurrentConversationId(conversationId);
         }
         console.log('Processing started, beginning polling...');
         // Poll for completion
@@ -378,6 +383,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               timestamp: new Date(),
             }
           ]));
+          if (conversationId) {
+            setCurrentConversationId(conversationId);
+          }
         } else {
           if (finalResult.data?.status === 'error') {
             setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
@@ -401,6 +409,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     isTyping: false,
     messages: initialMessages,
     uploadedFile: null,
+    currentConversationId: null,
     isProcessing: false,
     dropdownOpen: false,
     selectedDataSource: "",

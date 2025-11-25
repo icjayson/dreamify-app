@@ -94,11 +94,12 @@ const RollingText = ({ isActive, stopSignal, successText = "Your dashboard has b
 };
 
 interface ChatInterfaceProps {
+  projectId?: string;
   onProcessedDataChange?: (data: any) => void;
   onSwitchToDashboard?: () => void;
 }
 
-const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInterfaceProps) => {
+const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }: ChatInterfaceProps) => {
   // Template state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
 
@@ -709,7 +710,7 @@ const ChatInterface = ({ onProcessedDataChange, onSwitchToDashboard }: ChatInter
               // Replace behavior: if an uploaded file exists, we'll delete it after new upload succeeds
               setUploadedFile(newFile);
 
-              const res: UploadResponse = await fileService.uploadFile(file);
+              const res: UploadResponse = await fileService.uploadFile(file, { projectId: projectId ?? undefined });
               if (!res.success || !res.fileID || res.asset?.status !== 'uploaded') {
                 setUploadedFile({ ...newFile, status: 'error' });
                 toast({

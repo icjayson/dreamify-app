@@ -59,14 +59,17 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   // Fetch projects on mount when signed in
   useEffect(() => {
     if (isSignedIn) {
+      console.log('🚀 Initial project fetch on mount...');
       setIsLoadingProjects(true);
       projectService.listProjects()
         .then((response) => {
+          console.log('📋 Initial projects response:', response);
           if (response.success) {
             const mappedProjects = response.projects.map((p) => ({
               id: p.id,
-              title: p.name,
+              title: p.latest_dashboard_id && p.dashboard_title ? p.dashboard_title : "Untitled Project",
             }));
+            console.log('✅ Initial mapped projects:', mappedProjects);
             setProjects(mappedProjects);
           } else {
             toast({
@@ -77,7 +80,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           }
         })
         .catch((error) => {
-          console.error('Error fetching projects:', error);
+          console.error('❌ Error fetching projects:', error);
           toast({
             title: "Error",
             description: "Failed to load projects. Please try again.",
@@ -92,19 +95,56 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     }
   }, [isSignedIn, toast]);
 
+  // Refresh projects when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isSignedIn) {
+        refreshProjects();
+      }
+    };
+
+    const handleFocus = () => {
+      if (isSignedIn) {
+        refreshProjects();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isSignedIn]);
+
   const refreshProjects = async () => {
     if (!isSignedIn) return;
+    console.log('🔄 Refreshing projects list...');
     try {
       const response = await projectService.listProjects();
+      console.log('📋 Projects API response:', response);
       if (response.success) {
-        const mappedProjects = response.projects.map((p) => ({
+        const parseDate = (value?: string | null) => {
+          if (!value) return 0;
+          const timestamp = Date.parse(value);
+          return Number.isNaN(timestamp) ? 0 : timestamp;
+        };
+        const sortedProjects = [...response.projects].sort((a, b) => {
+          const first = parseDate(b.updated_at || b.created_at);
+          const second = parseDate(a.updated_at || a.created_at);
+          return first - second;
+        });
+        const mappedProjects = sortedProjects.map((p) => ({
           id: p.id,
-          title: p.name,
+          title: p.name || p.dashboard_title || "Untitled Project",
         }));
+        console.log('✅ Mapped projects:', mappedProjects);
         setProjects(mappedProjects);
+      } else {
+        console.error('❌ Failed to fetch projects:', response.error);
       }
     } catch (error) {
-      console.error('Error refreshing projects:', error);
+      console.error('❌ Error refreshing projects:', error);
     }
   };
 
@@ -544,6 +584,13 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     return () => window.removeEventListener('open-projects', openProjects as EventListener);
   }, []);
 
+  // Refresh projects list when sidebar opens
+  useEffect(() => {
+    if (projectsOpen && isSignedIn) {
+      console.log('Sidebar opened - refreshing projects...');
+      refreshProjects();
+    }
+  }, [projectsOpen, isSignedIn]);
 
   // sidebar show/animation is handled inside ProjectsSidebar component
 

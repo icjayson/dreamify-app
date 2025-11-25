@@ -12,14 +12,6 @@ interface ProjectsSidebarProps {
   onDeleteProject?: (id: string) => void;
 }
 
-// Default recent projects used when no recents are provided
-const DEFAULT_RECENTS: Array<{ id: string; title: string }> = [
-  { id: 'p1', title: 'Marketing Dashboard' },
-  { id: 'p2', title: 'Sales Overview' },
-  { id: 'p3', title: 'Product Analytics' },
-  { id: 'p4', title: 'Finance KPI Board' },
-  { id: 'p5', title: 'Operations Metrics' },
-];
 
 const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewProject, recents, onOpenProject, onRenameProject, onDeleteProject }) => {
   const [sidebarShown, setSidebarShown] = useState(false);
@@ -73,7 +65,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
 
   if (!shouldRender) return null;
 
-  const computedRecents = recents ?? DEFAULT_RECENTS;
+  const computedRecents = recents ?? [];
   const hasRecents = Array.isArray(computedRecents) && computedRecents.length > 0;
 
   // Safe no-op handlers used when not provided
@@ -189,16 +181,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
               </div>
             ))
           ) : (
-            <div className="group relative w-full rounded-md hover:bg-black/40 transition-colors">
-              <div className="w-full text-left px-3 py-2 md:pl-9 pr-10 text-white/90 text-sm">Portfolio Website Builder</div>
-              <button
-                data-btn="kebab"
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded hover:bg-primary/20 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                aria-label="More actions"
-              >
-                <Ellipsis className="w-4 h-4 text-white/80" />
-              </button>
-            </div>
+            <div className="text-white/50 text-xs mt-4 text-center">No projects yet</div>
           )}
         </div>
       </div>

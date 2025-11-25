@@ -6,6 +6,9 @@ export interface ProjectRecord {
   description?: string;
   created_at?: string;
   updated_at?: string;
+  latest_conversation_id?: string | null;
+  latest_dashboard_id?: string | null;
+  dashboard_title?: string | null;
 }
 
 export interface ProjectResponse {
@@ -40,6 +43,14 @@ class ProjectService {
       return { success: true, projects: res.data.projects || [] };
     }
     return { success: false, projects: [], error: res.error || 'Failed to list projects' };
+  }
+
+  async getProject(projectId: string): Promise<ProjectResponse> {
+    const res = await api.get<ProjectRecord>(`${this.baseUrl}/detail/${projectId}`);
+    if (res.success && res.data) {
+      return { success: true, project: res.data };
+    }
+    return { success: false, error: res.error || 'Failed to load project' };
   }
 
   async updateProject(projectId: string, name?: string, description?: string): Promise<ProjectResponse> {

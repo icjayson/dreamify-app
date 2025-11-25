@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Download, SquareArrowOutUpRight } from "lucide-react";
+import { ArrowLeft, Download, Pencil, SquareArrowOutUpRight } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
@@ -9,6 +9,10 @@ import { useFileStore } from "@/chat/useFileStore";
 import BlankState from "@/components/project-section/BlankState";
 import { useUser } from "@clerk/clerk-react";
 import PublishModal from "@/components/project-section/PublishModal";
+import { projectService } from "@/services/projectService";
+import { conversationService } from "@/services/conversationService";
+import { useToast } from "@/hooks/use-toast";
+import { Message } from "@/types/message";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -17,21 +21,176 @@ export default function ProjectPage() {
   const [processedData, setProcessedData] = useState<any>(null);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'dashboard'>('chat');
+  const [isProjectLoading, setIsProjectLoading] = useState(false);
+  const [projectTitle, setProjectTitle] = useState("Untitled Project");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [isRenaming, setIsRenaming] = useState(false);
+  const startEditingTitle = () => {
+    setRenameValue(projectTitle);
+    setIsEditingTitle(true);
+  };
+
+  const cancelEditingTitle = () => {
+    if (isRenaming) return;
+    setRenameValue("");
+    setIsEditingTitle(false);
+  };
+
+  const handleRenameSave = async () => {
+    if (!projectId) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      toast({
+        title: "Name required",
+        description: "Please enter a project name.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      setIsRenaming(true);
+      const response = await projectService.updateProject(projectId, trimmed);
+      if (response.success) {
+        setProjectTitle(trimmed);
+        toast({
+          title: "Project renamed",
+          description: `Project name updated to "${trimmed}".`,
+        });
+        setIsEditingTitle(false);
+      } else {
+        toast({
+          title: "Failed to rename project",
+          description: response.error || "Could not update project name",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to rename project", error);
+      toast({
+        title: "Rename failed",
+        description: "Could not update project name. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRenaming(false);
+    }
+  };
   const uploadedFile = useChatStore((s) => s.uploadedFile);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
   const { user } = useUser();
+  const { toast } = useToast();
   const displayName = user?.username || user?.fullName || user?.firstName || "you";
+  const setMessages = useChatStore((s) => s.setMessages);
+  const setCurrentConversationId = useChatStore((s) => s.setCurrentConversationId);
+  const setHasShownInitialDashboard = useChatStore((s) => s.setHasShownInitialDashboard);
 
-  // Reset chat and file store when projectId changes
-  useEffect(() => {
-    if (projectId) {
-      // Reset chat store for new project
-      useChatStore.getState().resetChat();
-      // Reset file store
-      useFileStore.getState().resetFileState();
+  const hydrateConversation = useCallback(async (projId: string, conversationId: string) => {
+    try {
+      const convoResponse = await conversationService.loadConversation(conversationId, projId);
+      const conversation = convoResponse.conversation;
+      const nodes = conversation?.nodes ?? [];
+      const assetName = conversation?.metadata?.asset?.filename || "dashboard";
+      const restoredMessages: Message[] = nodes
+        .filter((node: any) => node?.role === 'user' || node?.role === 'assistant')
+        .map((node: any) => {
+          const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
+          const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
+          const normalized: Message = {
+            id: node?.node_id || crypto.randomUUID(),
+            role: node?.role === 'user' ? 'user' : 'assistant',
+            content: textContent?.data?.text || "",
+            timestamp: new Date(node?.created_at || Date.now()),
+          };
+          if (dashboardContent) {
+            normalized.dashboardCard = {
+              sourceFileName: assetName,
+            };
+          }
+          return normalized;
+        });
+      if (restoredMessages.length) {
+        setMessages(restoredMessages);
+      }
+      setCurrentConversationId(conversationId);
+
+      const dashboardResponse = await conversationService.getDashboardData(conversationId, projId);
+      if (dashboardResponse?.dashboard_data) {
+        const assetMeta = conversation?.metadata?.asset || {};
+        const restoredFile = {
+          fileID: assetMeta.file_id || assetMeta.asset_id || 'restored',
+          filename: assetMeta.filename || 'data.csv',
+          size: assetMeta.size_bytes || 0,
+          ext: assetMeta.extension || '',
+          status: 'processed' as const,
+          projectId: projId,
+          conversationId,
+          processedData: dashboardResponse.dashboard_data,
+        };
+        useChatStore.getState().setUploadedFile(restoredFile);
+        setProcessedData(dashboardResponse.dashboard_data);
+        setHasShownInitialDashboard(true);
+        setActiveTab('dashboard');
+      }
+    } catch (error) {
+      console.error('Failed to hydrate conversation', error);
+      toast({
+        title: "Unable to restore project",
+        description: "Failed to load previous conversation. You can start a new one.",
+        variant: "destructive",
+      });
     }
-  }, [projectId]);
+  }, [setMessages, setCurrentConversationId, toast, setHasShownInitialDashboard]);
+
+  // Reset and hydrate when project changes
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+
+    const loadProject = async () => {
+      setIsProjectLoading(true);
+      useChatStore.getState().resetChat();
+      useFileStore.getState().resetFileState();
+      try {
+        const response = await projectService.getProject(projectId);
+        if (!cancelled) {
+          if (response.success && response.project) {
+            const displayTitle = response.project.name || response.project.dashboard_title || "Untitled Project";
+            setProjectTitle(displayTitle);
+            const latestConversationId = response.project.latest_conversation_id;
+            if (latestConversationId) {
+              await hydrateConversation(response.project.id, latestConversationId);
+            }
+          } else {
+            toast({
+              title: "Project unavailable",
+              description: response.error || "Failed to load project",
+              variant: "destructive",
+            });
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to load project', error);
+          toast({
+            title: "Project unavailable",
+            description: "Failed to load project data",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setIsProjectLoading(false);
+        }
+      }
+    };
+
+    loadProject();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, hydrateConversation, toast]);
   
   // Mirror processed data from store for rendering (optional local state)
   // Keep compatibility with existing DashboardPreview API
@@ -52,7 +211,50 @@ export default function ProjectPage() {
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-sm text-white/70 truncate" title={displayName}>{displayName}</span>
               <span className="text-sm text-white/50">›</span>
-              <span className="font-regular text-sm truncate" title="project-name">project-name</span>
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleRenameSave();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        cancelEditingTitle();
+                      }
+                    }}
+                    className="text-sm text-white bg-transparent border-b border-white/40 focus:outline-none focus:border-white/80 leading-none w-40 sm:w-56"
+                    autoFocus
+                  />
+                  <button
+                    className="px-2 py-1 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
+                    onClick={cancelEditingTitle}
+                    disabled={isRenaming}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-2 py-1 text-xs rounded-md button-gradient disabled:opacity-70 disabled:pointer-events-none"
+                    onClick={handleRenameSave}
+                    disabled={isRenaming}
+                  >
+                    {isRenaming ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <span className="font-regular text-sm truncate" title={projectTitle}>{projectTitle}</span>
+                  <button
+                    aria-label="Rename project"
+                    onClick={startEditingTitle}
+                    className="text-white/60 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center">
@@ -89,7 +291,7 @@ export default function ProjectPage() {
             <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
                 <div>
                 <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
-                    <ChatInterface onSwitchToDashboard={() => setActiveTab('dashboard')} />
+                    <ChatInterface projectId={projectId ?? undefined} onSwitchToDashboard={() => setActiveTab('dashboard')} />
                 </div>
                 </div>
             </div>
@@ -138,7 +340,9 @@ export default function ProjectPage() {
                 }}
               />
             ) : (
-              uploadedFile?.status === 'processing' ? (
+              isProjectLoading ? (
+                <DashboardLoading title="Loading Project" description="Restoring your dashboard..." durationSec={5} />
+              ) : uploadedFile?.status === 'processing' ? (
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
               ) : isInitialLoading ? (
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />

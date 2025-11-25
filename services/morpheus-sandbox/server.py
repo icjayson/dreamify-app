@@ -47,6 +47,7 @@ class StatusRequest(BaseModel):
 
 # Backend API URL for updating file records
 BACKEND_API_URL = "http://localhost:5001"
+MORPHEUS_API_KEY = os.environ.get("MORPHEUS_API_KEY", "dev-secret-key")
 
 logger.info(
     "Config AWS credentials present: %s", "yes" if getattr(config, "aws", None) else "no"
@@ -450,6 +451,13 @@ def _process_conversation_background(
             except Exception as exc:
                 logger.warning(f"Failed to update asset via API: {exc}")
 
+        dashboard_title = None
+        dashboard_description = None
+        if result.get("data"):
+            dashboard_meta = result["data"].get("dashboard") or {}
+            dashboard_title = dashboard_meta.get("title")
+            dashboard_description = dashboard_meta.get("description")
+
         new_dashboard_record = None
         if result.get("data") and conversation_bucket:
             new_dashboard_record = _save_dashboard_artifact(
@@ -512,6 +520,35 @@ def _process_conversation_background(
                 "dashboard_id": new_dashboard_record["dashboard_id"] if new_dashboard_record else None,
             },
         )
+
+        # Update project metadata in backend so UI can restore conversations/dashboards
+        try:
+            project_metadata_payload = {
+                "user_id": user_id,
+                "name": dashboard_title,
+                "description": dashboard_description,
+                "latest_conversation_id": conversation_id,
+                "latest_dashboard_id": new_dashboard_record["dashboard_id"]
+                if new_dashboard_record
+                else None,
+                "dashboard_title": dashboard_title,
+            }
+            headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
+            response = requests.put(
+                f"{BACKEND_API_URL}/api/v1/morpheus/project/{project_id}/metadata",
+                json=project_metadata_payload,
+                headers=headers,
+                timeout=10,
+            )
+            if response.status_code != 200:
+                logger.warning(
+                    "Failed to update project metadata for %s: %s %s",
+                    project_id,
+                    response.status_code,
+                    response.text,
+                )
+        except Exception as exc:
+            logger.warning("Project metadata update failed: %s", exc)
 
         logger.info(f"Workflow completed for conversation {conversation_id}")
 

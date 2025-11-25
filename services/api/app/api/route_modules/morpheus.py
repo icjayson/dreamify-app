@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.dependencies.auth import require_user
 from utils.config import config
 from utils.dynamodb.repos import conversations as conversations_repo
+from utils.dynamodb.repos import projects as projects_repo
 from utils.dynamodb.repos import workflow_nodes as workflow_nodes_repo
 from utils.logger import logger
 
@@ -49,6 +50,15 @@ class MorpheusAssetResponse(BaseModel):
     processed_json_s3_key: Optional[str] = None
     filename: Optional[str] = None
     extension: Optional[str] = None
+
+
+class ProjectMetadataUpdateRequest(BaseModel):
+    user_id: str
+    name: Optional[str] = None
+    description: Optional[str] = None
+    latest_conversation_id: Optional[str] = None
+    latest_dashboard_id: Optional[str] = None
+    dashboard_title: Optional[str] = None
 
 
 def _map_node(item: Dict) -> NodeStatusResponse:
@@ -152,5 +162,29 @@ async def get_asset_for_morpheus(
         filename=asset.get("filename"),
         extension=asset.get("extension"),
     )
+
+
+@router.put("/morpheus/project/{project_id}/metadata")
+async def update_project_metadata(
+    project_id: str,
+    request: ProjectMetadataUpdateRequest,
+    x_morpheus_key: Optional[str] = Header(None),
+):
+    _ensure_morpheus_key(x_morpheus_key)
+    if not request.user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+
+    updated_project = projects_repo.update_project(
+        user_id=request.user_id,
+        project_id=project_id,
+        name=request.name,
+        description=request.description,
+        latest_conversation_id=request.latest_conversation_id,
+        latest_dashboard_id=request.latest_dashboard_id,
+        dashboard_title=request.dashboard_title,
+    )
+    if not updated_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"success": True}
 
 

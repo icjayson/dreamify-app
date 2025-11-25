@@ -187,6 +187,26 @@ async def conversation_chat(
         is_new=is_new_conversation,
     )
 
+    # Keep project metadata in sync so frontend can restore conversations
+    try:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Updating project {request.project_id} with conversation {conversation_id}")
+        updated = projects_repo.update_project(
+            user_id=user_id,
+            project_id=request.project_id,
+            latest_conversation_id=conversation_id,
+        )
+        if updated:
+            logger.info(f"Successfully updated project {request.project_id} metadata")
+        else:
+            logger.warning(f"Project update returned None for {request.project_id}")
+    except Exception as exc:
+        # Do not block chat flow if metadata update fails
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to update project conversation metadata: {exc}", exc_info=True)
+
     # Small delay to help with S3 eventual consistency
     await asyncio.sleep(0.5)
 

@@ -26,6 +26,9 @@ class ProjectCreateRequest(BaseModel):
 class ProjectUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    latest_conversation_id: Optional[str] = None
+    latest_dashboard_id: Optional[str] = None
+    dashboard_title: Optional[str] = None
 
 
 class ProjectResponse(BaseModel):
@@ -34,6 +37,9 @@ class ProjectResponse(BaseModel):
     description: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    latest_conversation_id: Optional[str] = None
+    latest_dashboard_id: Optional[str] = None
+    dashboard_title: Optional[str] = None
 
 
 class ProjectListResponse(BaseModel):
@@ -79,6 +85,9 @@ def _map_project(item: dict) -> ProjectResponse:
         description=item.get("description"),
         created_at=item.get("created_at"),
         updated_at=item.get("updated_at"),
+        latest_conversation_id=item.get("latest_conversation_id"),
+        latest_dashboard_id=item.get("latest_dashboard_id"),
+        dashboard_title=item.get("dashboard_title"),
     )
 
 
@@ -153,10 +162,31 @@ async def update_project_endpoint(
         project_id=project_id,
         name=request.name,
         description=request.description,
+        latest_conversation_id=request.latest_conversation_id,
+        latest_dashboard_id=request.latest_dashboard_id,
+        dashboard_title=request.dashboard_title,
     )
     if not updated_project:
         raise HTTPException(status_code=404, detail="Project not found")
     return _map_project(updated_project)
+
+
+@router.get("/user/project/{project_id}", response_model=ProjectResponse)
+async def get_project_endpoint(
+    project_id: str,
+    user_id: str = Depends(require_user),
+):
+    project = _get_project_or_404(user_id, project_id)
+    return _map_project(project)
+
+
+@router.get("/user/project/detail/{project_id}", response_model=ProjectResponse)
+async def get_project_detail_endpoint(
+    project_id: str,
+    user_id: str = Depends(require_user),
+):
+    project = _get_project_or_404(user_id, project_id)
+    return _map_project(project)
 
 
 @router.delete("/user/project/{project_id}", response_model=ProjectDeleteResponse)

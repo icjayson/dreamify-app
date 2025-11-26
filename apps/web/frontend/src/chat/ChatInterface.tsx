@@ -353,104 +353,113 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
       {/* Messages Area */}
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-4">
-        {messages.map((message, index) => (
-          <>
-            <div
-              key={message.id}
-              className={`chat-enter flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div className={`max-w-[90%] flex gap-2 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${
-                  message.role === "user" 
-                    ? "bg-black" 
-                    : "bg-transparent"
-                }`}>
-                  {message.role === "user" ? (
-                    <User className="w-3 h-3 text-white" />
-                  ) : (
-                    <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
-                  )}
-                </div>
-                
-                <div className={`rounded-xl text-sm whitespace-pre-wrap break-words ${
-                  message.role === "user" 
-                    ? "bg-black p-3" 
-                    : "bg-transparent p-0"
-                }`}>
-                  {message.attachment && message.attachment.kind === "csv" && (
-                    <div className="mb-2">
-                      <span
-                        className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
-                        title={message.attachment.name}
-                        aria-label="Attached CSV file"
-                      >
-                        <span className="inline-flex items-center gap-1 text-white/70">
-                          <FileText className="w-3 h-3 text-white/80" />
-                          Attached file
-                        </span>
-                        <span className="truncate w-full">{message.attachment.name}</span>
+        {messages.map((message, index) => {
+          const isUser = message.role === "user";
+          const isSystem = message.role === "system";
+          const bubbleLayoutClass = isUser ? "flex-row-reverse" : "flex-row";
+          const avatarClass = isUser
+            ? "bg-black"
+            : isSystem
+              ? "bg-white/10 border border-white/20"
+              : "bg-transparent";
+          const bubbleBgClass = isUser
+            ? "bg-black p-3"
+            : isSystem
+              ? "bg-white/5 p-3 border border-white/10"
+              : "bg-transparent p-0";
+          return (
+            <div key={message.id} className="space-y-1">
+              <div
+                className={`chat-enter flex ${isUser ? "justify-end" : "justify-start"}`}
+              >
+                <div className={`max-w-[90%] flex gap-2 ${bubbleLayoutClass}`}>
+                  <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${avatarClass}`}>
+                    {isUser ? (
+                      <User className="w-3 h-3 text-white" />
+                    ) : isSystem ? (
+                      <span className="text-[9px] font-semibold tracking-wide uppercase text-white/70">
+                        SYS
                       </span>
-                    </div>
-                  )}
-                  {message.template && (
-                    <div className="mb-2">
-                      <span
-                        className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
-                        title={message.template.title}
-                        aria-label="Selected template"
-                      >
-                        <span className="inline-flex items-center gap-1 text-white/70">
-                          <LayoutTemplate className="w-3 h-3 text-white/80" />
-                          Template
+                    ) : (
+                      <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
+                    )}
+                  </div>
+                  
+                  <div className={`rounded-xl text-sm whitespace-pre-wrap break-words ${bubbleBgClass}`}>
+                    {message.attachment && (
+                      <div className="mb-2">
+                        <span
+                          className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
+                          title={message.attachment.name}
+                          aria-label="Attached file"
+                        >
+                          <span className="inline-flex items-center gap-1 text-white/70">
+                            <FileText className="w-3 h-3 text-white/80" />
+                            Attached file
+                          </span>
+                          <span className="truncate w-full">{message.attachment.name}</span>
                         </span>
-                        <span className="truncate w-full">{message.template.title}</span>
-                      </span>
-                    </div>
-                  )}
-                  {message.role === 'assistant' && message.dashboardCard ? (
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-label="Open dashboard"
-                      onClick={() => { onSwitchToDashboard && onSwitchToDashboard(); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(); } }}
-                      className="group w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">Dashboard</div>
-                        <div className="text-xs text-white/70 mt-0.5 truncate">Source: {message.dashboardCard.sourceFileName}</div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-white/60 flex-shrink-0 ml-2 group-hover:translate-x-1 transition-transform duration-200" />
-                    </div>
-                  ) : (
-                    <div
-                      className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
-                      dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
-                    />
-                  )}
-                  <span className="text-xs text-muted-foreground mt-1 block">
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              </div>
-            </div>
-            {/* Inline Rolling Text under the last user message that started analysis */}
-            {message.role === 'user'
-              && index === messages.length - 1
-              && uploadedFile
-              && (isProcessing || uploadedFile.status === 'processing') && (
-                <div className={`flex justify-start mt-1`}>
-                  <div className={`ml-8`}>
-                    <RollingText
-                      isActive={isProcessing || uploadedFile.status === 'processing'}
-                      stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
-                      successText="Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need."
-                    />
+                    )}
+                    {message.template && (
+                      <div className="mb-2">
+                        <span
+                          className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
+                          title={message.template.title}
+                          aria-label="Selected template"
+                        >
+                          <span className="inline-flex items-center gap-1 text-white/70">
+                            <LayoutTemplate className="w-3 h-3 text-white/80" />
+                            Template
+                          </span>
+                          <span className="truncate w-full">{message.template.title}</span>
+                        </span>
+                      </div>
+                    )}
+                    {message.role === 'assistant' && message.dashboardCard ? (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Open dashboard"
+                        onClick={() => { onSwitchToDashboard && onSwitchToDashboard(); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(); } }}
+                        className="group w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-white truncate">Dashboard</div>
+                          <div className="text-xs text-white/70 mt-0.5 truncate">Source: {message.dashboardCard.sourceFileName}</div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-white/60 flex-shrink-0 ml-2 group-hover:translate-x-1 transition-transform duration-200" />
+                      </div>
+                    ) : (
+                      <div
+                        className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
+                        dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
+                      />
+                    )}
+                    <span className="text-xs text-muted-foreground mt-1 block">
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
                 </div>
-            )}
-          </>
-        ))}
+              </div>
+              {/* Inline Rolling Text under the last user message that started analysis */}
+              {message.role === 'user'
+                && index === messages.length - 1
+                && uploadedFile
+                && (isProcessing || uploadedFile.status === 'processing') && (
+                  <div className={`flex justify-start mt-1`}>
+                    <div className={`ml-8`}>
+                      <RollingText
+                        isActive={isProcessing || uploadedFile.status === 'processing'}
+                        stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
+                        successText="Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need."
+                      />
+                    </div>
+                  </div>
+              )}
+            </div>
+        )})}
 
         <div ref={messagesEndRef} />
       </div>

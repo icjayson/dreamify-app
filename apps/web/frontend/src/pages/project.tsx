@@ -93,10 +93,28 @@ export default function ProjectPage() {
       const nodes = conversation?.nodes ?? [];
       const assetName = conversation?.metadata?.asset?.filename || "dashboard";
       const restoredMessages: Message[] = nodes
-        .filter((node: any) => node?.role === 'user' || node?.role === 'assistant')
+        .filter((node: any) => {
+          if (!node) return false;
+          if (node.role === 'user') return true;
+          if (node.role === 'assistant') {
+            const metadata = node.metadata || {};
+            const hasToolCalls = Array.isArray(metadata.tool_calls) && metadata.tool_calls.length > 0;
+            if (hasToolCalls || metadata.tool_call_id) return false;
+            const hasRenderableContent = node.contents?.some?.((c: any) => {
+              if (c?.type === 'text') {
+                const text = c?.data?.text;
+                return typeof text === 'string' && text.trim().length > 0;
+              }
+              return c?.type === 'dashboard';
+            });
+            return !!hasRenderableContent;
+          }
+          return false;
+        })
         .map((node: any) => {
           const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
           const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
+          const attachmentContent = node?.contents?.find?.((c: any) => c?.type === 'attachment' || c?.type === 'file');
           const normalized: Message = {
             id: node?.node_id || crypto.randomUUID(),
             role: node?.role === 'user' ? 'user' : 'assistant',
@@ -106,6 +124,13 @@ export default function ProjectPage() {
           if (dashboardContent) {
             normalized.dashboardCard = {
               sourceFileName: assetName,
+            };
+          }
+          if (attachmentContent?.data) {
+            normalized.attachment = {
+              kind: attachmentContent?.data?.kind === 'file' ? 'file' : 'csv',
+              name: attachmentContent?.data?.name || assetName,
+              mime: attachmentContent?.data?.mime,
             };
           }
           return normalized;

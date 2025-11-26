@@ -21,20 +21,24 @@ class ProcessingService {
     projectId: string,
     assetId: string,
     prompt: string,
-    conversationId?: string
+    conversationId?: string,
+    additionalContents?: ConversationChatRequest['user_node_contents']
   ): Promise<ProcessingResponse> {
     try {
+      const textContent: ConversationChatRequest['user_node_contents'][number] = {
+        type: 'text',
+        data: {
+          text: prompt,
+        },
+      };
+
       const request: ConversationChatRequest = {
         conversation_id: conversationId,
         project_id: projectId,
         asset_id: assetId,
         user_node_contents: [
-          {
-            type: 'text',
-            data: {
-              text: prompt,
-            },
-          },
+          textContent,
+          ...(additionalContents ?? []),
         ],
       };
       const response = await conversationService.sendChatMessage(request);

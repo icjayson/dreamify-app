@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Message } from '@/types/message';
 import { processingService } from '@/services/processingService';
+import { ConversationChatRequest } from '@/services/conversationService';
 
 // Theme detection function (keyword-based only)
 const detectThemeChange = (message: string): 'light' | 'dark' | null => {
@@ -327,7 +328,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       
       console.log('Starting processing for fileID:', uploadedFile.fileID);
-      const startResult = await processingService.runProcessing(projectId, uploadedFile.fileID, content, uploadedFile.conversationId || currentConversationId || undefined);
+      const attachmentContents = uploadedFile ? [
+        {
+          type: 'attachment',
+          data: {
+            kind: 'csv',
+            name: uploadedFile.filename,
+            asset_id: uploadedFile.fileID,
+            project_id: projectId,
+          }
+        }
+      ] as ConversationChatRequest['user_node_contents'] : undefined;
+
+      const startResult = await processingService.runProcessing(
+        projectId,
+        uploadedFile.fileID,
+        content,
+        uploadedFile.conversationId || currentConversationId || undefined,
+        attachmentContents
+      );
       console.log('Run processing result:', startResult);
       // processing or accepted
       if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {

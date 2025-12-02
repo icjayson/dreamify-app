@@ -3,7 +3,7 @@ import { api } from './api';
 export interface ConversationChatRequest {
   conversation_id?: string;
   project_id: string;
-  asset_id: string;
+  asset_id?: string;  // Optional if conversation_id is provided
   user_node_contents: Array<{
     type: string;
     data: Record<string, any>;
@@ -67,25 +67,9 @@ class ConversationService {
 
   async getDashboardData(conversationId: string, projectId: string): Promise<DashboardDataResponse | null> {
     try {
-      const conversationResponse = await this.loadConversation(conversationId, projectId);
-      const conversation = conversationResponse.conversation;
-      
-      // Get the latest dashboard from conversation
-      const dashboards = conversation.dashboards || [];
-      if (dashboards.length === 0) {
-        return null;
-      }
-      
-      // Get the most recent dashboard
-      const latestDashboard = dashboards[dashboards.length - 1];
-      const dashboardId = latestDashboard.dashboard_id;
-      const s3Uri = latestDashboard.s3_uri;
-      
-      if (!dashboardId || !s3Uri) {
-        return null;
-      }
-      
-      // Load dashboard from S3 via backend endpoint
+      // Always delegate dashboard lookup to the backend endpoint.
+      // The backend reads the latest conversation and validates that
+      // a dashboard exists (or returns 404 otherwise).
       const response = await api.get<DashboardDataResponse>(
         `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}`
       );

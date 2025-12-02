@@ -19,7 +19,7 @@ export interface ProcessingResponse {
 class ProcessingService {
   async runProcessing(
     projectId: string,
-    assetId: string,
+    assetId: string | null,  // Allow null for Q&A without files
     prompt: string,
     conversationId?: string,
     additionalContents?: ConversationChatRequest['user_node_contents']
@@ -35,7 +35,7 @@ class ProcessingService {
       const request: ConversationChatRequest = {
         conversation_id: conversationId,
         project_id: projectId,
-        asset_id: assetId,
+        asset_id: assetId || undefined,  // Only include if provided
         user_node_contents: [
           textContent,
           ...(additionalContents ?? []),
@@ -47,7 +47,7 @@ class ProcessingService {
         data: {
           success: true,
           status: 'accepted',
-          fileID: assetId,
+          fileID: assetId || '',
           conversation_id: response.conversation_id,
         },
       };
@@ -57,7 +57,7 @@ class ProcessingService {
         data: {
           success: false,
           status: 'error',
-          fileID: assetId,
+          fileID: assetId || '',
           error: error instanceof Error ? error.message : 'Unknown error occurred',
         },
       };
@@ -126,43 +126,80 @@ class ProcessingService {
         const workflowStatus = status.data?.workflow_status?.status;
         
         if (workflowStatus === 'completed') {
-          // Get dashboard data when workflow is completed
-          try {
-            const dashboardData = await conversationService.getDashboardData(conversationId, projectId);
-            if (dashboardData) {
-              return {
-                success: true,
-                data: {
+          // Check response type from workflow status
+          const responseType = status.data?.workflow_status?.metadata?.response_type;
+          
+          if (responseType === 'message' || !responseType) {
+            // Q&A response or unknown - try to get dashboard, but don't fail if it doesn't exist
+            try {
+              const dashboardData = await conversationService.getDashboardData(conversationId, projectId);
+              if (dashboardData) {
+                return {
                   success: true,
-                  status: 'completed',
+                  data: {
+                    success: true,
+                    status: 'completed',
+                    fileID: assetId,
+                    conversation_id: conversationId,
+                    dashboard_data: dashboardData.dashboard_data,
+                  },
+                };
+              }
+            } catch (error) {
+              // Dashboard doesn't exist - this is OK for Q&A responses
+              console.log('No dashboard found - this is expected for Q&A responses');
+            }
+            
+            // Q&A response - return completed without dashboard_data
+            return {
+              success: true,
+              data: {
+                success: true,
+                status: 'completed',
+                fileID: assetId,
+                conversation_id: conversationId,
+                workflow_status: status.data?.workflow_status,
+              },
+            };
+          } else {
+            // Dashboard response - get dashboard data
+            try {
+              const dashboardData = await conversationService.getDashboardData(conversationId, projectId);
+              if (dashboardData) {
+                return {
+                  success: true,
+                  data: {
+                    success: true,
+                    status: 'completed',
+                    fileID: assetId,
+                    conversation_id: conversationId,
+                    dashboard_data: dashboardData.dashboard_data,
+                  },
+                };
+              } else {
+                // Workflow completed but no dashboard (shouldn't happen, but handle gracefully)
+                return {
+                  success: true,
+                  data: {
+                    success: true,
+                    status: 'completed',
+                    fileID: assetId,
+                    conversation_id: conversationId,
+                  },
+                };
+              }
+            } catch (error) {
+              return {
+                success: false,
+                data: {
+                  success: false,
+                  status: 'error',
                   fileID: assetId,
                   conversation_id: conversationId,
-                  dashboard_data: dashboardData.dashboard_data,
-                },
-              };
-            } else {
-              // Workflow completed but no dashboard (shouldn't happen, but handle gracefully)
-              return {
-                success: true,
-                data: {
-                  success: true,
-                  status: 'completed',
-                  fileID: assetId,
-                  conversation_id: conversationId,
+                  error: error instanceof Error ? error.message : 'Unable to load dashboard data',
                 },
               };
             }
-          } catch (error) {
-            return {
-              success: false,
-              data: {
-                success: false,
-                status: 'error',
-                fileID: assetId,
-                conversation_id: conversationId,
-                error: error instanceof Error ? error.message : 'Unable to load dashboard data',
-              },
-            };
           }
         }
 

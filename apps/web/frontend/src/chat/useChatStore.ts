@@ -143,7 +143,7 @@ interface ChatState {
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: () => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void) => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string) => Promise<void>;
 }
 
 const initialMessages: Message[] = [
@@ -223,7 +223,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   clearInput: () => set({ inputValue: "" }),
   
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void) => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string) => {
     const state = get();
     const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId } = state;
     
@@ -272,10 +272,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     
     if (isTextOnly) {
-      // No file uploaded, check if user message already exists
+      // No file uploaded - process Q&A (with or without existing conversation)
+      console.log('No file - processing Q&A', { hasConversation: !!currentConversationId, projectId: projectIdParam });
+      
+      // Check if we have projectId (required for API call)
+      if (!projectIdParam) {
+        console.log('No projectId - cannot process Q&A');
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          role: "user",
+          content: content.trim(),
+          timestamp: new Date(),
+          template: get().selectedTemplate || undefined,
+        };
+        addMessage(userMessage);
+        
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: "Project context is required. Please ensure you are in a project workspace.",
+          timestamp: new Date(),
+        };
+        addMessage(errorMessage);
+        return;
+      }
+      
+      // Process Q&A (with or without existing conversation)
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content !== content.trim()) {
-        // User message doesn't exist, add it
         const userMessage: Message = {
           id: Date.now().toString(),
           role: "user",
@@ -285,16 +309,165 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
         addMessage(userMessage);
       }
-      // Generate AI response for no file case
-      console.log('No file case - generating AI response');
+      
       setIsTyping(true);
+      setIsProcessing(true);
+      
       try {
-        // Get updated messages after adding user message
-        const updatedMessages = get().messages;
-        console.log('No file - Updated messages before AI call:', updatedMessages.map(m => ({ id: m.id, role: m.role, content: m.content.substring(0, 50) })));
-        await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
+        // Use projectId from parameter (required)
+        const projectId = projectIdParam;
+        
+        if (!projectId) {
+          throw new Error('Project context missing. Please ensure you are in a project workspace.');
+        }
+        
+        // Call processing service with null assetId (with or without conversationId)
+        const startResult = await processingService.runProcessing(
+          projectId,
+          null,  // No asset_id for Q&A without file
+          content,
+          currentConversationId || undefined,  // Use existing conversation if available
+          undefined  // No attachment contents
+        );
+        
+        console.log('Q&A processing result:', startResult);
+        
+        if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
+          const conversationId = startResult.data?.conversation_id || currentConversationId;
+          if (conversationId) {
+            setCurrentConversationId(conversationId);
+          }
+          
+          // Poll for completion
+          const finalResult = await processingService.pollProcessingStatus(
+            '',  // No assetId for Q&A
+            projectId,
+            conversationId,
+            (status) => {
+              // Update status based on workflow status
+              const workflowStatus = status.data?.workflow_status?.status;
+              if (workflowStatus === 'error') {
+                setIsProcessing(false);
+              }
+            },
+            60,
+            5000
+          );
+          
+          console.log('Q&A final result:', finalResult);
+          
+          if (finalResult.data?.success && finalResult.data?.status === 'completed') {
+            // Q&A response - check if it's a message or dashboard
+            if (finalResult.data?.dashboard_data) {
+              // Dashboard response
+              updateMessages((prev) => ([
+                ...prev,
+                {
+                  id: (Date.now() + 1).toString(),
+                  role: 'assistant',
+                  content: "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.",
+                  timestamp: new Date(),
+                },
+                {
+                  id: (Date.now() + 2).toString(),
+                  role: 'assistant',
+                  content: "",
+                  dashboardCard: { sourceFileName: uploadedFile?.filename || "dashboard" },
+                  timestamp: new Date(),
+                }
+              ]));
+            } else {
+              // Q&A text response - load conversation to get the latest assistant message
+              try {
+                const { conversationService } = await import('@/services/conversationService');
+                const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+                const conversation = conversationResponse.conversation;
+                const nodes = conversation.nodes || [];
+                
+                // Find the latest assistant node with text content
+                let responseText = "I've processed your question.";
+                for (let i = nodes.length - 1; i >= 0; i--) {
+                  const node = nodes[i];
+                  if (node.role === 'assistant') {
+                    const contents = node.contents || [];
+                    for (const content of contents) {
+                      if (content.type === 'text' && content.data?.text) {
+                        responseText = content.data.text;
+                        break;
+                      }
+                    }
+                    if (responseText !== "I've processed your question.") {
+                      break;
+                    }
+                  }
+                }
+                
+                updateMessages((prev) => ([
+                  ...prev,
+                  {
+                    id: (Date.now() + 1).toString(),
+                    role: 'assistant',
+                    content: responseText,
+                    timestamp: new Date(),
+                  }
+                ]));
+              } catch (error) {
+                console.error('Failed to load conversation for Q&A response:', error);
+                // Fallback to workflow status metadata
+                const workflowStatus = finalResult.data?.workflow_status;
+                const responseText = workflowStatus?.metadata?.content || 
+                                   workflowStatus?.message || 
+                                   "I've processed your question.";
+                
+                updateMessages((prev) => ([
+                  ...prev,
+                  {
+                    id: (Date.now() + 1).toString(),
+                    role: 'assistant',
+                    content: responseText,
+                    timestamp: new Date(),
+                  }
+                ]));
+              }
+            }
+          } else if (finalResult.data?.status === 'error') {
+            const errorMsg = finalResult.data?.error || 'An error occurred while processing your question.';
+            updateMessages((prev) => ([
+              ...prev,
+              {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: `Sorry, I encountered an error: ${errorMsg}`,
+                timestamp: new Date(),
+              }
+            ]));
+          }
+        } else {
+          const errorMsg = startResult.data?.error || 'Failed to start processing.';
+          updateMessages((prev) => ([
+            ...prev,
+            {
+              id: (Date.now() + 1).toString(),
+              role: 'assistant',
+              content: `Sorry, I couldn't process your question: ${errorMsg}`,
+              timestamp: new Date(),
+            }
+          ]));
+        }
+      } catch (error) {
+        console.error('Q&A processing error:', error);
+        updateMessages((prev) => ([
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            timestamp: new Date(),
+          }
+        ]));
       } finally {
         setIsTyping(false);
+        setIsProcessing(false);
       }
       return;
     }

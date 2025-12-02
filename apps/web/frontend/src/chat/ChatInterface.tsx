@@ -252,7 +252,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
     // Delegate adding the user message to the store's process flow to avoid duplicates
     clearInput();
-    await processFileWithMessage(inputValue.trim(), onProcessedDataChange);
+    await processFileWithMessage(inputValue.trim(), onProcessedDataChange, projectId);
   };
 
 

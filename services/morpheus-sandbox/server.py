@@ -53,8 +53,10 @@ logger.info(
     "Config AWS credentials present: %s", "yes" if getattr(config, "aws", None) else "no"
 )
 
-def _parse_s3_key(s3_key: str) -> dict:
+def _parse_s3_key(s3_key: str) -> Optional[dict]:
     """Parse S3 key to extract user/project/asset metadata."""
+    if s3_key is None:
+        return None
     clean_key = s3_key.lstrip("/")
     parts = clean_key.split("/")
     if not parts:
@@ -84,6 +86,27 @@ def _parse_s3_key(s3_key: str) -> dict:
         "file_id": file_id,
         "extension": extension,
     }
+
+
+def _fetch_asset_from_backend(asset_id: str) -> Optional[Dict[str, Any]]:
+    """Fetch asset information from backend API using asset_id."""
+    try:
+        headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
+        response = requests.get(
+            f"{BACKEND_API_URL}/api/v1/morpheus/asset/{asset_id}",
+            headers=headers,
+            timeout=10,
+        )
+        if response.status_code == 200:
+            asset_data = response.json()
+            logger.info(f"Successfully fetched asset {asset_id} from backend API")
+            return asset_data
+        else:
+            logger.warning(f"Failed to fetch asset {asset_id}: HTTP {response.status_code}")
+            return None
+    except Exception as e:
+        logger.error(f"Error fetching asset {asset_id} from backend: {e}")
+        return None
 
 
 def _build_processed_json_key(user_id: str, project_id: str, asset_id: str, file_id: str) -> str:
@@ -365,40 +388,104 @@ def _process_conversation_background(
 
         metadata = conversation.get("metadata", {})
         asset_info = metadata.get("asset") or {}
-        asset_bucket = asset_info.get("s3_bucket")
-        asset_key = asset_info.get("s3_key")
-        file_ext = (asset_info.get("extension") or "csv").lstrip(".")
-        file_identifier = asset_info.get("file_id") or asset_info.get("asset_id") or conversation_id
+        asset_bucket = asset_info.get("s3_bucket") if asset_info else None
+        asset_key = asset_info.get("s3_key") if asset_info else None
+        
+        # Fallback: if asset info is missing, try to fetch from backend using asset_id
+        if (not asset_bucket or not asset_key) and conversation.get("asset_id"):
+            asset_id = conversation.get("asset_id")
+            logger.info(f"Asset info missing in metadata, attempting fallback retrieval for asset_id: {asset_id}")
+            fetched_asset = _fetch_asset_from_backend(asset_id)
+            if fetched_asset:
+                # Update asset_info with fetched data
+                asset_info = {
+                    "asset_id": fetched_asset.get("asset_id"),
+                    "file_id": fetched_asset.get("file_id"),
+                    "s3_bucket": fetched_asset.get("s3_bucket"),
+                    "s3_key": fetched_asset.get("s3_key"),
+                    "extension": fetched_asset.get("extension"),
+                    "filename": fetched_asset.get("filename"),
+                }
+                asset_bucket = asset_info.get("s3_bucket")
+                asset_key = asset_info.get("s3_key")
+                logger.info(f"Successfully retrieved asset info via fallback: s3://{asset_bucket}/{asset_key}")
+        
+        # Safely get extension with proper None handling
+        extension = asset_info.get("extension") if asset_info else None
+        if extension and isinstance(extension, str):
+            file_ext = extension.lstrip(".")
+        else:
+            file_ext = "csv"
+        
+        file_identifier = (asset_info.get("file_id") or asset_info.get("asset_id") if asset_info else None) or conversation_id
 
+        # Handle file download - check if asset exists
+        temp_file_path = None
         if not asset_bucket or not asset_key:
-            error_msg = "Conversation metadata missing asset reference"
-            logger.error(error_msg)
-            _post_node_status_sync(
-                conversation_id,
-                "error",
-                {
-                    "step": "validate_asset",
-                    "error": error_msg,
-                },
-            )
-            return
+            logger.info(f"No asset in conversation {conversation_id} - processing Q&A without file")
+            # Create empty CSV file for Q&A mode (workflow will handle it)
+            temp_dir = tempfile.gettempdir()
+            temp_file_path = os.path.join(temp_dir, f"qa_{conversation_id}.csv")
+            # Create minimal CSV file
+            with open(temp_file_path, "w") as handle:
+                handle.write("placeholder\n1\n")  # Minimal CSV for workflow
+            logger.info(f"Created placeholder file for Q&A: {temp_file_path}")
+        else:
+            _post_node_status_sync(conversation_id, "processing", {"step": "download_asset"})
+            logger.info(f"Downloading asset for conversation {conversation_id}: s3://{asset_bucket}/{asset_key}")
+            try:
+                file_content = download_bytes(asset_bucket, asset_key)
+                logger.info(f"Successfully downloaded {len(file_content)} bytes from S3")
 
-        _post_node_status_sync(conversation_id, "processing", {"step": "download_asset"})
-        logger.info(f"Downloading asset for conversation {conversation_id}: s3://{asset_bucket}/{asset_key}")
-        file_content = download_bytes(asset_bucket, asset_key)
-
-        temp_dir = tempfile.gettempdir()
-        temp_file_path = os.path.join(temp_dir, f"{file_identifier}.{file_ext}")
-        with open(temp_file_path, "wb") as handle:
-            handle.write(file_content)
+                temp_dir = tempfile.gettempdir()
+                temp_file_path = os.path.join(temp_dir, f"{file_identifier}.{file_ext}")
+                with open(temp_file_path, "wb") as handle:
+                    handle.write(file_content)
+                logger.info(f"Saved file to {temp_file_path} ({os.path.getsize(temp_file_path)} bytes)")
+            except Exception as e:
+                logger.error(f"Failed to download asset: {e}")
+                _post_node_status_sync(
+                    conversation_id,
+                    "error",
+                    {
+                        "step": "download_asset",
+                        "error": f"Failed to download file: {str(e)}",
+                    },
+                )
+                return
 
         workflow = AnalyzeCSVWorkflow()
         _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
+        
+        # Extract user prompt from latest user node
+        user_prompt = None
+        nodes = conversation.get("nodes", [])
+        for node in reversed(nodes):
+            if node.get("role") == "user":
+                contents = node.get("contents", [])
+                for content in contents:
+                    if content.get("type") == "text":
+                        user_prompt = content.get("data", {}).get("text")
+                        break
+                if user_prompt:
+                    break
+        
         result = workflow.execute(
             file_path=temp_file_path,
             conversation=conversation,
             dashboards=dashboards_cache,
+            user_prompt=user_prompt,
         )
+        
+        # Validate result is not None
+        if result is None:
+            error_msg = "Workflow returned None result"
+            logger.error(error_msg)
+            _post_node_status_sync(conversation_id, "error", {"error": error_msg})
+            return
+        
+        # Check response type to route handling
+        response_type = result.get("type", "dashboard_config")  # Default to dashboard for backward compatibility
         
         # Postprocess workflow messages into conversation nodes
         workflow_output = result.get("workflow_output")
@@ -406,25 +493,67 @@ def _process_conversation_background(
             postprocessed_nodes = _postprocess_workflow_to_conversation_nodes(workflow_output)
             conversation.setdefault("nodes", []).extend(postprocessed_nodes)
 
-        file_size = os.path.getsize(temp_file_path) if os.path.exists(temp_file_path) else 0
-        key_parts = _parse_s3_key(asset_key)
-        processed_json_s3_key = _build_processed_json_key(
-            user_id=key_parts["user_id"],
-            project_id=key_parts["project_id"],
-            asset_id=key_parts["asset_id"],
-            file_id=key_parts["file_id"],
-        )
+        # Handle Q&A responses (type == "message")
+        if response_type == "message":
+            logger.info("Processing Q&A response - skipping dashboard generation")
+            
+            # Extract Q&A content from result
+            qa_content = result.get("content", "I've processed your question.")
+            
+            # The workflow_output messages have already been added to conversation nodes above
+            # But we should ensure the final assistant response is clear
+            # The postprocessed_nodes should already contain the assistant's text response
+            
+            # Q&A responses don't generate dashboards, just save conversation with text response
+            conversation["updated_at"] = datetime.utcnow().isoformat()
+            _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
+            
+            # Post completion status with Q&A content in metadata
+            _post_node_status_sync(
+                conversation_id,
+                "completed",
+                {
+                    "fileID": file_identifier,
+                    "response_type": "message",
+                    "content": qa_content,
+                },
+            )
+            
+            logger.info(f"Q&A workflow completed for conversation {conversation_id}")
+            return
 
+        # Handle Dashboard responses (type == "dashboard_config")
+        logger.info("Processing Dashboard response")
+        
+        file_size = os.path.getsize(temp_file_path) if os.path.exists(temp_file_path) else 0
+        processed_json_s3_key = None
+        if asset_key:
+            key_parts = _parse_s3_key(asset_key)
+            if key_parts:
+                processed_json_s3_key = _build_processed_json_key(
+                    user_id=key_parts["user_id"],
+                    project_id=key_parts["project_id"],
+                    asset_id=key_parts["asset_id"],
+                    file_id=key_parts["file_id"],
+                )
+            else:
+                logger.warning(f"Failed to parse asset_key: {asset_key}")
+        else:
+            logger.warning(f"No asset_key available for processed JSON key generation")
+
+        result_data = result.get("data", {}) if result else {}
+        if not isinstance(result_data, dict):
+            result_data = {}
         processed_data = {
             "fileID": file_identifier,
             "status": "completed",
             "processed_at": datetime.now().isoformat(),
             "file_size": file_size,
             "file_type": file_ext,
-            "data": result.get("data", {}),
-            "charts": result.get("data", {}).get("charts", []),
-            "metrics": result.get("data", {}).get("metrics", []),
-            "insights": result.get("data", {}).get("insights", []),
+            "data": result_data,
+            "charts": result_data.get("charts", []),
+            "metrics": result_data.get("metrics", []),
+            "insights": result_data.get("insights", []),
         }
 
         if result.get("workflow_output"):
@@ -435,10 +564,13 @@ def _process_conversation_background(
             processed_data["workflow_output_path"] = str(workflow_output_file)
 
         processed_json_bytes = json.dumps(processed_data, ensure_ascii=False, indent=2).encode("utf-8")
-        _upload_bytes_to_s3(asset_bucket, processed_json_s3_key, processed_json_bytes)
+        if processed_json_s3_key and asset_bucket:
+            _upload_bytes_to_s3(asset_bucket, processed_json_s3_key, processed_json_bytes)
+        else:
+            logger.warning(f"Skipping processed JSON upload: processed_json_s3_key={processed_json_s3_key}, asset_bucket={asset_bucket}")
 
-        asset_id = asset_info.get("asset_id")
-        if asset_id:
+        asset_id = asset_info.get("asset_id") if asset_info and isinstance(asset_info, dict) else None
+        if asset_id and processed_json_s3_key:
             try:
                 update_url = f"{BACKEND_API_URL}/api/v1/morpheus/asset/{asset_id}/processed-key"
                 response = requests.put(
@@ -453,26 +585,49 @@ def _process_conversation_background(
 
         dashboard_title = None
         dashboard_description = None
-        if result.get("data"):
-            dashboard_meta = result["data"].get("dashboard") or {}
-            dashboard_title = dashboard_meta.get("title")
-            dashboard_description = dashboard_meta.get("description")
+        result_data = result.get("data")
+        if result_data:
+            dashboard_meta = result_data.get("dashboard") if isinstance(result_data, dict) else {}
+            if isinstance(dashboard_meta, dict):
+                dashboard_title = dashboard_meta.get("title")
+                dashboard_description = dashboard_meta.get("description")
 
         new_dashboard_record = None
-        if result.get("data") and conversation_bucket:
-            new_dashboard_record = _save_dashboard_artifact(
-                bucket=conversation_bucket,
-                conversation=conversation,
-                dashboard_data=result["data"],
+        result_data = result.get("data")
+        if result_data and isinstance(result_data, dict) and conversation_bucket:
+            logger.info(
+                f"Saving dashboard artifact for conversation {conversation_id}, data keys: {list(result_data.keys())}"
             )
-            # Add dashboard to the last assistant node (or create one if needed)
+            try:
+                new_dashboard_record = _save_dashboard_artifact(
+                    bucket=conversation_bucket,
+                    conversation=conversation,
+                    dashboard_data=result_data,
+                )
+                logger.info(
+                    f"Successfully saved dashboard {new_dashboard_record.get('dashboard_id')} "
+                    f"to s3://{new_dashboard_record.get('s3_bucket')}/{new_dashboard_record.get('s3_key')}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to save dashboard artifact: {e}", exc_info=True)
+                raise
+        else:
+            logger.warning(
+                f"Skipping dashboard save: result_data={result_data is not None}, "
+                f"result_data_type={type(result_data).__name__ if result_data else None}, "
+                f"conversation_bucket={conversation_bucket}"
+            )
+
+        # If we have a saved dashboard record, attach it to the conversation structure
+        if new_dashboard_record:
+            # Add dashboard reference to the last assistant node (or create one if needed)
             if conversation.get("nodes"):
                 last_assistant_node = None
                 for node in reversed(conversation["nodes"]):
                     if node.get("role") == "assistant":
                         last_assistant_node = node
                         break
-                
+
                 if last_assistant_node:
                     last_assistant_node["contents"].append(
                         {
@@ -501,7 +656,8 @@ def _process_conversation_background(
                         ],
                     }
                     conversation.setdefault("nodes", []).append(dashboard_node)
-            
+
+            # Append to conversation-level dashboards list for backend /dashboard endpoint
             conversation.setdefault("dashboards", []).append(
                 {
                     "dashboard_id": new_dashboard_record["dashboard_id"],
@@ -517,6 +673,8 @@ def _process_conversation_background(
             "completed",
             {
                 "fileID": file_identifier,
+                # Explicitly mark this as a dashboard response for frontend routing
+                "response_type": "dashboard_config",
                 "dashboard_id": new_dashboard_record["dashboard_id"] if new_dashboard_record else None,
             },
         )

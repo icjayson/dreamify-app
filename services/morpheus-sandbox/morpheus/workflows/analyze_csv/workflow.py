@@ -163,6 +163,8 @@ Please inform the user that a data file is required to generate a dashboard, and
             self.workflow_output.add_message(msg)
         
         max_iterations = 10
+        extraction_retries = 0
+        max_extraction_retries = 3
         
         try:
             for iteration in range(max_iterations):
@@ -183,6 +185,31 @@ Please inform the user that a data file is required to generate a dashboard, and
                     logger.info("No more tool calls - analysis complete")
                     # Extract structured frontend contract from final response
                     self._extract_frontend_contract(response.content)
+                    
+                    # Check if extraction failed and retry if needed
+                    extraction_failed = (
+                        self.frontend_contract is not None 
+                        and isinstance(self.frontend_contract, dict) 
+                        and self.frontend_contract.get("status") == "failed"
+                    )
+                    
+                    if extraction_failed and extraction_retries < max_extraction_retries:
+                        extraction_retries += 1
+                        logger.warning(
+                            f"Frontend contract extraction failed. Retry {extraction_retries}/{max_extraction_retries}"
+                        )
+                        
+                        # Ask the model to regenerate the JSON
+                        retry_message = HumanMessage(content="""
+Your previous response could not be parsed correctly. Please provide your analysis results again with a valid JSON code block.
+""".strip())
+                        self.messages.append(retry_message)
+                        self.workflow_output.add_message(retry_message)
+                        
+                        # Reset frontend_contract for next attempt
+                        self.frontend_contract = None
+                        continue  # Continue to next iteration to get new response
+                    
                     break
 
                 # Process tool calls

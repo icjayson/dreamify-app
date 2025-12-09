@@ -64,6 +64,13 @@ def create_app():
         logger.error(f"Failed to import auth router: {e}")
 
     try:
+        from app.api.route_modules.waitlist import router as waitlist_router
+        app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])
+        logger.info("Waitlist router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import waitlist router: {e}")
+
+    try:
         from app.api.route_modules.user import router as user_router
         app.include_router(user_router, prefix="/api/v1")
         logger.info("User router registered successfully")

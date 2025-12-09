@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import WaveBackground from "../../../src/ui/lightswind/wave-background";
 import { dark } from "@clerk/themes";
+import WaitlistStatusCheck from "@/components/waitlist/WaitlistStatusCheck";
 
 export default function WaitlistPage() {
   const navigate = useNavigate();
@@ -56,7 +57,10 @@ export default function WaitlistPage() {
           </section>
 
           {/* Waitlist (right, 1/3 width) */}
-          <section className="order-1 lg:order-2 flex items-center justify-center z-10">
+          <section className="order-1 lg:order-2 flex flex-col items-center justify-center z-10 gap-4">
+            <div className="w-full bg-muted shadow-none border rounded-lg p-4">
+              <WaitlistStatusCheck />
+            </div>
             <Waitlist
             appearance={{
                   baseTheme: dark,

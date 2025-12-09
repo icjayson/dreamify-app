@@ -1,37 +1,20 @@
-import { Twitter, Linkedin, Github, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
+
+// X (Twitter) Icon Component
+const XIcon = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
 
 export const FooterSection = () => {
-  const footerLinks = {
-    product: [
-      { name: "Features", href: "#features" },
-      { name: "Pricing", href: "#pricing" },
-      { name: "API", href: "#api" },
-      { name: "Integrations", href: "#integrations" }
-    ],
-    company: [
-      { name: "About", href: "#about" },
-      { name: "Blog", href: "#blog" },
-      { name: "Careers", href: "#careers" },
-      { name: "Press", href: "#press" }
-    ],
-    resources: [
-      { name: "Documentation", href: "#docs" },
-      { name: "Help Center", href: "#help" },
-      { name: "Community", href: "#community" },
-      { name: "Status", href: "#status" }
-    ],
-    legal: [
-      { name: "Privacy", href: "#privacy" },
-      { name: "Terms", href: "#terms" },
-      { name: "Security", href: "#security" },
-      { name: "Cookies", href: "#cookies" }
-    ]
-  };
-
   const socialLinks = [
-    { icon: Twitter, href: "#twitter", label: "Twitter" },
-    { icon: Linkedin, href: "#linkedin", label: "LinkedIn" },
-    { icon: Github, href: "#github", label: "GitHub" },
+    { icon: XIcon, href: "#twitter", label: "X (Twitter)" },
     { icon: Mail, href: "#contact", label: "Contact" }
   ];
 
@@ -40,7 +23,7 @@ export const FooterSection = () => {
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent"></div>
       
-      <div className="relative z-10 container mx-auto px-6">
+      <div className="relative z-10 container mx-auto px-20">
         <div className="grid md:grid-cols-6 gap-8 mb-8">
           {/* Brand */}
           <div className="md:col-span-2">
@@ -73,69 +56,13 @@ export const FooterSection = () => {
             </div>
           </div>
 
-          {/* Links */}
-          <div>
-            <h3 className="font-semibold text-foreground mb-4">Product</h3>
-            <ul className="space-y-2">
-              {footerLinks.product.map((link, index) => (
-                <li key={index}>
-                  <a 
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-accent transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-foreground mb-4">Company</h3>
-            <ul className="space-y-2">
-              {footerLinks.company.map((link, index) => (
-                <li key={index}>
-                  <a 
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-accent transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-foreground mb-4">Resources</h3>
-            <ul className="space-y-2">
-              {footerLinks.resources.map((link, index) => (
-                <li key={index}>
-                  <a 
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-accent transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-foreground mb-4">Legal</h3>
-            <ul className="space-y-2">
-              {footerLinks.legal.map((link, index) => (
-                <li key={index}>
-                  <a 
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-accent transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
+          {/* Logo Image */}
+          <div className="md:col-span-4 flex items-center justify-center md:justify-end md:self-center">
+            <img 
+              src="/logo-full-horizon-white.png" 
+              alt="Dreamify Logo" 
+              className="h-auto max-w-full object-contain lg:pl-40 opacity-30"
+            />
           </div>
         </div>
 

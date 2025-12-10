@@ -32,7 +32,7 @@ export const FeaturesSection = () => {
         title: "AI Insight Engine",
         description: "Instantly analyzes data and suggests the best visual motion narrative.",
         icon: Brain,
-        videoSrc: "/bg-video-1.mp4",
+        videoSrc: "/video-demo-main.mov",
         bullets: [
           "Analyzes your data instantly",
           "Suggests best motion narrative",
@@ -43,7 +43,7 @@ export const FeaturesSection = () => {
         title: "Motion-First Visualization → Export / Share",
         description: "Your insights come alive in seconds — no BI setup, no static reports.",
         icon: Sparkles,
-        videoSrc: "/video-demo-test.mp4",
+        videoSrc: "/video-demo-main.mov",
         bullets: [
           "Animated visuals in seconds",
           "Export or share instantly",

@@ -50,15 +50,10 @@ export const ProblemSection = () => {
             <div 
               className="mt-20 mx-4 rounded-xl overflow-hidden hover:scale-[1.01] transition-transform duration-200"
             >
-              <video
-                ref={leftVideoRef}
+              <img
                 className="w-full aspect-video object-cover"
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                aria-label="Old way demo video"
-                src="/video-demo-main.mov"
+                aria-label="Old way demo image"
+                src="/old-way.png"
               />
             </div>
           </div>

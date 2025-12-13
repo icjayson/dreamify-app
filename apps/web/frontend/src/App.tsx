@@ -18,6 +18,8 @@ import PreviewPage from "./pages/preview.tsx";
 import WaitlistPage from "./pages/Waitlist.tsx";
 import CancelPage from "./pages/CancelPage";
 import SuccessPage from "./pages/SuccessPage";
+import AdminPage from "./pages/admin";
+import AdminConversationPage from "./pages/admin/conversation";
 import { useChatStore } from "./chat/useChatStore";
 
 const queryClient = new QueryClient();
@@ -31,12 +33,13 @@ const AppContent = () => {
   const location = useLocation();
   const isAuthPath = location.pathname === "/login" || location.pathname === "/signup";
   const isWorkspacePath = location.pathname.startsWith("/workspace");
+  const isAdminPath = location.pathname.startsWith("/admin");
   const isHomePath = location.pathname === "/";
   const isAboutPath = location.pathname === "/about";
 
   return (
     <>
-      {(isHomePath || isAboutPath || (!isStarted && !isAuthPath && !isWorkspacePath)) && <Header />}
+      {(isHomePath || isAboutPath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/about" element={<AboutPage />} />
@@ -60,6 +63,8 @@ const AppContent = () => {
         } />
         <Route path="/cancel" element={<CancelPage />} />
         <Route path="/success" element={<SuccessPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/conversation/:conversationId" element={<AdminConversationPage />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

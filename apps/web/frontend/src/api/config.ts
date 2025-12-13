@@ -27,6 +27,11 @@ export const API_ENDPOINTS = {
   
   // Health Check
   HEALTH: '/health',
+  
+  // Admin
+  ADMIN_CONVERSATIONS: '/api/v1/admin/conversations',
+  ADMIN_CONVERSATION: '/api/v1/admin/conversations',
+  ADMIN_CONVERSATION_NODES: '/api/v1/admin/conversations',
 } as const;
 
 // HTTP Methods

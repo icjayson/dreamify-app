@@ -4,6 +4,7 @@ Conversation management endpoints.
 import uuid
 import time
 import asyncio
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import json
@@ -19,6 +20,8 @@ from utils.dynamodb.repos import projects as projects_repo
 from utils.s3.conversations import save_conversation, load_conversation
 from utils.s3.paths import build_conversation_key
 from utils.s3.client import download_bytes
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["conversation"])
 
@@ -98,6 +101,71 @@ def _update_conversation_with_user_node(conversation: Dict[str, Any], user_node:
     return conversation
 
 
+def _enrich_asset_content(content: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Enrich asset/attachment content with full asset data from database."""
+    content_type = content.get("type")
+    
+    # Only process asset or attachment content types
+    if content_type not in ["asset", "attachment"]:
+        return content
+    
+    asset_data = content.get("data", {})
+    asset_id = asset_data.get("asset_id")
+    
+    if not asset_id:
+        logger.warning(f"Asset content missing asset_id, skipping enrichment")
+        return content
+    
+    try:
+        # Fetch full asset data from database
+        asset = assets_repo.get_asset(user_id, asset_id)
+        
+        if not asset:
+            logger.warning(f"Asset {asset_id} not found in database, skipping enrichment")
+            return content
+        
+        # Enrich content data with all required fields
+        enriched_data = {
+            "asset_id": asset.get("asset_id"),
+            "file_id": asset.get("file_id"),
+            "s3_bucket": asset.get("s3_bucket"),
+            "s3_key": asset.get("s3_key"),
+            "extension": asset.get("extension", ""),
+            "filename": asset.get("filename", ""),
+        }
+        
+        # Preserve any additional fields from original data (like kind, name, project_id)
+        for key, value in asset_data.items():
+            if key not in enriched_data:
+                enriched_data[key] = value
+        
+        # Normalize type to "asset" for consistency
+        enriched_content = {
+            "type": "asset",
+            "data": enriched_data,
+        }
+        
+        logger.info(f"Enriched asset content for asset_id: {asset_id}")
+        
+        return enriched_content
+        
+    except Exception as e:
+        logger.error(f"Failed to enrich asset content for asset_id {asset_id}: {e}", exc_info=True)
+        # Return original content if enrichment fails
+        return content
+
+
+def _enrich_user_node_contents(contents: List[Dict[str, Any]], user_id: str) -> List[Dict[str, Any]]:
+    """Enrich all asset/attachment content items in user_node_contents with full asset data."""
+    enriched_contents = []
+    
+    for content in contents:
+        enriched_content = _enrich_asset_content(content, user_id)
+        enriched_contents.append(enriched_content)
+    
+    return enriched_contents
+
+
 def _save_conversation_to_s3_and_dynamodb(
     user_id: str,
     project_id: str,
@@ -146,10 +214,13 @@ async def conversation_chat(
                     assets_repo.update_asset_status(user_id, asset_id, "processing")
                     assets_to_process.append(asset_id)
 
+    # Enrich asset/attachment content with full asset data before saving
+    enriched_contents = _enrich_user_node_contents(request.user_node_contents, user_id)
+
     conversation_bucket = config.aws.s3.USER_ASSETS_BUCKET
     now_iso = datetime.utcnow().isoformat()
     
-    user_node = _create_user_node(request.user_node_contents)
+    user_node = _create_user_node(enriched_contents)
     
     is_new_conversation = False
     if request.conversation_id:
@@ -196,8 +267,6 @@ async def conversation_chat(
 
     # Keep project metadata in sync so frontend can restore conversations
     try:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(f"Updating project {request.project_id} with conversation {conversation_id}")
         updated = projects_repo.update_project(
             user_id=user_id,
@@ -210,8 +279,6 @@ async def conversation_chat(
             logger.warning(f"Project update returned None for {request.project_id}")
     except Exception as exc:
         # Do not block chat flow if metadata update fails
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Failed to update project conversation metadata: {exc}", exc_info=True)
 
     # Small delay to help with S3 eventual consistency

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from boto3.dynamodb.conditions import Key  # type: ignore
+from boto3.dynamodb.conditions import Key, Attr  # type: ignore
 
 from utils.dynamodb.client import get_table
 from utils.dynamodb.tables import tables
@@ -72,5 +72,75 @@ def update_conversation_metadata(
         ReturnValues="ALL_NEW",
     )
     return resp.get("Attributes")
+
+
+def scan_all_conversations(limit: Optional[int] = None, last_evaluated_key: Optional[Dict] = None) -> Dict:
+    """
+    Scan all conversations from DynamoDB table.
+    
+    Args:
+        limit: Maximum number of items to return
+        last_evaluated_key: Last evaluated key for pagination
+        
+    Returns:
+        Dict with 'Items' list and 'LastEvaluatedKey' for pagination
+    """
+    table = get_table(tables.conversations)
+    scan_kwargs = {}
+    
+    if limit:
+        scan_kwargs["Limit"] = limit
+    
+    if last_evaluated_key:
+        scan_kwargs["ExclusiveStartKey"] = last_evaluated_key
+    
+    resp = table.scan(**scan_kwargs)
+    
+    return {
+        "Items": resp.get("Items", []),
+        "LastEvaluatedKey": resp.get("LastEvaluatedKey")
+    }
+
+
+def scan_conversations_by_project(project_id: str, limit: Optional[int] = None) -> List[Dict]:
+    """
+    Scan conversations filtered by project_id.
+    
+    Args:
+        project_id: Project ID to filter by
+        limit: Maximum number of items to return (None = all items)
+        
+    Returns:
+        List of conversation metadata items
+    """
+    table = get_table(tables.conversations)
+    all_items = []
+    last_key = None
+    
+    while True:
+        scan_kwargs = {
+            "FilterExpression": Attr("project_id").eq(project_id)
+        }
+        
+        if limit and len(all_items) >= limit:
+            break
+            
+        if last_key:
+            scan_kwargs["ExclusiveStartKey"] = last_key
+        
+        # Use a reasonable chunk size for scanning
+        scan_kwargs["Limit"] = 1000
+        
+        resp = table.scan(**scan_kwargs)
+        items = resp.get("Items", [])
+        all_items.extend(items)
+        
+        last_key = resp.get("LastEvaluatedKey")
+        if not last_key:
+            break
+    
+    if limit:
+        return all_items[:limit]
+    return all_items
 
 

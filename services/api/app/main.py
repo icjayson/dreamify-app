@@ -91,6 +91,13 @@ def create_app():
     except ImportError as e:
         logger.error(f"Failed to import Conversation router: {e}")
     
+    try:
+        from app.api.route_modules.admin import router as admin_router
+        app.include_router(admin_router, prefix="/api/v1", tags=["admin"])
+        logger.info("Admin router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Admin router: {e}")
+    
     # Root endpoint
     @app.get("/", tags=["root"])
     async def root():

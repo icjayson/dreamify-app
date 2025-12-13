@@ -3,6 +3,7 @@ Intent detection module for routing between Q&A and Dashboard modes.
 """
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
+from morpheus.models.base import get_model_for_agent
 from utils.config import load_config
 from utils.logger import logger
 from typing import List, Dict, Any
@@ -49,11 +50,7 @@ def detect_user_intent(user_prompt: str, conversation_history: List[Dict[str, An
     """
     try:
         config = load_config()
-        model = ChatOpenAI(
-            model=config.openai.agent[0].model,
-            temperature=0.1,  # Low temperature for classification
-            api_key=config.openai.api_key
-        )
+        model = get_model_for_agent()
         
         # Build context from conversation history
         context_parts = []

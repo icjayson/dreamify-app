@@ -4,6 +4,8 @@ from morpheus.tools.python_repl.tool import PythonREPLTool, PersistentPythonREPL
 from morpheus.tools.charts_knowledge.tool import get_available_chart_types
 from morpheus.workflows.analyze_csv.prompts.analysis_prompts import UNIFIED_SYSTEM_PROMPT
 from morpheus.workflows.base import WorkflowOutput
+from morpheus.models.base import get_model_for_agent
+from morpheus.workflows.analyze_csv.intent_detector import detect_user_intent
 from utils.config import load_config
 from utils.logger import logger
 import json
@@ -15,11 +17,7 @@ class AnalyzeCSVWorkflow:
     
     def __init__(self):
         self.config = load_config()
-        self.model = ChatOpenAI(
-            model=self.config.openai.agent[0].model,
-            temperature=self.config.openai.agent[0].temperature,
-            api_key=self.config.openai.api_key
-        )
+        self.model = get_model_for_agent()
         self.python_tool = PythonREPLTool()
         self.tools = [self.python_tool, get_available_chart_types]
         self.model_with_tools = self.model.bind_tools(self.tools)
@@ -199,7 +197,7 @@ class AnalyzeCSVWorkflow:
         self.workflow_output.set_completed("success")
         
         # Extract typed response from final content
-        extraction_result = self._extract_typed_response(final_content)
+        extraction_result = self._extract_typed_response(user_prompt, conversation, final_content)
         response_type = extraction_result.get("type")
         
         if response_type == "dashboard":
@@ -271,7 +269,7 @@ class AnalyzeCSVWorkflow:
             f"and {metrics_len} metric(s)."
         )
     
-    def _extract_typed_response(self, content: str) -> Dict[str, Any]:
+    def _extract_typed_response(self, user_prompt, conversation, content: str) -> Dict[str, Any]:
         """
         Extract and type the LLM response content.
         
@@ -283,7 +281,10 @@ class AnalyzeCSVWorkflow:
         """
         if not user_prompt:
             # Default to dashboard if no prompt
-            return "dashboard"
+            return {
+                "type": "dashboard",
+                "data": None,
+            }
 
         # ---- RULE-BASED OVERRIDE: FEATURE-AWARE INTENT ----
         # If a data asset is attached to the conversation, no dashboards exist yet,

@@ -74,6 +74,25 @@ def _create_user_node(contents: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _create_greeting_node() -> Dict[str, Any]:
+    """Create initial greeting message node."""
+    now_iso = datetime.utcnow().isoformat()
+    return {
+        "node_id": f"node_{uuid.uuid4().hex[:8]}",
+        "role": "assistant",
+        "status": "completed",
+        "created_at": now_iso,
+        "contents": [
+            {
+                "type": "text",
+                "data": {
+                    "text": "Hi! I'm Morpheus, your analytics intern. Upload data, visualise motion-rich dashboard in seconds!",
+                },
+            }
+        ],
+    }
+
+
 def _update_conversation_with_user_node(conversation: Dict[str, Any], user_node: Dict[str, Any], asset: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Append user node and update timestamps."""
     conversation.setdefault("nodes", []).append(user_node)
@@ -194,6 +213,7 @@ async def conversation_chat(
                 "filename": asset.get("filename"),
             }
         
+        greeting_node = _create_greeting_node()
         conversation = {
             "user_id": user_id,
             "project_id": request.project_id,
@@ -202,7 +222,7 @@ async def conversation_chat(
             "created_at": now_iso,
             "updated_at": now_iso,
             "metadata": metadata,
-            "nodes": [user_node],
+            "nodes": [greeting_node, user_node],
             "dashboards": [],
         }
     

@@ -484,8 +484,21 @@ def _process_conversation_background(
             _post_node_status_sync(conversation_id, "error", {"error": error_msg})
             return
         
-        # Check response type to route handling
-        response_type = result.get("type", "dashboard_config")  # Default to dashboard for backward compatibility
+        # Detect response type from result structure
+        # Dashboard: has "data" dict with charts/metrics
+        # Q&A: has "content" string
+        response_type = result.get("type")
+        if not response_type:
+            # Auto-detect if type not provided
+            if result.get("data") and isinstance(result.get("data"), dict):
+                response_type = "dashboard_config"
+            elif result.get("content") and isinstance(result.get("content"), str):
+                response_type = "message"
+            else:
+                # Default to dashboard for backward compatibility
+                response_type = "dashboard_config"
+        
+        logger.info(f"Detected response type: {response_type}")
         
         # Postprocess workflow messages into conversation nodes
         workflow_output = result.get("workflow_output")

@@ -34,14 +34,12 @@ def _conversation_keys(user_id: str, project_id: str, conversation_id: str) -> D
 class ConversationChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     project_id: str
-    asset_id: Optional[str] = None  # Optional if conversation_id is provided
     user_node_contents: List[Dict[str, Any]]
 
 
 class ConversationChatResponse(BaseModel):
     conversation_id: str
     project_id: str
-    asset_id: str
     workflow_status: Dict
 
 
@@ -93,23 +91,10 @@ def _create_greeting_node() -> Dict[str, Any]:
     }
 
 
-def _update_conversation_with_user_node(conversation: Dict[str, Any], user_node: Dict[str, Any], asset: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _update_conversation_with_user_node(conversation: Dict[str, Any], user_node: Dict[str, Any]) -> Dict[str, Any]:
     """Append user node and update timestamps."""
     conversation.setdefault("nodes", []).append(user_node)
     conversation["updated_at"] = datetime.utcnow().isoformat()
-    
-    # Update asset info in metadata if provided
-    if asset:
-        conversation.setdefault("metadata", {})
-        conversation["metadata"]["asset"] = {
-            "asset_id": asset["asset_id"],
-            "file_id": asset.get("file_id"),
-            "s3_bucket": asset["s3_bucket"],
-            "s3_key": asset["s3_key"],
-            "extension": asset.get("extension"),
-            "filename": asset.get("filename"),
-        }
-    
     return conversation
 
 
@@ -120,7 +105,6 @@ def _save_conversation_to_s3_and_dynamodb(
     conversation: Dict[str, Any],
     conversation_bucket: str,
     conversation_keys: Dict[str, str],
-    asset_id: str,
     title: Optional[str] = None,
     is_new: bool = True,
 ) -> None:
@@ -135,15 +119,8 @@ def _save_conversation_to_s3_and_dynamodb(
             s3_bucket=conversation_bucket,
             s3_key=conversation_keys["primary"],
             title=title or "Conversation",
-            metadata={"asset_id": asset_id},
+            metadata={},
             conversation_id=conversation_id,
-        )
-    else:
-        # Update existing conversation metadata
-        conversations_repo.update_conversation_metadata(
-            project_id=project_id,
-            conversation_id=conversation_id,
-            metadata={"asset_id": asset_id},
         )
 
 
@@ -157,24 +134,17 @@ async def conversation_chat(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Handle asset_id: optional for Q&A without files
-    asset = None
-    asset_id = request.asset_id
-    
-    if request.conversation_id and not asset_id:
-        # Load existing conversation to get asset_id
-        conversation = _load_existing_conversation(user_id, request.project_id, request.conversation_id)
-        asset_id = conversation.get("asset_id")
-        if asset_id:
-            asset = assets_repo.get_asset(user_id, asset_id)
-    
-    # Allow asset_id to be None for Q&A without files
-    if asset_id:
-        if not asset:
-            asset = assets_repo.get_asset(user_id, asset_id)
-            if not asset:
-                raise HTTPException(status_code=404, detail="Asset not found")
-        assets_repo.update_asset_status(user_id, asset_id, "processing")
+    # Extract assets from user_node_contents and update their status
+    assets_to_process = []
+    for content in request.user_node_contents:
+        if content.get("type") in ["asset", "attachment"]:
+            asset_data = content.get("data", {})
+            asset_id = asset_data.get("asset_id")
+            if asset_id:
+                asset = assets_repo.get_asset(user_id, asset_id)
+                if asset:
+                    assets_repo.update_asset_status(user_id, asset_id, "processing")
+                    assets_to_process.append(asset_id)
 
     conversation_bucket = config.aws.s3.USER_ASSETS_BUCKET
     now_iso = datetime.utcnow().isoformat()
@@ -185,7 +155,7 @@ async def conversation_chat(
     if request.conversation_id:
         # Load existing conversation and update
         conversation = _load_existing_conversation(user_id, request.project_id, request.conversation_id)
-        conversation = _update_conversation_with_user_node(conversation, user_node, asset)
+        conversation = _update_conversation_with_user_node(conversation, user_node)
         conversation_id = request.conversation_id
         conversation_keys = _conversation_keys(user_id, request.project_id, conversation_id)
     else:
@@ -202,23 +172,11 @@ async def conversation_chat(
             },
         }
         
-        # Add asset info if available
-        if asset:
-            metadata["asset"] = {
-                "asset_id": asset["asset_id"],
-                "file_id": asset.get("file_id"),
-                "s3_bucket": asset["s3_bucket"],
-                "s3_key": asset["s3_key"],
-                "extension": asset.get("extension"),
-                "filename": asset.get("filename"),
-            }
-        
         greeting_node = _create_greeting_node()
         conversation = {
             "user_id": user_id,
             "project_id": request.project_id,
             "conversation_id": conversation_id,
-            "asset_id": asset_id or None,
             "created_at": now_iso,
             "updated_at": now_iso,
             "metadata": metadata,
@@ -233,7 +191,6 @@ async def conversation_chat(
         conversation=conversation,
         conversation_bucket=conversation_bucket,
         conversation_keys=conversation_keys,
-        asset_id=asset_id,
         is_new=is_new_conversation,
     )
 
@@ -291,7 +248,6 @@ async def conversation_chat(
     return ConversationChatResponse(
         conversation_id=conversation_id,
         project_id=request.project_id,
-        asset_id=asset_id or "",
         workflow_status=workflow_status,
     )
 

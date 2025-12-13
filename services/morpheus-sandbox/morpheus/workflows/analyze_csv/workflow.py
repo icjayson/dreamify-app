@@ -351,10 +351,19 @@ Please inform the user that a data file is required to generate a dashboard, and
         # and the latest user prompt explicitly asks for a dashboard/visualization,
         # we force "dashboard" intent without consulting the classifier.
 
-        # Detect whether an asset is present on the conversation
-        metadata = conversation.get("metadata") or {}
-        asset_meta = metadata.get("asset") or {}
-        asset_present = bool(conversation.get("asset_id") or asset_meta)
+        # Detect whether an asset is present on the conversation by checking nodes
+        asset_present = False
+        nodes = conversation.get("nodes", [])
+        for node in nodes:
+            contents = node.get("contents", [])
+            for content in contents:
+                if content.get("type") in ["asset", "attachment"]:
+                    asset_data = content.get("data", {})
+                    if asset_data.get("asset_id") and asset_data.get("s3_bucket") and asset_data.get("s3_key"):
+                        asset_present = True
+                        break
+            if asset_present:
+                break
 
         # Detect whether any dashboards already exist for this conversation
         dashboards = conversation.get("dashboards") or []

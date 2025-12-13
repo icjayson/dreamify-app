@@ -279,41 +279,183 @@ class AnalyzeCSVWorkflow:
             content: The response content from the LLM
             
         Returns:
-            Dict with keys:
-            - type: "dashboard" | "message" | "error"
-            - data: Parsed JSON dict (if dashboard), text content (if message), None (if error)
-            - error: Error message string (if error), None otherwise
+            "qa" or "dashboard"
         """
-        if not content:
-            return {"type": "message", "data": "", "error": None}
+        if not user_prompt:
+            # Default to dashboard if no prompt
+            return "dashboard"
+
+        # ---- RULE-BASED OVERRIDE: FEATURE-AWARE INTENT ----
+        # If a data asset is attached to the conversation, no dashboards exist yet,
+        # and the latest user prompt explicitly asks for a dashboard/visualization,
+        # we force "dashboard" intent without consulting the classifier.
+
+        # Detect whether an asset is present on the conversation by checking nodes
+        asset_present = False
+        nodes = conversation.get("nodes", [])
+        for node in nodes:
+            contents = node.get("contents", [])
+            for content in contents:
+                if content.get("type") in ["asset", "attachment"]:
+                    asset_data = content.get("data", {})
+                    if asset_data.get("asset_id") and asset_data.get("s3_bucket") and asset_data.get("s3_key"):
+                        asset_present = True
+                        break
+            if asset_present:
+                break
+
+        # Detect whether any dashboards already exist for this conversation
+        dashboards = conversation.get("dashboards") or []
+        has_existing_dashboard = bool(dashboards)
+
+        # Simple keyword-based detection of explicit dashboard requests
+        lower_prompt = user_prompt.lower()
+        dashboard_keywords = [
+            "dashboard",
+            "visualize",
+            "visualise",
+            "visualization",
+            "visualisation",
+            "chart",
+            "charts",
+            "graph",
+            "graphs",
+            "plot",
+            "plots",
+            "create dashboard",
+            "build dashboard",
+            "make dashboard",
+            "generate dashboard",
+        ]
+        explicit_dashboard_request = any(keyword in lower_prompt for keyword in dashboard_keywords)
+
+        if asset_present and not has_existing_dashboard and explicit_dashboard_request:
+            logger.info(
+                "Forcing intent to 'dashboard' (asset present, no dashboards yet, explicit dashboard request detected)."
+            )
+            return "dashboard"
+
+        # ---- FALLBACK: LLM-BASED INTENT DETECTION ----
+        # Extract conversation history for context
+        conversation_history = conversation.get("nodes", [])
+
+        # Detect intent using LLM
+        intent = detect_user_intent(user_prompt, conversation_history)
+        logger.info(f"Detected intent: {intent} for prompt: {user_prompt[:50]}...")
+        return intent
+    
+    def _execute_qa_mode(
+        self,
+        file_path: str,
+        conversation: Dict[str, Any],
+        dashboards: Dict[str, Any],
+        user_prompt: Optional[str] = None,
+    ):
+        """
+        Execute Q&A mode: answer questions without generating dashboard.
         
-        # Try JSON code block extraction
-        json_pattern = r'```json\s*(\{[\s\S]*?\})\s*```'
-        json_match = re.search(json_pattern, content, re.DOTALL)
+        Returns:
+            Dict with type="message", content, and workflow_output
+        """
+        logger.info("Executing Q&A mode")
         
-        if json_match:
-            try:
-                json_str = json_match.group(1)
-                json_data = json.loads(json_str)
-                logger.info("Extracted JSON from code block - Dashboard type")
-                charts_count = len(json_data.get("charts", [])) if isinstance(json_data, dict) else 0
-                metrics_count = len(json_data.get("metrics", [])) if isinstance(json_data, dict) else 0
-                logger.info(f"Extracted dashboard with {charts_count} charts and {metrics_count} metrics")
-                return {"type": "dashboard", "data": json_data, "error": None}
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON from code block: {e}")
-                return {"type": "error", "data": None, "error": f"Invalid JSON in code block: {str(e)}"}
+        # Initialize messages with Q&A system prompt
+        self.init_messages(file_path, conversation, dashboards, user_prompt, mode="qa")
         
-        # Try plain JSON parsing
+        # Add initial messages to workflow output
+        for msg in self.messages:
+            self.workflow_output.add_message(msg)
+        
+        max_iterations = 10
+        final_content = "I'm processing your question..."
+        
         try:
-            content_stripped = content.strip()
-            if content_stripped.startswith('{') and content_stripped.endswith('}'):
-                json_data = json.loads(content_stripped)
-                logger.info("Extracted plain JSON - Dashboard type")
-                return {"type": "dashboard", "data": json_data, "error": None}
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.debug(f"Content is not plain JSON: {e}")
+            for iteration in range(max_iterations):
+                logger.info(f"Q&A workflow iteration {iteration + 1}")
+                
+                # Get model response
+                response = self.model_with_tools.invoke(self.messages)
+                self.messages.append(response)
+                
+                # Add response to workflow output
+                tool_calls_data = None
+                if response.tool_calls:
+                    tool_calls_data = [{"name": tc["name"], "args": tc["args"]} for tc in response.tool_calls]
+                self.workflow_output.add_message(response, tool_calls=tool_calls_data)
+                
+                # Check if the response contains tool calls
+                if not response.tool_calls:
+                    logger.info("No more tool calls - Q&A complete")
+                    # Extract final text response
+                    final_content = response.content or "I've completed the analysis."
+                    break
+
+                # Process tool calls
+                logger.info(f"Processing {len(response.tool_calls)} tool calls...")
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+                    
+                    logger.info(f"Executing tool: {tool_name}")
+                    
+                    try:
+                        # Execute the appropriate tool
+                        if tool_name.lower() == "python_repl":
+                            # Check if this is Q&A without file - skip file operations
+                            is_placeholder = file_path and "qa_" in file_path if file_path else False
+                            if is_placeholder:
+                                # For Q&A without file, allow general Python but warn about file access
+                                query = tool_args.get("query", "")
+                                if "pd.read_csv" in query or "read_csv" in query or (file_path and file_path in query):
+                                    tool_result = "No data file is available for this Q&A session. Please answer the user's question directly without trying to access a file."
+                                else:
+                                    # Allow other Python operations
+                                    tool_result = self.python_tool.run(query)
+                            else:
+                                tool_result = self.python_tool.run(tool_args["query"])
+                        elif tool_name.lower() == "get_available_chart_types":
+                            tool_result = get_available_chart_types.invoke({})
+                        else:
+                            tool_result = f"Unknown tool: {tool_name}"
+                        
+                        logger.info(f"Tool result: {str(tool_result)[:200]}...")
+                        
+                        # Add tool result to messages
+                        tool_message = ToolMessage(
+                            content=str(tool_result),
+                            tool_call_id=tool_call["id"]
+                        )
+                        self.messages.append(tool_message)
+                        
+                        # Add to workflow output
+                        self.workflow_output.add_message(tool_message, tool_call_id=tool_call["id"])
+                        
+                    except Exception as e:
+                        error_msg = f"Error executing {tool_name}: {str(e)}"
+                        logger.error(error_msg)
+                        tool_message = ToolMessage(
+                            content=error_msg,
+                            tool_call_id=tool_call["id"]
+                        )
+                        self.messages.append(tool_message)
+                        self.workflow_output.add_message(tool_message, tool_call_id=tool_call["id"])
+            
+            # Set workflow as completed
+            self.workflow_output.set_completed("success")
+            
+            # Return Q&A response structure
+            return {
+                "type": "message",
+                "content": final_content,
+                "workflow_output": self.workflow_output,
+            }
         
-        # Default to message type
-        logger.info("Detected text response - Message type")
-        return {"type": "message", "data": content, "error": None}
+        except Exception as e:
+            error_msg = f"Q&A workflow error: {str(e)}"
+            logger.error(error_msg)
+            self.workflow_output.set_completed("error", error_msg)
+            return {
+                "type": "message",
+                "content": f"I encountered an error while processing your question: {str(e)}",
+                "workflow_output": self.workflow_output,
+            }

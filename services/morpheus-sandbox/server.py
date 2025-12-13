@@ -236,11 +236,11 @@ async def _post_node_status(conversation_id: Optional[str], status: str, metadat
     if not conversation_id:
         return
     try:
-        logger.info(f"Posting node status: {conversation_id}, {status}, {metadata} to {BACKEND_API_URL}/api/v1/morpheus/workflow-status")
-        timeout = aiohttp.ClientTimeout(total=10)
+        logger.info(f"Posting node status: {conversation_id}, {status}, {metadata} to {BACKEND_API_URL}/api/v1/morpheus/post-workflow-status")
+        timeout = aiohttp.ClientTimeout(total=100)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
-                f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status",
+                f"{BACKEND_API_URL}/api/v1/morpheus/post-workflow-status",
                 json={
                     "conversation_id": conversation_id,
                     "node_id": "workflow",
@@ -276,6 +276,31 @@ def _post_node_status_sync(conversation_id: Optional[str], status: str, metadata
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop.run_until_complete(_post_node_status(conversation_id, status, metadata))
+
+
+def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract all asset content items from conversation nodes."""
+    assets = []
+    nodes = conversation.get("nodes", [])
+    
+    for node in nodes:
+        contents = node.get("contents", [])
+        for content in contents:
+            content_type = content.get("type")
+            if content_type in ["asset", "attachment"]:
+                asset_data = content.get("data", {})
+                # Ensure we have required fields
+                if asset_data.get("asset_id") and asset_data.get("s3_bucket") and asset_data.get("s3_key"):
+                    assets.append({
+                        "asset_id": asset_data.get("asset_id"),
+                        "file_id": asset_data.get("file_id"),
+                        "s3_bucket": asset_data.get("s3_bucket"),
+                        "s3_key": asset_data.get("s3_key"),
+                        "extension": asset_data.get("extension", "csv"),
+                        "filename": asset_data.get("filename", ""),
+                    })
+    
+    return assets
 
 
 def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[str, Any]]:
@@ -386,73 +411,83 @@ def _process_conversation_background(
         conversation_bucket, _ = _parse_s3_uri(conversation_uri)
         dashboards_cache = _load_existing_dashboards(conversation)
 
-        metadata = conversation.get("metadata", {})
-        asset_info = metadata.get("asset") or {}
-        asset_bucket = asset_info.get("s3_bucket") if asset_info else None
-        asset_key = asset_info.get("s3_key") if asset_info else None
-        
-        # Fallback: if asset info is missing, try to fetch from backend using asset_id
-        if (not asset_bucket or not asset_key) and conversation.get("asset_id"):
-            asset_id = conversation.get("asset_id")
-            logger.info(f"Asset info missing in metadata, attempting fallback retrieval for asset_id: {asset_id}")
-            fetched_asset = _fetch_asset_from_backend(asset_id)
-            if fetched_asset:
-                # Update asset_info with fetched data
-                asset_info = {
-                    "asset_id": fetched_asset.get("asset_id"),
-                    "file_id": fetched_asset.get("file_id"),
-                    "s3_bucket": fetched_asset.get("s3_bucket"),
-                    "s3_key": fetched_asset.get("s3_key"),
-                    "extension": fetched_asset.get("extension"),
-                    "filename": fetched_asset.get("filename"),
-                }
-                asset_bucket = asset_info.get("s3_bucket")
-                asset_key = asset_info.get("s3_key")
-                logger.info(f"Successfully retrieved asset info via fallback: s3://{asset_bucket}/{asset_key}")
-        
-        # Safely get extension with proper None handling
-        extension = asset_info.get("extension") if asset_info else None
-        if extension and isinstance(extension, str):
-            file_ext = extension.lstrip(".")
-        else:
-            file_ext = "csv"
-        
-        file_identifier = (asset_info.get("file_id") or asset_info.get("asset_id") if asset_info else None) or conversation_id
+        # Extract all assets from conversation nodes
+        assets = _extract_assets_from_nodes(conversation)
+        logger.info(f"Found {len(assets)} asset(s) in conversation {conversation_id}")
 
-        # Handle file download - check if asset exists
-        temp_file_path = None
-        if not asset_bucket or not asset_key:
-            logger.info(f"No asset in conversation {conversation_id} - processing Q&A without file")
+        # Handle file download - download all assets or create placeholder for Q&A
+        temp_file_paths = []
+        if not assets:
+            logger.info(f"No assets in conversation {conversation_id} - processing Q&A without file")
             # Create empty CSV file for Q&A mode (workflow will handle it)
             temp_dir = tempfile.gettempdir()
             temp_file_path = os.path.join(temp_dir, f"qa_{conversation_id}.csv")
             # Create minimal CSV file
             with open(temp_file_path, "w") as handle:
                 handle.write("placeholder\n1\n")  # Minimal CSV for workflow
+            temp_file_paths.append(temp_file_path)
             logger.info(f"Created placeholder file for Q&A: {temp_file_path}")
         else:
             _post_node_status_sync(conversation_id, "processing", {"step": "download_asset"})
-            logger.info(f"Downloading asset for conversation {conversation_id}: s3://{asset_bucket}/{asset_key}")
-            try:
-                file_content = download_bytes(asset_bucket, asset_key)
-                logger.info(f"Successfully downloaded {len(file_content)} bytes from S3")
+            for idx, asset_info in enumerate(assets):
+                asset_bucket = asset_info.get("s3_bucket")
+                asset_key = asset_info.get("s3_key")
+                
+                if not asset_bucket or not asset_key:
+                    logger.warning(f"Asset {asset_info.get('asset_id')} missing s3_bucket or s3_key, skipping")
+                    continue
+                
+                logger.info(f"Downloading asset {idx + 1}/{len(assets)} for conversation {conversation_id}: s3://{asset_bucket}/{asset_key}")
+                try:
+                    file_content = download_bytes(asset_bucket, asset_key)
+                    logger.info(f"Successfully downloaded {len(file_content)} bytes from S3")
 
-                temp_dir = tempfile.gettempdir()
-                temp_file_path = os.path.join(temp_dir, f"{file_identifier}.{file_ext}")
-                with open(temp_file_path, "wb") as handle:
-                    handle.write(file_content)
-                logger.info(f"Saved file to {temp_file_path} ({os.path.getsize(temp_file_path)} bytes)")
-            except Exception as e:
-                logger.error(f"Failed to download asset: {e}")
+                    # Safely get extension with proper None handling
+                    extension = asset_info.get("extension", "csv")
+                    if extension and isinstance(extension, str):
+                        file_ext = extension.lstrip(".")
+                    else:
+                        file_ext = "csv"
+                    
+                    file_identifier = asset_info.get("file_id") or asset_info.get("asset_id") or f"{conversation_id}_{idx}"
+                    temp_dir = tempfile.gettempdir()
+                    temp_file_path = os.path.join(temp_dir, f"{file_identifier}.{file_ext}")
+                    with open(temp_file_path, "wb") as handle:
+                        handle.write(file_content)
+                    temp_file_paths.append(temp_file_path)
+                    logger.info(f"Saved file to {temp_file_path} ({os.path.getsize(temp_file_path)} bytes)")
+                except Exception as e:
+                    logger.error(f"Failed to download asset {asset_info.get('asset_id')}: {e}")
+                    _post_node_status_sync(
+                        conversation_id,
+                        "error",
+                        {
+                            "step": "download_asset",
+                            "error": f"Failed to download file: {str(e)}",
+                            "asset_id": asset_info.get("asset_id"),
+                        },
+                    )
+                    # Continue with other assets instead of returning
+                    continue
+            
+            if not temp_file_paths:
+                logger.error("No assets were successfully downloaded")
                 _post_node_status_sync(
                     conversation_id,
                     "error",
                     {
                         "step": "download_asset",
-                        "error": f"Failed to download file: {str(e)}",
+                        "error": "Failed to download any assets",
                     },
                 )
                 return
+        
+        # Store primary_asset for later use in error handling and completion
+        primary_asset = assets[0] if assets else None
+        
+        # Use first file path for backward compatibility with workflow (for now)
+        # TODO: Update workflow to accept multiple file paths
+        temp_file_path = temp_file_paths[0] if temp_file_paths else None
 
         workflow = AnalyzeCSVWorkflow()
         _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
@@ -522,6 +557,7 @@ def _process_conversation_background(
             _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
             
             # Post completion status with Q&A content in metadata
+            file_identifier = assets[0].get("file_id") or assets[0].get("asset_id") if assets else conversation_id
             _post_node_status_sync(
                 conversation_id,
                 "completed",
@@ -538,9 +574,13 @@ def _process_conversation_background(
         # Handle Dashboard responses (type == "dashboard_config")
         logger.info("Processing Dashboard response")
         
-        file_size = os.path.getsize(temp_file_path) if os.path.exists(temp_file_path) else 0
+        # Use first asset for processed JSON key generation (for backward compatibility)
+        primary_asset = assets[0] if assets else None
+        file_size = os.path.getsize(temp_file_path) if temp_file_path and os.path.exists(temp_file_path) else 0
         processed_json_s3_key = None
-        if asset_key:
+        
+        if primary_asset and primary_asset.get("s3_key"):
+            asset_key = primary_asset.get("s3_key")
             key_parts = _parse_s3_key(asset_key)
             if key_parts:
                 processed_json_s3_key = _build_processed_json_key(
@@ -557,6 +597,10 @@ def _process_conversation_background(
         result_data = result.get("data", {}) if result else {}
         if not isinstance(result_data, dict):
             result_data = {}
+        
+        file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") if primary_asset else conversation_id
+        file_ext = primary_asset.get("extension", "csv").lstrip(".") if primary_asset else "csv"
+        
         processed_data = {
             "fileID": file_identifier,
             "status": "completed",
@@ -577,12 +621,16 @@ def _process_conversation_background(
             processed_data["workflow_output_path"] = str(workflow_output_file)
 
         processed_json_bytes = json.dumps(processed_data, ensure_ascii=False, indent=2).encode("utf-8")
-        if processed_json_s3_key and asset_bucket:
-            _upload_bytes_to_s3(asset_bucket, processed_json_s3_key, processed_json_bytes)
+        if processed_json_s3_key and primary_asset:
+            asset_bucket = primary_asset.get("s3_bucket")
+            if asset_bucket:
+                _upload_bytes_to_s3(asset_bucket, processed_json_s3_key, processed_json_bytes)
+            else:
+                logger.warning(f"Skipping processed JSON upload: missing asset_bucket")
         else:
-            logger.warning(f"Skipping processed JSON upload: processed_json_s3_key={processed_json_s3_key}, asset_bucket={asset_bucket}")
+            logger.warning(f"Skipping processed JSON upload: processed_json_s3_key={processed_json_s3_key}, primary_asset={primary_asset is not None}")
 
-        asset_id = asset_info.get("asset_id") if asset_info and isinstance(asset_info, dict) else None
+        asset_id = primary_asset.get("asset_id") if primary_asset else None
         if asset_id and processed_json_s3_key:
             try:
                 update_url = f"{BACKEND_API_URL}/api/v1/morpheus/asset/{asset_id}/processed-key"
@@ -681,11 +729,13 @@ def _process_conversation_background(
 
         conversation["updated_at"] = datetime.utcnow().isoformat()
         _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
+        
+        completion_file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") if primary_asset else conversation_id
         _post_node_status_sync(
             conversation_id,
             "completed",
             {
-                "fileID": file_identifier,
+                "fileID": completion_file_identifier,
                 # Explicitly mark this as a dashboard response for frontend routing
                 "response_type": "dashboard_config",
                 "dashboard_id": new_dashboard_record["dashboard_id"] if new_dashboard_record else None,
@@ -746,16 +796,18 @@ def _process_conversation_background(
             except Exception as persist_error:
                 logger.warning(f"Failed to persist errored conversation: {persist_error}")
 
-        if processed_json_s3_key and conversation is not None:
+        if processed_json_s3_key and conversation is not None and primary_asset:
             try:
+                error_file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") or conversation_id
                 error_payload = {
-                    "fileID": file_identifier,
+                    "fileID": error_file_identifier,
                     "status": "error",
                     "error": str(exc),
                     "processed_at": datetime.now().isoformat(),
                 }
+                error_asset_bucket = primary_asset.get("s3_bucket") or conversation_bucket
                 _upload_bytes_to_s3(
-                    asset_bucket or conversation_bucket,
+                    error_asset_bucket,
                     processed_json_s3_key,
                     json.dumps(error_payload, ensure_ascii=False, indent=2).encode("utf-8"),
                 )
@@ -765,11 +817,14 @@ def _process_conversation_background(
         _post_node_status_sync(conversation_id, "error", {"error": str(exc)})
 
     finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except Exception as cleanup_error:
-                logger.warning(f"Failed to clean up temporary file {temp_file_path}: {cleanup_error}")
+        # Clean up all downloaded asset files
+        if temp_file_paths:
+            for temp_path in temp_file_paths:
+                if temp_path and os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception as cleanup_error:
+                        logger.warning(f"Failed to clean up temporary file {temp_path}: {cleanup_error}")
 
 
 @app.post("/run")
@@ -798,6 +853,7 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
             },
         )
         if not response:
+
             return {
                 "success": False,
                 "data": {

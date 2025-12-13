@@ -65,10 +65,10 @@ export function ConversationNodesView({ nodes }: ConversationNodesViewProps) {
             Dashboard: {content.data?.dashboard_id || 'N/A'}
           </div>
         );
-      } else if (content.type === 'attachment') {
+      } else if (content.type === 'asset' || content.type === 'attachment') {
         return (
           <div key={idx} className="text-sm text-muted-foreground">
-            Attachment: {content.data?.name || 'N/A'}
+            Asset: {content.data?.filename || content.data?.name || 'N/A'}
           </div>
         );
       }

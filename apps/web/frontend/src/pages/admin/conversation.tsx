@@ -119,12 +119,34 @@ export default function AdminConversationPage() {
                         <span className="font-medium">Conversation ID:</span>
                         <span className="ml-2 font-mono text-xs">{conversation.conversation_id}</span>
                       </div>
-                      {conversation.asset_id && (
-                        <div>
-                          <span className="font-medium">Asset ID:</span>
-                          <span className="ml-2 font-mono text-xs">{conversation.asset_id}</span>
-                        </div>
-                      )}
+                      {(() => {
+                        // Extract assets from nodes
+                        const nodes = conversation.nodes || [];
+                        const assets: any[] = [];
+                        for (const node of nodes) {
+                          const contents = node?.contents || [];
+                          for (const content of contents) {
+                            if (content?.type === 'asset' || content?.type === 'attachment') {
+                              const assetData = content?.data || {};
+                              if (assetData.asset_id) {
+                                assets.push(assetData);
+                              }
+                            }
+                          }
+                        }
+                        return assets.length > 0 ? (
+                          <div>
+                            <span className="font-medium">Assets:</span>
+                            <div className="ml-2 mt-1 space-y-1">
+                              {assets.map((asset, idx) => (
+                                <div key={idx} className="font-mono text-xs">
+                                  {asset.asset_id} ({asset.filename || 'N/A'})
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
                       <div>
                         <span className="font-medium">Created:</span>
                         <span className="ml-2">

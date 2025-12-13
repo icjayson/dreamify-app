@@ -501,14 +501,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       
       console.log('Starting processing for fileID:', uploadedFile.fileID);
-      const attachmentContents = uploadedFile ? [
+      // Fetch full asset data if not already available
+      let assetData: any = null;
+      if (uploadedFile.fileID) {
+        try {
+          const { fileService } = await import('@/services/fileService');
+          const assetResponse = await fileService.getAsset(uploadedFile.fileID);
+          if (assetResponse.success && assetResponse.asset) {
+            assetData = assetResponse.asset;
+          }
+        } catch (error) {
+          console.warn('Failed to fetch asset data:', error);
+        }
+      }
+      
+      const assetContents = uploadedFile && assetData ? [
         {
-          type: 'attachment',
+          type: 'asset',
           data: {
-            kind: 'csv',
-            name: uploadedFile.filename,
-            asset_id: uploadedFile.fileID,
-            project_id: projectId,
+            asset_id: assetData.asset_id,
+            file_id: assetData.file_id,
+            s3_bucket: assetData.s3_bucket,
+            s3_key: assetData.s3_key,
+            extension: assetData.extension,
+            filename: assetData.filename,
           }
         }
       ] as ConversationChatRequest['user_node_contents'] : undefined;
@@ -518,7 +534,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         uploadedFile.fileID,
         content,
         uploadedFile.conversationId || currentConversationId || undefined,
-        attachmentContents
+        assetContents
       );
       console.log('Run processing result:', startResult);
       // processing or accepted

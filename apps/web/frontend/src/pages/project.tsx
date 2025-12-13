@@ -91,7 +91,25 @@ export default function ProjectPage() {
       const convoResponse = await conversationService.loadConversation(conversationId, projId);
       const conversation = convoResponse.conversation;
       const nodes = conversation?.nodes ?? [];
-      const assetName = conversation?.metadata?.asset?.filename || "dashboard";
+      
+      // Extract assets from nodes
+      const assets: any[] = [];
+      for (const node of nodes) {
+        const contents = node?.contents || [];
+        for (const content of contents) {
+          if (content?.type === 'asset' || content?.type === 'attachment') {
+            const assetData = content?.data || {};
+            if (assetData.asset_id) {
+              assets.push(assetData);
+            }
+        }
+        }
+      }
+      
+      // Use first asset for display name, fallback to "dashboard"
+      const primaryAsset = assets[0];
+      const assetName = primaryAsset?.filename || "dashboard";
+      
       const restoredMessages: Message[] = nodes
         .filter((node: any) => {
           if (!node) return false;
@@ -114,7 +132,7 @@ export default function ProjectPage() {
         .map((node: any) => {
           const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
           const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
-          const attachmentContent = node?.contents?.find?.((c: any) => c?.type === 'attachment' || c?.type === 'file');
+          const assetContent = node?.contents?.find?.((c: any) => c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file');
           const normalized: Message = {
             id: node?.node_id || crypto.randomUUID(),
             role: node?.role === 'user' ? 'user' : 'assistant',
@@ -126,11 +144,11 @@ export default function ProjectPage() {
               sourceFileName: assetName,
             };
           }
-          if (attachmentContent?.data) {
+          if (assetContent?.data) {
             normalized.attachment = {
-              kind: attachmentContent?.data?.kind === 'file' ? 'file' : 'csv',
-              name: attachmentContent?.data?.name || assetName,
-              mime: attachmentContent?.data?.mime,
+              kind: assetContent?.data?.kind === 'file' ? 'file' : 'csv',
+              name: assetContent?.data?.filename || assetContent?.data?.name || assetName,
+              mime: assetContent?.data?.mime,
             };
           }
           return normalized;
@@ -141,13 +159,12 @@ export default function ProjectPage() {
       setCurrentConversationId(conversationId);
 
       const dashboardResponse = await conversationService.getDashboardData(conversationId, projId);
-      if (dashboardResponse?.dashboard_data) {
-        const assetMeta = conversation?.metadata?.asset || {};
+      if (dashboardResponse?.dashboard_data && primaryAsset) {
         const restoredFile = {
-          fileID: assetMeta.file_id || assetMeta.asset_id || 'restored',
-          filename: assetMeta.filename || 'data.csv',
-          size: assetMeta.size_bytes || 0,
-          ext: assetMeta.extension || '',
+          fileID: primaryAsset.file_id || primaryAsset.asset_id || 'restored',
+          filename: primaryAsset.filename || 'data.csv',
+          size: primaryAsset.size_bytes || 0,
+          ext: primaryAsset.extension || '',
           status: 'processed' as const,
           projectId: projId,
           conversationId,

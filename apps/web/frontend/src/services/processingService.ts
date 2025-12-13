@@ -35,7 +35,6 @@ class ProcessingService {
       const request: ConversationChatRequest = {
         conversation_id: conversationId,
         project_id: projectId,
-        asset_id: assetId || undefined,  // Only include if provided
         user_node_contents: [
           textContent,
           ...(additionalContents ?? []),

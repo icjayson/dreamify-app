@@ -77,7 +77,7 @@ def detect_user_intent(user_prompt: str, conversation_history: List[Dict[str, An
         ]
         
         response = model.invoke(messages)
-        intent = response.content.strip().lower()
+        intent = str(response.content).strip().lower()
         
         # Normalize response
         if "qa" in intent or "question" in intent or "answer" in intent:

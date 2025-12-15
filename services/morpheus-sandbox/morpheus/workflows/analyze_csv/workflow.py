@@ -8,10 +8,11 @@ from morpheus.models.base import get_model_for_agent
 from morpheus.workflows.analyze_csv.intent_detector import detect_user_intent
 from utils.config import load_config
 from utils.logger import logger
+from utils.postprocess import clean_json
 import json
 import re
 import os
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Union
 
 class AnalyzeCSVWorkflow:
     
@@ -177,7 +178,7 @@ class AnalyzeCSVWorkflow:
                 # Check if the response contains tool calls
                 if not response.tool_calls:
                     logger.info("No more tool calls - analysis complete")
-                    final_content = response.content or ""
+                    final_content = str(response.content) if response.content else ""
                     break
 
                 # Process tool calls
@@ -269,6 +270,60 @@ class AnalyzeCSVWorkflow:
             f"and {metrics_len} metric(s)."
         )
     
+    def _extract_json_from_content(self, content: Union[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Extract and parse JSON from LLM response content.
+        
+        Args:
+            content: The LLM response content (may contain JSON in code blocks or be a dict)
+            
+        Returns:
+            Parsed JSON dict if successful, None otherwise
+        """
+        # Handle dict input (already parsed JSON from LLM)
+        if isinstance(content, dict):
+            logger.info("Content is already a dict, returning directly")
+            return content
+        
+        # Handle string input
+        if not content or (isinstance(content, str) and not content.strip()):
+            logger.warning("Empty content provided for JSON extraction")
+            return None
+        
+        try:
+            # Search for JSON code blocks
+            json_match = re.search(r'```json\s*(.*?)\s*```', content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # Try to find any code block
+                code_match = re.search(r'```\s*(.*?)\s*```', content, re.DOTALL)
+                if code_match:
+                    json_str = code_match.group(1)
+                else:
+                    # Use entire content
+                    json_str = content
+            
+            # Clean the JSON string
+            cleaned_json = clean_json(json_str)
+            
+            # Parse JSON
+            parsed = json.loads(cleaned_json)
+            
+            # Validate it's a dict
+            if not isinstance(parsed, dict):
+                logger.warning(f"Extracted JSON is not a dict, got type: {type(parsed)}")
+                return None
+            
+            return parsed
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from content: {str(e)}")
+            return None
+        except Exception as e:
+            logger.error(f"Error extracting JSON from content: {str(e)}")
+            return None
+    
     def _extract_typed_response(self, user_prompt, conversation, content: str) -> Dict[str, Any]:
         """
         Extract and type the LLM response content.
@@ -281,9 +336,17 @@ class AnalyzeCSVWorkflow:
         """
         if not user_prompt:
             # Default to dashboard if no prompt
+            # Extract JSON from content
+            json_data = self._extract_json_from_content(content)
+            if json_data is None:
+                return {
+                    "type": "dashboard",
+                    "data": None,
+                    "error": "Failed to extract dashboard JSON from response"
+                }
             return {
                 "type": "dashboard",
-                "data": None,
+                "data": json_data,
             }
 
         # ---- RULE-BASED OVERRIDE: FEATURE-AWARE INTENT ----
@@ -334,7 +397,15 @@ class AnalyzeCSVWorkflow:
             logger.info(
                 "Forcing intent to 'dashboard' (asset present, no dashboards yet, explicit dashboard request detected)."
             )
-            return "dashboard"
+            # Extract JSON from content
+            json_data = self._extract_json_from_content(content)
+            if json_data is None:
+                return {
+                    "type": "dashboard",
+                    "data": None,
+                    "error": "Failed to extract dashboard JSON from response"
+                }
+            return {"type": "dashboard", "data": json_data}
 
         # ---- FALLBACK: LLM-BASED INTENT DETECTION ----
         # Extract conversation history for context
@@ -343,7 +414,23 @@ class AnalyzeCSVWorkflow:
         # Detect intent using LLM
         intent = detect_user_intent(user_prompt, conversation_history)
         logger.info(f"Detected intent: {intent} for prompt: {user_prompt[:50]}...")
-        return intent
+        # Map "qa" to "message" type to match expected format
+        response_type = "message" if intent == "qa" else "dashboard"
+        
+        # Extract data based on response type
+        if response_type == "dashboard":
+            # Extract JSON from content
+            json_data = self._extract_json_from_content(content)
+            if json_data is None:
+                return {
+                    "type": response_type,
+                    "data": None,
+                    "error": "Failed to extract dashboard JSON from response"
+                }
+            return {"type": response_type, "data": json_data}
+        else:
+            # Message type - return text content
+            return {"type": response_type, "data": content}
     
     def _execute_qa_mode(
         self,
@@ -388,7 +475,7 @@ class AnalyzeCSVWorkflow:
                 if not response.tool_calls:
                     logger.info("No more tool calls - Q&A complete")
                     # Extract final text response
-                    final_content = response.content or "I've completed the analysis."
+                    final_content = str(response.content) if response.content else "I've completed the analysis."
                     break
 
                 # Process tool calls

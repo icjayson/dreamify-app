@@ -14,7 +14,13 @@ import os
 from typing import Any, Dict, Optional, List, Union, Literal
 
 # Q&A System Prompt
-QA_SYSTEM_PROMPT = """You are a helpful data analysis assistant. Your goal is to answer the user's questions textually based on the provided data and conversation history. Do not generate JSON dashboards. Use the Python tool to calculate answers if necessary."""
+QA_SYSTEM_PROMPT = """You are a helpful data analysis assistant. Your goal is to answer the user's questions textually based on the provided data and conversation history. Do not generate JSON dashboards.
+
+IMPORTANT TOOL USAGE GUIDELINES:
+- Use the Python tool ONLY when the question requires data analysis, calculations, or information from the CSV file
+- For general knowledge questions (e.g., "who is X", "what is Y"), answer directly using your knowledge - DO NOT use tools
+- For questions about the data file, use Python to read and analyze the CSV
+- If the question is not related to the data file, answer directly without using tools"""
 
 # Dashboard System Prompt - Dashboard Mode Only
 DASHBOARD_SYSTEM_PROMPT = """You are Morpheus, an expert data analysis AI assistant in Dashboard Mode. Your task is to generate comprehensive dashboard configurations.
@@ -435,7 +441,38 @@ class AnalyzeCSVWorkflow:
             system_prompt = DASHBOARD_SYSTEM_PROMPT
         self.messages = [SystemMessage(content=system_prompt)]
 
-        for node in conversation.get("nodes", []):
+        # Filter nodes based on mode
+        nodes = conversation.get("nodes", [])
+        
+        if mode == "qa":
+            # For Q&A mode, only include recent relevant nodes (last 10 user/assistant exchanges)
+            # Exclude system messages and workflow-generated instruction messages
+            filtered_nodes = []
+            user_assistant_count = 0
+            # Process nodes in reverse to get most recent first
+            for node in reversed(nodes):
+                role = (node.get("role") or "").lower()
+                # Skip system messages and workflow instructions
+                if role == "system":
+                    continue
+                # Skip nodes that look like workflow instructions (contain "REQUIRED WORKFLOW" or "STEP 1")
+                content_text = self._render_node_contents(node, dashboards)
+                if content_text and ("REQUIRED WORKFLOW" in content_text or "STEP 1:" in content_text):
+                    continue
+                # Include user and assistant messages
+                if role in ["user", "assistant"]:
+                    filtered_nodes.insert(0, node)  # Insert at beginning to maintain order
+                    if role == "user":
+                        user_assistant_count += 1
+                        # Limit to last 10 user/assistant exchanges (approximately 20 nodes)
+                        if user_assistant_count >= 10:
+                            break
+            nodes = filtered_nodes
+        else:
+            # For dashboard mode, include all nodes
+            nodes = nodes
+
+        for node in nodes:
             content_text = self._render_node_contents(node, dashboards)
             if not content_text:
                 continue
@@ -461,14 +498,30 @@ class AnalyzeCSVWorkflow:
             instruction = f"User wants to: {effective_prompt}\n\nCSV file available at: {file_path}"
             
         elif mode == "qa" and file_exists and not is_placeholder:
-            # Q&A mode with real file
+            # Q&A mode with real file - conditionally suggest Python based on question type
+            # Check if question seems data-related (contains data-related keywords)
+            data_keywords = ["data", "csv", "file", "column", "row", "value", "calculate", "sum", "average", "count", "total", "metric", "statistic"]
+            question_lower = effective_prompt.lower()
+            is_data_question = any(keyword in question_lower for keyword in data_keywords)
+            
             instruction_parts = [
                 f"User question: {effective_prompt}",
-                f"",
-                f"CSV file available at: {file_path}",
-                f"",
-                f"Use the python_repl tool to read the file and calculate the answer to the user's question.",
             ]
+            
+            if is_data_question:
+                instruction_parts.extend([
+                    f"",
+                    f"CSV file available at: {file_path}",
+                    f"",
+                    f"If the question requires data from the CSV file, use the python_repl tool to read and analyze it.",
+                ])
+            else:
+                instruction_parts.extend([
+                    f"",
+                    f"Note: A CSV file is available at {file_path}, but this question appears to be about general knowledge.",
+                    f"Answer the question directly using your knowledge. Only use the python_repl tool if the question specifically requires data from the file.",
+                ])
+            
             instruction = "\n".join(instruction_parts)
             
         else:
@@ -492,6 +545,12 @@ class AnalyzeCSVWorkflow:
                     "BEFORE generating the dashboard JSON. Do not hallucinate column names. "
                     "Output ONLY valid JSON after analysis."
                 )
+            elif mode == "qa":
+                # For Q&A without file, clarify tool usage
+                if not file_exists or is_placeholder:
+                    context_parts.append(
+                        "Answer the question directly. Only use tools if the question requires data analysis or calculations."
+                    )
             
             instruction = "\n\n".join(context_parts)
         
@@ -664,16 +723,77 @@ class AnalyzeCSVWorkflow:
                 response = self.model_with_tools.invoke(self.messages)
                 self.messages.append(response)
                 
+                # Safely check for tool calls
+                has_tool_calls = bool(response.tool_calls and len(response.tool_calls) > 0)
+                
+                # Log response details for debugging
+                response_content = str(response.content) if response.content else ""
+                logger.info(
+                    f"Iteration {iteration + 1} response: has_tool_calls={has_tool_calls}, "
+                    f"tool_calls_count={len(response.tool_calls) if response.tool_calls else 0}, "
+                    f"content_length={len(response_content)}"
+                )
+                
                 # Add response to workflow output
                 tool_calls_data = None
-                if response.tool_calls:
+                if has_tool_calls:
                     tool_calls_data = [{"name": tc["name"], "args": tc["args"]} for tc in response.tool_calls]
                 self.workflow_output.add_message(response, tool_calls=tool_calls_data)
                 
                 # Check if the response contains tool calls
-                if not response.tool_calls:
+                if not has_tool_calls:
                     logger.info("No more tool calls - dashboard analysis complete")
-                    final_content = str(response.content) if response.content else ""
+                    final_content = response_content
+                    
+                    # Handle empty content with enhanced retry logic
+                    if not final_content or not final_content.strip():
+                        logger.warning(
+                            f"Model returned empty content in iteration {iteration + 1}. "
+                            f"This may indicate the model needs more iterations or there was an error."
+                        )
+                        
+                        # Check if we have a file but no tool calls were made - enforce tool usage
+                        file_exists = file_path and os.path.exists(file_path) if file_path else False
+                        is_placeholder = file_path and "qa_" in file_path if file_path else False
+                        
+                        if file_exists and not is_placeholder and iteration < 2:
+                            logger.info(
+                                f"File exists at {file_path} but no tools called in iteration {iteration + 1}. "
+                                "Requesting tool usage."
+                            )
+                            self.messages.append(HumanMessage(
+                                content=(
+                                    f"You must use tools first. Load the CSV file at {file_path} using python_repl: "
+                                    f"df = pd.read_csv('{file_path}'); print(df.head()); print(df.info()); print(df.columns.tolist())"
+                                )
+                            ))
+                            continue
+                        
+                        # Allow multiple iterations with empty content (up to 3 iterations)
+                        if iteration < 3:
+                            logger.info(
+                                f"Continuing to iteration {iteration + 2} due to empty content. "
+                                f"Current iteration: {iteration + 1}"
+                            )
+                            self.messages.append(HumanMessage(
+                                content="Please provide your analysis and dashboard JSON configuration."
+                            ))
+                            continue
+                        
+                        # If we get here with empty content after retries, it's an error
+                        error_msg = (
+                            f"Model returned empty content after {iteration + 1} iterations. "
+                            "Workflow cannot proceed without content."
+                        )
+                        logger.error(error_msg)
+                        self.workflow_output.set_completed("error", error_msg)
+                        return {
+                            "type": "dashboard_config",
+                            "error": error_msg,
+                            "workflow_output": self.workflow_output,
+                        }
+                    
+                    # If we have content, proceed normally
                     logger.info(
                         "Dashboard workflow complete. Final content preview: %s",
                         (final_content[:200] + "...") if len(final_content) > 200 else final_content,
@@ -713,12 +833,30 @@ class AnalyzeCSVWorkflow:
                 "summary": summary,
             }
         else:
-            # Fallback - return error
-            error_msg = "Failed to extract dashboard JSON from response"
-            logger.error(error_msg)
+            # Enhanced error reporting
+            error_details = {
+                "final_content_length": len(final_content) if final_content else 0,
+                "final_content_preview": (final_content[:500] + "...") if final_content and len(final_content) > 500 else (final_content or "(empty)"),
+                "workflow_messages_count": len(self.workflow_output.messages) if hasattr(self.workflow_output, 'messages') else 0,
+            }
+            error_msg = (
+                f"Failed to extract dashboard JSON from response. "
+                f"Content length: {error_details['final_content_length']}, "
+                f"Messages in workflow: {error_details['workflow_messages_count']}"
+            )
+            logger.error(f"{error_msg}. Details: {error_details}")
+            
+            # If we have workflow messages, log the last few for debugging
+            if hasattr(self.workflow_output, 'messages') and self.workflow_output.messages:
+                logger.error("Last 3 workflow messages:")
+                for msg in self.workflow_output.messages[-3:]:
+                    msg_content = getattr(msg, 'content', str(msg))[:200] if hasattr(msg, 'content') else str(msg)[:200]
+                    logger.error(f"  - {msg_content}")
+            
             return {
                 "type": "dashboard_config",
                 "error": error_msg,
+                "error_details": error_details,
                 "workflow_output": self.workflow_output,
             }
     

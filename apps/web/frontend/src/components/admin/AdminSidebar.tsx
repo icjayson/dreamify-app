@@ -38,7 +38,7 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: AdminSide
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 p-4">
+        <nav className="flex-1 space-y-8 p-4">
           <Button
             variant={isActive('/admin') ? 'secondary' : 'ghost'}
             className={cn(
@@ -50,6 +50,24 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: AdminSide
             <LayoutDashboard className="h-4 w-4" />
             {!collapsed && <span className="ml-2">Dashboard</span>}
           </Button>
+          {!collapsed && (
+            <div className="mt-4 px-2">
+              <img 
+                src="/funfunadminport.gif" 
+                alt="Admin Portal" 
+                className="w-full h-auto object-contain rounded"
+              />
+            </div>
+          )}
+                    {!collapsed && (
+            <div className="mt-4 px-2">
+              <img 
+                src="/fungift2.gif" 
+                alt="Admin Portal" 
+                className="w-full h-auto object-contain rounded"
+              />
+            </div>
+          )}
         </nav>
 
         {/* Footer */}

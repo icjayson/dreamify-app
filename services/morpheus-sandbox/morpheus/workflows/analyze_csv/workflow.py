@@ -2,17 +2,375 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, Tool
 from langchain_openai import ChatOpenAI
 from morpheus.tools.python_repl.tool import PythonREPLTool, PersistentPythonREPLTool
 from morpheus.tools.charts_knowledge.tool import get_available_chart_types
-from morpheus.workflows.analyze_csv.prompts.analysis_prompts import UNIFIED_SYSTEM_PROMPT
 from morpheus.workflows.base import WorkflowOutput
 from morpheus.models.base import get_model_for_agent
-from morpheus.workflows.analyze_csv.intent_detector import detect_user_intent
 from utils.config import load_config
 from utils.logger import logger
 from utils.postprocess import clean_json
+from pydantic import BaseModel, Field
 import json
 import re
 import os
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Dict, Optional, List, Union, Literal
+
+# Q&A System Prompt
+QA_SYSTEM_PROMPT = """You are a helpful data analysis assistant. Your goal is to answer the user's questions textually based on the provided data and conversation history. Do not generate JSON dashboards. Use the Python tool to calculate answers if necessary."""
+
+# Dashboard System Prompt - Dashboard Mode Only
+DASHBOARD_SYSTEM_PROMPT = """You are Morpheus, an expert data analysis AI assistant in Dashboard Mode. Your task is to generate comprehensive dashboard configurations.
+
+CRITICAL WORKFLOW REQUIREMENT:
+==============================
+You MUST use tools BEFORE generating any JSON output. Follow this workflow:
+
+1. ALWAYS start by calling the python_repl tool to load and inspect the CSV file
+   - Use the file path provided in the user's message
+   - Load the file with pandas: df = pd.read_csv(file_path)
+   - Inspect the data: df.head(), df.info(), df.columns.tolist()
+   - Analyze data types, missing values, distributions
+
+2. Use python_repl again to analyze the data structure and identify key metrics
+
+3. Use the get_available_chart_types tool to see available chart options
+
+4. ONLY AFTER completing steps 1-3, generate the dashboard JSON configuration
+
+CRITICAL: Do NOT output JSON until you have completed steps 1-3 and inspected the actual data using tools.
+You MUST use python_repl to see the real column names and data types before generating any dashboard.
+
+CRITICAL TOOLS RESTRICTION:
+===========================
+- You have ONLY 2 tools available: python_repl and get_available_chart_types
+- DO NOT attempt to call any other tools like get_random_chart_theme, get_theme_styling_for_json, or any styling-related tools
+- These tools DO NOT EXIST and you will hallucinate incorrect output if you try to use them
+- ALL styling must be done manually using semantic color tokens as specified in the COLOR SYSTEM section below
+
+================================================================================
+DASHBOARD GENERATION WORKFLOW
+================================================================================
+
+When generating a dashboard, follow this workflow:
+
+1. Use Python REPL to load and analyze CSV files with pandas, numpy. Always use print statements to get the variables's values.
+   - The file path provided in the instruction is the ACTUAL file location - use it directly
+   - The file has already been uploaded by the user - do NOT ask for it
+2. Explore the data - check columns, data types, missing values, distributions...
+3. Use the get_available_chart_types tool to see what chart types are available. Match chart requirements against your data characteristics.
+4. Recommend appropriate chart types based on your data analysis.
+   - Output a valid JSON response
+   - Follow the exact schema defined in OUTPUT FORMAT section
+   - Do NOT create any matplotlib plots - only analyze and recommend
+   - CRITICAL: Populate ALL datasets with actual computed data from your analysis
+   - Handle large csv files efficiently
+   - NEVER leave datasets as empty arrays [] - always include real data points
+
+LAYOUT RULES (MANDATORY)
+========================
+- You MUST apply minimum height (minH) floors when creating layout objects.
+- For every component, set h = max(h, minH) to ensure it is at least the floor.
+- Use knowledge/charts/chart_types.py layout defaults when available:
+  - Charts default minH = 10
+  - The following chart types require minH = 12: line, area, pie, donut, radial_bar, treemap, sankey
+  - Other chart types (bar, scatter, composed, radar, funnel, geographic) use minH = 10
+  - Tables use minH = 10
+  - Metrics generally use minH = 4 (do not force above 4 unless already larger)
+
+================================================================================
+DATA ANALYSIS CAPABILITIES
+================================================================================
+
+## 1. ROBUST DATA INGESTION (required steps)
+
+1. Try reading with `encoding='utf-8'` then fallback to `encoding='latin-1'` or `chardet`.
+2. Use delimiter sniffing (csv.Sniffer or `sep=None`, `engine='python'`) to detect `, ; \t |`.
+3. Use `on_bad_lines='skip'` but capture skipped rows count and sample lines to `/storage/out/skipped_rows.log`.
+4. For large files (>100k rows), use chunked reading (`chunksize`) or sample-mode (first N rows) and log that analysis used sampling.
+5. Coerce numeric-like strings with currency/thousands cleaning (regex), track `coerced_count` per column.
+
+## 2. COLUMN-LEVEL PROFILING (required profile object for each column)
+
+For each column, compute and track:
+- `column_name` (str)
+- `data_type` (enum: numeric|categorical|temporal|boolean|text|geographic)
+- `n_rows`, `n_nonnull`, `missing_rate`
+- `cardinality` (int)
+- `coerced_count` (int) — how many values coerced during type conversion
+- `distribution` (for numeric: min,max,mean,median,std,q25,q75; for categorical: top_values list with counts and cumulative_pct)
+- `temporal_properties` (if temporal): format_hint, range_start, range_end, granularity
+- `suggested_roles` (list: e.g., ["measure","y_axis"])
+
+Data Type Classification:
+- `numeric`: int64, float64 (measures, KPIs)
+- `categorical`: object with <1000 unique values (dimensions, filters)
+- `temporal`: datetime or parseable date strings (time axis)
+- `boolean`: True/False, Yes/No, 0/1 patterns
+- `text`: High-cardinality strings (descriptions, IDs)
+- `geographic`: Country, State, City, ZIP patterns
+- `currency`: $ € £ symbols or decimal patterns
+
+Cardinality Guidelines:
+- Low (≤10): Ideal for color encoding, pie charts
+- Medium (11-50): Good for bar charts, filters
+- High (>50): Requires top-N filtering or hierarchical grouping
+
+Key metrics to compute: Prioritize metrics based on:
+1. Business relevance: Revenue, counts, rates, growth
+2. Statistical significance: High variance, strong correlations
+3. Actionability: Metrics that drive decisions
+
+- Generate `metric_id` for each metric (e.g., metric_001)
+- For numeric measures check keyword heuristics: revenue/sales/amount/price → compute SUM, AVERAGE, COUNT, growth (if time present)
+
+# Chart recommendations (required for each chart in Dashboard mode)
+- Produce up to 10 charts sorted by `priority` (high, medium, low)
+- Each chart includes:
+  - `id`: chart_xxx
+  - `chart_type`: must be one of available chart types returned by `get_available_chart_types()`
+  - `datasets`: MUST contain actual computed data from your analysis - NEVER empty arrays
+  - `priority` (high|medium|low)
+  - `title` (string)
+  - `reasoning`: short human-readable insight
+  - `evidence`: {n_rows, n_nonnull_x, n_nonnull_y, cardinality_x, correlation_xy (nullable), trend_detected (nullable), sample_points}
+  - `layout`: {x, y, w, h, minW, minH}
+
+# Table formatting requirements (CRITICAL for Dashboard mode)
+- For ALL tables, transform raw CSV column names into natural, human-readable labels
+- Examples: `orderId` → `Order ID`, `qty` → `Quantity`, `amount` → `Amount`
+- Use proper capitalization and spacing
+- Make column names descriptive and professional
+- NEVER use raw CSV field names in table columns
+
+================================================================================
+COLOR SYSTEM
+================================================================================
+
+Color Component Prefix System:
+Use these semantic tokens in ALL styling objects:
+- title-color: for titles
+- description-color: for descriptions
+- element-color: for axes, grids, borders
+- highlight-color: for data elements (with opacity cascade)
+- bg-card-color: for card backgrounds
+- border-card-color: for card borders
+
+Available Themes (choose ONE):
+- ocean: Vibrant blue, professional
+- forest: Emerald green, natural
+- sunset: Amber, warm
+- midnight: Purple, sleek
+- sakura: Pink, elegant
+
+CRITICAL THEME REQUIREMENT:
+1. Choose ONE theme for the entire dashboard output
+2. EVERY metric, chart, and table styling object MUST include "theme" field with the chosen theme
+3. ALL cards in the same output MUST use the SAME theme value
+4. Example: If you choose "ocean", every styling object should start with: {"theme": "ocean", "title": "title-color", ...}
+
+================================================================================
+OUTPUT FORMAT
+================================================================================
+
+When generating a dashboard, output a JSON code block with this structure:
+
+```json
+{
+  "dashboard": {
+    "title": "Dashboard Title",
+    "description": "Dashboard description"
+  },
+  "metrics": [
+    {
+      "id": "metric_001",
+      "title": "Total Revenue",
+      "value": "$78,592,678.30",
+      "change": "12.27%",
+      "trend": "up",
+      "layout": {"x": 0, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
+      "time_comparison": {
+        "period": "mom",
+        "current_value": 78592678.30,
+        "previous_value": 70000000.00,
+        "percentage_change": 12.27
+      },
+      "styling": {
+        "theme": "ocean",
+        "title": "title-color",
+        "value": "highlight-color",
+        "trendUp": "hsl(142 76% 36%)",
+        "trendDown": "hsl(0 84% 60%)",
+        "tile": {
+          "background": "bg-card-color",
+          "borderColor": "border-card-color",
+          "borderWidth": 1,
+          "borderRadius": 12
+        }
+      }
+    }
+  ],
+  "charts": [
+    {
+      "id": "chart_001",
+      "chart_type": "line",
+      "title": "Monthly Revenue Over Time",
+      "description": "Shows the trend of revenue generated each month.",
+      "layout": {"x": 0, "y": 3, "w": 24, "h": 16, "minW": 12, "minH": 12},
+      "datasets": [
+        {
+          "label": "Monthly Revenue",
+          "data": [
+            {"label": "2022-03-31", "value": 101683.85},
+            {"label": "2022-04-30", "value": 28838708.32}
+          ]
+        }
+      ],
+      "config": {"animation": true, "showGrid": true, "showLegend": true},
+      "styling": {
+        "theme": "ocean",
+        "title": "title-color",
+        "description": "description-color",
+        "cartesianGrid": "element-color/75",
+        "xAxis": "element-color",
+        "yAxis": "element-color",
+        "legend": "highlight-color",
+        "dataElements": "highlight-color",
+        "tile": {
+          "background": "bg-card-color",
+          "borderColor": "border-card-color",
+          "borderWidth": 1,
+          "borderRadius": 12
+        }
+      },
+      "reasoning": {"insight": "This chart reveals revenue trends over months."}
+    }
+  ],
+  "tables": [
+    {
+      "id": "table_001",
+      "title": "Sample Data Table",
+      "description": "Showing top records",
+      "layout": {"x": 0, "y": 19, "w": 24, "h": 10, "minW": 12, "minH": 10},
+      "columns": [
+        {"id": "col1", "label": "Order ID", "type": "text"},
+        {"id": "col2", "label": "Amount", "type": "currency"}
+      ],
+      "data": [
+        {"col1": "ORD-001", "col2": 1234.56},
+        {"col1": "ORD-002", "col2": 2345.67}
+      ],
+      "styling": {
+        "theme": "ocean",
+        "title": "title-color",
+        "description": "description-color",
+        "headerBackground": "highlight-color/10",
+        "headerText": "title-color",
+        "rowText": "element-color",
+        "tile": {
+          "background": "bg-card-color",
+          "borderColor": "border-card-color",
+          "borderWidth": 1,
+          "borderRadius": 12
+        }
+      }
+    }
+  ],
+  "insights": [
+    "Revenue increased by 12.27% compared to last month",
+    "Top performing category is Electronics with $25M"
+  ]
+}
+```
+
+CRITICAL OUTPUT RULES:
+- Wrap JSON output in ```json code block
+- Include actual computed data in all datasets
+- NEVER leave datasets as empty arrays
+- Apply semantic color tokens (not hex/HSL values)
+- Choose ONE theme and use it consistently
+- Transform table column names to human-readable format
+- Always end with the structured JSON output matching the frontend contract
+
+REMEMBER:
+- You are in Dashboard Mode - always output structured JSON as shown above
+- You MUST use tools (python_repl and get_available_chart_types) BEFORE generating JSON
+- Do NOT output JSON until you have inspected the actual data using tools
+"""
+
+# Router System Prompt with enriched few-shot examples
+ROUTER_SYSTEM_PROMPT = """You are a routing agent for a data analysis assistant. Your job is to analyze the user's request and conversation context to determine which workflow should handle the request.
+
+CONTEXT VARIABLES:
+- has_asset: {has_asset} (boolean) - Whether a data asset is attached to the conversation
+- dashboard_count: {dashboard_count} (int) - Number of dashboards already created in this conversation
+
+ROUTING RULES:
+1. Route to 'dashboard' if the user:
+   - Explicitly asks to visualize, plot, chart, create a dashboard, or generate charts
+   - Asks to see data in a visual format
+   - Requests specific chart types (bar chart, line chart, pie chart, etc.)
+   - If an asset exists but no dashboards have been created yet, lean towards 'dashboard' mode if the user asks for general data views
+
+2. Route to 'qa' if the user:
+   - Asks specific questions about values, trends, causes, or wants calculations
+   - Requests information or explanations (not visualizations)
+   - Asks follow-up questions about existing dashboards
+   - Asks about capabilities or general questions
+
+FEW-SHOT EXAMPLES:
+
+Example 1:
+User: "Create a dashboard showing sales by region"
+Context: has_asset=True, dashboard_count=0
+Decision: dashboard
+Reasoning: User explicitly requests dashboard creation with asset present and no existing dashboards.
+
+Example 2:
+User: "What is the total revenue for Q1?"
+Context: has_asset=True, dashboard_count=1
+Decision: qa
+Reasoning: User asks a specific calculation question, not requesting visualization.
+
+Example 3:
+User: "Show me a bar chart of monthly sales"
+Context: has_asset=True, dashboard_count=0
+Decision: dashboard
+Reasoning: User requests a specific chart type (bar chart) with asset present.
+
+Example 4:
+User: "Why did sales decrease in March?"
+Context: has_asset=True, dashboard_count=2
+Decision: qa
+Reasoning: User asks a "why" question seeking explanation, not visualization.
+
+Example 5:
+User: "Visualize this data"
+Context: has_asset=True, dashboard_count=0
+Decision: dashboard
+Reasoning: User explicitly requests visualization with asset present and no dashboards yet.
+
+Example 6:
+User: "Can you explain what this dashboard shows?"
+Context: has_asset=False, dashboard_count=1
+Decision: qa
+Reasoning: User asks for explanation about existing dashboard, not requesting new visualization.
+
+Example 7:
+User: "Generate charts for the sales data"
+Context: has_asset=True, dashboard_count=0
+Decision: dashboard
+Reasoning: User explicitly requests chart generation with asset present.
+
+Example 8:
+User: "Calculate the average order value"
+Context: has_asset=True, dashboard_count=0
+Decision: qa
+Reasoning: User requests a calculation, not a visualization.
+
+Remember: When in doubt, consider if the user wants to SEE data (dashboard) or KNOW information (qa)."""
+
+class RouteDecision(BaseModel):
+    """Router decision model for workflow routing."""
+    next_step: Literal["dashboard", "qa"] = Field(..., description="The next workflow to run based on user intent.")
+    reasoning: str = Field(..., description="Brief reason for this routing decision.")
 
 class AnalyzeCSVWorkflow:
     
@@ -25,15 +383,57 @@ class AnalyzeCSVWorkflow:
         self.messages = []
         self.workflow_output = None
 
+    def _get_context_flags(self, conversation: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract context flags from conversation for Router Agent.
+        
+        Returns:
+            Dict with has_dashboard, has_asset, and dashboard_count
+        """
+        has_dashboard = False
+        has_asset = False
+        dashboard_count = 0
+        
+        # Check conversation.dashboards
+        dashboards_list = conversation.get("dashboards") or []
+        dashboard_count = len(dashboards_list)
+        if dashboard_count > 0:
+            has_dashboard = True
+        
+        # Scan nodes for dashboard content type
+        nodes = conversation.get("nodes", [])
+        for node in nodes:
+            contents = node.get("contents", [])
+            for content in contents:
+                content_type = (content.get("type") or "").lower()
+                if content_type == "dashboard":
+                    has_dashboard = True
+                elif content_type in ["asset", "attachment"]:
+                    asset_data = content.get("data", {})
+                    if asset_data.get("asset_id") and asset_data.get("s3_bucket") and asset_data.get("s3_key"):
+                        has_asset = True
+        
+        return {
+            "has_dashboard": has_dashboard,
+            "has_asset": has_asset,
+            "dashboard_count": dashboard_count,
+        }
+
     def init_messages(
         self,
         file_path: str,
         conversation: Dict[str, Any],
         dashboards: Dict[str, Any],
         user_prompt: Optional[str] = None,
+        mode: str = "dashboard",
     ):
         """Initialize conversation history with prior nodes and latest request."""
-        self.messages = [SystemMessage(content=UNIFIED_SYSTEM_PROMPT)]
+        # Select system prompt based on mode
+        if mode == "qa":
+            system_prompt = QA_SYSTEM_PROMPT
+        else:
+            system_prompt = DASHBOARD_SYSTEM_PROMPT
+        self.messages = [SystemMessage(content=system_prompt)]
 
         for node in conversation.get("nodes", []):
             content_text = self._render_node_contents(node, dashboards)
@@ -51,27 +451,50 @@ class AnalyzeCSVWorkflow:
             or "Please analyze the data."
         )
 
-        # Build simple factual context
-        context_parts = []
-        
-        # File availability
+        # File availability check
         file_exists = file_path and os.path.exists(file_path) if file_path else False
         is_placeholder = file_path and "qa_" in file_path if file_path else False
         
-        if file_exists and not is_placeholder:
-            context_parts.append(f"📊 CSV file available at: {file_path}")
+        # Build instruction message based on mode
+        if mode == "dashboard" and file_exists and not is_placeholder:
+            # Dashboard mode with real file - simple instruction: user prompt + file path
+            instruction = f"User wants to: {effective_prompt}\n\nCSV file available at: {file_path}"
+            
+        elif mode == "qa" and file_exists and not is_placeholder:
+            # Q&A mode with real file
+            instruction_parts = [
+                f"User question: {effective_prompt}",
+                f"",
+                f"CSV file available at: {file_path}",
+                f"",
+                f"Use the python_repl tool to read the file and calculate the answer to the user's question.",
+            ]
+            instruction = "\n".join(instruction_parts)
+            
         else:
-            context_parts.append("ℹ️  No data file available")
+            # Fallback for cases without file or placeholder files
+            context_parts = []
+            if file_exists and not is_placeholder:
+                context_parts.append(f"📊 CSV file available at: {file_path}")
+            else:
+                context_parts.append("ℹ️  No data file available")
+            
+            if dashboards:
+                dashboard_count = len(dashboards)
+                context_parts.append(f"📈 {dashboard_count} dashboard(s) exist in this conversation")
+            
+            context_parts.append(f"🎯 User request: {effective_prompt}")
+            
+            if mode == "dashboard":
+                context_parts.append(
+                    "IMPORTANT: You MUST use the `python_repl` tool to inspect the dataframe "
+                    "(e.g., df.head(), df.info()) to understand the column names and data types "
+                    "BEFORE generating the dashboard JSON. Do not hallucinate column names. "
+                    "Output ONLY valid JSON after analysis."
+                )
+            
+            instruction = "\n\n".join(context_parts)
         
-        # Dashboard count
-        if dashboards:
-            dashboard_count = len(dashboards)
-            context_parts.append(f"📈 {dashboard_count} dashboard(s) exist in this conversation")
-        
-        # User request
-        context_parts.append(f"🎯 User request: {effective_prompt}")
-        
-        instruction = "\n\n".join(context_parts)
         self.messages.append(HumanMessage(content=instruction))
         return self.messages
     
@@ -112,34 +535,106 @@ class AnalyzeCSVWorkflow:
                 tool_call_id=tool_call_id
             )
     
-    def execute(
+    def _route_request(self, user_prompt: str, conversation: Dict[str, Any]) -> RouteDecision:
+        """
+        Route user request to appropriate workflow using Router Agent.
+        
+        Args:
+            user_prompt: The user's current request
+            conversation: The conversation context
+            
+        Returns:
+            RouteDecision with next_step and reasoning
+        """
+        try:
+            # Get context flags
+            context_flags = self._get_context_flags(conversation)
+            has_asset = context_flags["has_asset"]
+            dashboard_count = context_flags["dashboard_count"]
+            
+            # Format router system prompt with context variables
+            router_prompt = ROUTER_SYSTEM_PROMPT.format(
+                has_asset=has_asset,
+                dashboard_count=dashboard_count
+            )
+            
+            # Build conversation history for router (last 10 nodes for context)
+            nodes = conversation.get("nodes", [])
+            recent_nodes = nodes[-10:] if len(nodes) > 10 else nodes
+            
+            # Build router messages
+            router_messages = [SystemMessage(content=router_prompt)]
+            
+            # Add recent conversation history
+            for node in recent_nodes:
+                content_text = self._render_node_contents(node, conversation.get("dashboards", {}))
+                if not content_text:
+                    continue
+                role = (node.get("role") or "").lower()
+                if role == "user":
+                    router_messages.append(HumanMessage(content=content_text))
+                elif role == "assistant":
+                    router_messages.append(AIMessage(content=content_text))
+            
+            # Add current user prompt
+            router_messages.append(HumanMessage(content=f"Current user request: {user_prompt}"))
+            
+            # Try to use structured output
+            try:
+                router_model = self.model.with_structured_output(RouteDecision)
+                route_decision = router_model.invoke(router_messages)
+                logger.info(f"Router decision: {route_decision.next_step} - {route_decision.reasoning}")
+                return route_decision
+            except (AttributeError, TypeError, Exception) as e:
+                # Fallback: call model normally and parse response
+                logger.warning(f"Structured output not available, using fallback parsing: {str(e)}")
+                response = self.model.invoke(router_messages)
+                content = str(response.content) if response.content else ""
+                
+                # Try to parse JSON from response
+                try:
+                    # Look for JSON in response
+                    json_match = re.search(r'\{[^{}]*"next_step"[^{}]*\}', content, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(0)
+                        parsed = json.loads(json_str)
+                        route_decision = RouteDecision(**parsed)
+                        logger.info(f"Router decision (parsed): {route_decision.next_step} - {route_decision.reasoning}")
+                        return route_decision
+                except (json.JSONDecodeError, KeyError, TypeError) as parse_error:
+                    logger.warning(f"Failed to parse router response: {str(parse_error)}")
+                
+                # Final fallback: default to dashboard
+                logger.warning("Router failed, defaulting to dashboard")
+                return RouteDecision(
+                    next_step="dashboard",
+                    reasoning="Default fallback due to routing error"
+                )
+        except Exception as e:
+            logger.error(f"Router Agent error: {str(e)}")
+            # Default to dashboard on any error (backwards compatibility)
+            return RouteDecision(
+                next_step="dashboard",
+                reasoning=f"Default fallback due to routing error: {str(e)}"
+            )
+    
+    def _run_dashboard_workflow(
         self,
         file_path: str,
         conversation: Dict[str, Any],
         dashboards: Dict[str, Any],
         user_prompt: Optional[str] = None,
-    ):
-        """Execute the CSV analysis workflow"""
+    ) -> Dict[str, Any]:
+        """
+        Execute dashboard workflow: generate dashboard JSON configuration.
         
-        # Create workflow output instance
-        self.workflow_output = WorkflowOutput.create_new(
-            workflow_name="analyze_csv",
-            input_data={
-                "file_path": file_path,
-                "conversation_id": conversation.get("conversation_id"),
-                "project_id": conversation.get("project_id"),
-                "user_prompt": user_prompt or conversation.get("metadata", {}).get("prompt"),
-            }
-        )
+        Returns:
+            Dict with type="dashboard_config", data, workflow_output, summary
+        """
+        logger.info("Running dashboard workflow")
         
-        logger.info(
-            "Starting CSV analysis workflow for file: %s (conversation=%s)",
-            file_path,
-            conversation.get("conversation_id"),
-        )
-        
-        # Initialize messages with unified prompt (LLM decides response format)
-        self.init_messages(file_path, conversation, dashboards, user_prompt)
+        # Initialize messages with dashboard mode
+        self.init_messages(file_path, conversation, dashboards, user_prompt, mode="dashboard")
         
         # Add system prompt and instruction message to workflow output for full conversation history
         # System message and instruction context are new and should be saved
@@ -163,7 +658,7 @@ class AnalyzeCSVWorkflow:
         
         try:
             for iteration in range(max_iterations):
-                logger.info(f"Workflow iteration {iteration + 1}")
+                logger.info(f"Dashboard workflow iteration {iteration + 1}")
                 
                 # Get model response
                 response = self.model_with_tools.invoke(self.messages)
@@ -177,8 +672,12 @@ class AnalyzeCSVWorkflow:
                 
                 # Check if the response contains tool calls
                 if not response.tool_calls:
-                    logger.info("No more tool calls - analysis complete")
+                    logger.info("No more tool calls - dashboard analysis complete")
                     final_content = str(response.content) if response.content else ""
+                    logger.info(
+                        "Dashboard workflow complete. Final content preview: %s",
+                        (final_content[:200] + "...") if len(final_content) > 200 else final_content,
+                    )
                     break
 
                 # Process tool calls
@@ -189,63 +688,93 @@ class AnalyzeCSVWorkflow:
                     self.workflow_output.add_message(tool_message, tool_call_id=tool_call["id"])
         
         except Exception as e:
-            error_msg = f"Workflow error: {str(e)}"
+            error_msg = f"Dashboard workflow error: {str(e)}"
             logger.error(error_msg)
             self.workflow_output.set_completed("error", error_msg)
-            return {"type": "dashboard_config", "error": str(e)}
+            return {"type": "dashboard_config", "error": str(e), "workflow_output": self.workflow_output}
         
         # Set workflow as completed
         self.workflow_output.set_completed("success")
         
-        # Extract typed response from final content
-        extraction_result = self._extract_typed_response(user_prompt, conversation, final_content)
-        response_type = extraction_result.get("type")
+        # Extract JSON from final content
+        json_data = self._extract_json_from_content(final_content)
         
-        if response_type == "dashboard":
-            # Dashboard mode - extract JSON
-            logger.info("Processing as Dashboard response")
-            json_data = extraction_result.get("data")
-            
-            if json_data and isinstance(json_data, dict):
-                self.workflow_output.output_data = json_data
-                logger.info("CSV analysis workflow completed successfully with dashboard JSON")
-                charts_len = len(json_data.get("charts", [])) if isinstance(json_data, dict) else 0
-                metrics_len = len(json_data.get("metrics", [])) if isinstance(json_data, dict) else 0
-                summary = self._build_summary(charts_len, metrics_len)
-                logger.info(f"Final results: {charts_len} charts, {metrics_len} metrics")
-                return {
-                    "type": "dashboard_config",
-                    "data": json_data,
-                    "workflow_output": self.workflow_output,
-                    "summary": summary,
-                }
-            else:
-                # Fallback - return error
-                error_msg = extraction_result.get("error") or "Failed to extract dashboard JSON from response"
-                logger.error(error_msg)
-                return {
-                    "type": "dashboard_config",
-                    "error": error_msg,
-                    "workflow_output": self.workflow_output,
-                }
-        elif response_type == "message":
-            # Q&A mode - return text response
-            logger.info("Processing as Q&A text response")
-            content = extraction_result.get("data") or final_content
+        if json_data and isinstance(json_data, dict):
+            self.workflow_output.output_data = json_data
+            logger.info("CSV analysis workflow completed successfully with dashboard JSON")
+            charts_len = len(json_data.get("charts", [])) if isinstance(json_data, dict) else 0
+            metrics_len = len(json_data.get("metrics", [])) if isinstance(json_data, dict) else 0
+            summary = self._build_summary(charts_len, metrics_len)
+            logger.info(f"Final results: {charts_len} charts, {metrics_len} metrics")
             return {
-                "type": "message",
-                "content": content,
+                "type": "dashboard_config",
+                "data": json_data,
                 "workflow_output": self.workflow_output,
+                "summary": summary,
             }
         else:
-            # Error type
-            error_msg = extraction_result.get("error") or "Unknown error during response extraction"
+            # Fallback - return error
+            error_msg = "Failed to extract dashboard JSON from response"
             logger.error(error_msg)
             return {
                 "type": "dashboard_config",
                 "error": error_msg,
                 "workflow_output": self.workflow_output,
             }
+    
+    def execute(
+        self,
+        file_path: str,
+        conversation: Dict[str, Any],
+        dashboards: Dict[str, Any],
+        user_prompt: Optional[str] = None,
+    ):
+        """Execute the CSV analysis workflow with Router Agent"""
+        
+        # Create workflow output instance
+        self.workflow_output = WorkflowOutput.create_new(
+            workflow_name="analyze_csv",
+            input_data={
+                "file_path": file_path,
+                "conversation_id": conversation.get("conversation_id"),
+                "project_id": conversation.get("project_id"),
+                "user_prompt": user_prompt or conversation.get("metadata", {}).get("prompt"),
+            }
+        )
+        
+        logger.info(
+            "Starting CSV analysis workflow for file: %s (conversation=%s)",
+            file_path,
+            conversation.get("conversation_id"),
+        )
+        
+        try:
+            # Get effective prompt
+            effective_prompt = (
+                user_prompt
+                or conversation.get("metadata", {}).get("prompt")
+                or "Please analyze the data."
+            )
+            
+            # Route request using Router Agent
+            route_decision = self._route_request(effective_prompt, conversation)
+            logger.info(f"Router decision: {route_decision.next_step} - {route_decision.reasoning}")
+            
+            # Dispatch to appropriate workflow
+            if route_decision.next_step == "dashboard":
+                return self._run_dashboard_workflow(file_path, conversation, dashboards, user_prompt)
+            elif route_decision.next_step == "qa":
+                return self._run_qa_workflow(file_path, conversation, dashboards, user_prompt)
+            else:
+                # Default to dashboard (backwards compatibility)
+                logger.warning(f"Unknown route decision: {route_decision.next_step}, defaulting to dashboard")
+                return self._run_dashboard_workflow(file_path, conversation, dashboards, user_prompt)
+        
+        except Exception as e:
+            error_msg = f"Workflow execution error: {str(e)}"
+            logger.error(error_msg)
+            self.workflow_output.set_completed("error", error_msg)
+            return {"type": "dashboard_config", "error": str(e), "workflow_output": self.workflow_output}
     
     def _render_node_contents(self, node: Dict[str, Any], dashboards: Dict[str, Any]) -> str:
         chunks = []
@@ -324,128 +853,21 @@ class AnalyzeCSVWorkflow:
             logger.error(f"Error extracting JSON from content: {str(e)}")
             return None
     
-    def _extract_typed_response(self, user_prompt, conversation, content: str) -> Dict[str, Any]:
-        """
-        Extract and type the LLM response content.
-        
-        Args:
-            content: The response content from the LLM
-            
-        Returns:
-            "qa" or "dashboard"
-        """
-        if not user_prompt:
-            # Default to dashboard if no prompt
-            # Extract JSON from content
-            json_data = self._extract_json_from_content(content)
-            if json_data is None:
-                return {
-                    "type": "dashboard",
-                    "data": None,
-                    "error": "Failed to extract dashboard JSON from response"
-                }
-            return {
-                "type": "dashboard",
-                "data": json_data,
-            }
-
-        # ---- RULE-BASED OVERRIDE: FEATURE-AWARE INTENT ----
-        # If a data asset is attached to the conversation, no dashboards exist yet,
-        # and the latest user prompt explicitly asks for a dashboard/visualization,
-        # we force "dashboard" intent without consulting the classifier.
-
-        # Detect whether an asset is present on the conversation by checking nodes
-        asset_present = False
-        nodes = conversation.get("nodes", [])
-        for node in nodes:
-            contents = node.get("contents", [])
-            for content in contents:
-                if content.get("type") in ["asset", "attachment"]:
-                    asset_data = content.get("data", {})
-                    if asset_data.get("asset_id") and asset_data.get("s3_bucket") and asset_data.get("s3_key"):
-                        asset_present = True
-                        break
-            if asset_present:
-                break
-
-        # Detect whether any dashboards already exist for this conversation
-        dashboards = conversation.get("dashboards") or []
-        has_existing_dashboard = bool(dashboards)
-
-        # Simple keyword-based detection of explicit dashboard requests
-        lower_prompt = user_prompt.lower()
-        dashboard_keywords = [
-            "dashboard",
-            "visualize",
-            "visualise",
-            "visualization",
-            "visualisation",
-            "chart",
-            "charts",
-            "graph",
-            "graphs",
-            "plot",
-            "plots",
-            "create dashboard",
-            "build dashboard",
-            "make dashboard",
-            "generate dashboard",
-        ]
-        explicit_dashboard_request = any(keyword in lower_prompt for keyword in dashboard_keywords)
-
-        if asset_present and not has_existing_dashboard and explicit_dashboard_request:
-            logger.info(
-                "Forcing intent to 'dashboard' (asset present, no dashboards yet, explicit dashboard request detected)."
-            )
-            # Extract JSON from content
-            json_data = self._extract_json_from_content(content)
-            if json_data is None:
-                return {
-                    "type": "dashboard",
-                    "data": None,
-                    "error": "Failed to extract dashboard JSON from response"
-                }
-            return {"type": "dashboard", "data": json_data}
-
-        # ---- FALLBACK: LLM-BASED INTENT DETECTION ----
-        # Extract conversation history for context
-        conversation_history = conversation.get("nodes", [])
-
-        # Detect intent using LLM
-        intent = detect_user_intent(user_prompt, conversation_history)
-        logger.info(f"Detected intent: {intent} for prompt: {user_prompt[:50]}...")
-        # Map "qa" to "message" type to match expected format
-        response_type = "message" if intent == "qa" else "dashboard"
-        
-        # Extract data based on response type
-        if response_type == "dashboard":
-            # Extract JSON from content
-            json_data = self._extract_json_from_content(content)
-            if json_data is None:
-                return {
-                    "type": response_type,
-                    "data": None,
-                    "error": "Failed to extract dashboard JSON from response"
-                }
-            return {"type": response_type, "data": json_data}
-        else:
-            # Message type - return text content
-            return {"type": response_type, "data": content}
     
-    def _execute_qa_mode(
+    def _run_qa_workflow(
         self,
         file_path: str,
         conversation: Dict[str, Any],
         dashboards: Dict[str, Any],
         user_prompt: Optional[str] = None,
-    ):
+    ) -> Dict[str, Any]:
         """
-        Execute Q&A mode: answer questions without generating dashboard.
+        Execute Q&A workflow: answer questions textually without generating dashboard.
         
         Returns:
             Dict with type="message", content, and workflow_output
         """
-        logger.info("Executing Q&A mode")
+        logger.info("Running Q&A workflow")
         
         # Initialize messages with Q&A system prompt
         self.init_messages(file_path, conversation, dashboards, user_prompt, mode="qa")

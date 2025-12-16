@@ -1,6 +1,6 @@
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Code, FileText, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Code, Copy, FileText, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,8 +8,9 @@ import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { ConversationNodesView } from '@/components/admin/ConversationNodesView';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { adminService } from '@/services/adminService';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PanelLeft } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AdminConversationPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -18,6 +19,7 @@ export default function AdminConversationPage() {
   const navigate = useNavigate();
   const { credentials } = useAdminAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { toast } = useToast();
 
   const { data: conversationData, isLoading: isLoadingConversation } = useQuery({
     queryKey: ['admin-conversation', conversationId, projectId],
@@ -38,6 +40,57 @@ export default function AdminConversationPage() {
   });
 
   const conversation = conversationData?.conversation;
+
+  const conversationJsonString = useMemo(() => {
+    if (!conversation) return '';
+    return JSON.stringify(conversation, null, 2);
+  }, [conversation]);
+
+  const handleCopyJson = async () => {
+    if (!conversationJsonString) return;
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(conversationJsonString);
+        toast({
+          title: "Copied JSON",
+          description: "Full conversation JSON has been copied to your clipboard.",
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Clipboard API failed:', error);
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = conversationJsonString;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-999999px';
+      textarea.style.top = '-999999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+
+      if (successful) {
+        toast({
+          title: "Copied JSON",
+          description: "Full conversation JSON has been copied to your clipboard.",
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Fallback copy failed:', error);
+    }
+
+    toast({
+      title: "Unable to copy JSON",
+      description: "Your browser blocked clipboard access. Please copy manually.",
+      variant: "destructive",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-muted">
@@ -198,11 +251,22 @@ export default function AdminConversationPage() {
               <TabsContent value="json">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Full Conversation JSON</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Full Conversation JSON</CardTitle>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCopyJson}
+                        aria-label="Copy full conversation JSON to clipboard"
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy JSON
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <pre className="text-xs bg-muted p-4 rounded overflow-x-auto max-h-[600px] overflow-y-auto">
-                      {JSON.stringify(conversation, null, 2)}
+                      {conversationJsonString}
                     </pre>
                   </CardContent>
                 </Card>

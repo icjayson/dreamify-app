@@ -160,6 +160,9 @@ Use these semantic tokens in ALL styling objects:
 - border-card-color: for card borders
 
 Available Themes (choose ONE):
+- minimal-light: Clean light theme, minimal
+- minimal-dark: Clean dark theme, minimal
+- monochrome: Basic monochrome, minimal
 - ocean: Vibrant blue, professional
 - forest: Emerald green, natural
 - sunset: Amber, warm
@@ -170,7 +173,7 @@ CRITICAL THEME REQUIREMENT:
 1. Choose ONE theme for the entire dashboard output
 2. EVERY metric, chart, and table styling object MUST include "theme" field with the chosen theme
 3. ALL cards in the same output MUST use the SAME theme value
-4. Example: If you choose "ocean", every styling object should start with: {"theme": "ocean", "title": "title-color", ...}
+4. Example: If you choose "minimal-dark", every styling object should start with: {"theme": "minimal-dark", "title": "title-color", ...}
 
 ================================================================================
 OUTPUT FORMAT
@@ -199,7 +202,7 @@ When generating a dashboard, output a JSON code block with this structure:
         "percentage_change": 12.27
       },
       "styling": {
-        "theme": "ocean",
+        "theme": "minimal-dark",
         "title": "title-color",
         "value": "highlight-color",
         "trendUp": "hsl(142 76% 36%)",
@@ -231,7 +234,7 @@ When generating a dashboard, output a JSON code block with this structure:
       ],
       "config": {"animation": true, "showGrid": true, "showLegend": true},
       "styling": {
-        "theme": "ocean",
+        "theme": "minimal-dark",
         "title": "title-color",
         "description": "description-color",
         "cartesianGrid": "element-color/75",
@@ -264,7 +267,7 @@ When generating a dashboard, output a JSON code block with this structure:
         {"col1": "ORD-002", "col2": 2345.67}
       ],
       "styling": {
-        "theme": "ocean",
+        "theme": "minimal-dark",
         "title": "title-color",
         "description": "description-color",
         "headerBackground": "highlight-color/10",
@@ -441,46 +444,13 @@ class AnalyzeCSVWorkflow:
             system_prompt = DASHBOARD_SYSTEM_PROMPT
         self.messages = [SystemMessage(content=system_prompt)]
 
-        # Filter nodes based on mode
+        # Include all nodes without filtering
         nodes = conversation.get("nodes", [])
-        
-        if mode == "qa":
-            # For Q&A mode, only include recent relevant nodes (last 10 user/assistant exchanges)
-            # Exclude system messages and workflow-generated instruction messages
-            filtered_nodes = []
-            user_assistant_count = 0
-            # Process nodes in reverse to get most recent first
-            for node in reversed(nodes):
-                role = (node.get("role") or "").lower()
-                # Skip system messages and workflow instructions
-                if role == "system":
-                    continue
-                # Skip nodes that look like workflow instructions (contain "REQUIRED WORKFLOW" or "STEP 1")
-                content_text = self._render_node_contents(node, dashboards)
-                if content_text and ("REQUIRED WORKFLOW" in content_text or "STEP 1:" in content_text):
-                    continue
-                # Include user and assistant messages
-                if role in ["user", "assistant"]:
-                    filtered_nodes.insert(0, node)  # Insert at beginning to maintain order
-                    if role == "user":
-                        user_assistant_count += 1
-                        # Limit to last 10 user/assistant exchanges (approximately 20 nodes)
-                        if user_assistant_count >= 10:
-                            break
-            nodes = filtered_nodes
-        else:
-            # For dashboard mode, include all nodes
-            nodes = nodes
 
         for node in nodes:
-            content_text = self._render_node_contents(node, dashboards)
-            if not content_text:
-                continue
-            role = (node.get("role") or "").lower()
-            if role == "user":
-                self.messages.append(HumanMessage(content=content_text))
-            elif role == "assistant":
-                self.messages.append(AIMessage(content=content_text))
+            message = self._node_to_message(node, dashboards)
+            if message is not None:
+                self.messages.append(message)
 
         effective_prompt = (
             user_prompt
@@ -626,14 +596,9 @@ class AnalyzeCSVWorkflow:
             
             # Add recent conversation history
             for node in recent_nodes:
-                content_text = self._render_node_contents(node, conversation.get("dashboards", {}))
-                if not content_text:
-                    continue
-                role = (node.get("role") or "").lower()
-                if role == "user":
-                    router_messages.append(HumanMessage(content=content_text))
-                elif role == "assistant":
-                    router_messages.append(AIMessage(content=content_text))
+                message = self._node_to_message(node, conversation.get("dashboards", {}))
+                if message is not None:
+                    router_messages.append(message)
             
             # Add current user prompt
             router_messages.append(HumanMessage(content=f"Current user request: {user_prompt}"))
@@ -930,6 +895,41 @@ class AnalyzeCSVWorkflow:
                     dash_block = json.dumps(dash_payload, ensure_ascii=False, indent=2)
                     chunks.append(f"Attached dashboard ({dash_id}):\n{dash_block}")
         return "\n\n".join(chunk for chunk in chunks if chunk).strip()
+
+    def _node_to_message(self, node: Dict[str, Any], dashboards: Dict[str, Any]):
+        """
+        Convert a conversation node to appropriate LangChain message type.
+        
+        Args:
+            node: Conversation node dict with role, contents, and optional metadata
+            dashboards: Dict of dashboard_id -> dashboard_data for rendering
+            
+        Returns:
+            HumanMessage, AIMessage, SystemMessage, ToolMessage, or None if invalid
+        """
+        role = (node.get("role") or "").lower()
+        content_text = self._render_node_contents(node, dashboards)
+        
+        # Handle empty content - still create message objects for structure
+        if not content_text:
+            content_text = ""
+        
+        if role == "user":
+            return HumanMessage(content=content_text)
+        elif role == "assistant":
+            return AIMessage(content=content_text)
+        elif role == "system":
+            return SystemMessage(content=content_text)
+        elif role == "tool":
+            metadata = node.get("metadata", {})
+            tool_call_id = metadata.get("tool_call_id")
+            if not tool_call_id:
+                logger.warning(f"Tool node missing tool_call_id in metadata, skipping: {node.get('node_id', 'unknown')}")
+                return None
+            return ToolMessage(content=content_text, tool_call_id=tool_call_id)
+        else:
+            logger.warning(f"Unknown node role '{role}', skipping node: {node.get('node_id', 'unknown')}")
+            return None
 
     def _build_summary(self, charts_len: int, metrics_len: int) -> str:
         return (

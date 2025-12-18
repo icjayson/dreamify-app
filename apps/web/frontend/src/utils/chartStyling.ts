@@ -11,7 +11,10 @@ export const CHART_PRESET_THEMES = {
   FOREST: 'forest',
   SUNSET: 'sunset',
   MIDNIGHT: 'midnight',
-  SAKURA: 'sakura'
+  SAKURA: 'sakura',
+  MONOCHROME: 'monochrome',
+  MINIMAL_LIGHT: 'minimal-light',
+  MINIMAL_DARK: 'minimal-dark'
 } as const;
 
 export type ChartPresetTheme = typeof CHART_PRESET_THEMES[keyof typeof CHART_PRESET_THEMES];
@@ -73,6 +76,33 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'title-color': '#fdf4ff',
     'description-color': '#f5d0fe',
     'element-color': '#e879f9'
+  },
+  [CHART_PRESET_THEMES.MONOCHROME]: {
+    'highlight-color': '#ffffff',
+    'bg-dashboard-color': '#1a1a1a',
+    'bg-card-color': '#2a2a2a',
+    'border-card-color': '#404040',
+    'title-color': '#ffffff',
+    'description-color': '#a0a0a0',
+    'element-color': '#6b7280'
+  },
+  [CHART_PRESET_THEMES.MINIMAL_LIGHT]: {
+    'highlight-color': '#111827',
+    'bg-dashboard-color': '#ffffff',
+    'bg-card-color': '#ffffff',
+    'border-card-color': '#e5e7eb',
+    'title-color': '#111827',
+    'description-color': '#4b5563',
+    'element-color': '#9ca3af'
+  },
+  [CHART_PRESET_THEMES.MINIMAL_DARK]: {
+    'highlight-color': '#3B82F6',
+    'bg-dashboard-color': '#111827',
+    'bg-card-color': '#1f2937',
+    'border-card-color': '#374151',
+    'title-color': '#ffffff',
+    'description-color': '#9ca3af',
+    'element-color': '#6b7280'
   }
 };
 
@@ -140,7 +170,7 @@ export function resolveColorToken(token: string): string {
  */
 export function getDashboardBackgroundStyle(styling: ChartStyling): React.CSSProperties {
   const theme = styling.presetTheme as ChartPresetTheme;
-  const bgColor = CHART_THEME_COLORS[theme]?.['bg-dashboard-color'] || CHART_THEME_COLORS[CHART_PRESET_THEMES.OCEAN]['bg-dashboard-color'];
+  const bgColor = CHART_THEME_COLORS[theme]?.['bg-dashboard-color'] || CHART_THEME_COLORS[CHART_PRESET_THEMES.MONOCHROME]['bg-dashboard-color'];
   
   return {
     backgroundColor: styling.dashboardBackground || bgColor,
@@ -190,7 +220,7 @@ export function getColorPalette(
 ): string[] {
   const themeColors = CHART_THEME_COLORS[theme];
   if (!themeColors) {
-    return generateOpacityCascade(CHART_THEME_COLORS[CHART_PRESET_THEMES.OCEAN]['highlight-color'], datasetCount);
+    return generateOpacityCascade(CHART_THEME_COLORS[CHART_PRESET_THEMES.MONOCHROME]['highlight-color'], datasetCount);
   }
   
   return generateOpacityCascade(themeColors['highlight-color'], datasetCount);
@@ -241,20 +271,24 @@ export function convertLLMStylingToChartStyling(
   }
 ): ChartStyling {
   // Map old theme names to new ones for backward compatibility
+  // Note: 'ocean' is mapped to MONOCHROME to migrate existing dashboards to the monochrome default
   const themeMap: Record<string, ChartPresetTheme> = {
-    'corporate': CHART_PRESET_THEMES.OCEAN,
+    'corporate': CHART_PRESET_THEMES.MONOCHROME,
     'vibrant': CHART_PRESET_THEMES.SAKURA,
     'minimal': CHART_PRESET_THEMES.MIDNIGHT,
     'dark': CHART_PRESET_THEMES.MIDNIGHT,
     'colorful': CHART_PRESET_THEMES.FOREST,
-    'ocean': CHART_PRESET_THEMES.OCEAN,
+    'ocean': CHART_PRESET_THEMES.MONOCHROME,
     'forest': CHART_PRESET_THEMES.FOREST,
     'sunset': CHART_PRESET_THEMES.SUNSET,
     'midnight': CHART_PRESET_THEMES.MIDNIGHT,
-    'sakura': CHART_PRESET_THEMES.SAKURA
+    'sakura': CHART_PRESET_THEMES.SAKURA,
+    'monochrome': CHART_PRESET_THEMES.MONOCHROME,
+    'minimal-light': CHART_PRESET_THEMES.MINIMAL_LIGHT,
+    'minimal-dark': CHART_PRESET_THEMES.MINIMAL_DARK
   };
   
-  const theme = themeMap[llmStyling.theme?.toLowerCase() || ''] || CHART_PRESET_THEMES.OCEAN;
+  const theme = themeMap[llmStyling.theme?.toLowerCase() || ''] || CHART_PRESET_THEMES.MONOCHROME;
   const themeColors = CHART_THEME_COLORS[theme];
   
   // Generate color palette using opacity cascade
@@ -300,7 +334,7 @@ export function validateChartStyling(styling: ChartStyling): {
 /**
  * Get default chart styling for a theme
  */
-export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_THEMES.OCEAN): ChartStyling {
+export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_THEMES.MONOCHROME): ChartStyling {
   const themeColors = CHART_THEME_COLORS[theme];
   const colorPalette = generateOpacityCascade(themeColors['highlight-color'], 10);
   

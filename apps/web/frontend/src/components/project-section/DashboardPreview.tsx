@@ -65,6 +65,12 @@ const DashboardPreview = ({
         }
         const layout = m?.layout;
         const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
+        // Convert metric styling if it has theme property
+        const metricStyling = m.styling ? convertLLMStylingToChartStyling(m.styling) : undefined;
+        const validatedMetricStyling = metricStyling && validateChartStyling(metricStyling).isValid
+          ? metricStyling
+          : (dashboardStyling || getDefaultChartStyling());
+        
         components.push({
           id: `metric_${componentId++}`,
           type: 'metric',
@@ -79,12 +85,12 @@ const DashboardPreview = ({
             change,
             trend,
             timeComparison: m.time_comparison,
-            // merge dashboard tile defaults into metric styling if missing
+            // Convert and merge styling with dashboard defaults
             styling: {
-              ...(m.styling || {}),
+              ...validatedMetricStyling,
               tile: {
                 ...(dashboardTile || {}),
-                ...((m.styling && (m.styling as any).tile) || {})
+                ...((validatedMetricStyling as any)?.tile || {})
               }
             }
           }
@@ -174,6 +180,12 @@ const DashboardPreview = ({
       tablesToProcess.forEach((t: any, idx: number) => {
         const layout = t?.layout;
         const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
+        // Convert table styling if it has theme property
+        const tableStyling = t.styling ? convertLLMStylingToChartStyling(t.styling) : undefined;
+        const validatedTableStyling = tableStyling && validateChartStyling(tableStyling).isValid
+          ? tableStyling
+          : (dashboardStyling || getDefaultChartStyling());
+        
         components.push({
           id: `table_${componentId++}`,
           type: 'table',
@@ -186,11 +198,12 @@ const DashboardPreview = ({
             title: t.title || 'Table',
             columns: Array.isArray(t.columns) ? t.columns : [],
             data: Array.isArray(t.rows) ? t.rows : [],
+            // Convert and merge styling with dashboard defaults
             styling: {
-              ...(t.styling || {}),
+              ...validatedTableStyling,
               tile: {
                 ...(dashboardTile || {}),
-                ...((t.styling || {}).tile || {})
+                ...((validatedTableStyling as any)?.tile || {})
               }
             }
           }

@@ -1,6 +1,6 @@
 /**
  * Chart Theme Presets - CSS Custom Properties for Dynamic Chart Styling
- * Color Component Prefix System with 5 curated themes
+ * Color Component Prefix System with 8 curated themes
  */
 
 /* OCEAN Theme - Vibrant blue, professional */
@@ -97,6 +97,63 @@
     --chart-animation-easing: cubic-bezier(0.68, -0.55, 0.265, 1.55);
     --chart-hover-scale: 1.05;
   }
+
+/* MONOCHROME Theme - Basic monochrome, minimal */
+.chart-theme-monochrome {
+  --highlight-color: #ffffff;
+  --bg-dashboard-color: #1a1a1a;
+  --bg-card-color: #2a2a2a;
+  --border-card-color: #404040;
+  --title-color: #ffffff;
+  --description-color: #a0a0a0;
+  --element-color: #6b7280;
+    
+  /* RGB variants for opacity manipulation */
+  --highlight-color-rgb: 255, 255, 255;
+  --element-color-rgb: 107, 114, 128;
+    
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* MINIMAL-LIGHT Theme - Clean light theme, minimal */
+.chart-theme-minimal-light {
+  --highlight-color: #111827;
+  --bg-dashboard-color: #ffffff;
+  --bg-card-color: #ffffff;
+  --border-card-color: #e5e7eb;
+  --title-color: #111827;
+  --description-color: #4b5563;
+  --element-color: #9ca3af;
+    
+  /* RGB variants for opacity manipulation */
+  --highlight-color-rgb: 17, 24, 39;
+  --element-color-rgb: 156, 162, 175;
+    
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* MINIMAL-DARK Theme - Clean dark theme, minimal */
+.chart-theme-minimal-dark {
+  --highlight-color: #3B82F6;
+  --bg-dashboard-color: #111827;
+  --bg-card-color: #1f2937;
+  --border-card-color: #374151;
+  --title-color: #ffffff;
+  --description-color: #9ca3af;
+  --element-color: #6b7280;
+    
+  /* RGB variants for opacity manipulation */
+  --highlight-color-rgb: 59, 130, 246;
+  --element-color-rgb: 107, 114, 128;
+    
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
 
 @layer components {
   /* Chart Animation Classes */

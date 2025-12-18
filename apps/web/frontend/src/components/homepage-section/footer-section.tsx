@@ -14,8 +14,8 @@ const XIcon = ({ className }: { className?: string }) => (
 
 export const FooterSection = () => {
   const socialLinks = [
-    { icon: XIcon, href: "#twitter", label: "X (Twitter)" },
-    { icon: Mail, href: "#contact", label: "Contact" }
+    { icon: XIcon, href: "https://x.com/dreamify_dev", label: "X (Twitter)", external: true },
+    { icon: Mail, href: "mailto:dreamify.dev@gmail.com", label: "Contact", external: false }
   ];
 
   return (
@@ -48,6 +48,8 @@ export const FooterSection = () => {
                   key={index}
                   href={social.href}
                   aria-label={social.label}
+                  target={social.external ? "_blank" : undefined}
+                  rel={social.external ? "noopener noreferrer" : undefined}
                   className="w-8 h-8 rounded-xl glass-panel flex items-center justify-center hover:bg-primary/10 hover:scale-110 transition-all duration-300 group"
                 >
                   <social.icon className="w-4 h-4 text-muted-foreground group-hover:text-accent transition-colors" />

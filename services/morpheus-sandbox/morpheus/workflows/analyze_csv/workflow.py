@@ -160,8 +160,6 @@ Use these semantic tokens in ALL styling objects:
 - border-card-color: for card borders
 
 Available Themes (choose ONE):
-- minimal-light: Clean light theme, minimal
-- minimal-dark: Clean dark theme, minimal
 - monochrome: Basic monochrome, minimal
 - ocean: Vibrant blue, professional
 - forest: Emerald green, natural
@@ -173,7 +171,7 @@ CRITICAL THEME REQUIREMENT:
 1. Choose ONE theme for the entire dashboard output
 2. EVERY metric, chart, and table styling object MUST include "theme" field with the chosen theme
 3. ALL cards in the same output MUST use the SAME theme value
-4. Example: If you choose "minimal-dark", every styling object should start with: {"theme": "minimal-dark", "title": "title-color", ...}
+4. Example: If you choose "monochrome", every styling object should start with: {"theme": "monochrome", "title": "title-color", ...}
 
 ================================================================================
 OUTPUT FORMAT
@@ -202,7 +200,7 @@ When generating a dashboard, output a JSON code block with this structure:
         "percentage_change": 12.27
       },
       "styling": {
-        "theme": "minimal-dark",
+        "theme": "monochrome",
         "title": "title-color",
         "value": "highlight-color",
         "trendUp": "hsl(142 76% 36%)",
@@ -234,7 +232,7 @@ When generating a dashboard, output a JSON code block with this structure:
       ],
       "config": {"animation": true, "showGrid": true, "showLegend": true},
       "styling": {
-        "theme": "minimal-dark",
+        "theme": "monochrome",
         "title": "title-color",
         "description": "description-color",
         "cartesianGrid": "element-color/75",
@@ -267,7 +265,7 @@ When generating a dashboard, output a JSON code block with this structure:
         {"col1": "ORD-002", "col2": 2345.67}
       ],
       "styling": {
-        "theme": "minimal-dark",
+        "theme": "monochrome",
         "title": "title-color",
         "description": "description-color",
         "headerBackground": "highlight-color/10",

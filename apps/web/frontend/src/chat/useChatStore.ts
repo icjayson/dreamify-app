@@ -359,23 +359,76 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (finalResult.data?.success && finalResult.data?.status === 'completed') {
             // Q&A response - check if it's a message or dashboard
             if (finalResult.data?.dashboard_data) {
-              // Dashboard response
-              updateMessages((prev) => ([
-                ...prev,
-                {
-                  id: (Date.now() + 1).toString(),
-                  role: 'assistant',
-                  content: "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.",
-                  timestamp: new Date(),
-                },
-                {
-                  id: (Date.now() + 2).toString(),
-                  role: 'assistant',
-                  content: "",
-                  dashboardCard: { sourceFileName: uploadedFile?.filename || "dashboard" },
-                  timestamp: new Date(),
+              // Dashboard response - load conversation to get LLM's actual response text
+              try {
+                const { conversationService } = await import('@/services/conversationService');
+                const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+                const conversation = conversationResponse.conversation;
+                const nodes = conversation.nodes || [];
+                
+                // Filter to only user and assistant nodes
+                const filteredNodes = nodes.filter((node: any) => 
+                  node.role === 'user' || node.role === 'assistant'
+                );
+                
+                // Find the latest assistant node with text content
+                let responseText = "Your dashboard has been created successfully!";
+                for (let i = filteredNodes.length - 1; i >= 0; i--) {
+                  const node = filteredNodes[i];
+                  if (node.role === 'assistant') {
+                    const contents = node.contents || [];
+                    for (const content of contents) {
+                      if (content.type === 'text' && content.data?.text) {
+                        const text = content.data.text.trim();
+                        // Skip empty texts and JSON blocks
+                        if (text && !text.startsWith('{') && !text.startsWith('[')) {
+                          responseText = text;
+                          break;
+                        }
+                      }
+                    }
+                    if (responseText !== "Your dashboard has been created successfully!") {
+                      break;
+                    }
+                  }
                 }
-              ]));
+                
+                updateMessages((prev) => ([
+                  ...prev,
+                  {
+                    id: (Date.now() + 1).toString(),
+                    role: 'assistant',
+                    content: responseText,
+                    timestamp: new Date(),
+                  },
+                  {
+                    id: (Date.now() + 2).toString(),
+                    role: 'assistant',
+                    content: "",
+                    dashboardCard: { sourceFileName: uploadedFile?.filename || "dashboard" },
+                    timestamp: new Date(),
+                  }
+                ]));
+              } catch (error) {
+                console.error('Failed to load conversation for dashboard response:', error);
+                // Fallback to default message
+                updateMessages((prev) => ([
+                  ...prev,
+                  {
+                    id: (Date.now() + 1).toString(),
+                    role: 'assistant',
+                    content: "Your dashboard has been created successfully!",
+                    timestamp: new Date(),
+                  },
+                  {
+                    id: (Date.now() + 2).toString(),
+                    role: 'assistant',
+                    content: "",
+                    dashboardCard: { sourceFileName: uploadedFile?.filename || "dashboard" },
+                    timestamp: new Date(),
+                  }
+                ]));
+              }
             } else {
               // Q&A text response - load conversation to get the latest assistant message
               try {
@@ -384,10 +437,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const conversation = conversationResponse.conversation;
                 const nodes = conversation.nodes || [];
                 
+                // Filter to only user and assistant nodes (exclude system and tool)
+                const filteredNodes = nodes.filter((node: any) => 
+                  node.role === 'user' || node.role === 'assistant'
+                );
+                
                 // Find the latest assistant node with text content
                 let responseText = "I've processed your question.";
-                for (let i = nodes.length - 1; i >= 0; i--) {
-                  const node = nodes[i];
+                for (let i = filteredNodes.length - 1; i >= 0; i--) {
+                  const node = filteredNodes[i];
                   if (node.role === 'assistant') {
                     const contents = node.contents || [];
                     for (const content of contents) {
@@ -574,23 +632,77 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }, 10000);
           }
           
-          // Always add success message and dashboard card when dashboard is completed
-          updateMessages((prev) => ([
-            ...prev,
-            {
-              id: '2',
-              role: 'assistant',
-              content: "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.",
-              timestamp: new Date(),
-            },
-            {
-              id: (Date.now() + 3).toString(),
-              role: 'assistant',
-              content: "",
-              dashboardCard: { sourceFileName: uploadedFile.filename },
-              timestamp: new Date(),
+          // Load conversation to get LLM's actual response text
+          try {
+            const { conversationService } = await import('@/services/conversationService');
+            const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+            const conversation = conversationResponse.conversation;
+            const nodes = conversation.nodes || [];
+            
+            // Filter to only user and assistant nodes (exclude system and tool)
+            const filteredNodes = nodes.filter((node: any) => 
+              node.role === 'user' || node.role === 'assistant'
+            );
+            
+            // Find the latest assistant node with text content
+            let responseText = "Your dashboard has been created successfully!";
+            for (let i = filteredNodes.length - 1; i >= 0; i--) {
+              const node = filteredNodes[i];
+              if (node.role === 'assistant') {
+                const contents = node.contents || [];
+                for (const content of contents) {
+                  if (content.type === 'text' && content.data?.text) {
+                    const text = content.data.text.trim();
+                    // Skip empty texts and JSON blocks
+                    if (text && !text.startsWith('{') && !text.startsWith('[')) {
+                      responseText = text;
+                      break;
+                    }
+                  }
+                }
+                if (responseText !== "Your dashboard has been created successfully!") {
+                  break;
+                }
+              }
             }
-          ]));
+            
+            updateMessages((prev) => ([
+              ...prev,
+              {
+                id: '2',
+                role: 'assistant',
+                content: responseText,
+                timestamp: new Date(),
+              },
+              {
+                id: (Date.now() + 3).toString(),
+                role: 'assistant',
+                content: "",
+                dashboardCard: { sourceFileName: uploadedFile.filename },
+                timestamp: new Date(),
+              }
+            ]));
+          } catch (error) {
+            console.error('Failed to load conversation for dashboard response:', error);
+            // Fallback to default message
+            updateMessages((prev) => ([
+              ...prev,
+              {
+                id: '2',
+                role: 'assistant',
+                content: "Your dashboard has been created successfully!",
+                timestamp: new Date(),
+              },
+              {
+                id: (Date.now() + 3).toString(),
+                role: 'assistant',
+                content: "",
+                dashboardCard: { sourceFileName: uploadedFile.filename },
+                timestamp: new Date(),
+              }
+            ]));
+          }
+          
           if (conversationId) {
             setCurrentConversationId(conversationId);
           }

@@ -327,14 +327,28 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
             msg_tool_calls = getattr(msg, 'tool_calls', None)
             msg_tool_call_id = getattr(msg, 'tool_call_id', None)
         
-        # Map message types to conversation roles
-        role_map = {
-            "human": "user",
-            "ai": "assistant",
-            "system": "system",
-            "tool": "assistant",
-        }
-        role = role_map.get(msg_type, "assistant")
+        # Map message types to conversation roles with strict logic
+        # Distinguish tool executions, system instructions, and final responses
+        if msg_type == "human":
+            # Check if this is a workflow-generated instruction vs actual user prompt
+            content_lower = str(msg_content).lower()
+            workflow_keywords = ["user wants to:", "csv file available at:", "important:", "you must use tools"]
+            if any(keyword in content_lower for keyword in workflow_keywords):
+                role = "system"  # Workflow-generated instruction
+            else:
+                role = "user"  # Actual user prompt
+        elif msg_type == "ai":
+            # AI messages with tool_calls are tool execution triggers, not final responses
+            if msg_tool_calls:
+                role = "tool"  # AI message triggering tool execution
+            else:
+                role = "assistant"  # Final user-facing response
+        elif msg_type == "system":
+            role = "system"
+        elif msg_type == "tool":
+            role = "tool"  # Tool execution result
+        else:
+            role = "assistant"  # Fallback
         
         # Get timestamp as ISO string
         if isinstance(msg_timestamp, str):
@@ -344,7 +358,59 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
         else:
             timestamp_iso = datetime.utcnow().isoformat()
         
-        # Build node
+        # Build node(s)
+        # Check if this is an AI message with both text explanation and JSON block
+        # If so, split into two nodes: assistant (text) and system (JSON)
+        content_str = str(msg_content)
+        if role == "assistant" and "```json" in content_str:
+            import re
+            # Try to extract text before JSON block and JSON block separately
+            json_match = re.search(r'```json\s*(.*?)\s*```', content_str, re.DOTALL)
+            if json_match:
+                # Extract text before JSON block
+                json_start = content_str.find("```json")
+                text_before = content_str[:json_start].strip()
+                json_block = json_match.group(0)  # Full ```json...``` block
+                
+                # Create assistant node with text explanation (if exists)
+                if text_before:
+                    assistant_node = {
+                        "node_id": f"node_{uuid.uuid4().hex[:8]}",
+                        "role": "assistant",
+                        "status": "completed",
+                        "created_at": timestamp_iso,
+                        "contents": [
+                            {
+                                "type": "text",
+                                "data": {
+                                    "text": text_before,
+                                },
+                            }
+                        ],
+                    }
+                    nodes.append(assistant_node)
+                
+                # Create system node with JSON block (for debugging/admin view)
+                system_node = {
+                    "node_id": f"node_{uuid.uuid4().hex[:8]}",
+                    "role": "system",
+                    "status": "completed",
+                    "created_at": timestamp_iso,
+                    "contents": [
+                        {
+                            "type": "text",
+                            "data": {
+                                "text": json_block,
+                            },
+                        }
+                    ],
+                }
+                nodes.append(system_node)
+                
+                # Skip the regular node creation below
+                continue
+        
+        # Regular node creation for messages without JSON blocks
         node = {
             "node_id": f"node_{uuid.uuid4().hex[:8]}",
             "role": role,

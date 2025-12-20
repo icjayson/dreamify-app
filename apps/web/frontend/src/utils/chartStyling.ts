@@ -12,9 +12,7 @@ export const CHART_PRESET_THEMES = {
   SUNSET: 'sunset',
   MIDNIGHT: 'midnight',
   SAKURA: 'sakura',
-  MONOCHROME: 'monochrome',
-  MINIMAL_LIGHT: 'minimal-light',
-  MINIMAL_DARK: 'minimal-dark'
+  MONOCHROME: 'monochrome'
 } as const;
 
 export type ChartPresetTheme = typeof CHART_PRESET_THEMES[keyof typeof CHART_PRESET_THEMES];
@@ -84,24 +82,6 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'border-card-color': '#404040',
     'title-color': '#ffffff',
     'description-color': '#a0a0a0',
-    'element-color': '#6b7280'
-  },
-  [CHART_PRESET_THEMES.MINIMAL_LIGHT]: {
-    'highlight-color': '#111827',
-    'bg-dashboard-color': '#ffffff',
-    'bg-card-color': '#ffffff',
-    'border-card-color': '#e5e7eb',
-    'title-color': '#111827',
-    'description-color': '#4b5563',
-    'element-color': '#9ca3af'
-  },
-  [CHART_PRESET_THEMES.MINIMAL_DARK]: {
-    'highlight-color': '#3B82F6',
-    'bg-dashboard-color': '#111827',
-    'bg-card-color': '#1f2937',
-    'border-card-color': '#374151',
-    'title-color': '#ffffff',
-    'description-color': '#9ca3af',
     'element-color': '#6b7280'
   }
 };
@@ -283,9 +263,7 @@ export function convertLLMStylingToChartStyling(
     'sunset': CHART_PRESET_THEMES.SUNSET,
     'midnight': CHART_PRESET_THEMES.MIDNIGHT,
     'sakura': CHART_PRESET_THEMES.SAKURA,
-    'monochrome': CHART_PRESET_THEMES.MONOCHROME,
-    'minimal-light': CHART_PRESET_THEMES.MINIMAL_LIGHT,
-    'minimal-dark': CHART_PRESET_THEMES.MINIMAL_DARK
+    'monochrome': CHART_PRESET_THEMES.MONOCHROME
   };
   
   const theme = themeMap[llmStyling.theme?.toLowerCase() || ''] || CHART_PRESET_THEMES.MONOCHROME;

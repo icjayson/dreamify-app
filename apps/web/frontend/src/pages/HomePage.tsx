@@ -385,7 +385,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     }
     
     // Start processing in background
-    void processFileWithMessage(inputValue.trim(), onProcessedDataChange);
+    void processFileWithMessage(inputValue.trim(), onProcessedDataChange, uploadedFile.projectId);
     
     // Navigate to project workspace for unified chat + dashboard flow
     navigate(`/workspace/project?projectId=${uploadedFile.projectId}`);

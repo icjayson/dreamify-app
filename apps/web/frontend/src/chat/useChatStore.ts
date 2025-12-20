@@ -553,7 +553,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       // Start processing with user prompt
       setUploadedFile({ ...uploadedFile, status: 'processing' });
-      const projectId = uploadedFile.projectId;
+      // Prioritize projectIdParam when provided, fallback to uploadedFile.projectId
+      const projectId = projectIdParam || uploadedFile.projectId;
       if (!projectId) {
         throw new Error('Project context missing for uploaded file');
       }

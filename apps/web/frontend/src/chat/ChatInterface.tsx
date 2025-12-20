@@ -11,35 +11,29 @@ import { useChatStore } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 
+// Helper function to map workflow-status step values to display text
+const mapStepToDisplayText = (step: string): string => {
+  const stepMap: Record<string, string> = {
+    "load_conversation": "Loading conversation...",
+    "download_asset": "Downloading file...",
+    "run_workflow": "Running workflow...",
+  };
+  return stepMap[step] || "Processing...";
+};
+
 // Rolling multiline log for loading animation
 interface RollingTextProps {
   isActive: boolean;
   stopSignal: boolean;
   successText?: string;
+  currentStep?: string | null;
 }
 
-const RollingText = ({ isActive, stopSignal, successText = "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need." }: RollingTextProps) => {
-  const actions = [
-    "Thinking...",
-    "Analyzing data...",
-    "Reading CSV...",
-    "Detecting patterns...",
-    "Calculating metrics...",
-    "Processing insights...",
-    "Designing charts...",
-    "Optimizing layout...",
-    "Adding animations...",
-    "Structuring components...",
-    "Applying themes...",
-    "Testing responsiveness...",
-    "Building dashboard...",
-    "Finalizing...",
-    "Almost ready..."
-  ];
+const RollingText = ({ isActive, stopSignal, successText = "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.", currentStep = null }: RollingTextProps) => {
   const [lines, setLines] = useState<string[]>([]);
-  const idxRef = useRef(0);
   const [started, setStarted] = useState(false);
   const [stopped, setStopped] = useState(false);
+  const prevStepRef = useRef<string | null>(null);
 
   // Start when becoming active the first time
   useEffect(() => {
@@ -47,29 +41,34 @@ const RollingText = ({ isActive, stopSignal, successText = "Your dashboard has b
       setStarted(true);
       setStopped(false);
       setLines([]);
-      idxRef.current = 0;
+      prevStepRef.current = null;
     }
   }, [isActive, started]);
 
-  // Handle rolling text interval
+  // Watch for currentStep changes and add new line when step changes
   useEffect(() => {
     if (!started || stopped) return;
-    const interval = setInterval(() => {
+    
+    if (currentStep && currentStep !== prevStepRef.current) {
+      const displayText = mapStepToDisplayText(currentStep);
       setLines((prev) => {
-        const next = [...prev, actions[idxRef.current]];
-        idxRef.current = (idxRef.current + 1) % actions.length;
-        // keep last 8 lines
-        return next.slice(-8);
+        // Check if last line is different to avoid duplicates
+        const lastLine = prev[prev.length - 1];
+        if (lastLine !== displayText) {
+          // Keep all historical lines (limit to last 20 to prevent memory issues)
+          return [...prev, displayText].slice(-20);
+        }
+        return prev;
       });
-    }, 2400);
-    return () => clearInterval(interval);
-  }, [started, stopped]);
+      prevStepRef.current = currentStep;
+    }
+  }, [currentStep, started, stopped]);
 
   // Stop when stopSignal becomes true
   useEffect(() => {
     if (started && !stopped && stopSignal) {
       setStopped(true);
-      setLines((prev) => [...prev, successText].slice(-8));
+      setLines((prev) => [...prev, successText].slice(-20));
     }
   }, [stopSignal, started, stopped, successText]);
 
@@ -115,6 +114,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     isListening,
     detectedLanguage,
     selectedTemplate,
+    currentWorkflowStep,
     setInputValue,
     setIsTyping,
     setMessages,
@@ -454,6 +454,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         isActive={isProcessing || uploadedFile.status === 'processing'}
                         stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
                         successText="Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need."
+                        currentStep={currentWorkflowStep}
                       />
                     </div>
                   </div>

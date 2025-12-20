@@ -95,6 +95,7 @@ interface ChatState {
   
   // Processing state
   isProcessing: boolean;
+  currentWorkflowStep: string | null;
   
   // UI state
   dropdownOpen: boolean;
@@ -131,6 +132,7 @@ interface ChatState {
   setTranscript: (transcript: string) => void;
   setDetectedLanguage: (language: string | null) => void;
   setIsProcessing: (processing: boolean) => void;
+  setCurrentWorkflowStep: (step: string | null) => void;
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setDashboardTheme: (theme: 'light' | 'dark') => void;
   setIsThemeChanging: (changing: boolean) => void;
@@ -163,6 +165,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   uploadedFile: null,
   currentConversationId: null,
   isProcessing: false,
+  currentWorkflowStep: null,
   dropdownOpen: false,
   selectedDataSource: "",
   isListening: false,
@@ -193,6 +196,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setTranscript: (transcript) => set({ transcript }),
   setDetectedLanguage: (language) => set({ detectedLanguage: language }),
   setIsProcessing: (processing) => set({ isProcessing: processing }),
+  setCurrentWorkflowStep: (step) => set({ currentWorkflowStep: step }),
   updateMessages: (updater) => set((state) => ({ messages: updater(state.messages) })),
   setDashboardTheme: (theme) => set({ dashboardTheme: theme }),
   setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
@@ -225,7 +229,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string) => {
     const state = get();
-    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId } = state;
+    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
+    
+    // Clear current workflow step at start
+    setCurrentWorkflowStep(null);
     
     // Text-only message path: allow theme change after initial dashboard shown, only if currently light
     const isTextOnly = !uploadedFile || uploadedFile.status !== 'uploaded';
@@ -348,6 +355,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
               const workflowStatus = status.data?.workflow_status?.status;
               if (workflowStatus === 'error') {
                 setIsProcessing(false);
+              }
+              // Track current workflow step
+              const step = status.data?.workflow_status?.metadata?.step;
+              if (step) {
+                setCurrentWorkflowStep(step);
               }
             },
             60,
@@ -617,6 +629,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             } else if (workflowStatus === 'error') {
               setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
             }
+            // Track current workflow step
+            const step = status.data?.workflow_status?.metadata?.step;
+            if (step) {
+              setCurrentWorkflowStep(step);
+            }
           },
           60, // max attempts (60 seconds)
           5000 // 5 second intervals
@@ -732,6 +749,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     uploadedFile: null,
     currentConversationId: null,
     isProcessing: false,
+    currentWorkflowStep: null,
     dropdownOpen: false,
     selectedDataSource: "",
     isListening: false,

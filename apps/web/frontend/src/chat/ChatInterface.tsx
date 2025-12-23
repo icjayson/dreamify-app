@@ -29,7 +29,7 @@ interface RollingTextProps {
   currentStep?: string | null;
 }
 
-const RollingText = ({ isActive, stopSignal, successText = "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.", currentStep = null }: RollingTextProps) => {
+const RollingText = ({ isActive, stopSignal, successText = "", currentStep = null }: RollingTextProps) => {
   const [lines, setLines] = useState<string[]>([]);
   const [started, setStarted] = useState(false);
   const [stopped, setStopped] = useState(false);
@@ -453,7 +453,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                       <RollingText
                         isActive={isProcessing || uploadedFile.status === 'processing'}
                         stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
-                        successText="Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need."
+                        successText=""
                         currentStep={currentWorkflowStep}
                       />
                     </div>

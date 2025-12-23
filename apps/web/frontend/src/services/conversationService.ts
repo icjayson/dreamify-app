@@ -30,8 +30,8 @@ export interface WorkflowStatusResponse {
 }
 
 export interface DashboardDataResponse {
-  dashboard_id: string;
-  dashboard_data: Record<string, any>;
+  dashboard_id: string | null;
+  dashboard_data: Record<string, any> | null;
 }
 
 class ConversationService {
@@ -67,9 +67,6 @@ class ConversationService {
 
   async getDashboardData(conversationId: string, projectId: string): Promise<DashboardDataResponse | null> {
     try {
-      // Always delegate dashboard lookup to the backend endpoint.
-      // The backend reads the latest conversation and validates that
-      // a dashboard exists (or returns 404 otherwise).
       const response = await api.get<DashboardDataResponse>(
         `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}`
       );

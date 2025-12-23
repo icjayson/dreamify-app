@@ -35,7 +35,7 @@ const generateAIResponse = async (
 
   // Always return success message
   const getContextualResponse = (input: string): string => {
-    return "Your dashboard has been created successfully! If you'd like to make any changes or customize the dashboard further, please let me know what you need.";
+    return "";
   };
 
   try {
@@ -384,7 +384,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 );
                 
                 // Find the latest assistant node with text content
-                let responseText = "Your dashboard has been created successfully!";
+                let responseText = "";
                 for (let i = filteredNodes.length - 1; i >= 0; i--) {
                   const node = filteredNodes[i];
                   if (node.role === 'assistant') {
@@ -399,7 +399,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                         }
                       }
                     }
-                    if (responseText !== "Your dashboard has been created successfully!") {
+                    if (responseText) {
                       break;
                     }
                   }
@@ -423,15 +423,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 ]));
               } catch (error) {
                 console.error('Failed to load conversation for dashboard response:', error);
-                // Fallback to default message
+                // No fallback message
                 updateMessages((prev) => ([
                   ...prev,
-                  {
-                    id: (Date.now() + 1).toString(),
-                    role: 'assistant',
-                    content: "Your dashboard has been created successfully!",
-                    timestamp: new Date(),
-                  },
                   {
                     id: (Date.now() + 2).toString(),
                     role: 'assistant',
@@ -663,7 +657,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             );
             
             // Find the latest assistant node with text content
-            let responseText = "Your dashboard has been created successfully!";
+            let responseText = "";
             for (let i = filteredNodes.length - 1; i >= 0; i--) {
               const node = filteredNodes[i];
               if (node.role === 'assistant') {
@@ -678,7 +672,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     }
                   }
                 }
-                if (responseText !== "Your dashboard has been created successfully!") {
+                if (responseText) {
                   break;
                 }
               }
@@ -702,15 +696,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ]));
           } catch (error) {
             console.error('Failed to load conversation for dashboard response:', error);
-            // Fallback to default message
+            // No fallback message
             updateMessages((prev) => ([
               ...prev,
-              {
-                id: '2',
-                role: 'assistant',
-                content: "Your dashboard has been created successfully!",
-                timestamp: new Date(),
-              },
               {
                 id: (Date.now() + 3).toString(),
                 role: 'assistant',

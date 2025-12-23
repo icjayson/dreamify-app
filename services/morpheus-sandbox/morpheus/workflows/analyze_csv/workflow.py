@@ -1008,10 +1008,6 @@ class AnalyzeCSVWorkflow:
         # Initialize messages with Q&A system prompt
         self.init_messages(file_path, conversation, dashboards, user_prompt, mode="qa")
         
-        # Add initial messages to workflow output
-        for msg in self.messages:
-            self.workflow_output.add_message(msg)
-        
         max_iterations = 10
         final_content = "I'm processing your question..."
         

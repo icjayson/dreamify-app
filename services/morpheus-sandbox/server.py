@@ -284,6 +284,7 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
     nodes = conversation.get("nodes", [])
     
     for node in nodes:
+        node_created_at = node.get("created_at")
         contents = node.get("contents", [])
         for content in contents:
             content_type = content.get("type")
@@ -298,7 +299,12 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
                         "s3_key": asset_data.get("s3_key"),
                         "extension": asset_data.get("extension", "csv"),
                         "filename": asset_data.get("filename", ""),
+                        "node_created_at": node_created_at,
                     })
+    
+    # Sort assets by node_created_at (newest first)
+    assets.sort(key=lambda x: x.get("node_created_at", ""), reverse=True)
+    logger.info(f"Extracted {len(assets)} asset(s), sorted by created_at (newest first)")
     
     return assets
 
@@ -554,6 +560,7 @@ def _process_conversation_background(
         # Use first file path for backward compatibility with workflow (for now)
         # TODO: Update workflow to accept multiple file paths
         temp_file_path = temp_file_paths[0] if temp_file_paths else None
+        logger.info(f"Selected primary file path: {temp_file_path} (from {len(temp_file_paths)} downloaded assets)")
 
         workflow = AnalyzeCSVWorkflow()
         _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})

@@ -88,9 +88,13 @@ def create_app():
         from app.api.route_modules.conversation import router as conversation_router
         app.include_router(conversation_router, prefix="/api/v1", tags=["conversation"])
         # Verify route registration
-        conversation_routes = [r for r in app.routes if hasattr(r, 'path') and 'conversation/chat' in r.path]
+        conversation_routes = [r for r in app.routes if hasattr(r, "path") and "conversation" in r.path]
         if conversation_routes:
-            logger.info(f"Conversation router registered successfully with {len(conversation_routes)} route(s)")
+            logger.info(
+                "Conversation router registered with %d route(s): %s",
+                len(conversation_routes),
+                [f"{','.join(sorted(getattr(r, 'methods', []) or []))} {r.path}" for r in conversation_routes],
+            )
         else:
             logger.warning("Conversation router registered but no routes found")
     except ImportError as e:

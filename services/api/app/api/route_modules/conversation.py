@@ -340,8 +340,8 @@ async def load_conversation_endpoint(
 
 
 class DashboardDataResponse(BaseModel):
-    dashboard_id: str
-    dashboard_data: Dict[str, Any]
+    dashboard_id: Optional[str] = None
+    dashboard_data: Optional[Dict[str, Any]] = None
 
 
 @router.get("/conversation/{conversation_id}/dashboard", response_model=DashboardDataResponse)
@@ -351,10 +351,30 @@ async def get_conversation_dashboard(
     user_id: str = Depends(require_user),
 ):
     """Get dashboard data from the latest dashboard in conversation."""
+    logger.info(
+        "Fetching dashboard for conversation: project_id=%s, conversation_id=%s, user_id=%s",
+        project_id,
+        conversation_id,
+        user_id,
+    )
+
     conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
     if not conversation_meta:
+        logger.warning(
+            "Conversation not found for dashboard request: project_id=%s, conversation_id=%s, user_id=%s",
+            project_id,
+            conversation_id,
+            user_id,
+        )
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation_meta.get("user_id") != user_id:
+        logger.warning(
+            "Unauthorized dashboard access attempt: project_id=%s, conversation_id=%s, user_id=%s, owner_id=%s",
+            project_id,
+            conversation_id,
+            user_id,
+            conversation_meta.get("user_id"),
+        )
         raise HTTPException(status_code=403, detail="Unauthorized")
     
     s3_bucket = conversation_meta["s3_bucket"]
@@ -364,22 +384,47 @@ async def get_conversation_dashboard(
     # Get the latest dashboard
     dashboards = conversation.get("dashboards", [])
     if not dashboards:
-        raise HTTPException(status_code=404, detail="No dashboard found in conversation")
+        logger.info(
+            "No dashboards present in conversation: project_id=%s, conversation_id=%s",
+            project_id,
+            conversation_id,
+        )
+        return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
     
     latest_dashboard = dashboards[-1]
     dashboard_id = latest_dashboard.get("dashboard_id")
     s3_uri = latest_dashboard.get("s3_uri")
     
     if not dashboard_id or not s3_uri:
-        raise HTTPException(status_code=404, detail="Dashboard metadata incomplete")
+        logger.warning(
+            "Dashboard metadata incomplete for conversation: project_id=%s, conversation_id=%s, dashboard=%s",
+            project_id,
+            conversation_id,
+            latest_dashboard,
+        )
+        return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
     
     # Parse s3://bucket/key format
     if not s3_uri.startswith("s3://"):
-        raise HTTPException(status_code=400, detail="Invalid S3 URI format")
+        logger.error(
+            "Invalid S3 URI format for dashboard: project_id=%s, conversation_id=%s, dashboard_id=%s, s3_uri=%s",
+            project_id,
+            conversation_id,
+            dashboard_id,
+            s3_uri,
+        )
+        raise HTTPException(status_code=500, detail="Invalid S3 URI format for dashboard")
     
     uri_parts = s3_uri[5:].split("/", 1)
     if len(uri_parts) != 2:
-        raise HTTPException(status_code=400, detail="Invalid S3 URI format")
+        logger.error(
+            "Invalid S3 URI format (missing key) for dashboard: project_id=%s, conversation_id=%s, dashboard_id=%s, s3_uri=%s",
+            project_id,
+            conversation_id,
+            dashboard_id,
+            s3_uri,
+        )
+        raise HTTPException(status_code=500, detail="Invalid S3 URI format for dashboard")
     
     bucket = uri_parts[0]
     key = uri_parts[1].lstrip("/")
@@ -388,12 +433,32 @@ async def get_conversation_dashboard(
         dashboard_bytes = download_bytes(bucket, key)
         dashboard_data = json.loads(dashboard_bytes.decode("utf-8"))
         
+        logger.info(
+            "Successfully loaded dashboard from S3: bucket=%s, key=%s, dashboard_id=%s",
+            bucket,
+            key,
+            dashboard_id,
+        )
+
         return DashboardDataResponse(
             dashboard_id=dashboard_id,
             dashboard_data=dashboard_data,
         )
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Dashboard data not found in S3")
+        logger.warning(
+            "Dashboard data not found in S3, treating as no dashboard yet: bucket=%s, key=%s, dashboard_id=%s",
+            bucket,
+            key,
+            dashboard_id,
+        )
+        return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
     except Exception as e:
+        logger.error(
+            "Failed to load dashboard from S3: bucket=%s, key=%s, dashboard_id=%s, error=%s",
+            bucket,
+            key,
+            dashboard_id,
+            str(e),
+        )
         raise HTTPException(status_code=500, detail=f"Failed to load dashboard: {str(e)}")
 

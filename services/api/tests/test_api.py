@@ -95,8 +95,17 @@ class TestFastAPIApp:
         response = self.client.get("/api/v1/openapi.json")
         assert response.status_code == 200
         openapi_spec = response.json()
-        
+
         # Check that analyze endpoints exist
         paths = openapi_spec.get("paths", {})
         assert "/api/v1/morpheus/chat" in paths
         assert "/api/v1/morpheus/node-status" in paths
+
+    def test_conversation_dashboard_endpoint_exists(self):
+        """Test that conversation dashboard endpoint is registered."""
+        response = self.client.get("/api/v1/openapi.json")
+        assert response.status_code == 200
+        openapi_spec = response.json()
+
+        paths = openapi_spec.get("paths", {})
+        assert "/api/v1/conversation/{conversation_id}/dashboard" in paths

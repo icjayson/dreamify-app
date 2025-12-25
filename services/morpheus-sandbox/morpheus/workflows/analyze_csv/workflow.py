@@ -155,9 +155,11 @@ Use these semantic tokens in ALL styling objects:
 - title-color: for titles
 - description-color: for descriptions
 - element-color: for axes, grids, borders
-- highlight-color: for data elements (with opacity cascade)
+- highlight-color: for data elements (with opacity cascade) and insights text
 - bg-card-color: for card backgrounds
 - border-card-color: for card borders
+
+Note: Insights in the insights array should be displayed with highlight-color for text color.
 
 Available Themes (choose ONE):
 - monochrome: Basic monochrome, minimal
@@ -185,6 +187,7 @@ When generating a dashboard, output a JSON code block with this structure:
     "title": "Dashboard Title",
     "description": "Dashboard description"
   },
+  "created_at": "2025-01-15T10:30:00Z",
   "metrics": [
     {
       "id": "metric_001",
@@ -285,6 +288,17 @@ When generating a dashboard, output a JSON code block with this structure:
     "Top performing category is Electronics with $25M"
   ]
 }
+```
+
+Note: The "Key Insights" button in the dashboard header should use the following styling:
+- background: "bg-card-color"
+- borderColor: "border-card-color"
+- text color: "highlight-color"
+This follows the same styling logic as charts and tables.
+
+Note: The "created_at" field should be included at the top level of the JSON output (same level as "dashboard", "metrics", etc.).
+It should be an ISO 8601 timestamp string (e.g., "2025-01-15T10:30:00Z") representing when the dashboard was created.
+This timestamp will be displayed in the dashboard header next to the title.
 ```
 
 CRITICAL OUTPUT RULES:

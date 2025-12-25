@@ -46,7 +46,7 @@ class StatusRequest(BaseModel):
     project_id: str
 
 # Backend API URL for updating file records
-BACKEND_API_URL = "http://localhost:5000"
+BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "http://localhost:8080")
 MORPHEUS_API_KEY = os.environ.get("MORPHEUS_API_KEY", "dev-secret-key")
 
 logger.info(

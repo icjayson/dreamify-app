@@ -114,14 +114,14 @@ const Table = ({
   };
 
   const getSortIcon = (key: string) => {
-    if (sortConfig?.key !== key) return '';
+    if (!sortConfig || !key || sortConfig.key !== key) return '';
     return sortConfig.direction === 'asc' ? '↑' : '↓';
   };
 
   return (
     <div className={`rounded-md animate-fade-in h-full ${className}`} style={{ ...tileStyle, ...style, display: 'flex', flexDirection: 'column' }}>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold" style={{ color: titleColor }}>{title}</h3>
+        <h3 className="text-lg font-semibold mb-1" style={{ color: titleColor }}>{title}</h3>
         {description && (
           <p className="text-sm" style={{ color: descriptionColor }}>{description}</p>
         )}
@@ -132,20 +132,21 @@ const Table = ({
           {!hasStructure ? "No columns provided" : "No data available"}
         </div>
       ) : (
-        <div className="flex-1 overflow-hidden">
-          <div className="overflow-hidden rounded-md border" style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}>
+        <div className="flex-1 overflow-y-auto">
+          <div className="rounded-md border" style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}>
             <table className="w-full">
               <thead 
+                className="sticky top-0 z-10"
                 style={{ 
                   backgroundColor: styling?.headerBg || 'var(--highlight-color)',
-                  color: styling?.headerText || titleColor 
+                  color: styling?.headerText || 'var(--bg-card-color)'
                 }}
               >
                 <tr>
                   {columns.map((column) => (
                     <th
                       key={column.key}
-                      className="h-12 px-4 text-left align-middle font-medium cursor-pointer hover:bg-opacity-80 transition-colors"
+                      className="h-12 px-4 text-left align-middle font-medium cursor-pointer hover:bg-opacity-80 transition-colors first:rounded-tl-md last:rounded-tr-md"
                       style={{ textAlign: column.align || 'left' }}
                       onClick={() => handleSort(column.key)}
                     >

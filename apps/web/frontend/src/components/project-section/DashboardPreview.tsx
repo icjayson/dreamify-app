@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, Loader2 } from "lucide-react";
+import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
 import { DashboardGenerationRequest, LayoutType, ChartType } from "@/types/dashboard";
@@ -30,6 +30,7 @@ const DashboardPreview = ({
   processedData
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
+  const [expandedInsights, setExpandedInsights] = useState(false);
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -160,7 +161,8 @@ const DashboardPreview = ({
             id: c.id || `chart_${idx + 1}`,
             type: mappedType,
             title: c.title || 'Chart',
-            description: c.reasoning?.insight || c.description || '',
+            description: c.description || '',
+            insight: c.reasoning?.insight || '',
             axisConfig: c.config || { xKey: 'label', yKey: 'value' },
             datasets: Array.isArray(c.datasets) ? c.datasets : [],
             data: c.data,
@@ -196,8 +198,9 @@ const DashboardPreview = ({
           component_config: {
             id: t.id || `table_${idx + 1}`,
             title: t.title || 'Table',
+            description: t.description || '',
             columns: Array.isArray(t.columns) ? t.columns : [],
-            data: Array.isArray(t.rows) ? t.rows : [],
+            data: Array.isArray(t.data) ? t.data : (Array.isArray(t.rows) ? t.rows : []),
             // Convert and merge styling with dashboard defaults
             styling: {
               ...validatedTableStyling,
@@ -386,7 +389,9 @@ const DashboardPreview = ({
       return {
         title: processedData.dashboard.title,
         description: processedData.dashboard.description,
-        styling: processedData.dashboard.styling
+        styling: processedData.dashboard.styling,
+        insights: processedData.insights || [],
+        created_at: processedData.created_at || processedData.dashboard.created_at || processedData.metadata?.created_at
       };
     }
     // Fallback to nested structure (if backend wraps it)
@@ -394,7 +399,9 @@ const DashboardPreview = ({
       return {
         title: processedData.data.dashboard.title,
         description: processedData.data.dashboard.description,
-        styling: processedData.data.dashboard.styling
+        styling: processedData.data.dashboard.styling,
+        insights: processedData.data.insights || processedData.insights || [],
+        created_at: processedData.data.created_at || processedData.created_at || processedData.data.dashboard.created_at || processedData.data.metadata?.created_at
       };
     }
     return null;
@@ -414,23 +421,89 @@ const DashboardPreview = ({
     >
       {/* Dashboard Header with Title and Description */}
       {dashboardMetadata && (
-        <div className="px-6 pt-6 pb-4 border-b" style={{ borderColor: 'var(--border-card-color)' }}>
-          <h1 
-            className="text-3xl font-bold mb-2" 
-            style={{ color: 'var(--highlight-color)' }}
-          >
-            {dashboardMetadata.title}
-          </h1>
-          {dashboardMetadata.description && (
-            <p 
-              className="text-base opacity-90" 
-              style={{ color: 'var(--description-color)' }}
-            >
-              {dashboardMetadata.description}
-            </p>
-          )}
+        <div className="px-6 pt-6 pb-4" style={{ borderColor: 'var(--border-card-color)' }}>
+          <div className="flex flex-col gap-2">
+            {/* Row 1: Title and Created Date */}
+            <div className="flex items-center justify-between gap-4">
+              <h1 
+                className="text-3xl font-bold" 
+                style={{ color: 'var(--highlight-color)' }}
+              >
+                {dashboardMetadata.title}
+              </h1>
+              {dashboardMetadata.created_at && (
+                <div className="text-sm flex-shrink-0" style={{ color: 'var(--description-color)' }}>
+                  {new Date(dashboardMetadata.created_at).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                  })}
+                </div>
+              )}
+            </div>
+            {/* Row 2: Description and Key Insights */}
+            <div className="flex items-center justify-between gap-4">
+              {dashboardMetadata.description && (
+                <p 
+                  className="text-base opacity-90 flex-1" 
+                  style={{ color: 'var(--description-color)' }}
+                >
+                  {dashboardMetadata.description}
+                </p>
+              )}
+              {dashboardMetadata.insights && dashboardMetadata.insights.length > 0 && (
+                <button
+                  onClick={() => setExpandedInsights(!expandedInsights)}
+                  className="flex items-center justify-start gap-2 px-3 py-1.5 text-sm rounded-md border hover:opacity-80 transition-opacity flex-shrink-0"
+                  style={{ 
+                    color: 'var(--highlight-color)',
+                    backgroundColor: 'var(--bg-card-color)',
+                    borderColor: 'var(--border-card-color)'
+                  }}
+                >
+                  <span className="text-sm font-medium">Key Insights</span>
+                  {expandedInsights ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+            </div>
+            {/* Row 3: Expanded Insights List */}
+            {dashboardMetadata?.insights && dashboardMetadata.insights.length > 0 && expandedInsights && (
+              <div className="w-full mt-2">
+                <h2 
+                  className="text-lg font-medium mb-2" 
+                  style={{ color: 'var(--description-color)' }}
+                >
+                  Key Insights
+                </h2>
+                <ul className="space-y-2">
+                  {dashboardMetadata.insights.map((insight: string, index: number) => (
+                    <li 
+                      key={index}
+                      className="flex items-start gap-2"
+                    >
+                      <span 
+                        className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: 'var(--highlight-color)' }}
+                      />
+                      <span 
+                        className="text-sm"
+                        style={{ color: 'var(--highlight-color)' }}
+                      >
+                        {insight}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       )}
+
 
       {/* Main Dashboard Content */}
       <div className="p-6">

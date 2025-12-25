@@ -154,12 +154,25 @@ class ChartFactory {
         const tableConfig = config as TableConfiguration;
         // Normalize columns if provided as string[] to TableColumn[]
         let normalizedColumns: any = tableConfig.columns;
-        if (Array.isArray(tableConfig.columns) && tableConfig.columns.length > 0 && typeof tableConfig.columns[0] === 'string') {
-          normalizedColumns = (tableConfig.columns as string[]).map((name) => ({
-            key: name,
-            label: name,
-            type: 'string'
-          }));
+        if (Array.isArray(tableConfig.columns) && tableConfig.columns.length > 0) {
+          if (typeof tableConfig.columns[0] === 'string') {
+            normalizedColumns = (tableConfig.columns as string[]).map((name) => ({
+              key: name,
+              label: name,
+              type: 'string'
+            }));
+          } else if (tableConfig.columns[0] && typeof tableConfig.columns[0] === 'object') {
+            // Transform columns that have 'id' field to use 'key' field instead
+            normalizedColumns = tableConfig.columns.map((col: any) => {
+              if (col.id && !col.key) {
+                return {
+                  ...col,
+                  key: col.id
+                };
+              }
+              return col;
+            });
+          }
         }
         return {
           title: tableConfig.title,

@@ -55,8 +55,8 @@ const MetricCard = ({
   const periodLabel = timeComparison?.period ? (timeComparison.period.toLowerCase() === 'mom' ? 'MoM' : timeComparison.period.toUpperCase()) : undefined;
 
   return (
-    <div className={`rounded-md hover:scale-105 transition-all duration-300 animate-fade-in h-full ${className}`}
-      style={{ borderRadius, backgroundColor: background, border: `${borderWidth}px solid ${borderColor}`, ...style }}>
+    <div className={`rounded-md animate-fade-in h-full ${className}`}
+      style={{ borderRadius, backgroundColor: background, ...style }}>
       <div className="space-y-2">
         <p className="text-sm" style={{ color: textColor }}>{title}</p>
         <div className="flex items-end justify-between">

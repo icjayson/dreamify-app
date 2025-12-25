@@ -62,32 +62,60 @@ const RechartsScatterChart: React.FC<RechartsScatterChartProps> = ({
   const transformedData = React.useMemo(() => {
     if (datasets.length === 0) return [];
 
-    // For scatter chart, we need x and y values
-    // We'll use the first dataset for x values and subsequent datasets for y values
     const result: Record<string, any>[] = [];
     
+    // Check if first dataset has scatter format (x, y properties directly)
+    const firstDataset = datasets[0];
+    if (firstDataset && firstDataset.data && firstDataset.data.length > 0) {
+      const firstPoint = firstDataset.data[0];
+      
+      // Check if data is in scatter format: { x: number, y: number }
+      if (firstPoint && typeof firstPoint.x === 'number' && typeof firstPoint.y === 'number') {
+        // Scatter format: data points have x and y directly
+        firstDataset.data.forEach((point: any) => {
+          if (point && typeof point.x === 'number' && typeof point.y === 'number') {
+            result.push({
+              x: point.x,
+              y: point.y,
+              label: point.label || `${point.x}, ${point.y}`
+            });
+          }
+        });
+        return result;
+      }
+    }
+    
+    // Fallback to standard format: { label: string, value: number }
     if (datasets.length >= 2) {
       const xDataset = datasets[0];
       const yDataset = datasets[1];
       
       xDataset.data.forEach((xPoint, index) => {
         const yPoint = yDataset.data[index];
-        if (yPoint) {
+        if (yPoint && xPoint) {
+          const xValue = typeof xPoint.value === 'number' ? xPoint.value : 
+                        (xPoint.value ? parseFloat(String(xPoint.value)) : 0);
+          const yValue = typeof yPoint.value === 'number' ? yPoint.value : 
+                        (yPoint.value ? parseFloat(String(yPoint.value)) : 0);
           result.push({
-            x: typeof xPoint.value === 'number' ? xPoint.value : parseFloat(xPoint.value.toString()) || 0,
-            y: typeof yPoint.value === 'number' ? yPoint.value : parseFloat(yPoint.value.toString()) || 0,
-            label: xPoint.label
+            x: xValue || 0,
+            y: yValue || 0,
+            label: xPoint.label || yPoint.label || `${xValue}, ${yValue}`
           });
         }
       });
     } else if (datasets.length === 1) {
       // Single dataset - use index as x, value as y
       datasets[0].data.forEach((point, index) => {
-        result.push({
-          x: index,
-          y: typeof point.value === 'number' ? point.value : parseFloat(point.value.toString()) || 0,
-          label: point.label
-        });
+        if (point) {
+          const yValue = typeof point.value === 'number' ? point.value : 
+                        (point.value ? parseFloat(String(point.value)) : 0);
+          result.push({
+            x: index,
+            y: yValue || 0,
+            label: point.label || `${index}, ${yValue}`
+          });
+        }
       });
     }
     

@@ -4,7 +4,7 @@
 import React, { useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   ChartType,
   ChartConfiguration,
@@ -26,6 +26,7 @@ interface ChartRendererProps {
 interface ChartRendererState {
   loading: boolean;
   error: string | null;
+  expandedInsight: boolean;
   // removed refresh-related state
 }
 
@@ -39,6 +40,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
   const [state, setState] = useState<ChartRendererState>({
     loading: false,
     error: null,
+    expandedInsight: false,
     // no refresh state
   });
 
@@ -197,11 +199,16 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
   const borderColor = tile.borderColor ? resolveColorToken(tile.borderColor) : 'var(--border-card-color)';
   const backgroundColor = tile.background ? resolveColorToken(tile.background) : 'var(--bg-card-color)';
   
+  // Get insight from config
+  const insight = (chartConfig as any).insight || '';
+  
   const containerStyle: React.CSSProperties = {
     border: `${(tile.borderWidth ?? 1)}px solid ${borderColor}`,
     borderRadius: (tile.borderRadius ?? 12) as number,
     backgroundColor: backgroundColor,
     height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
     ...style
   };
 
@@ -216,9 +223,43 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
       }}
     >
       <div className={`p-6 rounded-md animate-fade-in ${stylingClasses} ${className}`} style={containerStyle}>
-        <div className="chart-content w-full h-full overflow-hidden">
+        <div className="chart-content w-full overflow-hidden flex-1 min-h-0">
           {chartElement}
         </div>
+        {insight && (
+          <div 
+            className="relative z-10 flex-shrink-0" 
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setState(prev => ({ ...prev, expandedInsight: !prev.expandedInsight }));
+              }}
+              className="w-full flex items-center justify-start gap-2 hover:opacity-80 transition-opacity"
+              style={{ color: 'var(--description-color)' }}
+            >
+              <span className="text-sm font-medium">Insight</span>
+              {state.expandedInsight ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </button>
+            {state.expandedInsight && (
+              <div className="mt-2" onMouseDown={(e) => e.stopPropagation()}>
+                <p className="text-sm" style={{ color: 'var(--highlight-color)' }}>
+                  {insight}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </ErrorBoundary>
   );

@@ -393,6 +393,139 @@ class RouteDecision(BaseModel):
     next_step: Literal["dashboard", "qa"] = Field(..., description="The next workflow to run based on user intent.")
     reasoning: str = Field(..., description="Brief reason for this routing decision.")
 
+class TimeComparison(BaseModel):
+    """Time comparison data for metrics."""
+    period: str
+    current_value: float
+    previous_value: float
+    percentage_change: float
+
+class MetricLayout(BaseModel):
+    """Layout configuration for metrics."""
+    x: int
+    y: int
+    w: int
+    h: int
+    minW: int
+    minH: int
+
+class MetricStyling(BaseModel):
+    """Styling configuration for metrics."""
+    theme: str
+    title: str
+    value: str
+    trendUp: str
+    trendDown: str
+    tile: Dict[str, Any]
+
+class DashboardMetric(BaseModel):
+    """Dashboard metric configuration."""
+    id: str
+    title: str
+    value: str
+    change: Optional[str] = None
+    trend: Optional[str] = None
+    layout: MetricLayout
+    time_comparison: Optional[TimeComparison] = None
+    styling: MetricStyling
+
+class ChartLayout(BaseModel):
+    """Layout configuration for charts."""
+    x: int
+    y: int
+    w: int
+    h: int
+    minW: int
+    minH: int
+
+class ChartDataset(BaseModel):
+    """Chart dataset configuration."""
+    label: str
+    data: List[Dict[str, Any]]
+
+class ChartConfig(BaseModel):
+    """Chart configuration."""
+    animation: Optional[bool] = True
+    showGrid: Optional[bool] = True
+    showLegend: Optional[bool] = True
+
+class ChartStyling(BaseModel):
+    """Styling configuration for charts."""
+    theme: str
+    title: str
+    description: str
+    cartesianGrid: Optional[str] = None
+    xAxis: Optional[str] = None
+    yAxis: Optional[str] = None
+    legend: Optional[str] = None
+    dataElements: Optional[str] = None
+    tile: Dict[str, Any]
+
+class ChartReasoning(BaseModel):
+    """Reasoning/insight for chart."""
+    insight: str
+
+class DashboardChart(BaseModel):
+    """Dashboard chart configuration."""
+    id: str
+    chart_type: str
+    title: str
+    description: Optional[str] = None
+    layout: ChartLayout
+    datasets: List[ChartDataset]
+    config: Optional[ChartConfig] = None
+    styling: ChartStyling
+    reasoning: Optional[ChartReasoning] = None
+
+class TableLayout(BaseModel):
+    """Layout configuration for tables."""
+    x: int
+    y: int
+    w: int
+    h: int
+    minW: int
+    minH: int
+
+class TableColumn(BaseModel):
+    """Table column configuration."""
+    id: str
+    label: str
+    type: str
+
+class TableStyling(BaseModel):
+    """Styling configuration for tables."""
+    theme: str
+    title: str
+    description: str
+    headerBackground: Optional[str] = None
+    headerText: Optional[str] = None
+    rowText: Optional[str] = None
+    tile: Dict[str, Any]
+
+class DashboardTable(BaseModel):
+    """Dashboard table configuration."""
+    id: str
+    title: str
+    description: Optional[str] = None
+    layout: TableLayout
+    columns: List[TableColumn]
+    data: List[Dict[str, Any]]
+    styling: TableStyling
+
+class DashboardInfo(BaseModel):
+    """Dashboard metadata."""
+    title: str
+    description: Optional[str] = None
+
+class DashboardConfig(BaseModel):
+    """Complete dashboard configuration model for structured output."""
+    dashboard: DashboardInfo
+    created_at: str
+    metrics: List[DashboardMetric] = []
+    charts: List[DashboardChart] = []
+    tables: List[DashboardTable] = []
+    insights: List[str] = []
+
 class AnalyzeCSVWorkflow:
     
     def __init__(self):
@@ -722,11 +855,11 @@ class AnalyzeCSVWorkflow:
                     logger.info("No more tool calls - dashboard analysis complete")
                     final_content = response_content
                     
-                    # Handle empty content with enhanced retry logic
+                    # Handle empty content with structured output fallback
                     if not final_content or not final_content.strip():
                         logger.warning(
                             f"Model returned empty content in iteration {iteration + 1}. "
-                            f"This may indicate the model needs more iterations or there was an error."
+                            f"Attempting structured output mode."
                         )
                         
                         # Check if we have a file but no tool calls were made - enforce tool usage
@@ -745,6 +878,40 @@ class AnalyzeCSVWorkflow:
                                 )
                             ))
                             continue
+                        
+                        # Try structured output when content is empty and we've used tools
+                        # Check if we have tool messages in history (indicating tools were used)
+                        has_tool_history = any(
+                            isinstance(msg, ToolMessage) for msg in self.messages
+                        )
+                        
+                        if has_tool_history:
+                            try:
+                                logger.info("Attempting structured output for dashboard JSON generation")
+                                structured_model = self.model.with_structured_output(DashboardConfig)
+                                structured_response = structured_model.invoke(self.messages)
+                                
+                                # Convert Pydantic model to dict
+                                if hasattr(structured_response, 'model_dump'):
+                                    final_content = structured_response.model_dump()
+                                elif hasattr(structured_response, 'dict'):
+                                    final_content = structured_response.dict()
+                                else:
+                                    final_content = structured_response
+                                
+                                logger.info("Successfully generated dashboard using structured output")
+                                
+                                # Add the structured response as an AIMessage for workflow output
+                                if isinstance(final_content, dict):
+                                    # Convert dict to JSON string for compatibility
+                                    final_content_str = json.dumps(final_content, ensure_ascii=False, indent=2)
+                                    ai_response = AIMessage(content=final_content_str)
+                                    self.workflow_output.add_message(ai_response)
+                                
+                                break
+                            except (AttributeError, TypeError, Exception) as e:
+                                logger.warning(f"Structured output failed: {str(e)}. Falling back to retry logic.")
+                                # Fall through to retry logic below
                         
                         # Allow multiple iterations with empty content (up to 3 iterations)
                         if iteration < 3:
@@ -771,9 +938,13 @@ class AnalyzeCSVWorkflow:
                         }
                     
                     # If we have content, proceed normally
+                    if isinstance(final_content, dict):
+                        content_preview = json.dumps(final_content, ensure_ascii=False)[:200] + "..." if len(json.dumps(final_content)) > 200 else json.dumps(final_content, ensure_ascii=False)
+                    else:
+                        content_preview = (final_content[:200] + "...") if len(final_content) > 200 else final_content
                     logger.info(
                         "Dashboard workflow complete. Final content preview: %s",
-                        (final_content[:200] + "...") if len(final_content) > 200 else final_content,
+                        content_preview,
                     )
                     break
 
@@ -811,9 +982,17 @@ class AnalyzeCSVWorkflow:
             }
         else:
             # Enhanced error reporting
+            if isinstance(final_content, dict):
+                final_content_str = json.dumps(final_content, ensure_ascii=False, indent=2)
+                final_content_length = len(final_content_str)
+                final_content_preview = (final_content_str[:500] + "...") if len(final_content_str) > 500 else final_content_str
+            else:
+                final_content_length = len(final_content) if final_content else 0
+                final_content_preview = (final_content[:500] + "...") if final_content and len(final_content) > 500 else (final_content or "(empty)")
+            
             error_details = {
-                "final_content_length": len(final_content) if final_content else 0,
-                "final_content_preview": (final_content[:500] + "...") if final_content and len(final_content) > 500 else (final_content or "(empty)"),
+                "final_content_length": final_content_length,
+                "final_content_preview": final_content_preview,
                 "workflow_messages_count": len(self.workflow_output.messages) if hasattr(self.workflow_output, 'messages') else 0,
             }
             error_msg = (

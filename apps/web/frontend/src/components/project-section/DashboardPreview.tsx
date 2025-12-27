@@ -1,7 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
+import { DateRange } from "react-day-picker";
+import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
 import { DashboardGenerationRequest, LayoutType, ChartType } from "@/types/dashboard";
@@ -31,10 +36,187 @@ const DashboardPreview = ({
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
+  const originalProcessedDataRef = useRef<any>(null);
 
   // No automatic dashboard generation on mount
+
+  // Utility function to parse date labels
+  const parseDateLabel = (label: string): Date | null => {
+    if (!label) return null;
+    // Try ISO format first
+    const iso = new Date(label);
+    if (!isNaN(iso.getTime())) return iso;
+    
+    // Try common formats
+    const formats = [
+      /^(\d{4})-(\d{2})-(\d{2})/, // YYYY-MM-DD
+      /^(\d{2})\/(\d{2})\/(\d{4})/, // MM/DD/YYYY
+      /^(\d{2})-(\d{2})-(\d{2})$/, // MM-DD-YY
+    ];
+    
+    for (const format of formats) {
+      const match = label.match(format);
+      if (match) {
+        if (format === formats[0]) {
+          // YYYY-MM-DD
+          return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+        } else if (format === formats[1]) {
+          // MM/DD/YYYY
+          return new Date(parseInt(match[3]), parseInt(match[1]) - 1, parseInt(match[2]));
+        } else if (format === formats[2]) {
+          // MM-DD-YY
+          const year = parseInt(match[3]) + (parseInt(match[3]) < 50 ? 2000 : 1900);
+          return new Date(year, parseInt(match[1]) - 1, parseInt(match[2]));
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  // Utility function to extract sparkline data from chart
+  const extractSparklineData = (chart: any): Array<{label: string, value: number}> | undefined => {
+    if (!chart) return undefined;
+    
+    // Try to get data from first dataset
+    if (Array.isArray(chart.datasets) && chart.datasets.length > 0) {
+      const firstDataset = chart.datasets[0];
+      if (Array.isArray(firstDataset.data) && firstDataset.data.length > 0) {
+        return firstDataset.data.map((item: any) => ({
+          label: item.label || String(item.label),
+          value: typeof item.value === 'number' ? item.value : parseFloat(String(item.value)) || 0
+        }));
+      }
+    }
+    
+    return undefined;
+  };
+
+  // Utility function to find matching chart for metric
+  const findMatchingChartForMetric = (metricTitle: string, charts: any[]): any | null => {
+    if (!metricTitle || !Array.isArray(charts) || charts.length === 0) return null;
+    
+    // Normalize metric title
+    const normalizedMetric = metricTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // Keywords that might appear in both metric and chart titles
+    const keywords = ['revenue', 'users', 'orders', 'sales', 'stickiness', 'active', 'total', 'average', 'count'];
+    
+    for (const chart of charts) {
+      if (!chart.title) continue;
+      
+      const normalizedChart = chart.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      // Check if chart has time-series data
+      const hasTimeSeriesData = Array.isArray(chart.datasets) && 
+                                chart.datasets.length > 0 && 
+                                Array.isArray(chart.datasets[0]?.data) &&
+                                chart.datasets[0].data.length > 0;
+      
+      if (!hasTimeSeriesData) continue;
+      
+      // Check for keyword matches
+      for (const keyword of keywords) {
+        if (normalizedMetric.includes(keyword) && normalizedChart.includes(keyword)) {
+          return chart;
+        }
+      }
+      
+      // Check if metric title is a substring of chart title or vice versa
+      if (normalizedMetric.length > 3 && (normalizedChart.includes(normalizedMetric) || normalizedMetric.includes(normalizedChart))) {
+        return chart;
+      }
+    }
+    
+    return null;
+  };
+
+  // Utility function to filter data by date range
+  const filterDataByDateRange = (data: any, dateRange: DateRange | undefined): any => {
+    if (!dateRange || !dateRange.from || !dateRange.to || !data) {
+      return data;
+    }
+    
+    const filtered = JSON.parse(JSON.stringify(data)); // Deep clone
+    
+    // Filter charts
+    if (Array.isArray(filtered.charts)) {
+      filtered.charts = filtered.charts.map((chart: any) => {
+        if (!Array.isArray(chart.datasets)) return chart;
+        
+        const filteredChart = { ...chart };
+        filteredChart.datasets = chart.datasets.map((dataset: any) => {
+          if (!Array.isArray(dataset.data)) return dataset;
+          
+          const filteredDataset = { ...dataset };
+          filteredDataset.data = dataset.data.filter((item: any) => {
+            const itemDate = parseDateLabel(item.label || String(item.label));
+            if (!itemDate) return true; // Keep items without valid dates
+            return itemDate >= dateRange.from! && itemDate <= dateRange.to!;
+          });
+          
+          return filteredDataset;
+        });
+        
+        return filteredChart;
+      });
+    }
+    
+    // Recalculate metrics from filtered chart data
+    if (Array.isArray(filtered.metrics)) {
+      filtered.metrics = filtered.metrics.map((metric: any) => {
+        // Try to find related chart
+        let relatedChart = null;
+        if (metric.related_chart_id) {
+          relatedChart = filtered.charts?.find((c: any) => c.id === metric.related_chart_id);
+        } else {
+          relatedChart = findMatchingChartForMetric(metric.title || metric.name, filtered.charts || []);
+        }
+        
+        if (relatedChart && Array.isArray(relatedChart.datasets) && relatedChart.datasets.length > 0) {
+          const dataset = relatedChart.datasets[0];
+          if (Array.isArray(dataset.data) && dataset.data.length > 0) {
+            const values = dataset.data.map((item: any) => {
+              const val = typeof item.value === 'number' ? item.value : parseFloat(String(item.value)) || 0;
+              return val;
+            }).filter((v: number) => !isNaN(v));
+            
+            if (values.length > 0) {
+              // Recalculate metric value (sum for totals, average for averages)
+              const metricTitleLower = (metric.title || metric.name || '').toLowerCase();
+              let newValue: number;
+              
+              if (metricTitleLower.includes('total') || metricTitleLower.includes('sum')) {
+                newValue = values.reduce((sum: number, val: number) => sum + val, 0);
+              } else if (metricTitleLower.includes('average') || metricTitleLower.includes('avg') || metricTitleLower.includes('mean')) {
+                newValue = values.reduce((sum: number, val: number) => sum + val, 0) / values.length;
+              } else {
+                // Default to sum
+                newValue = values.reduce((sum: number, val: number) => sum + val, 0);
+              }
+              
+              // Format the value similar to original
+              const originalValue = metric.value;
+              if (typeof originalValue === 'string' && originalValue.includes('$')) {
+                metric.value = `$${newValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              } else if (typeof originalValue === 'string' && originalValue.includes('%')) {
+                metric.value = `${newValue.toFixed(2)}%`;
+              } else {
+                metric.value = newValue.toLocaleString('en-US');
+              }
+            }
+          }
+        }
+        
+        return metric;
+      });
+    }
+    
+    return filtered;
+  };
 
   // Normalize incoming data (Morpheus-first format)
   const getDashboardStyling = (data: any) => {
@@ -72,6 +254,31 @@ const DashboardPreview = ({
           ? metricStyling
           : (dashboardStyling || getDefaultChartStyling());
         
+        // Extract sparkline data with priority system
+        let sparklineData: Array<{label: string, value: number}> | undefined;
+        
+        // Priority 1: Direct sparkline data from LLM
+        if (m.sparkline_data && Array.isArray(m.sparkline_data)) {
+          sparklineData = m.sparkline_data.map((item: any) => ({
+            label: item.label || String(item.label),
+            value: typeof item.value === 'number' ? item.value : parseFloat(String(item.value)) || 0
+          }));
+        }
+        // Priority 2: Related chart ID
+        else if (m.related_chart_id) {
+          const relatedChart = data.charts?.find((c: any) => c.id === m.related_chart_id);
+          if (relatedChart) {
+            sparklineData = extractSparklineData(relatedChart);
+          }
+        }
+        // Priority 3: Heuristic matching (fallback)
+        else {
+          const matchingChart = findMatchingChartForMetric(m.title || m.name, data.charts || []);
+          if (matchingChart) {
+            sparklineData = extractSparklineData(matchingChart);
+          }
+        }
+        
         components.push({
           id: `metric_${componentId++}`,
           type: 'metric',
@@ -85,6 +292,8 @@ const DashboardPreview = ({
             value: m.value,
             change,
             trend,
+            data: sparklineData,
+            dataKey: 'value',
             timeComparison: m.time_comparison,
             // Convert and merge styling with dashboard defaults
             styling: {
@@ -135,6 +344,43 @@ const DashboardPreview = ({
     if (Array.isArray(data.charts)) {
       data.charts.forEach((c: any, idx: number) => {
         const mappedType = typeMap[(c.chart_type || '').toLowerCase()] || 'line';
+        
+        // Handle tables in charts array - they need special processing
+        if (mappedType === 'table') {
+          const tableStyling = c.styling ? convertLLMStylingToChartStyling(c.styling) : undefined;
+          const validatedTableStyling = tableStyling && validateChartStyling(tableStyling).isValid
+            ? tableStyling
+            : (dashboardStyling || getDefaultChartStyling());
+          
+          const layout = c?.layout;
+          const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
+          
+          components.push({
+            id: `table_${componentId++}`,
+            type: 'table',
+            position: hasLayout
+              ? { x: layout.x, y: layout.y, width: layout.w, height: layout.h }
+              : { x: 0, y: Math.floor(idx / 2) * 6 + 6, width: 12, height: 3 },
+            layout: hasLayout ? { ...layout } : undefined,
+            component_config: {
+              id: c.id || `table_${idx + 1}`,
+              title: c.title || 'Table',
+              description: c.description || '',
+              columns: Array.isArray(c.columns) ? c.columns : [],
+              data: Array.isArray(c.data) ? c.data : (Array.isArray(c.rows) ? c.rows : []),
+              styling: {
+                ...validatedTableStyling,
+                tile: {
+                  ...(dashboardTile || {}),
+                  ...((validatedTableStyling as any)?.tile || {})
+                }
+              }
+            }
+          });
+          return; // Skip chart processing for tables
+        }
+        
+        // Regular chart processing
         const chartLevelStyling = c.styling ? convertLLMStylingToChartStyling(c.styling) : undefined;
         const validatedChartStyling = chartLevelStyling && validateChartStyling(chartLevelStyling).isValid
           ? chartLevelStyling
@@ -223,6 +469,13 @@ const DashboardPreview = ({
     return dashboardConfig;
   };
 
+  // Store original processedData on mount
+  useEffect(() => {
+    if (processedData && !originalProcessedDataRef.current) {
+      originalProcessedDataRef.current = processedData;
+    }
+  }, [processedData]);
+
   // Apply dashboard-level styling to container
   const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData]);
   useEffect(() => {
@@ -230,6 +483,13 @@ const DashboardPreview = ({
       applyChartStyling(containerRef.current, dashboardStylingForContainer);
     }
   }, [dashboardStylingForContainer]);
+
+  // Filter processedData by date range
+  const filteredProcessedData = useMemo(() => {
+    const sourceData = originalProcessedDataRef.current || processedData;
+    if (!sourceData) return null;
+    return filterDataByDateRange(sourceData, dateRange);
+  }, [processedData, dateRange]);
 
   // Grid layout config
   const ResponsiveGridLayout = useMemo(() => WidthProvider(Responsive), []);
@@ -240,7 +500,7 @@ const DashboardPreview = ({
   const rowHeight = 30;
 
   // Build normalized dashboards and active selection
-  const normalizedProcessed = useMemo(() => processedData ? normalizeDashboard(processedData) : null, [processedData]);
+  const normalizedProcessed = useMemo(() => filteredProcessedData ? normalizeDashboard(filteredProcessedData) : null, [filteredProcessedData]);
   const activeDashboard = useMemo(() => {
     if (normalizedProcessed) return normalizedProcessed;
     if (dashboardState.configuration) return dashboardState.configuration as any;
@@ -390,8 +650,7 @@ const DashboardPreview = ({
         title: processedData.dashboard.title,
         description: processedData.dashboard.description,
         styling: processedData.dashboard.styling,
-        insights: processedData.insights || [],
-        created_at: processedData.created_at || processedData.dashboard.created_at || processedData.metadata?.created_at
+        insights: processedData.insights || []
       };
     }
     // Fallback to nested structure (if backend wraps it)
@@ -400,8 +659,7 @@ const DashboardPreview = ({
         title: processedData.data.dashboard.title,
         description: processedData.data.dashboard.description,
         styling: processedData.data.dashboard.styling,
-        insights: processedData.data.insights || processedData.insights || [],
-        created_at: processedData.data.created_at || processedData.created_at || processedData.data.dashboard.created_at || processedData.data.metadata?.created_at
+        insights: processedData.data.insights || processedData.insights || []
       };
     }
     return null;
@@ -423,54 +681,86 @@ const DashboardPreview = ({
       {dashboardMetadata && (
         <div className="px-6 pt-6 pb-4" style={{ borderColor: 'var(--border-card-color)' }}>
           <div className="flex flex-col gap-2">
-            {/* Row 1: Title and Created Date */}
+            {/* Row 1: Title and Controls */}
             <div className="flex items-center justify-between gap-4">
-              <h1 
-                className="text-3xl font-bold" 
-                style={{ color: 'var(--highlight-color)' }}
-              >
-                {dashboardMetadata.title}
-              </h1>
-              {dashboardMetadata.created_at && (
-                <div className="text-sm flex-shrink-0" style={{ color: 'var(--description-color)' }}>
-                  {new Date(dashboardMetadata.created_at).toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'short', 
-                    day: 'numeric' 
-                  })}
-                </div>
-              )}
-            </div>
-            {/* Row 2: Description and Key Insights */}
-            <div className="flex items-center justify-between gap-4">
-              {dashboardMetadata.description && (
-                <p 
-                  className="text-base opacity-90 flex-1" 
-                  style={{ color: 'var(--description-color)' }}
+              <div className="flex-1">
+                <h1 
+                  className="text-3xl font-bold" 
+                  style={{ color: 'var(--highlight-color)' }}
                 >
-                  {dashboardMetadata.description}
-                </p>
-              )}
-              {dashboardMetadata.insights && dashboardMetadata.insights.length > 0 && (
-                <button
-                  onClick={() => setExpandedInsights(!expandedInsights)}
-                  className="flex items-center justify-start gap-2 px-3 py-1.5 text-sm rounded-md border hover:opacity-80 transition-opacity flex-shrink-0"
-                  style={{ 
-                    color: 'var(--highlight-color)',
-                    backgroundColor: 'var(--bg-card-color)',
-                    borderColor: 'var(--border-card-color)'
-                  }}
-                >
-                  <span className="text-sm font-medium">Key Insights</span>
-                  {expandedInsights ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                </button>
-              )}
+                  {dashboardMetadata.title}
+                </h1>
+                {dashboardMetadata.description && (
+                  <p 
+                    className="text-base opacity-90 mt-1" 
+                    style={{ color: 'var(--description-color)' }}
+                  >
+                    {dashboardMetadata.description}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Date Picker */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity"
+                      style={{ 
+                        color: 'var(--highlight-color)',
+                        backgroundColor: 'var(--bg-card-color)',
+                        borderColor: 'var(--border-card-color)'
+                      }}
+                    >
+                      <CalendarIcon className="w-4 h-4" />
+                      <span>
+                        {dateRange?.from ? (
+                          dateRange.to ? (
+                            <>
+                              {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
+                            </>
+                          ) : (
+                            format(dateRange.from, "MMM dd, yyyy")
+                          )
+                        ) : (
+                          "Select Dates"
+                        )}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRange?.from}
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                    />
+                  </PopoverContent>
+                </Popover>
+                {/* Key Insights Button */}
+                {dashboardMetadata.insights && dashboardMetadata.insights.length > 0 && (
+                  <button
+                    onClick={() => setExpandedInsights(!expandedInsights)}
+                    className="flex items-center justify-start gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity flex-shrink-0"
+                    style={{ 
+                      color: 'var(--highlight-color)',
+                      backgroundColor: 'var(--bg-card-color)',
+                      borderColor: 'var(--border-card-color)'
+                    }}
+                  >
+                    <span className="text-sm font-medium">Key Insights</span>
+                    {expandedInsights ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
-            {/* Row 3: Expanded Insights List */}
+            {/* Expanded Insights List */}
             {dashboardMetadata?.insights && dashboardMetadata.insights.length > 0 && expandedInsights && (
               <div className="w-full mt-2">
                 <h2 

@@ -86,6 +86,11 @@ export interface MetricConfiguration {
   // Optional change and trend (can be computed from timeComparison)
   change?: string | number;
   trend?: MetricTrend | string;
+  // Optional link to related chart for sparkline data
+  related_chart_id?: string;
+  // Optional sparkline data (time-series data for visualization)
+  data?: Array<{label: string, value: number}>;
+  dataKey?: string; // Default 'value'
   // Optional time comparison context from agent
   timeComparison?: {
     enabled?: boolean;

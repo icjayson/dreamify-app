@@ -146,6 +146,8 @@ class ChartFactory {
           value: metricConfig.value,
           change: metricConfig.change,
           trend: metricConfig.trend,
+          data: metricConfig.data,
+          dataKey: metricConfig.dataKey,
           timeComparison: (metricConfig as any).timeComparison,
           styling: (metricConfig as any).styling
         };

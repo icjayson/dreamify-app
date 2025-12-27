@@ -168,8 +168,8 @@ const RechartsComposedChart: React.FC<RechartsComposedChartProps> = ({
                   dataKey={dataset.label}
                   stroke={dataset.color}
                   strokeWidth={2}
-                  dot={{ r: 4 }}
-                  activeDot={{ r: 6 }}
+                  dot={false}
+                  activeDot={false}
                   animationDuration={styling?.animationEnabled ? 1000 : 0}
                 />
               );

@@ -187,7 +187,6 @@ When generating a dashboard, output a JSON code block with this structure:
     "title": "Dashboard Title",
     "description": "Dashboard description"
   },
-  "created_at": "2025-01-15T10:30:00Z",
   "metrics": [
     {
       "id": "metric_001",
@@ -195,6 +194,11 @@ When generating a dashboard, output a JSON code block with this structure:
       "value": "$78,592,678.30",
       "change": "12.27%",
       "trend": "up",
+      "related_chart_id": "chart_001",
+      "sparkline_data": [
+        {"label": "2022-03-31", "value": 101683.85},
+        {"label": "2022-04-30", "value": 28838708.32}
+      ],
       "layout": {"x": 0, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
       "time_comparison": {
         "period": "mom",
@@ -296,9 +300,10 @@ Note: The "Key Insights" button in the dashboard header should use the following
 - text color: "highlight-color"
 This follows the same styling logic as charts and tables.
 
-Note: The "created_at" field should be included at the top level of the JSON output (same level as "dashboard", "metrics", etc.).
-It should be an ISO 8601 timestamp string (e.g., "2025-01-15T10:30:00Z") representing when the dashboard was created.
-This timestamp will be displayed in the dashboard header next to the title.
+Note: When a metric has a corresponding time-series chart that shows the same metric over time, include:
+- "related_chart_id": Link to the chart ID (e.g., "chart_001") that visualizes this metric over time
+- "sparkline_data": Optional array of time-series data points [{"label": "date", "value": number}] for direct sparkline rendering
+Including sparkline_data improves performance, but related_chart_id is sufficient as the frontend can extract data from the chart.
 ```
 
 CRITICAL OUTPUT RULES:
@@ -520,7 +525,7 @@ class DashboardInfo(BaseModel):
 class DashboardConfig(BaseModel):
     """Complete dashboard configuration model for structured output."""
     dashboard: DashboardInfo
-    created_at: str
+    created_at: Optional[str] = None
     metrics: List[DashboardMetric] = []
     charts: List[DashboardChart] = []
     tables: List[DashboardTable] = []

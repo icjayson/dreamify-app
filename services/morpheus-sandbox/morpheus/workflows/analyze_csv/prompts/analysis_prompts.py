@@ -192,6 +192,11 @@ When generating a dashboard, output a JSON code block with this structure:
       "value": "$78,592,678.30",
       "change": "12.27%",
       "trend": "up",
+      "related_chart_id": "chart_001",
+      "sparkline_data": [
+        {"label": "2022-03-31", "value": 101683.85},
+        {"label": "2022-04-30", "value": 28838708.32}
+      ],
       "layout": {"x": 0, "y": 0, "w": 6, "h": 4, "minW": 4, "minH": 4},
       "time_comparison": {
         "period": "mom",
@@ -286,6 +291,11 @@ When generating a dashboard, output a JSON code block with this structure:
   ]
 }
 ```
+
+Note: When a metric has a corresponding time-series chart that shows the same metric over time, include:
+- "related_chart_id": Link to the chart ID (e.g., "chart_001") that visualizes this metric over time
+- "sparkline_data": Optional array of time-series data points [{"label": "date", "value": number}] for direct sparkline rendering
+Including sparkline_data improves performance, but related_chart_id is sufficient as the frontend can extract data from the chart.
 
 CRITICAL OUTPUT RULES:
 - Wrap JSON output in ```json code block

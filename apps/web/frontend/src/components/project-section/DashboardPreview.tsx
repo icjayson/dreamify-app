@@ -16,7 +16,9 @@ import {
   getDefaultChartStyling,
   applyChartStyling,
   getChartStylingClasses,
-  getDashboardBackgroundStyle
+  getDashboardBackgroundStyle,
+  CHART_THEME_COLORS,
+  ChartPresetTheme
 } from "@/utils/chartStyling";
 
 interface DashboardPreviewProps {
@@ -77,6 +79,20 @@ const DashboardPreview = ({
     return null;
   };
 
+  // Utility function to extract numeric value from formatted string
+  const extractNumericValue = (value: string | number): number | null => {
+    if (typeof value === 'number') {
+      return isFinite(value) ? value : null;
+    }
+    if (typeof value !== 'string') {
+      return null;
+    }
+    // Remove common formatting: commas, currency symbols, percentage signs, whitespace
+    const cleaned = value.replace(/[,\s$€£¥%]/g, '');
+    const parsed = parseFloat(cleaned);
+    return isFinite(parsed) ? parsed : null;
+  };
+
   // Utility function to extract sparkline data from chart
   const extractSparklineData = (chart: any): Array<{label: string, value: number}> | undefined => {
     if (!chart) return undefined;
@@ -93,6 +109,54 @@ const DashboardPreview = ({
     }
     
     return undefined;
+  };
+
+  // Utility function to compute time_comparison from sparkline data
+  const computeTimeComparisonFromData = (
+    sparklineData: Array<{label: string, value: number}> | undefined,
+    currentValue: number | null,
+    period: string = 'wow'
+  ): { period: string; current_value: number; previous_value: number; percentage_change: number } | null => {
+    if (!sparklineData || sparklineData.length < 2) {
+      return null;
+    }
+    
+    // Create a copy and try to sort by date if labels are dates
+    let sortedData = [...sparklineData];
+    const dates = sortedData.map(item => parseDateLabel(item.label)).filter(d => d !== null);
+    
+    if (dates.length === sortedData.length) {
+      // All labels are valid dates, sort by date
+      sortedData.sort((a, b) => {
+        const dateA = parseDateLabel(a.label);
+        const dateB = parseDateLabel(b.label);
+        if (!dateA || !dateB) return 0;
+        return dateA.getTime() - dateB.getTime();
+      });
+    }
+    
+    const latest = sortedData[sortedData.length - 1];
+    const previous = sortedData[sortedData.length - 2];
+    
+    if (!latest || !previous || typeof latest.value !== 'number' || typeof previous.value !== 'number') {
+      return null;
+    }
+    
+    const current = currentValue !== null && isFinite(currentValue) ? currentValue : latest.value;
+    const prev = previous.value;
+    
+    if (prev === 0 || !isFinite(current) || !isFinite(prev)) {
+      return null;
+    }
+    
+    const percentageChange = ((current - prev) / prev) * 100;
+    
+    return {
+      period,
+      current_value: current,
+      previous_value: prev,
+      percentage_change: percentageChange
+    };
   };
 
   // Utility function to find matching chart for metric
@@ -238,23 +302,10 @@ const DashboardPreview = ({
     // Metrics (Morpheus: name -> title, optional change/trend)
     if (Array.isArray(data.metrics)) {
       data.metrics.forEach((m: any, idx: number) => {
-        const prev = m?.time_comparison?.previous_value;
-        let change: string | number | undefined = m.change;
-        let trend: string | undefined = m.trend;
-        if ((change === undefined || change === null) && typeof m.value === 'number' && typeof prev === 'number' && prev !== 0) {
-          const pct = ((m.value - prev) / prev) * 100;
-          change = `${pct.toFixed(2)}%`;
-          trend = pct > 0 ? 'up' : pct < 0 ? 'down' : 'stable';
-        }
-        const layout = m?.layout;
-        const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
-        // Convert metric styling if it has theme property
-        const metricStyling = m.styling ? convertLLMStylingToChartStyling(m.styling) : undefined;
-        const validatedMetricStyling = metricStyling && validateChartStyling(metricStyling).isValid
-          ? metricStyling
-          : (dashboardStyling || getDefaultChartStyling());
+        // Extract numeric value from formatted string
+        const numericValue = extractNumericValue(m.value);
         
-        // Extract sparkline data with priority system
+        // Extract sparkline data first (needed for time_comparison computation)
         let sparklineData: Array<{label: string, value: number}> | undefined;
         
         // Priority 1: Direct sparkline data from LLM
@@ -279,6 +330,45 @@ const DashboardPreview = ({
           }
         }
         
+        // Compute time_comparison if missing
+        let timeComparison = m.time_comparison;
+        if (!timeComparison && sparklineData && sparklineData.length >= 2) {
+          const computed = computeTimeComparisonFromData(sparklineData, numericValue, m.time_comparison?.period);
+          if (computed) {
+            timeComparison = computed;
+          }
+        }
+        
+        // Derive change and trend from time_comparison or existing logic
+        const prev = timeComparison?.previous_value;
+        let change: string | number | undefined = m.change;
+        let trend: string | undefined = m.trend;
+        
+        // Priority 1: Use time_comparison.percentage_change if available
+        if (timeComparison?.percentage_change !== undefined && timeComparison.percentage_change !== null) {
+          const pct = timeComparison.percentage_change;
+          change = `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`;
+          trend = pct > 0 ? 'up' : pct < 0 ? 'down' : 'stable';
+        }
+        // Priority 2: Compute from time_comparison values if available
+        else if (numericValue !== null && typeof prev === 'number' && prev !== 0) {
+          const pct = ((numericValue - prev) / prev) * 100;
+          change = `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`;
+          trend = pct > 0 ? 'up' : pct < 0 ? 'down' : 'stable';
+        }
+        // Priority 3: Use provided change/trend if available
+        else if (change === undefined || change === null) {
+          // Keep change and trend as undefined if we can't compute
+        }
+        
+        const layout = m?.layout;
+        const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
+        // Convert metric styling if it has theme property
+        const metricStyling = m.styling ? convertLLMStylingToChartStyling(m.styling) : undefined;
+        const validatedMetricStyling = metricStyling && validateChartStyling(metricStyling).isValid
+          ? metricStyling
+          : (dashboardStyling || getDefaultChartStyling());
+        
         components.push({
           id: `metric_${componentId++}`,
           type: 'metric',
@@ -294,7 +384,7 @@ const DashboardPreview = ({
             trend,
             data: sparklineData,
             dataKey: 'value',
-            timeComparison: m.time_comparison,
+            timeComparison: timeComparison,
             // Convert and merge styling with dashboard defaults
             styling: {
               ...validatedMetricStyling,
@@ -484,6 +574,18 @@ const DashboardPreview = ({
     }
   }, [dashboardStylingForContainer]);
 
+  // Helper function to get dashboard theme styles as inline CSS properties
+  const getDashboardThemeStyles = (styling: any): React.CSSProperties => {
+    if (!styling) return {};
+    const theme = styling.presetTheme as ChartPresetTheme;
+    const themeColors = CHART_THEME_COLORS[theme] || CHART_THEME_COLORS.monochrome;
+    return {
+      backgroundColor: themeColors['bg-card-color'],
+      borderColor: themeColors['border-card-color'],
+      color: themeColors['title-color'],
+    };
+  };
+
   // Filter processedData by date range
   const filteredProcessedData = useMemo(() => {
     const sourceData = originalProcessedDataRef.current || processedData;
@@ -510,7 +612,7 @@ const DashboardPreview = ({
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {
     if (type === 'metric') return { minW: 2, minH: 2 };
-    if (type === 'table') return { minW: 6, minH: 3 };
+    if (type === 'table') return { minW: 6, minH: 6 };
     return { minW: 4, minH: 4 }; // default for charts
   };
 
@@ -728,7 +830,11 @@ const DashboardPreview = ({
                       </span>
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="end">
+                  <PopoverContent 
+                    className={`w-auto p-0 [&]:!bg-[var(--bg-card-color)] ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)}`}
+                    align="end"
+                    style={getDashboardThemeStyles(dashboardStylingForContainer)}
+                  >
                     <Calendar
                       initialFocus
                       mode="range"
@@ -736,6 +842,7 @@ const DashboardPreview = ({
                       selected={dateRange}
                       onSelect={setDateRange}
                       numberOfMonths={2}
+                      themeStyles={getDashboardThemeStyles(dashboardStylingForContainer)}
                     />
                   </PopoverContent>
                 </Popover>

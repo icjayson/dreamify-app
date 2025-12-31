@@ -290,6 +290,13 @@ const DashboardPreview = ({
     return validation.isValid ? converted : getDefaultChartStyling();
   };
 
+  const normalizeChartDataPoints = (dataPoints: any[], chartType: string): any[] => {
+    if (chartType === 'pie' || chartType === 'donut') {
+      return dataPoints.map(point => ({ ...point, label: point.label || point.name || '' }));
+    }
+    return dataPoints;
+  };
+
   const normalizeDashboard = (data: any) => {
     if (!data) return null;
     const components: any[] = [];
@@ -486,6 +493,15 @@ const DashboardPreview = ({
 
         const layout = c?.layout;
         const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
+        
+        // Normalize datasets for pie/donut charts (convert name -> label)
+        const normalizedDatasets = (mappedType === 'pie' || mappedType === 'donut') && Array.isArray(c.datasets)
+          ? c.datasets.map((dataset: any) => ({
+              ...dataset,
+              data: normalizeChartDataPoints(dataset.data || [], mappedType)
+            }))
+          : (Array.isArray(c.datasets) ? c.datasets : []);
+        
         components.push({
           id: `chart_${componentId++}`,
           type: 'chart',
@@ -500,7 +516,7 @@ const DashboardPreview = ({
             description: c.description || '',
             insight: c.reasoning?.insight || '',
             axisConfig: c.config || { xKey: 'label', yKey: 'value' },
-            datasets: Array.isArray(c.datasets) ? c.datasets : [],
+            datasets: normalizedDatasets,
             data: c.data,
             config: {},
             styling: mergedChartStyling

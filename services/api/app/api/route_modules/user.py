@@ -8,10 +8,12 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Request
 from pydantic import BaseModel
+import pandas as pd
 
 from app.dependencies.auth import require_user
 from app.utils.file_handler import FileHandler
 from utils.config import config
+from utils.logger import logger
 from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import projects as projects_repo
 from utils.s3.client import compute_sha256_checksum, upload_bytes, delete_object, download_bytes
@@ -61,6 +63,8 @@ class AssetResponse(BaseModel):
     size_bytes: int
     processed_json_s3_key: Optional[str] = None
     created_at: Optional[str] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
 
 
 class AssetListResponse(BaseModel):
@@ -102,7 +106,24 @@ def _map_project(item: dict) -> ProjectResponse:
     )
 
 
-def _map_asset(item: dict) -> AssetResponse:
+def _get_file_metadata(data: bytes, extension: str) -> Dict[str, Optional[int]]:
+    """Parse file and extract row and column counts."""
+    try:
+        file_info = {"extension": extension}
+        file_like = io.BytesIO(data)
+        df = FileHandler.read_file(file_like, file_info)
+        return {
+            "row_count": len(df),
+            "column_count": len(df.columns)
+        }
+    except Exception:
+        return {
+            "row_count": None,
+            "column_count": None
+        }
+
+
+def _map_asset(item: dict, row_count: Optional[int] = None, column_count: Optional[int] = None) -> AssetResponse:
     return AssetResponse(
         asset_id=item["asset_id"],
         file_id=item.get("file_id", item["asset_id"]),
@@ -116,6 +137,8 @@ def _map_asset(item: dict) -> AssetResponse:
         size_bytes=int(item.get("size_bytes", 0)),
         processed_json_s3_key=item.get("processed_json_s3_key"),
         created_at=item.get("created_at"),
+        row_count=row_count,
+        column_count=column_count,
     )
 
 
@@ -225,6 +248,18 @@ async def upload_asset_endpoint(
     data = await file.read()
     file_size = len(data)
     checksum = compute_sha256_checksum(data)
+    
+    # Get file metadata (row and column counts)
+    # Wrap in try/except to ensure upload continues even if parsing fails
+    row_count = None
+    column_count = None
+    try:
+        metadata = _get_file_metadata(data, file_info["extension"])
+        row_count = metadata.get("row_count")
+        column_count = metadata.get("column_count")
+    except Exception as e:
+        # Log error but don't fail the upload
+        logger.warning(f"Failed to extract file metadata: {str(e)}")
 
     asset_id = str(uuid.uuid4())
     bucket = config.aws.s3.USER_ASSETS_BUCKET
@@ -267,7 +302,7 @@ async def upload_asset_endpoint(
         original_filename=file_info["filename"],
         extension=file_info["extension"],
     )
-    return _map_asset(asset)
+    return _map_asset(asset, row_count=row_count, column_count=column_count)
 
 
 @router.get("/user/asset/list", response_model=AssetListResponse)

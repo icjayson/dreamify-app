@@ -13,6 +13,8 @@ export interface AssetRecord {
   size_bytes: number;
   processed_json_s3_key?: string;
   created_at?: string;
+  row_count?: number;
+  column_count?: number;
 }
 
 export interface UploadResponse {
@@ -24,6 +26,8 @@ export interface UploadResponse {
   projectId?: string;
   asset?: AssetRecord;
   error?: string;
+  rowCount?: number;
+  columnCount?: number;
 }
 
 export interface FilesListResponse {
@@ -58,6 +62,8 @@ class FileService {
       ext: asset.extension,
       projectId: asset.project_id,
       asset,
+      rowCount: asset.row_count,
+      columnCount: asset.column_count,
     };
   }
 

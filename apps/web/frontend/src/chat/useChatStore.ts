@@ -79,6 +79,8 @@ interface UploadedFile {
   projectId?: string;
   conversationId?: string;
   processedData?: any;
+  rowCount?: number;
+  columnCount?: number;
 }
 
 interface ChatState {

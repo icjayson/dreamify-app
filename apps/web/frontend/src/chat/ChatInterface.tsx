@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -19,6 +19,17 @@ const mapStepToDisplayText = (step: string): string => {
     "run_workflow": "Running workflow...",
   };
   return stepMap[step] || "Processing...";
+};
+
+// Helper function to format file size
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  } else if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  } else {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 };
 
 // Rolling multiline log for loading animation
@@ -488,45 +499,47 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       <div className="mt-auto">
         {uploadedFile && (
           <div className="mx-2 mt-4 mb-2">
-            <div className="bg-black rounded-xl py-2 px-4">
-              <div className="flex items-center justify-between gap-2">
-                {/* Left side - File info */}
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {/* File Icon */}
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 rounded-lg border border-white/20 bg-white/10 flex items-center justify-center">
-                      <FileText className="w-4 h-4 text-white" />
-                    </div>
-                  </div>
-                  
-                  {/* File details */}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-white font-medium text-xs truncate">
-                      {uploadedFile.filename}
-                    </div>
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <span>{(uploadedFile.size/1024/1024).toFixed(1)}MB</span>
-                      <span>•</span>
-                      <div className="flex items-center gap-1">
-                        <div className={`w-1.5 h-1.5 rounded-full ${
-                          uploadedFile.status === 'uploading' ? 'bg-yellow-500' :
-                          uploadedFile.status === 'processing' ? 'bg-blue-500' :
-                          uploadedFile.status === 'processed' ? 'bg-green-500' :
-                          uploadedFile.status === 'error' ? 'bg-red-500' : 'bg-gray-500'
-                        }`}></div>
-                        <span className="capitalize truncate">
-                          {uploadedFile.status === 'uploading' ? 'Uploading' :
-                           uploadedFile.status === 'processing' ? 'Processing' :
-                           uploadedFile.status === 'processed' ? 'Processed' :
-                           uploadedFile.status === 'error' ? 'Error' : 'Ready'}
-                        </span>
-                      </div>
-                    </div>
+            <div className="group relative bg-black/95 border border-white/5 rounded-xl p-3">
+              {/* X button - top right, visible on hover */}
+              <button
+                onClick={() => removeUploadedFile(uploadedFile.fileID)}
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-white/10 rounded"
+                aria-label="Remove file"
+              >
+                <X className="w-3.5 h-3.5 text-white" />
+              </button>
+              
+              {/* File content */}
+              <div className="flex items-center gap-3 pr-10">
+                {/* File icon - left side */}
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-white" />
                   </div>
                 </div>
                 
-                {/* Right side - Actions */}
-                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                {/* File info */}
+                <div className="flex-1 min-w-0">
+                  {/* Top line - Filename */}
+                  <div className="text-white font-semibold text-sm truncate">
+                    {uploadedFile.filename}
+                  </div>
+                  {/* Bottom line - Metadata */}
+                  <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                    {uploadedFile.rowCount?.toLocaleString() || 'N/A'} rows • {uploadedFile.columnCount || 'N/A'} cols • {formatFileSize(uploadedFile.size)}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Footer section - only when uploaded or processed */}
+              {(uploadedFile.status === 'uploaded' || uploadedFile.status === 'processed') && (
+                <div className="border-t border-white/10 mt-2.5 pt-2.5 flex items-center justify-between">
+                  {/* Left side - Status indicator */}
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-white" />
+                    <span className="text-[10px] text-white">Ready to analyze</span>
+                  </div>
+                  {/* Right side - Preview button */}
                   <Button
                     onClick={async () => {
                       try {
@@ -540,19 +553,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         window.open(`/preview/${uploadedFile.fileID}`, '_blank');
                       }
                     }}
-                    disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
-                    className="text-xs bg-[#292929] text-white p-2 disabled:opacity-50 whitespace-nowrap"
+                    className="button-gradient px-3 py-1 text-[10px] whitespace-nowrap h-auto"
                   >
                     Preview
                   </Button>
-                  <button
-                    onClick={() => removeUploadedFile(uploadedFile.fileID)}
-                    className="text-[10px] text-muted-foreground hover:text-white underline transition-colors whitespace-nowrap"
-                  >
-                    Remove
-                  </button>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -756,7 +762,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                 size: fallbackSize, 
                 ext: fallbackExt, 
                 status: 'uploaded',
-                projectId: res.asset?.project_id 
+                projectId: res.asset?.project_id,
+                rowCount: res.rowCount,
+                columnCount: res.columnCount
               });
               try {
                 // Persist original file for CSV export if it's CSV

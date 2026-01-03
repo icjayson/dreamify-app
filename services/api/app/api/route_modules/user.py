@@ -2,9 +2,11 @@
 User-scoped project and asset APIs.
 """
 import uuid
+import csv
+import io
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Request
 from pydantic import BaseModel
 
 from app.dependencies.auth import require_user
@@ -76,6 +78,15 @@ class ProjectDeleteResponse(BaseModel):
 class ProcessedDataResponse(BaseModel):
     success: bool
     data: dict
+
+
+class FilePreviewResponse(BaseModel):
+    success: bool
+    filename: str
+    columns: List[str]
+    rows: List[List[str]]
+    total_rows: int
+    displayed_rows: int
 
 
 def _map_project(item: dict) -> ProjectResponse:
@@ -324,5 +335,156 @@ async def get_processed_asset_data(
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Invalid processed data")
     return ProcessedDataResponse(success=True, data=parsed)
+
+
+def _get_user_from_token(request: Request, token: Optional[str] = None) -> str:
+    """Get user_id from Authorization header or token query parameter."""
+    # First, try to get token from Authorization header
+    authorization = request.headers.get("Authorization")
+    auth_token = None
+    
+    if authorization:
+        try:
+            scheme, auth_token = authorization.split(" ", 1)
+            if scheme.lower() != "bearer":
+                auth_token = None
+        except ValueError:
+            auth_token = None
+    
+    # Use query parameter token if no Authorization header
+    if not auth_token and token:
+        auth_token = token
+    
+    # If we have a token, verify it
+    if auth_token:
+        # Create a mock request with Authorization header for Clerk auth
+        class TokenRequest:
+            def __init__(self, token: str):
+                self.headers = {"Authorization": f"Bearer {token}"}
+            
+            def header(self, name: str):
+                return self.headers.get(name)
+        
+        try:
+            clerk_req = TokenRequest(auth_token)
+            from clerk_backend_api import Clerk
+            from clerk_backend_api.security import authenticate_request
+            from clerk_backend_api.security.types import AuthenticateRequestOptions
+            from utils.config import config
+            
+            clerk = Clerk()
+            jwt_key = config.clerk.CLERK_JWT_KEY
+            
+            state = clerk.authenticate_request(
+                clerk_req,
+                AuthenticateRequestOptions(
+                    jwt_key=jwt_key,
+                    authorized_parties=None
+                )
+            )
+            
+            if not state.is_signed_in:
+                raise HTTPException(status_code=401, detail="Invalid or expired token")
+            
+            user_id = state.payload.get('sub')
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Token missing user ID")
+            
+            return user_id
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+    else:
+        # Fall back to standard authentication (requires Authorization header)
+        try:
+            return require_user(request)
+        except HTTPException as e:
+            # Re-raise with 401 for consistency
+            if e.status_code == 401:
+                raise
+            raise HTTPException(status_code=401, detail="Authentication required")
+
+
+@router.get("/files/preview/{asset_id}", response_model=FilePreviewResponse)
+async def preview_file_endpoint(
+    asset_id: str,
+    request: Request,
+    token: Optional[str] = Query(None, description="Authentication token"),
+):
+    """Preview CSV file data as JSON."""
+    try:
+        # Authenticate user
+        user_id = _get_user_from_token(request, token)
+        
+        # Get asset
+        asset = assets_repo.get_asset(user_id, asset_id)
+        if not asset:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        
+        # Check if file is CSV
+        extension = asset.get("extension", "").lower()
+        if extension != "csv":
+            raise HTTPException(status_code=400, detail="Preview only supported for CSV files")
+        
+        # Download file from S3
+        try:
+            file_data = download_bytes(asset["s3_bucket"], asset["s3_key"])
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="File not found in storage")
+        
+        # Parse CSV
+        try:
+            # Try different encodings
+            encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+            content_str = None
+            for encoding in encodings:
+                try:
+                    content_str = file_data.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if content_str is None:
+                raise HTTPException(status_code=500, detail="Could not decode file with any encoding")
+            
+            # Parse CSV with proper handling of quoted fields
+            csv_reader = csv.reader(io.StringIO(content_str))
+            rows = []
+            total_rows = 0
+            max_display_rows = 1000
+            
+            for row in csv_reader:
+                total_rows += 1
+                if total_rows <= max_display_rows:
+                    rows.append(row)
+            
+            if len(rows) == 0:
+                raise HTTPException(status_code=400, detail="CSV file is empty")
+            
+            # First row is headers
+            columns = rows[0] if rows else []
+            data_rows = rows[1:] if len(rows) > 1 else []
+            
+            filename = asset.get("filename", "file.csv")
+            
+            return FilePreviewResponse(
+                success=True,
+                filename=filename,
+                columns=columns,
+                rows=data_rows,
+                total_rows=max(0, total_rows - 1),  # Exclude header
+                displayed_rows=len(data_rows)
+            )
+            
+        except csv.Error as e:
+            raise HTTPException(status_code=500, detail=f"CSV parsing error: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 

@@ -691,13 +691,12 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                           onClick={async () => {
                             try {
                               const token = await useAuth().getToken();
-                              // save token to _token.json filejson
                               const url = token 
-                                ? `/api/v1/files/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
-                                : `/api/v1/files/preview/${uploadedFile.fileID}`;
+                                ? `/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
+                                : `/preview/${uploadedFile.fileID}`;
                               window.open(url, '_blank');
                             } catch {
-                              window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank');
+                              window.open(`/preview/${uploadedFile.fileID}`, '_blank');
                             }
                           }}
                           disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}

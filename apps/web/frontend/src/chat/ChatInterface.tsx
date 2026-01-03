@@ -533,11 +533,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         const { useAuth } = await import('@clerk/clerk-react');
                         const token = await useAuth().getToken();
                         const url = token
-                          ? `/api/v1/files/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
-                          : `/api/v1/files/preview/${uploadedFile.fileID}`;
+                          ? `/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
+                          : `/preview/${uploadedFile.fileID}`;
                         window.open(url, '_blank');
                       } catch {
-                        window.open(`/api/v1/files/preview/${uploadedFile.fileID}`, '_blank');
+                        window.open(`/preview/${uploadedFile.fileID}`, '_blank');
                       }
                     }}
                     disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}

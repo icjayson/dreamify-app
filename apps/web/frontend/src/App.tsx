@@ -15,6 +15,7 @@ import Signup from "./pages/Signup.tsx";
 import WorkspacePage from "./pages/workspace";
 import ProjectPage from "./pages/project";
 import PreviewPage from "./pages/preview.tsx";
+import FilePreviewPage from "./pages/FilePreviewPage";
 import WaitlistPage from "./pages/Waitlist.tsx";
 import CancelPage from "./pages/CancelPage";
 import SuccessPage from "./pages/SuccessPage";
@@ -36,10 +37,11 @@ const AppContent = () => {
   const isAdminPath = location.pathname.startsWith("/admin");
   const isHomePath = location.pathname === "/";
   const isAboutPath = location.pathname === "/about";
+  const isPreviewPath = location.pathname.startsWith("/preview/");
 
   return (
     <>
-      {(isHomePath || isAboutPath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath)) && <Header />}
+      {(isHomePath || isAboutPath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/about" element={<AboutPage />} />
@@ -61,6 +63,7 @@ const AppContent = () => {
             <PreviewPage />
           </SignedIn>
         } />
+        <Route path="/preview/:assetId" element={<FilePreviewPage />} />
         <Route path="/cancel" element={<CancelPage />} />
         <Route path="/success" element={<SuccessPage />} />
         <Route path="/admin" element={<AdminPage />} />

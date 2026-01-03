@@ -203,20 +203,20 @@ CHART_TYPES = {
             "Customer records"
         ]
     },
-    "geographic": {
-        "name": "Geographic Chart",
-        "description": "Display data on maps and geographic visualizations. Best for location-based analysis and geographic patterns.",
-        "data_requirements": {
-            "min_data_points": 1,
-            "required_columns": ["latitude", "longitude"],
-            "data_types": ["numeric", "numeric"]
-        },
-        "use_cases": [
-            "Location analysis",
-            "Geographic distribution",
-            "Regional performance"
-        ]
-    },
+    # "geographic": {
+    #     "name": "Geographic Chart",
+    #     "description": "Display data on maps and geographic visualizations. Best for location-based analysis and geographic patterns.",
+    #     "data_requirements": {
+    #         "min_data_points": 1,
+    #         "required_columns": ["latitude", "longitude"],
+    #         "data_types": ["numeric", "numeric"]
+    #     },
+    #     "use_cases": [
+    #         "Location analysis",
+    #         "Geographic distribution",
+    #         "Regional performance"
+    #     ]
+    # },
 }
 
 # Layout defaults per visualization kind for LLM output generation.

@@ -278,6 +278,30 @@ def _post_node_status_sync(conversation_id: Optional[str], status: str, metadata
     return loop.run_until_complete(_post_node_status(conversation_id, status, metadata))
 
 
+def _check_workflow_status(conversation_id: str, project_id: str) -> Optional[str]:
+    """Check workflow status from database via backend API."""
+    try:
+        response = requests.get(
+            f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status/{conversation_id}",
+            params={"project_id": project_id},
+            timeout=5,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("status")
+        else:
+            logger.warning(
+                f"Failed to check workflow status: HTTP {response.status_code} for conversation {conversation_id}"
+            )
+            return None
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Error checking workflow status for conversation {conversation_id}: {str(e)}")
+        return None
+    except Exception as e:
+        logger.warning(f"Unexpected error checking workflow status for conversation {conversation_id}: {str(e)}")
+        return None
+
+
 def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Extract all asset content items from conversation nodes."""
     assets = []

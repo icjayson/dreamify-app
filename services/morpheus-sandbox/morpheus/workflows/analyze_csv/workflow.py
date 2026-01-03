@@ -798,6 +798,8 @@ class AnalyzeCSVWorkflow:
         conversation: Dict[str, Any],
         dashboards: Dict[str, Any],
         user_prompt: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute dashboard workflow: generate dashboard JSON configuration.
@@ -833,6 +835,46 @@ class AnalyzeCSVWorkflow:
         try:
             for iteration in range(max_iterations):
                 logger.info(f"Dashboard workflow iteration {iteration + 1}")
+                
+                # Check workflow status before each iteration
+                if conversation_id and project_id:
+                    import sys
+                    import os
+                    # Add parent directory to path to import from server
+                    server_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'server.py')
+                    if os.path.exists(server_path):
+                        import importlib.util
+                        spec = importlib.util.spec_from_file_location("server", server_path)
+                        server_module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(server_module)
+                        status = server_module._check_workflow_status(conversation_id, project_id)
+                    else:
+                        status = None
+                    if status == "stopped":
+                        logger.info("Workflow stopped by user")
+                        self.workflow_output.set_completed("stopped", "Workflow stopped by user")
+                        # Extract partial content from messages if available
+                        partial_content = ""
+                        for msg in reversed(self.messages):
+                            if isinstance(msg, AIMessage) and msg.content:
+                                partial_content = str(msg.content)
+                                break
+                        if partial_content:
+                            json_data = self._extract_json_from_content(partial_content)
+                            if json_data and isinstance(json_data, dict):
+                                self.workflow_output.output_data = json_data
+                                return {
+                                    "type": "dashboard_config",
+                                    "data": json_data,
+                                    "workflow_output": self.workflow_output,
+                                    "summary": "Workflow stopped - partial results",
+                                }
+                        # Return empty result if no partial content
+                        return {
+                            "type": "dashboard_config",
+                            "error": "Workflow stopped by user",
+                            "workflow_output": self.workflow_output,
+                        }
                 
                 # Get model response
                 response = self.model_with_tools.invoke(self.messages)
@@ -1059,15 +1101,19 @@ class AnalyzeCSVWorkflow:
             route_decision = self._route_request(effective_prompt, conversation)
             logger.info(f"Router decision: {route_decision.next_step} - {route_decision.reasoning}")
             
+            # Extract conversation_id and project_id for status checking
+            conversation_id = conversation.get("conversation_id")
+            project_id = conversation.get("project_id")
+            
             # Dispatch to appropriate workflow
             if route_decision.next_step == "dashboard":
-                return self._run_dashboard_workflow(file_path, conversation, dashboards, user_prompt)
+                return self._run_dashboard_workflow(file_path, conversation, dashboards, user_prompt, conversation_id, project_id)
             elif route_decision.next_step == "qa":
-                return self._run_qa_workflow(file_path, conversation, dashboards, user_prompt)
+                return self._run_qa_workflow(file_path, conversation, dashboards, user_prompt, conversation_id, project_id)
             else:
                 # Default to dashboard (backwards compatibility)
                 logger.warning(f"Unknown route decision: {route_decision.next_step}, defaulting to dashboard")
-                return self._run_dashboard_workflow(file_path, conversation, dashboards, user_prompt)
+                return self._run_dashboard_workflow(file_path, conversation, dashboards, user_prompt, conversation_id, project_id)
         
         except Exception as e:
             error_msg = f"Workflow execution error: {str(e)}"
@@ -1194,6 +1240,8 @@ class AnalyzeCSVWorkflow:
         conversation: Dict[str, Any],
         dashboards: Dict[str, Any],
         user_prompt: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute Q&A workflow: answer questions textually without generating dashboard.
@@ -1212,6 +1260,35 @@ class AnalyzeCSVWorkflow:
         try:
             for iteration in range(max_iterations):
                 logger.info(f"Q&A workflow iteration {iteration + 1}")
+                
+                # Check workflow status before each iteration
+                if conversation_id and project_id:
+                    import sys
+                    import os
+                    # Add parent directory to path to import from server
+                    server_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'server.py')
+                    if os.path.exists(server_path):
+                        import importlib.util
+                        spec = importlib.util.spec_from_file_location("server", server_path)
+                        server_module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(server_module)
+                        status = server_module._check_workflow_status(conversation_id, project_id)
+                    else:
+                        status = None
+                    if status == "stopped":
+                        logger.info("Workflow stopped by user")
+                        self.workflow_output.set_completed("stopped", "Workflow stopped by user")
+                        # Extract partial content from messages if available
+                        partial_content = "Workflow stopped by user."
+                        for msg in reversed(self.messages):
+                            if isinstance(msg, AIMessage) and msg.content:
+                                partial_content = str(msg.content)
+                                break
+                        return {
+                            "type": "message",
+                            "content": partial_content,
+                            "workflow_output": self.workflow_output,
+                        }
                 
                 # Get model response
                 response = self.model_with_tools.invoke(self.messages)

@@ -111,6 +111,18 @@
   /* RGB variants for opacity manipulation */
   --highlight-color-rgb: 255, 255, 255;
   --element-color-rgb: 107, 114, 128;
+  
+  /* Monochrome color palette - 10 distinct colors for datasets */
+  --monochrome-color-0: #ffffff;
+  --monochrome-color-1: #38BDF8;
+  --monochrome-color-2: #FBBF24;
+  --monochrome-color-3: #2DD4BF;
+  --monochrome-color-4: #F472B6;
+  --monochrome-color-5: #A78BFA;
+  --monochrome-color-6: #94A3B8;
+  --monochrome-color-7: #E2E8F0;
+  --monochrome-color-8: #FB923C;
+  --monochrome-color-9: #64748B;
     
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);

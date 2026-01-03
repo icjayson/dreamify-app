@@ -297,6 +297,49 @@ const DashboardPreview = ({
     return dataPoints;
   };
 
+  const normalizeChartDatasets = (datasets: any[], chartType: string, config: any): any[] => {
+    if (!Array.isArray(datasets) || datasets.length === 0) return [];
+    
+    return datasets.map((dataset: any) => {
+      // Handle treemap: convert children array to data array
+      if (chartType === 'treemap' && Array.isArray(dataset.children)) {
+        return {
+          ...dataset,
+          data: dataset.children.map((child: any) => ({
+            label: child.name || child.label || '',
+            value: typeof child.value === 'number' ? child.value : parseFloat(String(child.value)) || 0
+          }))
+        };
+      }
+      
+      // Handle radar: convert numeric array to objects with label/value
+      if (chartType === 'radar' && Array.isArray(dataset.data)) {
+        const labels = config?.labels || [];
+        // Check if data is array of numbers (not objects)
+        if (dataset.data.length > 0 && typeof dataset.data[0] === 'number') {
+          return {
+            ...dataset,
+            data: dataset.data.map((value: number, index: number) => ({
+              label: labels[index] || `Label ${index + 1}`,
+              value: typeof value === 'number' ? value : parseFloat(String(value)) || 0
+            }))
+          };
+        }
+      }
+      
+      // Handle pie/donut: normalize data points (existing logic)
+      if (chartType === 'pie' || chartType === 'donut') {
+        return {
+          ...dataset,
+          data: normalizeChartDataPoints(dataset.data || [], chartType)
+        };
+      }
+      
+      // Default: return dataset as-is
+      return dataset;
+    });
+  };
+
   const normalizeDashboard = (data: any) => {
     if (!data) return null;
     const components: any[] = [];
@@ -494,13 +537,10 @@ const DashboardPreview = ({
         const layout = c?.layout;
         const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
         
-        // Normalize datasets for pie/donut charts (convert name -> label)
-        const normalizedDatasets = (mappedType === 'pie' || mappedType === 'donut') && Array.isArray(c.datasets)
-          ? c.datasets.map((dataset: any) => ({
-              ...dataset,
-              data: normalizeChartDataPoints(dataset.data || [], mappedType)
-            }))
-          : (Array.isArray(c.datasets) ? c.datasets : []);
+        // Normalize datasets based on chart type
+        const normalizedDatasets = Array.isArray(c.datasets)
+          ? normalizeChartDatasets(c.datasets, mappedType, c.config || {})
+          : [];
         
         components.push({
           id: `chart_${componentId++}`,
@@ -628,7 +668,7 @@ const DashboardPreview = ({
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {
     if (type === 'metric') return { minW: 2, minH: 2 };
-    if (type === 'table') return { minW: 6, minH: 6 };
+    if (type === 'table') return { minW: 12, minH: 10 };
     return { minW: 4, minH: 4 }; // default for charts
   };
 

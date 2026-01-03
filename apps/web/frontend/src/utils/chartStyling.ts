@@ -99,6 +99,38 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
 }
 
 /**
+ * Get monochrome color palette from CSS variables
+ * Reads CSS variables from the document root or a specific element
+ * Falls back to minimal inline values if CSS variables are not available
+ * @param element - Optional element to read CSS variables from (defaults to document.documentElement)
+ * @returns Array of 10 color strings
+ */
+function getMonochromePaletteFromCSS(element?: HTMLElement): string[] {
+  const targetElement = element || document.documentElement;
+  const computedStyle = window.getComputedStyle(targetElement);
+  
+  const colors: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const cssVar = `--monochrome-color-${i}`;
+    const color = computedStyle.getPropertyValue(cssVar).trim();
+    
+    if (color) {
+      colors.push(color);
+    } else {
+      // CSS variable not found - this should not happen in normal operation
+      // Return minimal inline fallback for critical error handling
+      console.error(`CSS variable ${cssVar} not found. Using minimal fallback.`);
+      return [
+        "#ffffff", "#38BDF8", "#FBBF24", "#2DD4BF", "#F472B6",
+        "#A78BFA", "#94A3B8", "#E2E8F0", "#FB923C", "#4ADE80"
+      ];
+    }
+  }
+  
+  return colors;
+}
+
+/**
  * Generate opacity cascade from a base color
  * @param baseColor - Hex color string (e.g., "#3b82f6")
  * @param count - Number of colors to generate
@@ -198,6 +230,37 @@ export function getColorPalette(
   theme: ChartPresetTheme,
   datasetCount: number = 5
 ): string[] {
+  // Special handling for MONOCHROME theme: use solid colors instead of opacity cascade
+  if (theme === CHART_PRESET_THEMES.MONOCHROME) {
+    // Try to read from CSS variables first, fallback to minimal inline array
+    let palette: string[];
+    try {
+      // Check if we're in a browser environment
+      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        palette = getMonochromePaletteFromCSS();
+      } else {
+        // Client-side only app - this should never happen
+        // Minimal inline fallback for edge cases
+        console.warn('Browser environment not available. Using minimal fallback.');
+        palette = [
+          "#ffffff", "#38BDF8", "#FBBF24", "#2DD4BF", "#F472B6",
+          "#A78BFA", "#94A3B8", "#E2E8F0", "#FB923C", "#4ADE80"
+        ];
+      }
+    } catch (error) {
+      // Critical error fallback - minimal inline array
+      console.error('Failed to read monochrome palette from CSS variables, using minimal fallback:', error);
+      palette = [
+        "#ffffff", "#38BDF8", "#FBBF24", "#2DD4BF", "#F472B6",
+        "#A78BFA", "#94A3B8", "#E2E8F0", "#FB923C", "#4ADE80"
+      ];
+    }
+    
+    return Array.from({ length: datasetCount }, (_, i) => 
+      palette[i % palette.length]
+    );
+  }
+  
   const themeColors = CHART_THEME_COLORS[theme];
   if (!themeColors) {
     return generateOpacityCascade(CHART_THEME_COLORS[CHART_PRESET_THEMES.MONOCHROME]['highlight-color'], datasetCount);
@@ -269,8 +332,10 @@ export function convertLLMStylingToChartStyling(
   const theme = themeMap[llmStyling.theme?.toLowerCase() || ''] || CHART_PRESET_THEMES.MONOCHROME;
   const themeColors = CHART_THEME_COLORS[theme];
   
-  // Generate color palette using opacity cascade
-  const colorPalette = generateOpacityCascade(themeColors['highlight-color'], 10);
+  // Special handling for MONOCHROME theme: use solid colors instead of opacity cascade
+  const colorPalette = theme === CHART_PRESET_THEMES.MONOCHROME
+    ? getColorPalette(CHART_PRESET_THEMES.MONOCHROME, 10)
+    : generateOpacityCascade(themeColors['highlight-color'], 10);
   
   return {
     presetTheme: theme,
@@ -314,7 +379,11 @@ export function validateChartStyling(styling: ChartStyling): {
  */
 export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_THEMES.MONOCHROME): ChartStyling {
   const themeColors = CHART_THEME_COLORS[theme];
-  const colorPalette = generateOpacityCascade(themeColors['highlight-color'], 10);
+  
+  // Special handling for MONOCHROME theme: use solid colors instead of opacity cascade
+  const colorPalette = theme === CHART_PRESET_THEMES.MONOCHROME
+    ? getColorPalette(CHART_PRESET_THEMES.MONOCHROME, 10)
+    : generateOpacityCascade(themeColors['highlight-color'], 10);
   
   return {
     presetTheme: theme,

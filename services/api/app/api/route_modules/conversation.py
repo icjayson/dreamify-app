@@ -17,6 +17,7 @@ from utils.config import config
 from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import conversations as conversations_repo
 from utils.dynamodb.repos import projects as projects_repo
+from utils.dynamodb.repos import workflow_nodes as workflow_nodes_repo
 from utils.s3.conversations import save_conversation, load_conversation
 from utils.s3.paths import build_conversation_key
 from utils.s3.client import download_bytes
@@ -344,6 +345,12 @@ class DashboardDataResponse(BaseModel):
     dashboard_data: Optional[Dict[str, Any]] = None
 
 
+class StopWorkflowResponse(BaseModel):
+    success: bool
+    message: str
+    conversation_id: str
+
+
 @router.get("/conversation/{conversation_id}/dashboard", response_model=DashboardDataResponse)
 async def get_conversation_dashboard(
     conversation_id: str,
@@ -461,4 +468,51 @@ async def get_conversation_dashboard(
             str(e),
         )
         raise HTTPException(status_code=500, detail=f"Failed to load dashboard: {str(e)}")
+
+
+@router.post("/conversation/{conversation_id}/stop", response_model=StopWorkflowResponse)
+async def stop_workflow(
+    conversation_id: str,
+    project_id: str,
+    user_id: str = Depends(require_user),
+):
+    """Stop a running workflow for a conversation."""
+    logger.info(
+        "Stop workflow request: project_id=%s, conversation_id=%s, user_id=%s",
+        project_id,
+        conversation_id,
+        user_id,
+    )
+    
+    # Validate conversation exists and belongs to user
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation_meta:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_meta.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    # Update workflow status to stopped
+    now_iso = datetime.utcnow().isoformat()
+    workflow_nodes_repo.upsert_node_status(
+        conversation_id=conversation_id,
+        node_id="workflow",
+        status="stopped",
+        metadata={
+            "stopped_at": now_iso,
+            "stopped_by": user_id,
+        },
+    )
+    
+    logger.info(
+        "Workflow stopped successfully: project_id=%s, conversation_id=%s, user_id=%s",
+        project_id,
+        conversation_id,
+        user_id,
+    )
+    
+    return StopWorkflowResponse(
+        success=True,
+        message="Workflow stopped successfully",
+        conversation_id=conversation_id,
+    )
 

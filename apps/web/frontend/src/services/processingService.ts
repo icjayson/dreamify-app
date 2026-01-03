@@ -65,7 +65,8 @@ class ProcessingService {
 
   async getWorkflowStatus(
     conversationId: string,
-    projectId: string
+    projectId: string,
+    abortSignal?: AbortSignal
   ): Promise<ProcessingResponse> {
     try {
       const workflowStatus = await conversationService.getWorkflowStatus(conversationId, projectId);
@@ -74,13 +75,26 @@ class ProcessingService {
         data: {
           success: true,
           status: workflowStatus.status === 'completed' ? 'completed' : 
-                  workflowStatus.status === 'error' ? 'error' : 'processing',
+                  workflowStatus.status === 'error' ? 'error' : 
+                  workflowStatus.status === 'stopped' ? 'stopped' : 'processing',
           fileID: '', // Not needed for workflow status
           conversation_id: conversationId,
           workflow_status: workflowStatus,
         },
       };
     } catch (error) {
+      if (abortSignal?.aborted) {
+        return {
+          success: false,
+          data: {
+            success: false,
+            status: 'error',
+            fileID: '',
+            conversation_id: conversationId,
+            error: 'Request aborted',
+          },
+        };
+      }
       return {
         success: false,
         data: {
@@ -100,7 +114,8 @@ class ProcessingService {
     conversationId?: string,
     onStatusUpdate?: (status: ProcessingResponse) => void,
     maxAttempts: number = 30,
-    intervalMs: number = 5000
+    intervalMs: number = 5000,
+    abortSignal?: AbortSignal
   ): Promise<ProcessingResponse> {
     if (!conversationId) {
       return {
@@ -116,13 +131,41 @@ class ProcessingService {
 
     let attempts = 0;
     while (attempts < maxAttempts) {
+      // Check if aborted before each iteration
+      if (abortSignal?.aborted) {
+        return {
+          success: false,
+          data: {
+            success: false,
+            status: 'error',
+            fileID: assetId,
+            conversation_id: conversationId,
+            error: 'Polling aborted',
+          },
+        };
+      }
+
       try {
-        const status = await this.getWorkflowStatus(conversationId, projectId);
+        const status = await this.getWorkflowStatus(conversationId, projectId, abortSignal);
         if (onStatusUpdate) {
           onStatusUpdate(status);
         }
 
         const workflowStatus = status.data?.workflow_status?.status;
+        
+        if (workflowStatus === 'stopped') {
+          return {
+            success: true,
+            data: {
+              success: true,
+              status: 'stopped',
+              fileID: assetId,
+              conversation_id: conversationId,
+              message: 'Workflow stopped by user',
+              workflow_status: status.data?.workflow_status,
+            },
+          };
+        }
         
         if (workflowStatus === 'completed') {
           // Check response type from workflow status

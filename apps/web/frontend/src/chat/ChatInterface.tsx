@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -128,7 +128,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     setSelectedTemplate,
     sendMessage,
     clearInput,
-    processFileWithMessage
+    processFileWithMessage,
+    stopGeneration
   } = useChatStore();
   
   const {
@@ -682,13 +683,22 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               >
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
-              <Button
-                onClick={() => handleSend()}
-                disabled={!inputValue.trim() || isTyping}
-                className="button-gradient p-3 disabled:opacity-50"
-              >
-                <CornerRightUp className="w-4 h-4" />
-              </Button>
+              {(isProcessing || uploadedFile?.status === 'processing') ? (
+                <Button
+                  onClick={() => stopGeneration()}
+                  className="button-gradient p-3"
+                >
+                  <Square className="w-4 h-4" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => handleSend()}
+                  disabled={!inputValue.trim() || isTyping}
+                  className="button-gradient p-3 disabled:opacity-50"
+                >
+                  <CornerRightUp className="w-4 h-4" />
+                </Button>
+              )}
             </div>
           </div>
         </div>

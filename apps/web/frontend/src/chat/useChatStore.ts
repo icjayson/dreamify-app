@@ -119,6 +119,9 @@ interface ChatState {
   // Template state
   selectedTemplate: { id: string; title: string; description: string; image: string; category: string } | null;
   
+  // Abort controller for stopping generation
+  abortController: AbortController | null;
+  
   // Actions
   setInputValue: (value: string) => void;
   setIsTyping: (typing: boolean) => void;
@@ -146,6 +149,7 @@ interface ChatState {
   clearInput: () => void;
   resetChat: () => void;
   processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string) => Promise<void>;
+  stopGeneration: () => Promise<void>;
 }
 
 const initialMessages: Message[] = [
@@ -178,6 +182,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   originalFileBlob: null,
   originalFileName: null,
   selectedTemplate: null,
+  abortController: null,
   
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -230,6 +235,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string) => {
     const state = get();
     const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
+    
+    // Create new AbortController for this processing session
+    const abortController = new AbortController();
+    set({ abortController });
     
     // Clear current workflow step at start
     setCurrentWorkflowStep(null);
@@ -353,8 +362,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             (status) => {
               // Update status based on workflow status
               const workflowStatus = status.data?.workflow_status?.status;
-              if (workflowStatus === 'error') {
+              if (workflowStatus === 'error' || workflowStatus === 'stopped') {
                 setIsProcessing(false);
+              }
+              if (workflowStatus === 'stopped') {
+                setIsTyping(false);
               }
               // Track current workflow step
               const step = status.data?.workflow_status?.metadata?.step;
@@ -363,7 +375,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
               }
             },
             60,
-            5000
+            5000,
+            abortController.signal
           );
           
           console.log('Q&A final result:', finalResult);
@@ -620,8 +633,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const workflowStatus = status.data?.workflow_status?.status;
             if (workflowStatus === 'processing') {
               setUploadedFile((prev) => prev ? { ...prev, status: 'processing' } : prev);
-            } else if (workflowStatus === 'error') {
-              setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
+            } else if (workflowStatus === 'error' || workflowStatus === 'stopped') {
+              setUploadedFile((prev) => prev ? { ...prev, status: workflowStatus === 'stopped' ? 'processed' : 'error' } : prev);
+            }
+            if (workflowStatus === 'stopped') {
+              setIsProcessing(false);
+              setIsTyping(false);
             }
             // Track current workflow step
             const step = status.data?.workflow_status?.metadata?.step;
@@ -630,7 +647,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           },
           60, // max attempts (60 seconds)
-          5000 // 5 second intervals
+          5000, // 5 second intervals
+          abortController.signal
         );
         console.log('Final polling result:', finalResult);
         
@@ -727,7 +745,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } finally {
       setIsTyping(false);
       setIsProcessing(false);
+      // Clear abort controller when processing completes
+      set({ abortController: null });
     }
+  },
+  
+  stopGeneration: async () => {
+    const state = get();
+    const { abortController, currentConversationId, setIsProcessing, setIsTyping } = state;
+    
+    // Abort the polling if controller exists
+    if (abortController && !abortController.signal.aborted) {
+      abortController.abort();
+    }
+    
+    // Call stop API if we have a conversation ID
+    if (currentConversationId) {
+      try {
+        // Get projectId from uploadedFile or state
+        const projectId = state.uploadedFile?.projectId;
+        if (projectId) {
+          const { conversationService } = await import('@/services/conversationService');
+          await conversationService.stopWorkflow(currentConversationId, projectId);
+        }
+      } catch (error) {
+        console.error('Failed to stop workflow:', error);
+      }
+    }
+    
+    // Clear abort controller and update state
+    set({ 
+      abortController: null,
+      isProcessing: false,
+      isTyping: false,
+    });
   },
   
   resetChat: () => set({

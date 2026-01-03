@@ -55,9 +55,10 @@ class ConversationService {
     throw new Error(response.error || 'Failed to load conversation');
   }
 
-  async getWorkflowStatus(conversationId: string, projectId: string): Promise<WorkflowStatusResponse> {
+  async getWorkflowStatus(conversationId: string, projectId: string, abortSignal?: AbortSignal): Promise<WorkflowStatusResponse> {
     const response = await api.get<WorkflowStatusResponse>(
-      `/api/v1/morpheus/workflow-status/${conversationId}?project_id=${projectId}`
+      `/api/v1/morpheus/workflow-status/${conversationId}?project_id=${projectId}`,
+      abortSignal ? { signal: abortSignal } : undefined
     );
     if (response.success && response.data) {
       return response.data;
@@ -77,6 +78,21 @@ class ConversationService {
     } catch (error) {
       console.error('Failed to get dashboard data:', error);
       return null;
+    }
+  }
+
+  async stopWorkflow(conversationId: string, projectId: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const response = await api.post<{ success: boolean; message: string; conversation_id: string }>(
+        `/api/v1/conversation/${conversationId}/stop?project_id=${projectId}`
+      );
+      if (response.success && response.data) {
+        return { success: true, message: response.data.message };
+      }
+      return { success: false, error: response.error || 'Failed to stop workflow' };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      return { success: false, error: errorMessage };
     }
   }
 }

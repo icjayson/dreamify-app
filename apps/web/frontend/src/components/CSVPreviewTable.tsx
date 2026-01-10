@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Pagination,
   PaginationContent,
@@ -36,6 +37,7 @@ export default function CSVPreviewTable({
     column: number | null;
     direction: 'asc' | 'desc';
   } | null>(null);
+  const isMobile = useIsMobile();
 
   // Sort rows
   const sortedRows = useMemo(() => {
@@ -121,7 +123,7 @@ export default function CSVPreviewTable({
   // Generate page numbers to display
   const getPageNumbers = () => {
     const pages: (number | 'ellipsis')[] = [];
-    const maxVisible = 7;
+    const maxVisible = isMobile ? 3 : 7;
 
     if (totalPages <= maxVisible) {
       // Show all pages if total is small
@@ -129,30 +131,57 @@ export default function CSVPreviewTable({
         pages.push(i);
       }
     } else {
-      // Always show first page
-      pages.push(0);
-
-      if (currentPage <= 3) {
-        // Near the start
-        for (let i = 1; i <= 5; i++) {
-          pages.push(i);
-        }
-        pages.push('ellipsis');
-        pages.push(totalPages - 1);
-      } else if (currentPage >= totalPages - 4) {
-        // Near the end
-        pages.push('ellipsis');
-        for (let i = totalPages - 5; i < totalPages; i++) {
-          pages.push(i);
+      if (isMobile) {
+        // Mobile: show only current page and adjacent pages
+        if (currentPage === 0) {
+          // At start: show first 2 pages and last page
+          pages.push(0);
+          pages.push(1);
+          pages.push('ellipsis');
+          pages.push(totalPages - 1);
+        } else if (currentPage === totalPages - 1) {
+          // At end: show first page and last 2 pages
+          pages.push(0);
+          pages.push('ellipsis');
+          pages.push(totalPages - 2);
+          pages.push(totalPages - 1);
+        } else {
+          // In middle: show first, current-1, current, current+1, last
+          pages.push(0);
+          pages.push('ellipsis');
+          pages.push(currentPage - 1);
+          pages.push(currentPage);
+          pages.push(currentPage + 1);
+          pages.push('ellipsis');
+          pages.push(totalPages - 1);
         }
       } else {
-        // In the middle
-        pages.push('ellipsis');
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-          pages.push(i);
+        // Desktop: show more pages
+        // Always show first page
+        pages.push(0);
+
+        if (currentPage <= 3) {
+          // Near the start
+          for (let i = 1; i <= 5; i++) {
+            pages.push(i);
+          }
+          pages.push('ellipsis');
+          pages.push(totalPages - 1);
+        } else if (currentPage >= totalPages - 4) {
+          // Near the end
+          pages.push('ellipsis');
+          for (let i = totalPages - 5; i < totalPages; i++) {
+            pages.push(i);
+          }
+        } else {
+          // In the middle
+          pages.push('ellipsis');
+          for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+            pages.push(i);
+          }
+          pages.push('ellipsis');
+          pages.push(totalPages - 1);
         }
-        pages.push('ellipsis');
-        pages.push(totalPages - 1);
       }
     }
 
@@ -193,7 +222,7 @@ export default function CSVPreviewTable({
         {/* Header */}
         <div className="border-b bg-muted/50 p-4 flex-shrink-0">
         <h1 className="text-xl font-semibold mb-1">{filename}</h1>
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <div className="flex items-center gap-4 md:text-sm text-xs text-muted-foreground">
           <span>{totalRows.toLocaleString()} total rows</span>
           {displayedRows < totalRows && (
             <span className="text-amber-600">
@@ -264,12 +293,12 @@ export default function CSVPreviewTable({
 
         {/* Pagination Footer */}
         {totalPages > 1 && (
-          <div className="border-t bg-muted/50 px-4 py-3 flex items-center justify-between flex-shrink-0">
-            <div className="text-sm text-muted-foreground">
+          <div className="border-t bg-muted/50 px-4 py-3 flex flex-col lg:flex-row items-center lg:justify-between gap-3 lg:gap-0 flex-shrink-0">
+            <div className="text-sm text-muted-foreground text-right lg:text-left w-full lg:w-auto">
               Showing {startRow} to {endRow} of {sortedRows.length} entries
             </div>
-            <Pagination>
-              <PaginationContent>
+            <Pagination className="w-full lg:w-auto overflow-x-auto">
+              <PaginationContent className="justify-center lg:justify-start flex-wrap">
                 <PaginationItem>
                   <PaginationPrevious
                     onClick={handlePreviousPage}

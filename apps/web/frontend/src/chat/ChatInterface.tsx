@@ -161,6 +161,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isSendingRef = useRef<boolean>(false);
   const { toast } = useToast();
 
   // Speech recognition hook
@@ -261,10 +262,28 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
+    if (isSendingRef.current) return;
 
-    // Delegate adding the user message to the store's process flow to avoid duplicates
-    clearInput();
-    await processFileWithMessage(inputValue.trim(), onProcessedDataChange, projectId);
+    isSendingRef.current = true;
+    const messageContent = inputValue.trim();
+    
+    try {
+      // Delegate adding the user message to the store's process flow to avoid duplicates
+      clearInput();
+      // Force clear input again after browser processes spell check
+      // This handles cases where browser spell check interferes with input clearing
+      setTimeout(() => {
+        setInputValue('');
+        // Force clear DOM element directly to handle browser spell check interference
+        const textarea = document.querySelector('textarea[data-chat-input]') as HTMLTextAreaElement;
+        if (textarea) {
+          textarea.value = '';
+        }
+      }, 10);
+      await processFileWithMessage(messageContent, onProcessedDataChange, projectId);
+    } finally {
+      isSendingRef.current = false;
+    }
   };
 
 
@@ -576,9 +595,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               onChange={(e) => setInputValue(e.target.value)}
               placeholder={isListening ? 'Listening...' : "Describe your dashboard..."}
               className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60"
+              data-chat-input
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
+                  e.stopPropagation();
                   handleSend();
                 }
               }}

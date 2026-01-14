@@ -33,6 +33,7 @@ class ProjectUpdateRequest(BaseModel):
     latest_conversation_id: Optional[str] = None
     latest_dashboard_id: Optional[str] = None
     dashboard_title: Optional[str] = None
+    is_preview_public: Optional[bool] = None
 
 
 class ProjectResponse(BaseModel):
@@ -44,6 +45,7 @@ class ProjectResponse(BaseModel):
     latest_conversation_id: Optional[str] = None
     latest_dashboard_id: Optional[str] = None
     dashboard_title: Optional[str] = None
+    is_preview_public: Optional[bool] = None
 
 
 class ProjectListResponse(BaseModel):
@@ -103,6 +105,7 @@ def _map_project(item: dict) -> ProjectResponse:
         latest_conversation_id=item.get("latest_conversation_id"),
         latest_dashboard_id=item.get("latest_dashboard_id"),
         dashboard_title=item.get("dashboard_title"),
+        is_preview_public=item.get("is_preview_public", False),
     )
 
 
@@ -199,6 +202,7 @@ async def update_project_endpoint(
         latest_conversation_id=request.latest_conversation_id,
         latest_dashboard_id=request.latest_dashboard_id,
         dashboard_title=request.dashboard_title,
+        is_preview_public=request.is_preview_public,
     )
     if not updated_project:
         raise HTTPException(status_code=404, detail="Project not found")

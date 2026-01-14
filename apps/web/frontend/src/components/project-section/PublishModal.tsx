@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Check, Copy, Mail, Globe, Shield, Loader2, Download, SquareArrowOutUpRight, Edit3 } from 'lucide-react';
+import { X, Check, Copy, Mail, Globe, Shield, Loader2, Download, SquareArrowOutUpRight } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { exportDashboardAsPdf, downloadBlob } from '@/utils/exportUtils';
 import { useChatStore } from '@/chat/useChatStore';
+import { projectService } from '@/services/projectService';
 
 interface PublishModalProps {
   open: boolean;
@@ -21,8 +22,10 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
   const [available, setAvailable] = useState<boolean | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invited, setInvited] = useState<string[]>([]);
-  const [isEditingSlug, setIsEditingSlug] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isPreviewPublic, setIsPreviewPublic] = useState(false);
+  const [isUpdatingPublic, setIsUpdatingPublic] = useState(false);
+  const [copied, setCopied] = useState(false);
   const originalFileBlob = useChatStore(s => s.originalFileBlob);
   const originalFileName = useChatStore(s => s.originalFileName);
   const uploadedFile = useChatStore(s => s.uploadedFile);
@@ -59,6 +62,24 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
     setActiveTab('share');
   }, [open]);
 
+  // Load current is_preview_public value when modal opens
+  useEffect(() => {
+    if (!open || !projectId) return;
+    
+    const loadProjectSettings = async () => {
+      try {
+        const response = await projectService.getProject(projectId);
+        if (response.success && response.project) {
+          setIsPreviewPublic(response.project.is_preview_public || false);
+        }
+      } catch (error) {
+        console.error('Failed to load project settings:', error);
+      }
+    };
+
+    loadProjectSettings();
+  }, [open, projectId]);
+
   // Mock slug availability check
   useEffect(() => {
     setAvailable(null);
@@ -84,7 +105,11 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
   const close = () => onOpenChange(false);
 
   const handleCopy = async () => {
-    try { await navigator.clipboard.writeText(previewUrl); } catch (_e) {}
+    try {
+      await navigator.clipboard.writeText(previewUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (_e) {}
   };
 
   const handleInvite = () => {
@@ -126,12 +151,25 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
     window.open(previewUrl, '_blank');
   };
 
-  const handleEditSlug = () => {
-    setIsEditingSlug(true);
-  };
 
-  const handleSaveSlug = () => {
-    setIsEditingSlug(false);
+  const handleTogglePublic = async () => {
+    if (!projectId || isUpdatingPublic) return;
+    
+    const newValue = !isPreviewPublic;
+    setIsUpdatingPublic(true);
+    
+    try {
+      const response = await projectService.updateProject(projectId, undefined, undefined, newValue);
+      if (response.success) {
+        setIsPreviewPublic(newValue);
+      } else {
+        console.error('Failed to update preview visibility:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to update preview visibility:', error);
+    } finally {
+      setIsUpdatingPublic(false);
+    }
   };
 
   const InnerContent = (
@@ -150,54 +188,34 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
           <div className="space-y-4">
             <div>
               <div className="text-sm font-medium mb-2">Share Link</div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex items-stretch sm:items-center gap-2">
                 <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-black group hover:bg-black/80 transition-all duration-200 min-w-0">
                   <Globe className="w-4 h-4 flex-shrink-0"/>
-                  {isEditingSlug ? (
-                    <input
-                      value={previewUrl}
-                      readOnly
-                      className="bg-transparent outline-none text-sm flex-1 text-white/70 truncate min-w-0"
-                      autoFocus
-                    />
-                  ) : (
-                    <button 
-                      onClick={handleOpenPublishedDashboard}
-                      className="text-sm text-white group-hover:underline cursor-pointer flex items-center transition-all duration-200 flex-1 text-left truncate min-w-0"
-                    >
-                      {previewUrl}
-                    </button>
-                  )}
-                  {!isEditingSlug && (
-                    <button 
-                      onClick={handleOpenPublishedDashboard}
-                      className="text-muted-foreground hover:text-white transition-colors duration-200 flex-shrink-0"
-                    >
-                      <SquareArrowOutUpRight className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                <div className="hidden sm:flex py-2 items-center gap-2 flex-shrink-0">
                   <button 
-                    onClick={isEditingSlug ? handleSaveSlug : handleEditSlug} 
-                    className="button-outline h-9 px-3 flex items-center gap-2 text-sm"
+                    onClick={handleOpenPublishedDashboard}
+                    className="text-sm text-white group-hover:underline cursor-pointer flex items-center transition-all duration-200 flex-1 text-left truncate min-w-0"
                   >
-                    {isEditingSlug ? (
-                      <>
-                        <Check className="w-4 h-4"/>
-                        Done
-                      </>
-                    ) : (
-                      <>
-                        <Edit3 className="w-4 h-4"/>
-                        Edit
-                      </>
-                    )}
+                    {previewUrl}
                   </button>
-                  <button onClick={handleCopy} className="button-outline h-9 px-3 flex items-center gap-2 text-sm"><Copy className="w-4 h-4"/></button>
+                  <button 
+                    onClick={handleOpenPublishedDashboard}
+                    className="text-muted-foreground hover:text-white transition-colors duration-200 flex-shrink-0"
+                  >
+                    <SquareArrowOutUpRight className="w-4 h-4" />
+                  </button>
                 </div>
+                <button 
+                  onClick={handleCopy} 
+                  className="button-outline h-9 px-3 flex items-center justify-center gap-2 text-sm flex-shrink-0"
+                >
+                  {copied ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
               </div>
-              <div className="flex items-center justify-between gap-2 pt-2 sm:mt-2">
+              <div className="flex items-center justify-between gap-2 sm:mt-2">
                 <div className="h-5 text-xs">
                   {!slug || !isValidSlug(slug) ? (
                     <span className="text-red-400">Slug must be 3–50 chars, lowercase letters, numbers, hyphens</span>
@@ -209,34 +227,41 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
                     <span className="inline-flex items-center gap-1 text-green-400"><Check className="w-3 h-3"/>Available</span>
                   ) : null}
                 </div>
-                <div className="flex sm:hidden items-center gap-2">
-                  <button 
-                    onClick={isEditingSlug ? handleSaveSlug : handleEditSlug} 
-                    className="button-outline h-9 px-3 flex items-center gap-2 text-sm"
-                  >
-                    {isEditingSlug ? (
-                      <>
-                        <Check className="w-4 h-4"/>
-                        Done
-                      </>
-                    ) : (
-                      <>
-                        <Edit3 className="w-4 h-4"/>
-                        Edit
-                      </>
-                    )}
-                  </button>
-                  <button onClick={handleCopy} className="button-outline h-9 px-3 flex items-center gap-2 text-sm"><Copy className="w-4 h-4"/></button>
-                </div>
               </div>
             </div>
 
-            <div className="py-0">
-              <button className="w-full flex items-center justify-between py-0 text-sm text-left text-muted-foreground">
-                <span className="opacity-70">+ Custom Domain</span>
-                <span className="text-xs">(coming soon)</span>
-              </button>
-            </div>
+            {projectId && (
+              <div className="space-y-3 pt-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {isPreviewPublic ? (
+                      <Globe className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Shield className="w-4 h-4 text-muted-foreground" />
+                    )}
+                    <div>
+                      <div className="text-sm font-medium">Preview Visibility</div>
+                      <div className="text-xs text-muted-foreground">
+                        {isPreviewPublic ? 'Public - Anyone with the link can view' : 'Private - Only you can view'}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleTogglePublic}
+                    disabled={isUpdatingPublic}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                      isPreviewPublic ? 'bg-green-500' : 'bg-gray-600'
+                    } ${isUpdatingPublic ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                        isPreviewPublic ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 pt-4 border-t border-white/10">
               <div className="text-sm font-medium">Export Options</div>

@@ -58,11 +58,7 @@ const AppContent = () => {
             <ProjectPage />
           </SignedIn>
         } />
-        <Route path="/workspace/project/preview" element={
-          <SignedIn>
-            <PreviewPage />
-          </SignedIn>
-        } />
+        <Route path="/workspace/project/preview" element={<PreviewPage />} />
         <Route path="/preview/:assetId" element={<FilePreviewPage />} />
         <Route path="/cancel" element={<CancelPage />} />
         <Route path="/success" element={<SuccessPage />} />

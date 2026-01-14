@@ -7,13 +7,14 @@ import { useChatStore } from '@/chat/useChatStore';
 interface PublishModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectId?: string;
 }
 
 const BASE_DOMAIN = 'dreamify.dev';
 
 const isValidSlug = (s: string) => /^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$/.test(s);
 
-export default function PublishModal({ open, onOpenChange }: PublishModalProps) {
+export default function PublishModal({ open, onOpenChange, projectId }: PublishModalProps) {
   const [activeTab, setActiveTab] = useState<'share' | 'export'>('share');
   const [slug, setSlug] = useState('dashboard-' + Math.random().toString(16).slice(2, 8));
   const [checking, setChecking] = useState(false);
@@ -71,13 +72,19 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
   }, [slug]);
 
   const fullUrl = useMemo(() => `https://${slug}.${BASE_DOMAIN}`, [slug]);
+  const previewUrl = useMemo(() => {
+    const baseUrl = window.location.origin;
+    return projectId 
+      ? `${baseUrl}/workspace/project/preview?projectId=${projectId}`
+      : `${baseUrl}/workspace/project/preview`;
+  }, [projectId]);
 
   if (!open) return null;
 
   const close = () => onOpenChange(false);
 
   const handleCopy = async () => {
-    try { await navigator.clipboard.writeText(fullUrl); } catch (_e) {}
+    try { await navigator.clipboard.writeText(previewUrl); } catch (_e) {}
   };
 
   const handleInvite = () => {
@@ -113,7 +120,10 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
     } catch (_e) {
       // ignore errors
     }
-    window.open('/workspace/project/preview', '_blank');
+    const previewUrl = projectId 
+      ? `/workspace/project/preview?projectId=${projectId}`
+      : '/workspace/project/preview';
+    window.open(previewUrl, '_blank');
   };
 
   const handleEditSlug = () => {
@@ -134,77 +144,90 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
         <button onClick={close} className="p-2 hover:bg-white/5 rounded-md"><X className="w-4 h-4"/></button>
       </div>
 
-      {/* Tabs */}
-      <div className="px-4 pt-3">
-        <div className="inline-flex rounded-lg border border-white/10 overflow-hidden">
-          <button onClick={() => setActiveTab('share')} className={`px-3 py-1.5 text-sm ${activeTab==='share' ? 'bg-black' : ''}`}>Share Settings</button>
-          <button onClick={() => setActiveTab('export')} className={`px-3 py-1.5 text-sm ${activeTab==='export' ? 'bg-black' : ''}`}>Export Options</button>
-        </div>
-      </div>
-
       {/* Body */}
       <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
         {activeTab === 'share' && (
           <div className="space-y-4">
             <div>
-              <div className="text-sm font-medium mb-2">Website Address</div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-black group hover:bg-black/80 transition-all duration-200">
-                  <Globe className="w-4 h-4"/>
+              <div className="text-sm font-medium mb-2">Share Link</div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-black group hover:bg-black/80 transition-all duration-200 min-w-0">
+                  <Globe className="w-4 h-4 flex-shrink-0"/>
                   {isEditingSlug ? (
                     <input
-                      value={slug}
-                      onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/-{2,}/g, '-').replace(/^-/,'').replace(/-$/,''))}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveSlug()}
-                      placeholder="your-dashboard"
-                      className="bg-transparent outline-none text-sm flex-1"
+                      value={previewUrl}
+                      readOnly
+                      className="bg-transparent outline-none text-sm flex-1 text-white/70 truncate min-w-0"
                       autoFocus
                     />
                   ) : (
                     <button 
                       onClick={handleOpenPublishedDashboard}
-                      className="text-sm text-white group-hover:underline cursor-pointer flex items-center transition-all duration-200 flex-1"
+                      className="text-sm text-white group-hover:underline cursor-pointer flex items-center transition-all duration-200 flex-1 text-left truncate min-w-0"
                     >
-                      {slug}.{BASE_DOMAIN}
+                      {previewUrl}
                     </button>
                   )}
                   {!isEditingSlug && (
                     <button 
                       onClick={handleOpenPublishedDashboard}
-                      className="text-muted-foreground hover:text-white transition-colors duration-200 ml-auto"
+                      className="text-muted-foreground hover:text-white transition-colors duration-200 flex-shrink-0"
                     >
                       <SquareArrowOutUpRight className="w-4 h-4" />
                     </button>
                   )}
                 </div>
-                <button 
-                  onClick={isEditingSlug ? handleSaveSlug : handleEditSlug} 
-                  className="button-outline h-9 px-3 flex items-center gap-2 text-sm"
-                >
-                  {isEditingSlug ? (
-                    <>
-                      <Check className="w-4 h-4"/>
-                      Done
-                    </>
-                  ) : (
-                    <>
-                      <Edit3 className="w-4 h-4"/>
-                      Edit
-                    </>
-                  )}
-                </button>
-                <button onClick={handleCopy} className="button-outline h-9 px-3 flex items-center gap-2 text-sm"><Copy className="w-4 h-4"/></button>
+                <div className="hidden sm:flex py-2 items-center gap-2 flex-shrink-0">
+                  <button 
+                    onClick={isEditingSlug ? handleSaveSlug : handleEditSlug} 
+                    className="button-outline h-9 px-3 flex items-center gap-2 text-sm"
+                  >
+                    {isEditingSlug ? (
+                      <>
+                        <Check className="w-4 h-4"/>
+                        Done
+                      </>
+                    ) : (
+                      <>
+                        <Edit3 className="w-4 h-4"/>
+                        Edit
+                      </>
+                    )}
+                  </button>
+                  <button onClick={handleCopy} className="button-outline h-9 px-3 flex items-center gap-2 text-sm"><Copy className="w-4 h-4"/></button>
+                </div>
               </div>
-              <div className="h-5 mt-1 text-xs">
-                {!slug || !isValidSlug(slug) ? (
-                  <span className="text-red-400">Slug must be 3–50 chars, lowercase letters, numbers, hyphens</span>
-                ) : checking ? (
-                  <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin"/>Checking availability…</span>
-                ) : available === false ? (
-                  <span className="text-red-400">This slug is taken</span>
-                ) : available === true ? (
-                  <span className="inline-flex items-center gap-1 text-green-400"><Check className="w-3 h-3"/>Available</span>
-                ) : null}
+              <div className="flex items-center justify-between gap-2 pt-2 sm:mt-2">
+                <div className="h-5 text-xs">
+                  {!slug || !isValidSlug(slug) ? (
+                    <span className="text-red-400">Slug must be 3–50 chars, lowercase letters, numbers, hyphens</span>
+                  ) : checking ? (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin"/>Checking availability…</span>
+                  ) : available === false ? (
+                    <span className="text-red-400">This slug is taken</span>
+                  ) : available === true ? (
+                    <span className="inline-flex items-center gap-1 text-green-400"><Check className="w-3 h-3"/>Available</span>
+                  ) : null}
+                </div>
+                <div className="flex sm:hidden items-center gap-2">
+                  <button 
+                    onClick={isEditingSlug ? handleSaveSlug : handleEditSlug} 
+                    className="button-outline h-9 px-3 flex items-center gap-2 text-sm"
+                  >
+                    {isEditingSlug ? (
+                      <>
+                        <Check className="w-4 h-4"/>
+                        Done
+                      </>
+                    ) : (
+                      <>
+                        <Edit3 className="w-4 h-4"/>
+                        Edit
+                      </>
+                    )}
+                  </button>
+                  <button onClick={handleCopy} className="button-outline h-9 px-3 flex items-center gap-2 text-sm"><Copy className="w-4 h-4"/></button>
+                </div>
               </div>
             </div>
 
@@ -215,36 +238,9 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
               </button>
             </div>
 
-            <div className="space-y-3 py-4 border-t border-white/10">
-              <div className="text-sm font-medium">Share</div>
-              <div className="flex gap-2">
-                <input
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="Invite by email"
-                  className="flex-1 px-3 py-2 rounded-lg bg-black text-sm"
-                />
-                <button onClick={handleInvite} className="button-gradient h-9 px-3 rounded-md text-sm flex items-center gap-2"><Mail className="w-4 h-4"/>Invite</button>
-              </div>
-              {!!invited.length && (
-                <div className="text-xs text-muted-foreground">Invited: {invited.join(', ')}</div>
-              )}
-              <div className="flex items-center justify-between text-sm text-muted-foreground rounded-lg border border-white/20 px-3 py-2">
-                <span>Everyone can view</span>
-                <span>Public</span>
-              </div>
-            </div>
-
-            <div className="pt-2 flex items-center justify-between">
-              <button className="button-outline h-9 px-3 flex items-center gap-2 text-sm"><Shield className="w-4 h-4"/>Review Security</button>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400">Updated</span>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'export' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3 pt-4 border-t border-white/10">
+              <div className="text-sm font-medium">Export Options</div>
+              <div className="grid grid-cols-2 gap-3">
               <button 
                 onClick={handleExportPdf} 
                 disabled={isExportingPdf}
@@ -265,8 +261,9 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
               <button onClick={handleExportCsv} disabled={!originalFileBlob} className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"><Download className="w-4 h-4"/>Export CSV</button>
             </div>
             {!originalFileBlob && (
-              <div className="text-xs text-muted-foreground">CSV export is available when the original uploaded file is a CSV.</div>
+              <div className="text-xs text-muted-foreground font-inter italic">CSV export is available when the original uploaded file is a CSV.</div>
             )}
+            </div>
           </div>
         )}
       </div>
@@ -294,14 +291,12 @@ export default function PublishModal({ open, onOpenChange }: PublishModalProps) 
       )}
 
       {/* Desktop/Tablet: centered dialog - ONLY mounted on screens >= sm */}
-      {open && isDesktop && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/60" onClick={close} />
           <div className="relative w-full max-w-lg mx-4 md:mx-0 bg-muted rounded-2xl border border-white/10 shadow-xl overflow-hidden">
             {InnerContent}
           </div>
         </div>
-      )}
     </>
   );
 }

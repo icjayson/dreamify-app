@@ -1,19 +1,20 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import AmazonDashboard from "@/components/project-section/Amazon_Dashboard";
-import AmazonDashboardDark from "@/components/project-section/Amazon_Dashboard_Dark";
+import { useAuth } from "@clerk/clerk-react";
+import { Shield, Lock, ArrowLeft } from "lucide-react";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
 import { useChatStore } from "@/chat/useChatStore";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import { projectService } from "@/services/projectService";
 import { conversationService } from "@/services/conversationService";
+import { publicProjectService } from "@/services/publicProjectService";
 
 export default function PreviewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('projectId');
+  const { isSignedIn } = useAuth();
   const dashboardTheme = useChatStore((s) => s.dashboardTheme);
   const isThemeChanging = useChatStore((s) => s.isThemeChanging);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
@@ -47,13 +48,26 @@ export default function PreviewPage() {
       setLoadError(null);
 
       try {
-        const response = await projectService.getProject(projectId);
+        // Use authenticated or public service based on auth status
+        let response;
+        if (isSignedIn) {
+          response = await projectService.getProject(projectId);
+        } else {
+          response = await publicProjectService.getPublicProject(projectId);
+        }
+        
         if (cancelled) return;
 
         if (response.success && response.project) {
           const latestConversationId = response.project.latest_conversation_id;
           if (latestConversationId) {
-            const dashboardResponse = await conversationService.getDashboardData(latestConversationId, projectId);
+            let dashboardResponse;
+            if (isSignedIn) {
+              dashboardResponse = await conversationService.getDashboardData(latestConversationId, projectId);
+            } else {
+              dashboardResponse = await publicProjectService.getPublicDashboardData(latestConversationId, projectId);
+            }
+            
             if (cancelled) return;
 
             if (dashboardResponse?.dashboard_data) {
@@ -79,7 +93,7 @@ export default function PreviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, isSignedIn]);
 
   return (
     <div className="min-h-screen bg-muted">
@@ -88,10 +102,64 @@ export default function PreviewPage() {
         {isLoadingProject ? (
           <DashboardLoading title="Loading Project" description="Please wait while we load your dashboard..." durationSec={10} />
         ) : loadError ? (
-          <div className="flex items-center justify-center min-h-screen">
-            <div className="text-center">
-              <p className="text-red-400 mb-2">Error loading project</p>
-              <p className="text-muted-foreground text-sm">{loadError}</p>
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="w-full max-w-md">
+              <div className="glass-panel rounded-2xl p-4 text-center space-y-6 border border-white/10">
+                {loadError.includes('not public') || loadError.includes('not publicly') ? (
+                  <>
+                    <div className="flex justify-center">
+                      <div className="p-4 rounded-full bg-orange-500/20 border border-orange-500/30">
+                        <Shield className="w-12 h-12 text-orange-400" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <h2 className="text-2xl font-semibold text-white">Private Preview</h2>
+                      <p className="text-muted-foreground">
+                        This dashboard preview is set to private. Only the project owner can view it.
+                      </p>
+                    </div>
+                    {!isSignedIn && (
+                      <div className="pt-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          Sign in to access your private dashboards
+                        </p>
+                        <button
+                          onClick={() => navigate('/login')}
+                          className="button-outline w-full py-2.5 flex items-center justify-center gap-2"
+                        >
+                          Sign In
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => navigate('/')}
+                      className="text-sm text-muted-foreground hover:text-white transition-colors flex items-center justify-center gap-2 mx-auto"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to Home
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-center">
+                      <div className="p-4 rounded-full bg-red-500/20 border border-red-500/30">
+                        <Lock className="w-12 h-12 text-red-400" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <h2 className="text-2xl font-semibold text-white">Unable to Load Project</h2>
+                      <p className="text-muted-foreground text-sm">{loadError}</p>
+                    </div>
+                    <button
+                      onClick={() => navigate('/')}
+                      className="button-outline w-full py-2.5 flex items-center justify-center gap-2"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to Home
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         ) : isInitialLoading ? (

@@ -9,6 +9,7 @@ export interface ProjectRecord {
   latest_conversation_id?: string | null;
   latest_dashboard_id?: string | null;
   dashboard_title?: string | null;
+  is_preview_public?: boolean;
 }
 
 export interface ProjectResponse {
@@ -53,10 +54,11 @@ class ProjectService {
     return { success: false, error: res.error || 'Failed to load project' };
   }
 
-  async updateProject(projectId: string, name?: string, description?: string): Promise<ProjectResponse> {
+  async updateProject(projectId: string, name?: string, description?: string, is_preview_public?: boolean): Promise<ProjectResponse> {
     const res = await api.put<ProjectRecord>(`${this.baseUrl}/${projectId}`, {
       name,
       description,
+      is_preview_public,
     });
     if (res.success && res.data) {
       return { success: true, project: res.data };

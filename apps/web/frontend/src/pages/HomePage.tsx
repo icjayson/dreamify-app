@@ -250,6 +250,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [lottieData, setLottieData] = useState(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   
@@ -398,6 +399,47 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     }
   };
 
+  // Listen for document-level drag events to detect file dragging
+  useEffect(() => {
+    let dragCounter = 0;
+
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter++;
+      // Only track file drags
+      if (e.dataTransfer?.types.includes('Files')) {
+        setIsDragging(true);
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter === 0) {
+        setIsDragging(false);
+        setDragOver(false);
+      }
+    };
+
+    const handleDragEnd = () => {
+      dragCounter = 0;
+      setIsDragging(false);
+      setDragOver(false);
+    };
+
+    document.addEventListener('dragenter', handleDragEnter);
+    document.addEventListener('dragleave', handleDragLeave);
+    document.addEventListener('dragend', handleDragEnd);
+    document.addEventListener('drop', handleDragEnd);
+
+    return () => {
+      document.removeEventListener('dragenter', handleDragEnter);
+      document.removeEventListener('dragleave', handleDragLeave);
+      document.removeEventListener('dragend', handleDragEnd);
+      document.removeEventListener('drop', handleDragEnd);
+    };
+  }, []);
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(true);
@@ -405,13 +447,19 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    setDragOver(false);
+    if (e.currentTarget === e.target) {
+      setDragOver(false);
+    }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    handleFileUpload(e.dataTransfer.files);
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      await processFileUpload(file);
+    }
   };
 
   const handlePlusClick = () => {
@@ -437,10 +485,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     setInputValue('');
   };
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
+  const processFileUpload = async (file: File) => {
     const validationError = validateClientFile(file);
     if (validationError) {
       toast({ title: "Upload error", description: validationError, variant: "destructive" });
@@ -495,6 +540,12 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       });
       toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
     }
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await processFileUpload(file);
     
     // Reset input
     event.target.value = '';
@@ -642,7 +693,19 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         {/* Chat-First Interface */}
         <div className="max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
           {/* Main Chat Input */}
-          <div className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300">
+          <div 
+            className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300 relative"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {/* Drag Overlay */}
+            {isDragging && (
+              <div className={`absolute inset-0 rounded-3xl border-2 border-dashed border-white/60 flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-white/10' : ''}`}>
+                <FileText className="w-10 h-10 text-white mb-3" />
+                <span className="text-base text-white font-medium">Drop file here to upload</span>
+              </div>
+            )}
 
             {/* File Chip Area */}
             {uploadedFile && (

@@ -129,6 +129,8 @@ interface ChatInterfaceProps {
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }: ChatInterfaceProps) => {
   // Template state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Zustand stores
   const {
@@ -315,6 +317,143 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
   const handleFileUpload = () => {
     fileInputRef.current?.click();
+  };
+
+  const processFileUpload = async (file: File) => {
+    const validationError = validateClientFile(file);
+    if (validationError) {
+      toast({ title: "Upload error", description: validationError, variant: "destructive" });
+      return;
+    }
+    try {
+      // Create new file object for upload
+      const newFile = { 
+        fileID: 'pending', 
+        filename: file.name, 
+        size: file.size, 
+        ext: (file.name.split('.').pop() || '').toLowerCase(), 
+        status: 'uploading' as const 
+      };
+      
+      // Replace behavior: if an uploaded file exists, we'll delete it after new upload succeeds
+      setUploadedFile(newFile);
+
+      const res: UploadResponse = await fileService.uploadFile(file, { projectId: projectId ?? undefined });
+      if (!res.success || !res.fileID || res.asset?.status !== 'uploaded') {
+        setUploadedFile({ ...newFile, status: 'error' });
+        toast({
+          title: "Upload failed",
+          description: res.error || `Unexpected upload status: ${res.asset?.status ?? 'unknown'}`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Delete previous file if different
+      if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
+        void fileService.deleteFile(uploadedFile.fileID);
+      }
+
+      const fallbackFilename = res.filename ?? file.name;
+      const fallbackSize = res.size ?? file.size;
+      const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
+
+      setUploadedFile({ 
+        fileID: res.fileID, 
+        filename: fallbackFilename, 
+        size: fallbackSize, 
+        ext: fallbackExt, 
+        status: 'uploaded',
+        projectId: res.asset?.project_id,
+        rowCount: res.rowCount,
+        columnCount: res.columnCount
+      });
+      try {
+        // Persist original file for CSV export if it's CSV
+        if ((file.name.split('.').pop() || '').toLowerCase() === 'csv') {
+          // store in chat store for export
+          // lazy import to avoid circulars
+          const { useChatStore } = await import('@/chat/useChatStore');
+          useChatStore.getState().setOriginalFile({ blob: file, name: file.name });
+        } else {
+          const { useChatStore } = await import('@/chat/useChatStore');
+          useChatStore.getState().setOriginalFile(null);
+        }
+      } catch (_err) {}
+      toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
+    } catch (_e) {
+      setUploadedFile({ 
+        fileID: 'error', 
+        filename: file.name, 
+        size: file.size, 
+        ext: (file.name.split('.').pop() || '').toLowerCase(), 
+        status: 'error' 
+      });
+      toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
+    }
+  };
+
+  // Listen for document-level drag events to detect file dragging
+  useEffect(() => {
+    let dragCounter = 0;
+
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter++;
+      // Only track file drags
+      if (e.dataTransfer?.types.includes('Files')) {
+        setIsDragging(true);
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter === 0) {
+        setIsDragging(false);
+        setDragOver(false);
+      }
+    };
+
+    const handleDragEnd = () => {
+      dragCounter = 0;
+      setIsDragging(false);
+      setDragOver(false);
+    };
+
+    document.addEventListener('dragenter', handleDragEnter);
+    document.addEventListener('dragleave', handleDragLeave);
+    document.addEventListener('dragend', handleDragEnd);
+    document.addEventListener('drop', handleDragEnd);
+
+    return () => {
+      document.removeEventListener('dragenter', handleDragEnter);
+      document.removeEventListener('dragleave', handleDragLeave);
+      document.removeEventListener('dragend', handleDragEnd);
+      document.removeEventListener('drop', handleDragEnd);
+    };
+  }, []);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.currentTarget === e.target) {
+      setDragOver(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      await processFileUpload(file);
+    }
   };
 
   const handleDataSourceSelect = (source: string) => {
@@ -604,7 +743,19 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         {/* Input Area */}
         <div className="m-2">
         {/* Main Chat Input with Hero Section Styling */}
-        <div className="w-full min-h-[60px] text-sm p-4 pb-2 bg-[#292929] rounded-xl resize-none transition-all duration-300">
+        <div 
+          className="w-full min-h-[60px] text-sm p-4 pb-2 bg-[#292929] rounded-xl resize-none transition-all duration-300 relative"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Drag Overlay */}
+          {isDragging && (
+            <div className={`absolute inset-0 rounded-xl border-2 border-dashed border-primary/60 flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-primary/10' : ''}`}>
+              <FileText className="w-8 h-8 text-primary mb-2" />
+              <span className="text-sm text-primary font-medium">Drop file here to upload</span>
+            </div>
+          )}
           {/* Textarea Row */}
           <div className="relative mb-3">
             <TextareaAutosize
@@ -758,77 +909,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           onChange={async (e) => {
             const file = e.target.files?.[0];
             if (!file) return;
-            const validationError = validateClientFile(file);
-            if (validationError) {
-              toast({ title: "Upload error", description: validationError, variant: "destructive" });
-              return;
-            }
-            try {
-              // Create new file object for upload
-              const newFile = { 
-                fileID: 'pending', 
-                filename: file.name, 
-                size: file.size, 
-                ext: (file.name.split('.').pop() || '').toLowerCase(), 
-                status: 'uploading' as const 
-              };
-              
-              // Replace behavior: if an uploaded file exists, we'll delete it after new upload succeeds
-              setUploadedFile(newFile);
-
-              const res: UploadResponse = await fileService.uploadFile(file, { projectId: projectId ?? undefined });
-              if (!res.success || !res.fileID || res.asset?.status !== 'uploaded') {
-                setUploadedFile({ ...newFile, status: 'error' });
-                toast({
-                  title: "Upload failed",
-                  description: res.error || `Unexpected upload status: ${res.asset?.status ?? 'unknown'}`,
-                  variant: "destructive"
-                });
-                return;
-              }
-
-              // Delete previous file if different
-              if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
-                void fileService.deleteFile(uploadedFile.fileID);
-              }
-
-              const fallbackFilename = res.filename ?? file.name;
-              const fallbackSize = res.size ?? file.size;
-              const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
-
-              setUploadedFile({ 
-                fileID: res.fileID, 
-                filename: fallbackFilename, 
-                size: fallbackSize, 
-                ext: fallbackExt, 
-                status: 'uploaded',
-                projectId: res.asset?.project_id,
-                rowCount: res.rowCount,
-                columnCount: res.columnCount
-              });
-              try {
-                // Persist original file for CSV export if it's CSV
-                if ((file.name.split('.').pop() || '').toLowerCase() === 'csv') {
-                  // store in chat store for export
-                  // lazy import to avoid circulars
-                  const { useChatStore } = await import('@/chat/useChatStore');
-                  useChatStore.getState().setOriginalFile({ blob: file, name: file.name });
-                } else {
-                  const { useChatStore } = await import('@/chat/useChatStore');
-                  useChatStore.getState().setOriginalFile(null);
-                }
-              } catch (_err) {}
-              toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
-            } catch (_e) {
-              setUploadedFile({ 
-                fileID: 'error', 
-                filename: file.name, 
-                size: file.size, 
-                ext: (file.name.split('.').pop() || '').toLowerCase(), 
-                status: 'error' 
-              });
-              toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
-            }
+            await processFileUpload(file);
           }}
         />
       </div>

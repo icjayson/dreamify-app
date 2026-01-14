@@ -398,7 +398,7 @@ export default function ProjectPage() {
         </div>
       </div>
       {/* Publish Modal */}
-      {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} />}
+      {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} />}
     </div>
   );
 }

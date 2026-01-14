@@ -5,7 +5,7 @@ export interface ProcessingResponse {
   success: boolean;
   data?: {
     success: boolean;
-    status: 'not_processed' | 'processing' | 'completed' | 'error' | 'accepted';
+    status: 'not_processed' | 'processing' | 'completed' | 'error' | 'accepted' | 'stopped';
     fileID: string;
     conversation_id?: string;
     message?: string;

@@ -44,20 +44,30 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setError(null);
 
       // TODO: Replace with actual API call
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/stripe/subscriptions`, {
+      const response = await fetch(`/api/v1/stripe/subscriptions?user_id=${user.id}`, {
         headers: {
           'Authorization': `Bearer ${user.id}`,
         },
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch subscription');
+        let errorMessage = 'Failed to fetch subscription';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       
       if (data.success) {
-        setSubscription(data.subscription);
+        // Backend returns subscriptions array, get first one or null
+        const subscriptions = data.subscriptions || [];
+        setSubscription(subscriptions.length > 0 ? subscriptions[0] : null);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch subscription';
@@ -72,7 +82,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
     if (!user) return;
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/stripe/credits/usage?user_id=${user.id}&subscription_tier=sandbox`);
+      const response = await fetch(`/api/v1/stripe/credits/usage?user_id=${user.id}&subscription_tier=sandbox`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch credit usage');
@@ -100,7 +110,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setError(null);
 
       // Create checkout session for Pro plan
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/stripe/checkout/sessions`, {
+      const response = await fetch(`/api/v1/stripe/checkout/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +148,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/stripe/customer-portal`, {
+      const response = await fetch(`/api/v1/stripe/customer-portal`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,7 +182,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
     if (!user) return false;
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/stripe/credits/consume`, {
+      const response = await fetch(`/api/v1/stripe/credits/consume`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -32,6 +32,23 @@ const formatFileSize = (bytes: number): string => {
   }
 };
 
+// Helper function to format file status for display
+const formatAssetStatus = (status: string | null | undefined): string => {
+  if (!status) return "Ready to analyze";
+  
+  // Map status values to display text
+  const statusMap: Record<string, string> = {
+    "uploading": "Uploading",
+    "uploaded": "Ready to analyze",
+    "processing": "Processing",
+    "processed": "Processed",
+    "error": "Error",
+    "accepted": "Processing",
+  };
+  
+  return statusMap[status] || status.charAt(0).toUpperCase() + status.slice(1);
+};
+
 // Rolling multiline log for loading animation
 interface RollingTextProps {
   isActive: boolean;
@@ -550,13 +567,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                 </div>
               </div>
               
-              {/* Footer section - only when uploaded or processed */}
-              {(uploadedFile.status === 'uploaded' || uploadedFile.status === 'processed') && (
+              {/* Footer section - only when uploaded, processing, or processed */}
+              {(uploadedFile.status === 'uploaded' || uploadedFile.status === 'processing' || uploadedFile.status === 'processed') && (
                 <div className="border-t border-white/10 mt-2.5 pt-2.5 flex items-center justify-between">
                   {/* Left side - Status indicator */}
                   <div className="flex items-center gap-1.5">
                     <CheckCircle className="w-3.5 h-3.5 text-white" />
-                    <span className="text-[10px] text-white">Ready to analyze</span>
+                    <span className="text-[10px] text-white">
+                      {formatAssetStatus(uploadedFile.status)}
+                    </span>
                   </div>
                   {/* Right side - Preview button */}
                   <Button

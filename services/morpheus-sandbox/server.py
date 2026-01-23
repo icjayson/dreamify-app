@@ -510,6 +510,8 @@ def _process_conversation_background(
             conversation=conversation,
             dashboards=dashboards_cache,
             user_prompt=user_prompt,
+            conversation_uri=conversation_uri,
+            conversation_backup_uri=conversation_backup_uri,
         )
         
         # Validate result is not None

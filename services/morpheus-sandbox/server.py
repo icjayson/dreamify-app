@@ -236,11 +236,11 @@ async def _post_node_status(conversation_id: Optional[str], status: str, metadat
     if not conversation_id:
         return
     try:
-        logger.info(f"Posting node status: {conversation_id}, {status}, {metadata} to {BACKEND_API_URL}/api/v1/morpheus/post-workflow-status")
+        logger.info(f"Posting node status: {conversation_id}, {status}, {metadata} to {BACKEND_API_URL}/api/v1/morpheus/workflow-status")
         timeout = aiohttp.ClientTimeout(total=100)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
-                f"{BACKEND_API_URL}/api/v1/morpheus/post-workflow-status",
+                f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status",
                 json={
                     "conversation_id": conversation_id,
                     "node_id": "workflow",

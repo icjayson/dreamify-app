@@ -560,12 +560,26 @@ Based on the above context, decide your next action."""
             if mode == "dashboard":
                 # Extract JSON from content
                 json_data = _extract_json_from_content(response.content)
+                
                 if json_data:
                     state.working_memory.dashboard_json = json_data
+                    
+                    # Generate summary with simple LLM call
+                    try:
+                        summary = _generate_summary_for_dashboard(model, json_data, state.input_prompt)
+                        state.working_memory.dashboard_summary = summary
+                        logger.info(f"Generated summary: {summary[:50]}...")
+                    except Exception as e:
+                        logger.warning(f"Failed to generate summary: {e}, using default")
+                        charts_count = len(json_data.get("charts", []))
+                        metrics_count = len(json_data.get("metrics", []))
+                        state.working_memory.dashboard_summary = (
+                            f"I've created a dashboard with {charts_count} chart(s) and {metrics_count} metric(s) "
+                            f"based on your data analysis request."
+                        )
                 else:
-                    # No JSON found - this is actually a text response (Q&A style)
-                    # Store as qa_response as fallback
-                    logger.info("No JSON found in dashboard mode response, treating as Q&A response")
+                    # No JSON found - text response
+                    logger.info("No JSON found in dashboard mode, treating as Q&A")
                     state.working_memory.qa_response = str(response.content)
             else:
                 state.working_memory.qa_response = str(response.content)
@@ -971,6 +985,50 @@ def _format_state_for_prompt_basic(state: AgentState) -> str:
 {chr(10).join([f"- {e.get('error', '')[:100]}" for e in recent_errors])}""")
     
     return "\n\n".join(sections)
+
+
+
+def _generate_summary_for_dashboard(model, dashboard_json: Dict[str, Any], user_prompt: str) -> str:
+    """Generate a text summary for the dashboard using a simple LLM call.
+    
+    Args:
+        model: LLM model instance
+        dashboard_json: The dashboard JSON configuration
+        user_prompt: Original user request for context
+        
+    Returns:
+        String summary of the dashboard
+    """
+    # Build description of dashboard contents
+    charts = dashboard_json.get("charts", [])
+    metrics = dashboard_json.get("metrics", [])
+    
+    chart_info = [f"- {c.get('type', 'chart')}: '{c.get('title', 'Untitled')}'" for c in charts]
+    metric_info = [f"- {m.get('label', 'Metric')}: {m.get('value', 'N/A')}" for m in metrics]
+    
+    description = ""
+    if chart_info:
+        description += "Charts:\n" + "\n".join(chart_info) + "\n"
+    if metric_info:
+        description += "Metrics:\n" + "\n".join(metric_info)
+    
+    prompt = f"""You just created a dashboard for the user, you should notify the user about the dashboard. Based on the dashboard you just created for the user, write a brief 2-3 sentence summary.
+
+User's request: {user_prompt}
+
+Dashboard contents:
+{description}
+
+Write a conversational summary explaining what the dashboard shows and key insights. No labels or prefixes."""
+
+    from langchain_core.messages import HumanMessage
+    response = model.invoke([HumanMessage(content=prompt)])
+    
+    if response and response.content:
+        return str(response.content).strip()
+    
+    # Fallback
+    return f"I've created a dashboard with {len(charts)} chart(s) and {len(metrics)} metric(s) based on your request."
 
 
 def _extract_json_from_content(content: str) -> Dict[str, Any]:

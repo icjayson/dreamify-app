@@ -727,14 +727,27 @@ class StatefulAnalyzeCSVWorkflow:
         
         # Add summary for dashboard outputs
         if state.output and state.output.get("type") == "dashboard_config":
-            data = state.output.get("data", {})
-            if isinstance(data, dict):
-                charts_count = len(data.get("charts", []))
-                metrics_count = len(data.get("metrics", []))
-                result["summary"] = (
-                    f"Generated dashboard with {charts_count} chart(s) "
-                    f"and {metrics_count} metric(s)."
-                )
+            from langchain_core.messages import AIMessage
+            
+            # Use dashboard_summary from working memory, or generate default
+            dashboard_summary = state.working_memory.dashboard_summary
+            if not dashboard_summary:
+                data = state.output.get("data", {})
+                if isinstance(data, dict):
+                    charts_count = len(data.get("charts", []))
+                    metrics_count = len(data.get("metrics", []))
+                    dashboard_summary = (
+                        f"I've created a dashboard with {charts_count} chart(s) "
+                        f"and {metrics_count} metric(s) based on your request."
+                    )
+            
+            # Add summary as AIMessage so it displays on frontend as text
+            if dashboard_summary:
+                workflow_output.add_message(AIMessage(content=dashboard_summary))
+                logger.info(f"Added dashboard summary to workflow output: {dashboard_summary[:50]}...")
+            
+            # Also add to result for legacy compatibility
+            result["summary"] = dashboard_summary
         
         return result
     

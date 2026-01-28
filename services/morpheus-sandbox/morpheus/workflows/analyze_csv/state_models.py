@@ -49,6 +49,7 @@ class WorkingMemory(BaseModel):
     
     # Generation artifacts
     dashboard_json: Optional[Dict[str, Any]] = Field(default=None, description="Generated dashboard configuration")
+    dashboard_summary: Optional[str] = Field(default=None, description="Summary text explaining the generated dashboard")
     qa_response: Optional[str] = Field(default=None, description="Generated Q&A text response")
     
     # Error tracking
@@ -161,6 +162,27 @@ class ActionResult(BaseModel):
     data: Optional[Dict[str, Any]] = Field(default=None, description="Action output data")
     error: Optional[str] = Field(default=None, description="Error message if failed")
     next_node: Optional[str] = Field(default=None, description="Suggested next node (optional)")
+    
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class DashboardWithSummary(BaseModel):
+    """
+    Structured output for dashboard generation with summary.
+    
+    This model is used for structured LLM output to ensure we get both
+    an explanatory summary and the dashboard JSON in a single response.
+    """
+    summary: str = Field(
+        description="A 2-3 sentence natural language summary explaining what dashboard was created, "
+                    "key insights found, and what the charts/metrics show. This will be displayed "
+                    "to the user as a text message before the dashboard."
+    )
+    dashboard: Dict[str, Any] = Field(
+        description="The complete dashboard JSON configuration including dashboard metadata, "
+                    "metrics, charts, tables, and insights arrays."
+    )
     
     class Config:
         arbitrary_types_allowed = True

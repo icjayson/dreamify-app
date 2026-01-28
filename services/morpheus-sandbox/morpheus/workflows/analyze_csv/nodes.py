@@ -542,6 +542,13 @@ Based on the above context, decide your next action."""
             # Store all tool calls for execution
             state.working_memory.tool_outputs["pending_tool_calls"] = response.tool_calls
             
+            # 🔥 FIX: Also capture content if present alongside tool calls
+            # Some LLMs return both tool calls AND content (the final answer)
+            # We store this as a "pending_qa_response" to be used if no more tool calls come
+            if response.content and len(str(response.content).strip()) > 20:
+                logger.info(f"LLM returned content alongside tool call, storing as pending response: {str(response.content)[:50]}...")
+                state.working_memory.tool_outputs["pending_qa_response"] = str(response.content)
+            
         elif response.content:
             # Agent provided final output
             action_request = ActionRequest(
@@ -555,25 +562,44 @@ Based on the above context, decide your next action."""
                 json_data = _extract_json_from_content(response.content)
                 if json_data:
                     state.working_memory.dashboard_json = json_data
+                else:
+                    # No JSON found - this is actually a text response (Q&A style)
+                    # Store as qa_response as fallback
+                    logger.info("No JSON found in dashboard mode response, treating as Q&A response")
+                    state.working_memory.qa_response = str(response.content)
             else:
                 state.working_memory.qa_response = str(response.content)
         
         else:
-            # Empty response - force retry instead of finishing prematurely
-            logger.warning("Empty response from model in REASONING node - forcing retry")
-            action_request = ActionRequest(
-                action_type="EXECUTE_TOOL",
-                tool_name="python_repl",
-                arguments={"query": f"# Retry: Load and analyze {state.file_path}\nimport pandas as pd\ndf = pd.read_csv('{state.file_path}')\nprint(df.head())\nprint(df.info())\nprint(df.columns.tolist())"},
-                reasoning="Model returned empty response, retrying with data load...",
-            )
+            # Empty response - check if we have a pending Q&A response from a previous tool call
+            pending_qa = state.working_memory.tool_outputs.get("pending_qa_response")
             
-            # Create a dummy tool call for execution
-            state.working_memory.tool_outputs["pending_tool_calls"] = [{
-                "name": "python_repl",
-                "args": {"query": f"# Retry: Load and analyze {state.file_path}\nimport pandas as pd\ndf = pd.read_csv('{state.file_path}')\nprint(df.head())\nprint(df.info())\nprint(df.columns.tolist())"},
-                "id": f"retry_{state.iteration}"
-            }]
+            if pending_qa:
+                # We have content from a previous iteration - use it as the final answer
+                logger.info(f"Using pending Q&A response as final answer: {pending_qa[:50]}...")
+                action_request = ActionRequest(
+                    action_type="FINISH",
+                    reasoning="Using content captured from previous tool call response",
+                )
+                state.working_memory.qa_response = pending_qa
+                # Clear the pending response
+                state.working_memory.tool_outputs.pop("pending_qa_response", None)
+            else:
+                # No pending response - force retry
+                logger.warning("Empty response from model in REASONING node - forcing retry")
+                action_request = ActionRequest(
+                    action_type="EXECUTE_TOOL",
+                    tool_name="python_repl",
+                    arguments={"query": f"# Retry: Load and analyze {state.file_path}\nimport pandas as pd\ndf = pd.read_csv('{state.file_path}')\nprint(df.head())\nprint(df.info())\nprint(df.columns.tolist())"},
+                    reasoning="Model returned empty response, retrying with data load...",
+                )
+                
+                # Create a dummy tool call for execution
+                state.working_memory.tool_outputs["pending_tool_calls"] = [{
+                    "name": "python_repl",
+                    "args": {"query": f"# Retry: Load and analyze {state.file_path}\nimport pandas as pd\ndf = pd.read_csv('{state.file_path}')\nprint(df.head())\nprint(df.info())\nprint(df.columns.tolist())"},
+                    "id": f"retry_{state.iteration}"
+                }]
         
         # Store pending action
         state.working_memory.tool_outputs["pending_action"] = action_request.dict()
@@ -764,19 +790,20 @@ def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
         # Extract dashboard JSON
         dashboard_json = state.working_memory.dashboard_json
         
-        if not dashboard_json:
-            logger.warning("No dashboard JSON found, attempting structured output fallback")
-            # Try to generate using structured output as fallback
-            # This would require the model and all context - skipping for now
-            # dashboard_json = _generate_dashboard_structured_output(state, model)
-            pass
-        
         if dashboard_json:
             state.output = {
                 "type": "dashboard_config",
                 "data": dashboard_json,
             }
             logger.info("Dashboard synthesis complete")
+        elif state.working_memory.qa_response:
+            # Fallback: No JSON found, but we have a text response
+            # This happens when routing defaulted to dashboard but LLM gave text
+            logger.info("No dashboard JSON, but found qa_response - using as text output")
+            state.output = {
+                "type": "message",
+                "content": state.working_memory.qa_response,
+            }
         else:
             state.working_memory.errors.append({
                 "node": "SYNTHESIS",

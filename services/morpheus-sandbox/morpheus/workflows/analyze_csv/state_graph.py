@@ -708,6 +708,14 @@ class StatefulAnalyzeCSVWorkflow:
                 workflow_output.output_data = state.output.get("data", {})
             elif state.output.get("type") == "message":
                 workflow_output.output_data = {"content": state.output.get("content")}
+                
+                # 🔥 FIX: Add Q&A response as AIMessage to workflow_output.messages
+                # This is critical because server.py's _postprocess_workflow_to_conversation_nodes
+                # reads from workflow_output.messages to create conversation nodes for the frontend
+                from langchain_core.messages import AIMessage
+                qa_content = state.output.get("content", "")
+                if qa_content:
+                    workflow_output.add_message(AIMessage(content=qa_content))
         
         # Add error if failed
         if state.status == "ERROR":

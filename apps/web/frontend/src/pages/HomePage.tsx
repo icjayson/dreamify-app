@@ -21,6 +21,7 @@ import ProjectsSection from '@/components/homepage-section/ProjectsSection';
 import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
 import TemplateModal from '@/components/homepage-section/TemplateModal';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { CONNECTORS, type ConnectorItem } from '@/constants/connectors';
 
 interface HomePageProps {
   onGetStarted: () => void;
@@ -263,17 +264,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     "Upload your CSV and I'll suggest visualizations...",
     "Connect Stripe data and create a revenue dashboard...",
     "Show me customer acquisition trends with animated charts..."
-  ];
-
-  const connectors = [
-    { name: "Google Sheets", icon: "/google-sheet.png" },
-    { name: "GA4", icon: "/GA4.png" },
-    { name: "Meta", icon: "/meta.png" },
-    { name: "Airtable", icon: "/airtable.png" },
-    { name: "Stripe", icon: "/stripe.jpeg" },
-    { name: "Shopify", icon: "/shopify.png" },
-    { name: "HubSpot", icon: "/hubspot.jpeg" },
-    { name: "PostgreSQL", icon: "/PostgreSQL.png" }
   ];
 
   // Function to get colors for each data source
@@ -557,6 +547,17 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     console.log('Data source selected:', source);
   };
 
+  const handleIntegrationClick = (connector: ConnectorItem) => {
+    if (connector.isActive) {
+      handleDataSourceSelect(connector.name);
+    } else {
+      toast({
+        title: `${connector.name}`,
+        description: "Integration is coming soon!",
+      });
+    }
+  };
+
   // Speech recognition hook
   const {
     transcript,
@@ -807,7 +808,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
               onConfirm={handleRecordingConfirm}
             />
             
-            {/* Template Tag Row - Mobile Only */}
+            {/* Template Tag Row - Mobile Only - commented out (not functionable)
             {selectedTemplate && (
               <div className="flex justify-start mb-3 lg:hidden">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
@@ -831,6 +832,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                 </div>
               </div>
             )}
+            */}
             
             {/* Buttons Row */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -865,7 +867,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'Attach'}</span>
                 </button>
 
-                {/* Clone Template Button */}
+                {/* Clone Template Button - commented out (not functionable)
                 <button
                   onClick={handleCloneTemplateClick}
                   className="px-3 py-1.5 text-sm button-outline rounded-md flex items-center gap-2"
@@ -880,6 +882,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   <LayoutTemplate className="w-4 h-4" />
                   <span className="hidden sm:inline">Template</span>
                 </button>
+                */}
 
                 {/* Connect Data Source Dropdown */}
                 <div className="relative data-source-dropdown">
@@ -903,11 +906,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   {dropdownOpen && (
                     <div className="absolute top-full left-0 mt-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
                       <div className="py-1">
-                        {connectors.map((connector) => (
+                        {CONNECTORS.map((connector) => (
                           <button
                             key={connector.name}
-                            onClick={() => handleDataSourceSelect(connector.name)}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10 transition-colors duration-200 flex items-center gap-2"
+                            onClick={() => handleIntegrationClick(connector)}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10 transition-colors duration-200 flex items-center gap-2 cursor-pointer"
                           >
                             <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
                             {connector.name}
@@ -918,7 +921,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   )}
                 </div>
 
-                {/* Selected Template Tag - Desktop Only */}
+                {/* Selected Template Tag - Desktop Only - commented out (not functionable)
                 {selectedTemplate && (
                   <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
                     <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
@@ -940,10 +943,12 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     </button>
                   </div>
                 )}
+                */}
               </div>
               
               {/* Right side buttons */}
               <div className="flex gap-2">
+                {/* Voice button - commented out (not functionable)
                 <Button
                   onClick={handleMicClick}
                   className={`button-gradient p-3 ${
@@ -954,6 +959,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                 >
                   {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </Button>
+                */}
                 <Button
                   onClick={handleChatSubmit}
                   disabled={!inputValue.trim() || isProcessing}

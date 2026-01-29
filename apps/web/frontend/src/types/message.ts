@@ -17,5 +17,7 @@ export interface Message {
   };
   dashboardCard?: {
     sourceFileName: string;
+    dashboardId: string;
+    dashboardTitle?: string;
   };
 }

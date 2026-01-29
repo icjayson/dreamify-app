@@ -54,7 +54,7 @@ const generateAIResponse = async (
       id: (Date.now() + 2).toString(),
       role: "assistant",
       content: "",
-      dashboardCard: { sourceFileName: uploadedFileName || "dashboard" },
+      dashboardCard: { sourceFileName: uploadedFileName || "dashboard", dashboardId: "", dashboardTitle: undefined },
       timestamp: new Date(),
     };
     
@@ -114,6 +114,9 @@ interface ChatState {
   hasShownInitialDashboard: boolean;
   isInitialLoading: boolean;
   
+  // Dashboard selection state
+  selectedDashboardId: string | null;
+  
   // Original file for exports
   originalFileBlob?: Blob | null;
   originalFileName?: string | null;
@@ -143,6 +146,7 @@ interface ChatState {
   setIsThemeChanging: (changing: boolean) => void;
   setHasShownInitialDashboard: (flag: boolean) => void;
   setIsInitialLoading: (flag: boolean) => void;
+  setSelectedDashboardId: (dashboardId: string | null) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
   setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
   
@@ -152,6 +156,7 @@ interface ChatState {
   resetChat: () => void;
   processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string) => Promise<void>;
   stopGeneration: () => Promise<void>;
+  selectDashboard: (dashboardId: string, projectId: string) => Promise<void>;
 }
 
 const initialMessages: Message[] = [
@@ -181,6 +186,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isThemeChanging: false,
   hasShownInitialDashboard: false,
   isInitialLoading: false,
+  selectedDashboardId: null,
   originalFileBlob: null,
   originalFileName: null,
   selectedTemplate: null,
@@ -209,6 +215,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
   setHasShownInitialDashboard: (flag) => set({ hasShownInitialDashboard: flag }),
   setIsInitialLoading: (flag) => set({ isInitialLoading: flag }),
+  setSelectedDashboardId: (dashboardId) => set({ selectedDashboardId: dashboardId }),
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
   
@@ -393,6 +400,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const conversation = conversationResponse.conversation;
                 const nodes = conversation.nodes || [];
                 
+                // Extract dashboard_id from conversation
+                const dashboards = conversation.dashboards || [];
+                const latestDashboard = dashboards[dashboards.length - 1];
+                const dashboardId = latestDashboard?.dashboard_id || "";
+                
+                // Set the latest dashboard as selected
+                if (dashboardId) {
+                  set({ selectedDashboardId: dashboardId });
+                }
+                
                 // Filter to only user and assistant nodes
                 const filteredNodes = nodes.filter((node: any) => 
                   node.role === 'user' || node.role === 'assistant'
@@ -432,7 +449,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     id: (Date.now() + 2).toString(),
                     role: 'assistant',
                     content: "",
-                    dashboardCard: { sourceFileName: uploadedFile?.filename || "dashboard" },
+                    dashboardCard: { 
+                      sourceFileName: uploadedFile?.filename || "dashboard",
+                      dashboardId: dashboardId,
+                      dashboardTitle: finalResult.data.dashboard_data?.dashboard?.title || 
+                                      finalResult.data.dashboard_data?.data?.dashboard?.title || 
+                                      undefined
+                    },
                     timestamp: new Date(),
                   }
                 ]));
@@ -445,7 +468,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     id: (Date.now() + 2).toString(),
                     role: 'assistant',
                     content: "",
-                    dashboardCard: { sourceFileName: uploadedFile?.filename || "dashboard" },
+                    dashboardCard: { 
+                      sourceFileName: uploadedFile?.filename || "dashboard",
+                      dashboardId: ""
+                    },
                     timestamp: new Date(),
                   }
                 ]));
@@ -664,12 +690,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }, 10000);
           }
           
-          // Load conversation to get LLM's actual response text
+          // Load conversation to get LLM's actual response text and dashboard_id
           try {
             const { conversationService } = await import('@/services/conversationService');
             const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
             const conversation = conversationResponse.conversation;
             const nodes = conversation.nodes || [];
+            
+            // Extract dashboard_id from conversation
+            const dashboards = conversation.dashboards || [];
+            const latestDashboard = dashboards[dashboards.length - 1];
+            const dashboardId = latestDashboard?.dashboard_id || "";
+            
+            // Set the latest dashboard as selected
+            if (dashboardId) {
+              set({ selectedDashboardId: dashboardId });
+            }
             
             // Filter to only user and assistant nodes (exclude system and tool)
             const filteredNodes = nodes.filter((node: any) => 
@@ -710,7 +746,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 id: (Date.now() + 3).toString(),
                 role: 'assistant',
                 content: "",
-                dashboardCard: { sourceFileName: uploadedFile.filename },
+                dashboardCard: { 
+                  sourceFileName: uploadedFile.filename,
+                  dashboardId: dashboardId,
+                  dashboardTitle: finalResult.data.dashboard_data?.dashboard?.title || 
+                                  finalResult.data.dashboard_data?.data?.dashboard?.title || 
+                                  undefined
+                },
                 timestamp: new Date(),
               }
             ]));
@@ -723,7 +765,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 id: (Date.now() + 3).toString(),
                 role: 'assistant',
                 content: "",
-                dashboardCard: { sourceFileName: uploadedFile.filename },
+                dashboardCard: { 
+                  sourceFileName: uploadedFile.filename,
+                  dashboardId: ""
+                },
                 timestamp: new Date(),
               }
             ]));
@@ -796,5 +841,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
     isListening: false,
     transcript: "",
     detectedLanguage: null,
+    selectedDashboardId: null,
   }),
+  
+  selectDashboard: async (dashboardId: string, projectId: string) => {
+    const { currentConversationId, setUploadedFile } = get();
+    if (!currentConversationId) return;
+    
+    try {
+      const { conversationService } = await import('@/services/conversationService');
+      const response = await conversationService.getDashboardData(
+        currentConversationId, 
+        projectId, 
+        dashboardId
+      );
+      
+      if (response?.dashboard_data) {
+        set({ selectedDashboardId: dashboardId });
+        setUploadedFile(prev => prev ? { ...prev, processedData: response.dashboard_data } : prev);
+      }
+    } catch (error) {
+      console.error('Failed to load dashboard:', error);
+    }
+  },
 }));

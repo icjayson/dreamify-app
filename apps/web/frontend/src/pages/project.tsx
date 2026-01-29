@@ -85,12 +85,14 @@ export default function ProjectPage() {
   const setMessages = useChatStore((s) => s.setMessages);
   const setCurrentConversationId = useChatStore((s) => s.setCurrentConversationId);
   const setHasShownInitialDashboard = useChatStore((s) => s.setHasShownInitialDashboard);
+  const selectDashboard = useChatStore((s) => s.selectDashboard);
 
   const hydrateConversation = useCallback(async (projId: string, conversationId: string) => {
     try {
       const convoResponse = await conversationService.loadConversation(conversationId, projId);
       const conversation = convoResponse.conversation;
       const nodes = conversation?.nodes ?? [];
+      const dashboards = conversation?.dashboards ?? [];
       
       // Extract assets from nodes
       const assets: any[] = [];
@@ -140,8 +142,16 @@ export default function ProjectPage() {
             timestamp: new Date(node?.created_at || Date.now()),
           };
           if (dashboardContent) {
+            const dashboardId = dashboardContent.data?.dashboard_id || "";
+            // Find the dashboard metadata from conversation.dashboards array
+            const dashboardMetadata = dashboards.find(
+              (d: any) => d.dashboard_id === dashboardId
+            );
+            
             normalized.dashboardCard = {
               sourceFileName: assetName,
+              dashboardId: dashboardId,
+              dashboardTitle: dashboardMetadata?.title || undefined,
             };
           }
           if (assetContent?.data) {
@@ -171,6 +181,9 @@ export default function ProjectPage() {
           processedData: dashboardResponse.dashboard_data,
         };
         useChatStore.getState().setUploadedFile(restoredFile);
+        if (dashboardResponse.dashboard_id) {
+          useChatStore.getState().setSelectedDashboardId(dashboardResponse.dashboard_id);
+        }
         setProcessedData(dashboardResponse.dashboard_data);
         setHasShownInitialDashboard(true);
         setActiveTab('dashboard');
@@ -234,11 +247,12 @@ export default function ProjectPage() {
     };
   }, [projectId, hydrateConversation, toast]);
   
-  // Mirror processed data from store for rendering (optional local state)
-  // Keep compatibility with existing DashboardPreview API
-  if (!processedData && uploadedFile?.processedData) {
-    try { setProcessedData(uploadedFile.processedData); } catch (_e) {}
-  }
+  // Sync processedData from store to local state
+  useEffect(() => {
+    if (uploadedFile?.processedData) {
+      setProcessedData(uploadedFile.processedData);
+    }
+  }, [uploadedFile?.processedData]);
 
   return (
     <div className="min-h-screen bg-muted">
@@ -333,7 +347,15 @@ export default function ProjectPage() {
             <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
                 <div>
                 <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
-                    <ChatInterface projectId={projectId ?? undefined} onSwitchToDashboard={() => setActiveTab('dashboard')} />
+                    <ChatInterface 
+                      projectId={projectId ?? undefined} 
+                      onSwitchToDashboard={(dashboardId) => {
+                        if (dashboardId && projectId) {
+                          selectDashboard(dashboardId, projectId);
+                        }
+                        setActiveTab('dashboard');
+                      }} 
+                    />
                 </div>
                 </div>
             </div>

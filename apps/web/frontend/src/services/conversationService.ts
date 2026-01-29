@@ -66,11 +66,12 @@ class ConversationService {
     throw new Error(response.error || 'Failed to get workflow status');
   }
 
-  async getDashboardData(conversationId: string, projectId: string): Promise<DashboardDataResponse | null> {
+  async getDashboardData(conversationId: string, projectId: string, dashboardId?: string): Promise<DashboardDataResponse | null> {
     try {
-      const response = await api.get<DashboardDataResponse>(
-        `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}`
-      );
+      const url = dashboardId 
+        ? `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}&dashboard_id=${dashboardId}`
+        : `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}`;
+      const response = await api.get<DashboardDataResponse>(url);
       if (response.success && response.data) {
         return response.data;
       }

@@ -23,6 +23,8 @@ export function ConversationNodesView({ nodes }: ConversationNodesViewProps) {
         return <MessageSquare className="h-4 w-4" />;
       case 'system':
         return <Settings className="h-4 w-4" />;
+      case 'tool':
+        return <Code className="h-4 w-4" />;
       default:
         return <MessageSquare className="h-4 w-4" />;
     }
@@ -36,6 +38,8 @@ export function ConversationNodesView({ nodes }: ConversationNodesViewProps) {
         return 'bg-green-500/10 border-green-500/20';
       case 'system':
         return 'bg-purple-500/10 border-purple-500/20';
+      case 'tool':
+        return 'bg-orange-500/10 border-orange-500/20';
       default:
         return 'bg-gray-500/10 border-gray-500/20';
     }
@@ -49,11 +53,40 @@ export function ConversationNodesView({ nodes }: ConversationNodesViewProps) {
     }
   };
 
-  const renderContent = (contents: Array<any>) => {
+  const renderContent = (contents: Array<any>, nodeRole?: string) => {
     if (!contents || contents.length === 0) return <span className="text-muted-foreground italic">No content</span>;
     
     return contents.map((content, idx) => {
       if (content.type === 'text') {
+        // Special rendering for tool nodes
+        if (nodeRole === 'tool' && content.data?.tool_input && content.data?.tool_output) {
+          return (
+            <div key={idx} className="space-y-3">
+              <div>
+                <div className="text-xs font-semibold text-orange-500 mb-1 flex items-center gap-1">
+                  <Code className="h-3 w-3" />
+                  Tool: {content.data?.tool_name || 'Unknown'}
+                </div>
+              </div>
+              
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">📥 Input:</div>
+                <pre className="text-xs bg-muted p-3 rounded overflow-x-auto border border-orange-500/20">
+                  {content.data.tool_input}
+                </pre>
+              </div>
+              
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">📤 Output:</div>
+                <pre className="text-xs bg-muted p-3 rounded overflow-x-auto border border-green-500/20 max-h-[300px] overflow-y-auto">
+                  {content.data.tool_output}
+                </pre>
+              </div>
+            </div>
+          );
+        }
+        
+        // Default text rendering
         return (
           <div key={idx} className="whitespace-pre-wrap text-sm">
             {content.data?.text || ''}
@@ -138,13 +171,28 @@ export function ConversationNodesView({ nodes }: ConversationNodesViewProps) {
                 <div className="space-y-3">
                   {node.contents && (
                     <div className="space-y-2">
-                      {renderContent(node.contents)}
+                      {renderContent(node.contents, node.role)}
                     </div>
                   )}
                   {node.metadata && renderToolCalls(node.metadata)}
                   {node.metadata?.tool_call_id && (
                     <div className="text-xs text-muted-foreground">
                       Tool Call ID: <span className="font-mono">{node.metadata.tool_call_id}</span>
+                    </div>
+                  )}
+                  {node.metadata?.success !== undefined && (
+                    <div className="text-xs">
+                      <span className={cn(
+                        'px-2 py-0.5 rounded',
+                        node.metadata.success ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
+                      )}>
+                        {node.metadata.success ? '✓ Success' : '✗ Failed'}
+                      </span>
+                    </div>
+                  )}
+                  {node.metadata?.error && (
+                    <div className="text-xs text-red-500 bg-red-500/10 p-2 rounded border border-red-500/20">
+                      <span className="font-semibold">Error:</span> {node.metadata.error}
                     </div>
                   )}
                 </div>

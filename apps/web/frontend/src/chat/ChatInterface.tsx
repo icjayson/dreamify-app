@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle } from "lucide-react";
-import { CONNECTORS } from "@/constants/connectors";
+import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
@@ -123,7 +123,7 @@ const RollingText = ({ isActive, stopSignal, successText = "", currentStep = nul
 interface ChatInterfaceProps {
   projectId?: string;
   onProcessedDataChange?: (data: any) => void;
-  onSwitchToDashboard?: () => void;
+  onSwitchToDashboard?: (dashboardId?: string) => void;
 }
 
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }: ChatInterfaceProps) => {
@@ -462,6 +462,17 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     console.log('Data source selected:', source);
   };
 
+  const handleIntegrationClick = (connector: ConnectorItem) => {
+    if (connector.isActive) {
+      handleDataSourceSelect(connector.name);
+    } else {
+      toast({
+        title: `${connector.name}`,
+        description: "Integration is coming soon!",
+      });
+    }
+  };
+
   const handleCloneTemplateClick = () => {
     setTemplateModalOpen(true);
   };
@@ -608,12 +619,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         role="button"
                         tabIndex={0}
                         aria-label="Open dashboard"
-                        onClick={() => { onSwitchToDashboard && onSwitchToDashboard(); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(); } }}
+                        onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
                         className="group w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between"
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-white truncate">Dashboard</div>
+                          <div className="text-sm font-medium text-white truncate">
+                            {message.dashboardCard.dashboardTitle || "Dashboard"}
+                          </div>
                           <div className="text-xs text-white/70 mt-0.5 truncate">Source: {message.dashboardCard.sourceFileName}</div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-white/60 flex-shrink-0 ml-2 group-hover:translate-x-1 transition-transform duration-200" />
@@ -784,7 +797,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
             onConfirm={handleRecordingConfirm}
           />
           
-          {/* Template Tag Row */}
+          {/* Template Tag Row - commented out (not functionable)
           {selectedTemplate && (
             <div className="flex justify-start mb-1">
               <div className="flex items-center gap-2 px-2 py-2 rounded-md bg-muted border border-border text-white">
@@ -808,6 +821,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               </div>
             </div>
           )}
+          */}
           
           {/* Buttons Row */}
           <div className="flex items-center justify-between">
@@ -821,7 +835,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                 <Upload className="w-4 h-4" />
               </button>
 
-              {/* Template Button */}
+              {/* Template Button - commented out (not functionable)
               <button
                 onClick={handleCloneTemplateClick}
                 className="p-2 flex items-center justify-center border border-white/30 rounded-md"
@@ -829,6 +843,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               >
                 <LayoutTemplate className="w-4 h-4" />
               </button>
+              */}
 
               {/* Data Connector Dropup */}
               <div className="relative data-source-dropdown">
@@ -855,8 +870,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                       {CONNECTORS.map((connector) => (
                         <button
                           key={connector.name}
-                          onClick={() => handleDataSourceSelect(connector.name)}
-                          className="w-full px-3 py-2 text-left text-sm flex items-center gap-2"
+                          onClick={() => handleIntegrationClick(connector)}
+                          className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-primary/10 transition-colors duration-200 cursor-pointer"
                         >
                           <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
                           {connector.name}
@@ -870,6 +885,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
             
             {/* Right side - Mic and Send Buttons */}
             <div className="flex gap-2">
+              {/* Voice button - commented out (not functionable)
               <button
                 onClick={handleMicClick}
                 className={`p-2 flex items-center justify-center ${
@@ -880,6 +896,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               >
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
+              */}
               {(isProcessing || uploadedFile?.status === 'processing') ? (
                 <Button
                   onClick={() => stopGeneration()}

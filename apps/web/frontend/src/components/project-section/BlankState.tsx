@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRotatingText } from "@/hooks/useRotatingText";
 import { Link as LinkIcon, Upload } from "lucide-react";
-import { CONNECTORS } from "@/constants/connectors";
+import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
+import { useToast } from "@/hooks/use-toast";
 
 interface BlankStateProps {
   subtexts: string[];
@@ -25,6 +26,7 @@ const BlankState: React.FC<BlankStateProps> = ({
 }) => {
   const texts = useMemo(() => Array.isArray(subtexts) ? subtexts.filter(Boolean) : [], [subtexts]);
   const { activeIndex, typedText, isTyping, isAnimating, pause, resume } = useRotatingText(texts, intervalMs);
+  const { toast } = useToast();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -50,6 +52,18 @@ const BlankState: React.FC<BlankStateProps> = ({
       }
     } catch (_e) {}
     setMenuOpen(false);
+  };
+
+  const handleIntegrationClick = (connector: ConnectorItem) => {
+    if (connector.isActive) {
+      selectConnector(connector.name);
+    } else {
+      toast({
+        title: `${connector.name}`,
+        description: "Integration is coming soon!",
+      });
+      setMenuOpen(false);
+    }
   };
 
   return (
@@ -104,8 +118,8 @@ const BlankState: React.FC<BlankStateProps> = ({
                     <button
                       role="menuitem"
                       key={connector.name}
-                      onClick={() => selectConnector(connector.name)}
-                      className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50"
+                      onClick={() => handleIntegrationClick(connector)}
+                      className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 cursor-pointer"
                     >
                       <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
                       {connector.name}

@@ -1,6 +1,7 @@
 export interface ConnectorItem {
   name: string;
   icon: string; // path to icon asset
+  isActive?: boolean; // when true, integration is enabled; when false/undefined, show "coming soon"
 }
 
 export const CONNECTORS: ConnectorItem[] = [

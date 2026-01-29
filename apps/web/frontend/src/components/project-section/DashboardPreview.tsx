@@ -41,7 +41,6 @@ const DashboardPreview = ({
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
-  const originalProcessedDataRef = useRef<any>(null);
 
   // No automatic dashboard generation on mount
 
@@ -615,13 +614,6 @@ const DashboardPreview = ({
     return dashboardConfig;
   };
 
-  // Store original processedData on mount
-  useEffect(() => {
-    if (processedData && !originalProcessedDataRef.current) {
-      originalProcessedDataRef.current = processedData;
-    }
-  }, [processedData]);
-
   // Apply dashboard-level styling to container
   const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData]);
   useEffect(() => {
@@ -644,9 +636,8 @@ const DashboardPreview = ({
 
   // Filter processedData by date range
   const filteredProcessedData = useMemo(() => {
-    const sourceData = originalProcessedDataRef.current || processedData;
-    if (!sourceData) return null;
-    return filterDataByDateRange(sourceData, dateRange);
+    if (!processedData) return null;
+    return filterDataByDateRange(processedData, dateRange);
   }, [processedData, dateRange]);
 
   // Grid layout config

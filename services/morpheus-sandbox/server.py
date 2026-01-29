@@ -332,9 +332,13 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
             "human": "user",
             "ai": "assistant",
             "system": "system",
-            "tool": "assistant",
+            "tool": "tool",
         }
-        role = role_map.get(msg_type, "assistant")
+        role = role_map.get(msg_type, "system")
+        
+        # If AIMessage has tool_calls, treat it as 'tool' role (tool invocation)
+        if msg_type == "ai" and msg_tool_calls:
+            role = "tool"
         
         # Get timestamp as ISO string
         if isinstance(msg_timestamp, str):

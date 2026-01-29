@@ -661,6 +661,41 @@ class StatefulAnalyzeCSVWorkflow:
             },
         )
         
+        # === ADD SYSTEM MESSAGE ===
+        # Add the system prompt so it appears in conversation history
+        from langchain_core.messages import SystemMessage, AIMessage, ToolMessage
+        from .nodes import DASHBOARD_SYSTEM_PROMPT, QA_SYSTEM_PROMPT
+        
+        route_decision = state.working_memory.tool_outputs.get("route_decision", {})
+        mode = route_decision.get("next_step", "dashboard")
+        system_prompt = QA_SYSTEM_PROMPT if mode == "qa" else DASHBOARD_SYSTEM_PROMPT
+        workflow_output.add_message(SystemMessage(content=system_prompt))
+        
+        # === ADD TOOL EXECUTION MESSAGES ===
+        # Add AIMessage + ToolMessage pairs from execution history
+        execution_results = state.working_memory.python_execution_results
+        for result in execution_results:
+            tool_name = result.get("tool_name", "python_repl")
+            tool_call_id = result.get("tool_call_id", f"call_{id(result)}")
+            tool_args = result.get("tool_args", {})
+            output = result.get("output", "")
+            success = result.get("success", False)
+            error = result.get("error")
+            
+            # AIMessage with tool_calls (what LLM decided to do)
+            tool_calls_data = [{"name": tool_name, "args": tool_args, "id": tool_call_id}]
+            ai_msg = AIMessage(content="", tool_calls=tool_calls_data)
+            workflow_output.add_message(ai_msg, tool_calls=[{"name": tool_name, "args": tool_args}])
+            
+            # ToolMessage with result (what happened)
+            if success:
+                tool_content = str(output)[:1000] if output else "Executed successfully"
+            else:
+                tool_content = f"Error: {error}" if error else "Execution failed"
+            
+            tool_msg = ToolMessage(content=tool_content, tool_call_id=tool_call_id)
+            workflow_output.add_message(tool_msg, tool_call_id=tool_call_id)
+        
         # Add workflow history as metadata
         workflow_output.metadata["workflow_history"] = [
             {
@@ -706,6 +741,10 @@ class StatefulAnalyzeCSVWorkflow:
             # Set output_data in WorkflowOutput
             if state.output.get("type") == "dashboard_config":
                 workflow_output.output_data = state.output.get("data", {})
+                dashboard_content = state.output.get("data", {})
+                if dashboard_content:
+                    import json
+                    workflow_output.add_message(SystemMessage(content=json.dumps(dashboard_content, indent=2, ensure_ascii=False)))
             elif state.output.get("type") == "message":
                 workflow_output.output_data = {"content": state.output.get("content")}
                 

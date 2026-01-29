@@ -45,10 +45,11 @@ async def get_public_project(project_id: str):
 async def get_public_conversation_dashboard(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID"),
+    dashboard_id: Optional[str] = Query(None, description="Specific dashboard ID to fetch"),
 ):
     """Get dashboard data for public preview (no authentication required)."""
     logger.info(
-        f"Public dashboard access request: project_id={project_id}, conversation_id={conversation_id}"
+        f"Public dashboard access request: project_id={project_id}, conversation_id={conversation_id}, dashboard_id={dashboard_id}"
     )
     
     # First verify project is public
@@ -76,7 +77,7 @@ async def get_public_conversation_dashboard(
     s3_key = conversation_meta["s3_key"]
     conversation = load_conversation(s3_bucket, s3_key)
     
-    # Get the latest dashboard
+    # Get dashboards list
     dashboards = conversation.get("dashboards", [])
     if not dashboards:
         logger.info(
@@ -84,13 +85,23 @@ async def get_public_conversation_dashboard(
         )
         return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
     
-    latest_dashboard = dashboards[-1]
-    dashboard_id = latest_dashboard.get("dashboard_id")
-    s3_uri = latest_dashboard.get("s3_uri")
+    # Select specific dashboard if ID provided, otherwise get latest
+    if dashboard_id:
+        target_dashboard = next((d for d in dashboards if d.get("dashboard_id") == dashboard_id), None)
+        if not target_dashboard:
+            logger.warning(
+                f"Dashboard not found: project_id={project_id}, conversation_id={conversation_id}, dashboard_id={dashboard_id}"
+            )
+            raise HTTPException(status_code=404, detail=f"Dashboard {dashboard_id} not found")
+    else:
+        target_dashboard = dashboards[-1]
+    
+    dashboard_id = target_dashboard.get("dashboard_id")
+    s3_uri = target_dashboard.get("s3_uri")
     
     if not dashboard_id or not s3_uri:
         logger.warning(
-            f"Dashboard metadata incomplete for conversation: project_id={project_id}, conversation_id={conversation_id}, dashboard={latest_dashboard}"
+            f"Dashboard metadata incomplete for conversation: project_id={project_id}, conversation_id={conversation_id}, dashboard={target_dashboard}"
         )
         return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
     

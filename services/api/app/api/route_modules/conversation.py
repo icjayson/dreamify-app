@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 import json
 import requests
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.dependencies.auth import require_user
@@ -354,14 +354,16 @@ class StopWorkflowResponse(BaseModel):
 @router.get("/conversation/{conversation_id}/dashboard", response_model=DashboardDataResponse)
 async def get_conversation_dashboard(
     conversation_id: str,
-    project_id: str,
+    project_id: str = Query(..., description="Project ID"),
+    dashboard_id: Optional[str] = Query(None, description="Specific dashboard ID to fetch"),
     user_id: str = Depends(require_user),
 ):
-    """Get dashboard data from the latest dashboard in conversation."""
+    """Get dashboard data from a specific dashboard or the latest dashboard in conversation."""
     logger.info(
-        "Fetching dashboard for conversation: project_id=%s, conversation_id=%s, user_id=%s",
+        "Fetching dashboard for conversation: project_id=%s, conversation_id=%s, dashboard_id=%s, user_id=%s",
         project_id,
         conversation_id,
+        dashboard_id,
         user_id,
     )
 
@@ -388,7 +390,7 @@ async def get_conversation_dashboard(
     s3_key = conversation_meta["s3_key"]
     conversation = load_conversation(s3_bucket, s3_key)
     
-    # Get the latest dashboard
+    # Get dashboards list
     dashboards = conversation.get("dashboards", [])
     if not dashboards:
         logger.info(
@@ -398,16 +400,29 @@ async def get_conversation_dashboard(
         )
         return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
     
-    latest_dashboard = dashboards[-1]
-    dashboard_id = latest_dashboard.get("dashboard_id")
-    s3_uri = latest_dashboard.get("s3_uri")
+    # Select specific dashboard if ID provided, otherwise get latest
+    if dashboard_id:
+        target_dashboard = next((d for d in dashboards if d.get("dashboard_id") == dashboard_id), None)
+        if not target_dashboard:
+            logger.warning(
+                "Dashboard not found: project_id=%s, conversation_id=%s, dashboard_id=%s",
+                project_id,
+                conversation_id,
+                dashboard_id,
+            )
+            raise HTTPException(status_code=404, detail=f"Dashboard {dashboard_id} not found")
+    else:
+        target_dashboard = dashboards[-1]
+    
+    dashboard_id = target_dashboard.get("dashboard_id")
+    s3_uri = target_dashboard.get("s3_uri")
     
     if not dashboard_id or not s3_uri:
         logger.warning(
             "Dashboard metadata incomplete for conversation: project_id=%s, conversation_id=%s, dashboard=%s",
             project_id,
             conversation_id,
-            latest_dashboard,
+            target_dashboard,
         )
         return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
     

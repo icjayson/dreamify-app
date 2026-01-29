@@ -69,12 +69,15 @@ async def create_checkout_session(checkout_request: CreateCheckoutSessionRequest
 async def get_subscriptions(user_id: str = Query(..., description="User ID")):
     """Get user subscriptions."""
     try:
+        logger.info(f"Getting subscriptions for user_id: {user_id}")
         # TODO: Implement actual subscription retrieval from database
         # For now, return mock data
-        return {
+        result = {
             'success': True,
             'subscriptions': []
         }
+        logger.info(f"Returning subscriptions for user_id {user_id}: {result}")
+        return result
         
     except Exception as e:
         logger.error(f"Error getting subscriptions: {str(e)}")

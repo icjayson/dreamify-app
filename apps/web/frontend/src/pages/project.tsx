@@ -11,8 +11,8 @@ import { useUser } from "@clerk/clerk-react";
 import PublishModal from "@/components/project-section/PublishModal";
 import { projectService } from "@/services/projectService";
 import { conversationService } from "@/services/conversationService";
+import { conversationNodesToMessages } from "@/chat/conversationToMessages";
 import { useToast } from "@/hooks/use-toast";
-import { Message } from "@/types/message";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -92,7 +92,6 @@ export default function ProjectPage() {
       const convoResponse = await conversationService.loadConversation(conversationId, projId);
       const conversation = convoResponse.conversation;
       const nodes = conversation?.nodes ?? [];
-      const dashboards = conversation?.dashboards ?? [];
       
       // Extract assets from nodes
       const assets: any[] = [];
@@ -112,57 +111,9 @@ export default function ProjectPage() {
       const primaryAsset = assets[0];
       const assetName = primaryAsset?.filename || "dashboard";
       
-      const restoredMessages: Message[] = nodes
-        .filter((node: any) => {
-          if (!node) return false;
-          if (node.role === 'user') return true;
-          if (node.role === 'assistant') {
-            const metadata = node.metadata || {};
-            const hasToolCalls = Array.isArray(metadata.tool_calls) && metadata.tool_calls.length > 0;
-            if (hasToolCalls || metadata.tool_call_id) return false;
-            const hasRenderableContent = node.contents?.some?.((c: any) => {
-              if (c?.type === 'text') {
-                const text = c?.data?.text;
-                return typeof text === 'string' && text.trim().length > 0;
-              }
-              return c?.type === 'dashboard';
-            });
-            return !!hasRenderableContent;
-          }
-          return false;
-        })
-        .map((node: any) => {
-          const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
-          const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
-          const assetContent = node?.contents?.find?.((c: any) => c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file');
-          const normalized: Message = {
-            id: node?.node_id || crypto.randomUUID(),
-            role: node?.role === 'user' ? 'user' : 'assistant',
-            content: textContent?.data?.text || "",
-            timestamp: new Date(node?.created_at || Date.now()),
-          };
-          if (dashboardContent) {
-            const dashboardId = dashboardContent.data?.dashboard_id || "";
-            // Find the dashboard metadata from conversation.dashboards array
-            const dashboardMetadata = dashboards.find(
-              (d: any) => d.dashboard_id === dashboardId
-            );
-            
-            normalized.dashboardCard = {
-              sourceFileName: assetName,
-              dashboardId: dashboardId,
-              dashboardTitle: dashboardMetadata?.title || undefined,
-            };
-          }
-          if (assetContent?.data) {
-            normalized.attachment = {
-              kind: assetContent?.data?.kind === 'file' ? 'file' : 'csv',
-              name: assetContent?.data?.filename || assetContent?.data?.name || assetName,
-              mime: assetContent?.data?.mime,
-            };
-          }
-          return normalized;
-        });
+      const restoredMessages = conversationNodesToMessages(conversation, {
+        sourceFileName: assetName,
+      });
       if (restoredMessages.length) {
         setMessages(restoredMessages);
       }

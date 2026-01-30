@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Message } from '@/types/message';
+import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService } from '@/services/processingService';
 import { ConversationChatRequest } from '@/services/conversationService';
 
@@ -398,7 +399,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const { conversationService } = await import('@/services/conversationService');
                 const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
                 const conversation = conversationResponse.conversation;
-                const nodes = conversation.nodes || [];
                 
                 // Extract dashboard_id from conversation
                 const dashboards = conversation.dashboards || [];
@@ -410,55 +410,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   set({ selectedDashboardId: dashboardId });
                 }
                 
-                // Filter to only user and assistant nodes
-                const filteredNodes = nodes.filter((node: any) => 
-                  node.role === 'user' || node.role === 'assistant'
-                );
-                
-                // Find the latest assistant node with text content
-                let responseText = "";
-                for (let i = filteredNodes.length - 1; i >= 0; i--) {
-                  const node = filteredNodes[i];
-                  if (node.role === 'assistant') {
-                    const contents = node.contents || [];
-                    for (const content of contents) {
-                      if (content.type === 'text' && content.data?.text) {
-                        const text = content.data.text.trim();
-                        // Skip empty texts and JSON blocks
-                        if (text && !text.startsWith('{') && !text.startsWith('[')) {
-                          responseText = text;
-                          break;
-                        }
-                      }
-                    }
-                    if (responseText) {
-                      break;
-                    }
-                  }
+                const restoredMessages = conversationNodesToMessages(conversation, {
+                  sourceFileName: uploadedFile?.filename || 'dashboard',
+                });
+                if (restoredMessages.length) {
+                  get().setMessages(restoredMessages);
                 }
-                
-                updateMessages((prev) => ([
-                  ...prev,
-                  {
-                    id: (Date.now() + 1).toString(),
-                    role: 'assistant',
-                    content: responseText,
-                    timestamp: new Date(),
-                  },
-                  {
-                    id: (Date.now() + 2).toString(),
-                    role: 'assistant',
-                    content: "",
-                    dashboardCard: { 
-                      sourceFileName: uploadedFile?.filename || "dashboard",
-                      dashboardId: dashboardId,
-                      dashboardTitle: finalResult.data.dashboard_data?.dashboard?.title || 
-                                      finalResult.data.dashboard_data?.data?.dashboard?.title || 
-                                      undefined
-                    },
-                    timestamp: new Date(),
-                  }
-                ]));
               } catch (error) {
                 console.error('Failed to load conversation for dashboard response:', error);
                 // No fallback message
@@ -477,45 +434,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 ]));
               }
             } else {
-              // Q&A text response - load conversation to get the latest assistant message
+              // Q&A text response - load conversation and show all nodes in workflow order
               try {
                 const { conversationService } = await import('@/services/conversationService');
                 const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
                 const conversation = conversationResponse.conversation;
-                const nodes = conversation.nodes || [];
-                
-                // Filter to only user and assistant nodes (exclude system and tool)
-                const filteredNodes = nodes.filter((node: any) => 
-                  node.role === 'user' || node.role === 'assistant'
-                );
-                
-                // Find the latest assistant node with text content
-                let responseText = "I've processed your question.";
-                for (let i = filteredNodes.length - 1; i >= 0; i--) {
-                  const node = filteredNodes[i];
-                  if (node.role === 'assistant') {
-                    const contents = node.contents || [];
-                    for (const content of contents) {
-                      if (content.type === 'text' && content.data?.text) {
-                        responseText = content.data.text;
-                        break;
-                      }
-                    }
-                    if (responseText !== "I've processed your question.") {
-                      break;
-                    }
-                  }
+                const restoredMessages = conversationNodesToMessages(conversation);
+                if (restoredMessages.length) {
+                  get().setMessages(restoredMessages);
                 }
-                
-                updateMessages((prev) => ([
-                  ...prev,
-                  {
-                    id: (Date.now() + 1).toString(),
-                    role: 'assistant',
-                    content: responseText,
-                    timestamp: new Date(),
-                  }
-                ]));
               } catch (error) {
                 console.error('Failed to load conversation for Q&A response:', error);
                 // Fallback to workflow status metadata
@@ -695,7 +622,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const { conversationService } = await import('@/services/conversationService');
             const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
             const conversation = conversationResponse.conversation;
-            const nodes = conversation.nodes || [];
             
             // Extract dashboard_id from conversation
             const dashboards = conversation.dashboards || [];
@@ -707,55 +633,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
               set({ selectedDashboardId: dashboardId });
             }
             
-            // Filter to only user and assistant nodes (exclude system and tool)
-            const filteredNodes = nodes.filter((node: any) => 
-              node.role === 'user' || node.role === 'assistant'
-            );
-            
-            // Find the latest assistant node with text content
-            let responseText = "";
-            for (let i = filteredNodes.length - 1; i >= 0; i--) {
-              const node = filteredNodes[i];
-              if (node.role === 'assistant') {
-                const contents = node.contents || [];
-                for (const content of contents) {
-                  if (content.type === 'text' && content.data?.text) {
-                    const text = content.data.text.trim();
-                    // Skip empty texts and JSON blocks
-                    if (text && !text.startsWith('{') && !text.startsWith('[')) {
-                      responseText = text;
-                      break;
-                    }
-                  }
-                }
-                if (responseText) {
-                  break;
-                }
-              }
+            const restoredMessages = conversationNodesToMessages(conversation, {
+              sourceFileName: uploadedFile.filename,
+            });
+            if (restoredMessages.length) {
+              get().setMessages(restoredMessages);
             }
-            
-            updateMessages((prev) => ([
-              ...prev,
-              {
-                id: '2',
-                role: 'assistant',
-                content: responseText,
-                timestamp: new Date(),
-              },
-              {
-                id: (Date.now() + 3).toString(),
-                role: 'assistant',
-                content: "",
-                dashboardCard: { 
-                  sourceFileName: uploadedFile.filename,
-                  dashboardId: dashboardId,
-                  dashboardTitle: finalResult.data.dashboard_data?.dashboard?.title || 
-                                  finalResult.data.dashboard_data?.data?.dashboard?.title || 
-                                  undefined
-                },
-                timestamp: new Date(),
-              }
-            ]));
           } catch (error) {
             console.error('Failed to load conversation for dashboard response:', error);
             // No fallback message

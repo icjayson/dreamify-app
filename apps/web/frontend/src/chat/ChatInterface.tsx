@@ -614,14 +614,22 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         </span>
                       </div>
                     )}
-                    {message.role === 'assistant' && message.dashboardCard ? (
+                    {/* Render text content if present */}
+                    {message.content && (
+                      <div
+                        className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
+                        dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
+                      />
+                    )}
+                    {/* Render dashboard card if present */}
+                    {message.role === 'assistant' && message.dashboardCard && (
                       <div
                         role="button"
                         tabIndex={0}
                         aria-label="Open dashboard"
                         onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
-                        className="group w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between"
+                        className={`group w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between ${message.content ? 'mt-2' : ''}`}
                       >
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-white truncate">
@@ -631,11 +639,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         </div>
                         <ChevronRight className="w-4 h-4 text-white/60 flex-shrink-0 ml-2 group-hover:translate-x-1 transition-transform duration-200" />
                       </div>
-                    ) : (
-                      <div
-                        className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
-                        dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
-                      />
                     )}
                     <span className="text-xs text-muted-foreground mt-1 block">
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

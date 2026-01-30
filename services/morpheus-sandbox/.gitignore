@@ -239,3 +239,6 @@ runs/
 
 development/*
 streamlit/
+
+# Agent kit
+.agent/* 

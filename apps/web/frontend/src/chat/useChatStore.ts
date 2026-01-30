@@ -23,7 +23,7 @@ const generateAIResponse = async (
   uploadedFileName?: string
 ) => {
   console.log('generateAIResponse called with:', { userPrompt, hasProcessedData: !!processedData, messageCount: messagesSnapshot.length });
-  
+
   // Check if there's already an assistant message for this specific user prompt to avoid duplicates
   const lastMessage = messagesSnapshot[messagesSnapshot.length - 1];
   const hasRecentAssistantMessage = lastMessage && lastMessage.role === 'assistant' && lastMessage.content.trim() !== '';
@@ -31,7 +31,7 @@ const generateAIResponse = async (
     console.log('Last message is already an assistant message, skipping AI response generation');
     return;
   }
-  
+
   console.log('Proceeding with AI response generation...');
 
   // Always return success message
@@ -41,7 +41,7 @@ const generateAIResponse = async (
 
   try {
     const response = getContextualResponse(userPrompt);
-    
+
     // Add success message
     const aiMessage: Message = {
       id: (Date.now() + 1).toString(),
@@ -49,17 +49,8 @@ const generateAIResponse = async (
       content: response,
       timestamp: new Date(),
     };
-    
-    // Add dashboard card
-    const dashboardCardMessage: Message = {
-      id: (Date.now() + 2).toString(),
-      role: "assistant",
-      content: "",
-      dashboardCard: { sourceFileName: uploadedFileName || "dashboard", dashboardId: "", dashboardTitle: undefined },
-      timestamp: new Date(),
-    };
-    
-    updateMessages((prev) => [...prev, aiMessage, dashboardCardMessage]);
+
+    updateMessages((prev) => [...prev, aiMessage]);
   } catch (_error) {
     const aiMessage: Message = {
       id: (Date.now() + 3).toString(),
@@ -88,46 +79,46 @@ interface ChatState {
   // Input state
   inputValue: string;
   isTyping: boolean;
-  
+
   // Messages state
   messages: Message[];
-  
+
   // File state
   uploadedFile: UploadedFile | null;
   currentConversationId: string | null;
-  
+
   // Processing state
   isProcessing: boolean;
   currentWorkflowStep: string | null;
-  
+
   // UI state
   dropdownOpen: boolean;
   selectedDataSource: string;
-  
+
   // Speech recognition state
   isListening: boolean;
   transcript: string;
   detectedLanguage: string | null;
-  
+
   // Theme state
   dashboardTheme: 'light' | 'dark';
   isThemeChanging: boolean;
   hasShownInitialDashboard: boolean;
   isInitialLoading: boolean;
-  
+
   // Dashboard selection state
   selectedDashboardId: string | null;
-  
+
   // Original file for exports
   originalFileBlob?: Blob | null;
   originalFileName?: string | null;
-  
+
   // Template state
   selectedTemplate: { id: string; title: string; description: string; image: string; category: string } | null;
-  
+
   // Abort controller for stopping generation
   abortController: AbortController | null;
-  
+
   // Actions
   setInputValue: (value: string) => void;
   setIsTyping: (typing: boolean) => void;
@@ -150,7 +141,7 @@ interface ChatState {
   setSelectedDashboardId: (dashboardId: string | null) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
   setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
-  
+
   // Complex actions
   sendMessage: (content: string) => void;
   clearInput: () => void;
@@ -192,16 +183,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   originalFileName: null,
   selectedTemplate: null,
   abortController: null,
-  
+
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
   setIsTyping: (typing) => set({ isTyping: typing }),
   setMessages: (messages) => set({ messages }),
-  addMessage: (message) => set((state) => ({ 
-    messages: [...state.messages, message] 
+  addMessage: (message) => set((state) => ({
+    messages: [...state.messages, message]
   })),
-  setUploadedFile: (file) => set((state) => ({ 
-    uploadedFile: typeof file === 'function' ? file(state.uploadedFile) : file 
+  setUploadedFile: (file) => set((state) => ({
+    uploadedFile: typeof file === 'function' ? file(state.uploadedFile) : file
   })),
   setCurrentConversationId: (conversationId) => set({ currentConversationId: conversationId }),
   setDropdownOpen: (open) => set({ dropdownOpen: open }),
@@ -219,7 +210,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSelectedDashboardId: (dashboardId) => set({ selectedDashboardId: dashboardId }),
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
-  
+
   // Complex actions
   sendMessage: (content) => {
     const userMessage: Message = {
@@ -227,39 +218,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
       role: "user",
       content: content.trim(),
       timestamp: new Date(),
-      attachment: get().uploadedFile ? { 
-        kind: "csv", 
-        name: get().uploadedFile!.filename 
+      attachment: get().uploadedFile ? {
+        kind: "csv",
+        name: get().uploadedFile!.filename
       } : undefined,
       template: get().selectedTemplate || undefined,
     };
-    
+
     set((state) => ({
       messages: [...state.messages, userMessage],
       inputValue: ""
     }));
   },
-  
+
   clearInput: () => set({ inputValue: "" }),
-  
+
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string) => {
     const state = get();
     const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
-    
+
     // Create new AbortController for this processing session
     const abortController = new AbortController();
     set({ abortController });
-    
+
     // Clear current workflow step at start
     setCurrentWorkflowStep(null);
-    
+
     // Text-only message path: allow theme change after initial dashboard shown, only if currently light
     const isTextOnly = !uploadedFile || uploadedFile.status !== 'uploaded';
     const detectedTheme = detectThemeChange(content);
     if (isTextOnly && hasShownInitialDashboard && dashboardTheme === 'light' && detectedTheme) {
       console.log('Theme change detected:', detectedTheme);
       setIsThemeChanging(true);
-      
+
       // Add user message
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -269,7 +260,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
-      
+
       // Add loading message
       const loadingMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -278,12 +269,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         timestamp: new Date(),
       };
       addMessage(loadingMessage);
-      
+
       // Wait 10 seconds for loading effect
       setTimeout(() => {
         setDashboardTheme(detectedTheme);
         setIsThemeChanging(false);
-        
+
         // Add completion message
         const completionMessage: Message = {
           id: (Date.now() + 2).toString(),
@@ -293,14 +284,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
         addMessage(completionMessage);
       }, 10000);
-      
+
       return;
     }
-    
+
     if (isTextOnly) {
       // No file uploaded - process Q&A (with or without existing conversation)
       console.log('No file - processing Q&A', { hasConversation: !!currentConversationId, projectId: projectIdParam });
-      
+
       // Check if we have projectId (required for API call)
       if (!projectIdParam) {
         console.log('No projectId - cannot process Q&A');
@@ -312,7 +303,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           template: get().selectedTemplate || undefined,
         };
         addMessage(userMessage);
-        
+
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
@@ -322,7 +313,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         addMessage(errorMessage);
         return;
       }
-      
+
       // Process Q&A (with or without existing conversation)
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content !== content.trim()) {
@@ -335,18 +326,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
         addMessage(userMessage);
       }
-      
+
       setIsTyping(true);
       setIsProcessing(true);
-      
+
       try {
         // Use projectId from parameter (required)
         const projectId = projectIdParam;
-        
+
         if (!projectId) {
           throw new Error('Project context missing. Please ensure you are in a project workspace.');
         }
-        
+
         // Call processing service with null assetId (with or without conversationId)
         const startResult = await processingService.runProcessing(
           projectId,
@@ -355,15 +346,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           currentConversationId || undefined,  // Use existing conversation if available
           undefined  // No attachment contents
         );
-        
+
         console.log('Q&A processing result:', startResult);
-        
+
         if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
           const conversationId = startResult.data?.conversation_id || currentConversationId;
           if (conversationId) {
             setCurrentConversationId(conversationId);
           }
-          
+
           // Poll for completion
           const finalResult = await processingService.pollProcessingStatus(
             '',  // No assetId for Q&A
@@ -388,9 +379,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             5000,
             abortController.signal
           );
-          
+
           console.log('Q&A final result:', finalResult);
-          
+
           if (finalResult.data?.success && finalResult.data?.status === 'completed') {
             // Q&A response - check if it's a message or dashboard
             if (finalResult.data?.dashboard_data) {
@@ -399,17 +390,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const { conversationService } = await import('@/services/conversationService');
                 const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
                 const conversation = conversationResponse.conversation;
-                
+
                 // Extract dashboard_id from conversation
                 const dashboards = conversation.dashboards || [];
                 const latestDashboard = dashboards[dashboards.length - 1];
                 const dashboardId = latestDashboard?.dashboard_id || "";
-                
+
                 // Set the latest dashboard as selected
                 if (dashboardId) {
                   set({ selectedDashboardId: dashboardId });
                 }
-                
+
                 const restoredMessages = conversationNodesToMessages(conversation, {
                   sourceFileName: uploadedFile?.filename || 'dashboard',
                 });
@@ -425,7 +416,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     id: (Date.now() + 2).toString(),
                     role: 'assistant',
                     content: "",
-                    dashboardCard: { 
+                    dashboardCard: {
                       sourceFileName: uploadedFile?.filename || "dashboard",
                       dashboardId: ""
                     },
@@ -447,10 +438,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 console.error('Failed to load conversation for Q&A response:', error);
                 // Fallback to workflow status metadata
                 const workflowStatus = finalResult.data?.workflow_status;
-                const responseText = workflowStatus?.metadata?.content || 
-                                   workflowStatus?.message || 
-                                   "I've processed your question.";
-                
+                const responseText = workflowStatus?.metadata?.content ||
+                  workflowStatus?.message ||
+                  "I've processed your question.";
+
                 updateMessages((prev) => ([
                   ...prev,
                   {
@@ -518,7 +509,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
       addMessage(userMessage);
     }
-    
+
     // Get updated messages after adding user message
     const updatedMessages = get().messages;
     setIsTyping(true);
@@ -532,7 +523,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!projectId) {
         throw new Error('Project context missing for uploaded file');
       }
-      
+
       console.log('Starting processing for fileID:', uploadedFile.fileID);
       // Fetch full asset data if not already available
       let assetData: any = null;
@@ -547,7 +538,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           console.warn('Failed to fetch asset data:', error);
         }
       }
-      
+
       const assetContents = uploadedFile && assetData ? [
         {
           type: 'asset',
@@ -606,7 +597,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           abortController.signal
         );
         console.log('Final polling result:', finalResult);
-        
+
         if (finalResult.data?.success && finalResult.data?.status === 'completed' && finalResult.data?.dashboard_data) {
           setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: finalResult.data?.dashboard_data } : prev);
           // First successful generation: show initial loading for 10s, then mark shown
@@ -616,23 +607,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
               set({ isInitialLoading: false, hasShownInitialDashboard: true });
             }, 10000);
           }
-          
+
           // Load conversation to get LLM's actual response text and dashboard_id
           try {
             const { conversationService } = await import('@/services/conversationService');
             const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
             const conversation = conversationResponse.conversation;
-            
+
             // Extract dashboard_id from conversation
             const dashboards = conversation.dashboards || [];
             const latestDashboard = dashboards[dashboards.length - 1];
             const dashboardId = latestDashboard?.dashboard_id || "";
-            
+
             // Set the latest dashboard as selected
             if (dashboardId) {
               set({ selectedDashboardId: dashboardId });
             }
-            
+
             const restoredMessages = conversationNodesToMessages(conversation, {
               sourceFileName: uploadedFile.filename,
             });
@@ -648,7 +639,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 id: (Date.now() + 3).toString(),
                 role: 'assistant',
                 content: "",
-                dashboardCard: { 
+                dashboardCard: {
                   sourceFileName: uploadedFile.filename,
                   dashboardId: ""
                 },
@@ -656,7 +647,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               }
             ]));
           }
-          
+
           if (conversationId) {
             setCurrentConversationId(conversationId);
           }
@@ -679,16 +670,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ abortController: null });
     }
   },
-  
+
   stopGeneration: async () => {
     const state = get();
     const { abortController, currentConversationId, setIsProcessing, setIsTyping } = state;
-    
+
     // Abort the polling if controller exists
     if (abortController && !abortController.signal.aborted) {
       abortController.abort();
     }
-    
+
     // Call stop API if we have a conversation ID
     if (currentConversationId) {
       try {
@@ -702,15 +693,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         console.error('Failed to stop workflow:', error);
       }
     }
-    
+
     // Clear abort controller and update state
-    set({ 
+    set({
       abortController: null,
       isProcessing: false,
       isTyping: false,
     });
   },
-  
+
   resetChat: () => set({
     inputValue: "",
     isTyping: false,
@@ -726,19 +717,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     detectedLanguage: null,
     selectedDashboardId: null,
   }),
-  
+
   selectDashboard: async (dashboardId: string, projectId: string) => {
     const { currentConversationId, setUploadedFile } = get();
     if (!currentConversationId) return;
-    
+
     try {
       const { conversationService } = await import('@/services/conversationService');
       const response = await conversationService.getDashboardData(
-        currentConversationId, 
-        projectId, 
+        currentConversationId,
+        projectId,
         dashboardId
       );
-      
+
       if (response?.dashboard_data) {
         set({ selectedDashboardId: dashboardId });
         setUploadedFile(prev => prev ? { ...prev, processedData: response.dashboard_data } : prev);

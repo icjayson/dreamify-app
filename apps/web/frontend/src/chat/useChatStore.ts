@@ -396,9 +396,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const latestDashboard = dashboards[dashboards.length - 1];
                 const dashboardId = latestDashboard?.dashboard_id || "";
 
-                // Set the latest dashboard as selected
+                // Set the latest dashboard as selected and update processedData
                 if (dashboardId) {
                   set({ selectedDashboardId: dashboardId });
+                  // Update processedData with the new dashboard data
+                  setUploadedFile((prev) => prev ? {
+                    ...prev,
+                    processedData: finalResult.data.dashboard_data
+                  } : prev);
                 }
 
                 const restoredMessages = conversationNodesToMessages(conversation, {
@@ -619,9 +624,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const latestDashboard = dashboards[dashboards.length - 1];
             const dashboardId = latestDashboard?.dashboard_id || "";
 
-            // Set the latest dashboard as selected
+            // Set the latest dashboard as selected and update processedData
             if (dashboardId) {
               set({ selectedDashboardId: dashboardId });
+              // Update processedData with the new dashboard data
+              setUploadedFile((prev) => prev ? {
+                ...prev,
+                processedData: finalResult.data.dashboard_data
+              } : prev);
             }
 
             const restoredMessages = conversationNodesToMessages(conversation, {

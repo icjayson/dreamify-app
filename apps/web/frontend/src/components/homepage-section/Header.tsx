@@ -168,7 +168,9 @@ const Header = () => {
               About Us
             </button>
             <a
-              href="#community"
+              href="https://discord.gg/HJ5FhwWY"
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-sm font-medium text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
             >
               Community
@@ -291,7 +293,9 @@ const Header = () => {
               About
             </button>
             <a
-              href="#community"
+              href="https://discord.gg/HJ5FhwWY"
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => setMobileNavOpen(false)}
               className="block w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
             >

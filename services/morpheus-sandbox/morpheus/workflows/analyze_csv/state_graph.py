@@ -98,6 +98,7 @@ class StatefulAnalyzeCSVWorkflow:
         user_prompt: Optional[str] = None,
         conversation_uri: Optional[str] = None,
         conversation_backup_uri: Optional[str] = None,
+        post_status_fn: Optional[callable] = None,
     ) -> Dict[str, Any]:
         """
         Main entry point for workflow execution.
@@ -112,6 +113,7 @@ class StatefulAnalyzeCSVWorkflow:
             user_prompt: Optional user prompt (extracted from conversation if not provided)
             conversation_uri: Optional S3 URI for conversation persistence (enables live sync)
             conversation_backup_uri: Optional backup S3 URI
+            post_status_fn: Optional callback to post status updates (from server.py)
             
         Returns:
             Dict with workflow output in legacy format for backward compatibility
@@ -119,6 +121,9 @@ class StatefulAnalyzeCSVWorkflow:
         logger.info(
             f"Starting workflow execution for conversation {conversation.get('conversation_id')}"
         )
+        
+        # Store callback for use in workflow loop
+        self._post_status_fn = post_status_fn
         
         # Build initial state
         state = self._build_initial_state(
@@ -447,7 +452,15 @@ class StatefulAnalyzeCSVWorkflow:
         logger.info("Starting workflow loop")
         
         # Get persistence functions for live sync
-        persist_fn, post_status_fn, load_fn = self._get_server_functions()
+        persist_fn, dynamic_post_status_fn, load_fn = self._get_server_functions()
+        
+        # Prefer passed callback over dynamically imported one
+        post_status_fn = self._post_status_fn or dynamic_post_status_fn
+        
+        if post_status_fn:
+            logger.info("✅ Status posting enabled for this workflow execution")
+        else:
+            logger.warning("⚠️ Status posting disabled (no callback available)")
         
         # Reset sync tracker
         self._last_synced_index = 0
@@ -517,10 +530,14 @@ class StatefulAnalyzeCSVWorkflow:
                 # Post workflow status for frontend polling (fault-tolerant)
                 if post_status_fn and state.conversation_id:
                     try:
+                        # Build descriptive log message for this step
+                        log_message = self._build_node_log_message(state)
+                        # Include full log history in metadata so FE always gets complete picture
                         metadata = {
                             "step": state.current_node.lower(),
                             "iteration": state.iteration,
-                            "node": state.current_node
+                            "node": state.current_node,
+                            "log": log_message,
                         }
                         post_status_fn(state.conversation_id, "processing", metadata)
                     except Exception as e:
@@ -900,3 +917,83 @@ class StatefulAnalyzeCSVWorkflow:
         )
         
         state.workflow_history.entries.append(entry)
+    
+    def _build_node_log_message(self, state: AgentState) -> str:
+        """
+        Build a descriptive log message based on current node and state.
+        
+        Args:
+            state: Current agent state
+            
+        Returns:
+            Human-readable log message describing current workflow step
+        """
+        node = state.current_node
+        
+        if node == "START":
+            assets_count = len(state.user_state.user_assets)
+            dashboards_count = len(state.user_state.dashboards)
+            return f"Starting analysis with {assets_count} asset(s) and {dashboards_count} existing dashboard(s)"
+        
+        elif node == "ROUTING":
+            route = state.working_memory.tool_outputs.get("route_decision", {})
+            next_step = route.get("next_step", "unknown")
+            reasoning = route.get("reasoning", "")[:80]
+            return f"Routing to '{next_step}' mode - {reasoning}"
+        
+        elif node == "REASONING":
+            pending = state.working_memory.tool_outputs.get("pending_action", {})
+            action_type = pending.get("action_type", "")
+            tool_name = pending.get("tool_name", "")
+            reasoning = pending.get("reasoning", "")[:60]
+            if action_type == "EXECUTE_TOOL" and tool_name:
+                return f"Planning to execute {tool_name}: {reasoning}"
+            elif action_type == "FINISH":
+                return f"Preparing final output: {reasoning}"
+            return f"Analyzing data: {reasoning}" if reasoning else "Analyzing..."
+        
+        elif node == "EXECUTION":
+            results = state.working_memory.python_execution_results
+            if results:
+                last = results[-1]
+                tool_name = last.get("tool_name", "tool")
+                success = last.get("success", False)
+                output_preview = str(last.get("output", ""))[:80]
+                status_icon = "✓" if success else "✗"
+                return f"Executed {tool_name} {status_icon}: {output_preview}"
+            return "Executing tool..."
+        
+        elif node == "SYNTHESIS":
+            route = state.working_memory.tool_outputs.get("route_decision", {})
+            mode = route.get("next_step", "dashboard")
+            if mode == "dashboard":
+                return "Synthesizing dashboard configuration..."
+            return "Synthesizing response..."
+        
+        elif node == "VALIDATION":
+            result = state.working_memory.tool_outputs.get("validation", {})
+            is_valid = result.get("valid", False)
+            if is_valid:
+                return "Validation passed ✓"
+            error = result.get("error", "")[:60]
+            return f"Validation failed: {error}" if error else "Validating output..."
+        
+        elif node == "FINISH":
+            output_type = state.output.get("type", "unknown") if state.output else "unknown"
+            if output_type == "dashboard_config":
+                data = state.output.get("data", {}) if state.output else {}
+                charts = len(data.get("charts", []))
+                metrics = len(data.get("metrics", []))
+                return f"Completed: Generated dashboard with {charts} chart(s) and {metrics} metric(s)"
+            elif output_type == "message":
+                return "Completed: Generated response"
+            return "Workflow completed successfully"
+        
+        elif node == "ERROR":
+            errors = state.working_memory.errors
+            if errors:
+                last_error = errors[-1].get("error", "Unknown error")[:80]
+                return f"Error: {last_error}"
+            return "Workflow encountered an error"
+        
+        return f"Processing {node}..."

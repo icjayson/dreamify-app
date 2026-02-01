@@ -516,6 +516,7 @@ def _process_conversation_background(
             user_prompt=user_prompt,
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
+            post_status_fn=_post_node_status_sync,
         )
         
         # Validate result is not None

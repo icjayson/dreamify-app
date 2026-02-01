@@ -22,6 +22,7 @@ import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
 import TemplateModal from '@/components/homepage-section/TemplateModal';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { CONNECTORS, type ConnectorItem } from '@/constants/connectors';
+import FilePreviewChip from '@/components/chat/FilePreviewChip';
 
 interface HomePageProps {
   onGetStarted: () => void;
@@ -492,7 +493,13 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         status: 'uploading' as const 
       };
       
-      // Replace behavior: if an uploaded file exists, we'll delete it after new upload succeeds
+      // IMPORTANT: When uploading a new file:
+      // - Keep conversation history (don't reset)
+      // - Keep previous files (don't delete)
+      // - Replace uploadedFile state to show new file in UI
+      // - Backend will handle multiple assets in conversation
+      
+      // Simply replace the uploadedFile state to show new upload progress
       setUploadedFile(newFile);
 
       const res: UploadResponse = await fileService.uploadFile(file);
@@ -502,10 +509,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         return;
       }
 
-      // Delete previous file if different
-      if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
-        void fileService.deleteFile(uploadedFile.fileID);
-      }
+      // DON'T delete previous file - keep all files in project for reference
+      // Each file can create its own dashboard
+      // Old code: if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
+      //   void fileService.deleteFile(uploadedFile.fileID);
+      // }
 
       const fallbackFilename = res.filename ?? file.name;
       const fallbackSize = res.size ?? file.size;
@@ -708,76 +716,13 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
               </div>
             )}
 
-            {/* File Chip Area */}
-            {uploadedFile && (
-              <div className="mt-0 mb-4 flex justify-start">
-                <div className="w-full sm:w-3/4 md:w-2/3 lg:w-1/2">
-                  <div className="glass-panel rounded-xl border border-border/30 py-2 px-4">
-                    <div className="flex items-center justify-between gap-3">
-                      {/* Left side - File info */}
-                      <div className="flex items-center gap-4 flex-1 min-w-0">
-                        {/* File Icon */}
-                        <div className="flex-shrink-0">
-                          <div className="w-10 h-10 icon-panel rounded-full flex items-center justify-center shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))]">
-                            <FileText className="w-4 h-4 text-white" />
-                          </div>
-                        </div>
-                        
-                        {/* File details */}
-                        <div className="min-w-0">
-                          <div className="text-white font-medium text-sm truncate pb-1">
-                            {uploadedFile.filename}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{(uploadedFile.size/1024/1024).toFixed(1)}MB</span>
-                            <span>•</span>
-                            <div className="flex items-center gap-1">
-                              <div className={`w-1.5 h-1.5 rounded-full ${
-                                uploadedFile.status === 'uploading' ? 'bg-yellow-500' :
-                                uploadedFile.status === 'processing' ? 'bg-blue-500' :
-                                uploadedFile.status === 'processed' ? 'bg-green-500' :
-                                uploadedFile.status === 'error' ? 'bg-red-500' : 'bg-gray-500'
-                              }`}></div>
-                              <span className="capitalize">
-                                {uploadedFile.status === 'uploading' ? 'Uploading' :
-                                 uploadedFile.status === 'processing' ? 'Processing' :
-                                 uploadedFile.status === 'processed' ? 'Processed' :
-                                 uploadedFile.status === 'error' ? 'Error' : 'Ready'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Right side - Actions */}
-                      <div className="flex flex-col items-end gap-0 flex-shrink-0">
-                        <Button
-                          onClick={async () => {
-                            try {
-                              const token = await useAuth().getToken();
-                              const url = token 
-                                ? `/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
-                                : `/preview/${uploadedFile.fileID}`;
-                              window.open(url, '_blank');
-                            } catch {
-                              window.open(`/preview/${uploadedFile.fileID}`, '_blank');
-                            }
-                          }}
-                          disabled={uploadedFile.status === 'uploading' || uploadedFile.status === 'processing'}
-                          className="button-gradient px-4 py-0 text-xs disabled:opacity-50 whitespace-nowrap"
-                        >
-                          Preview
-                        </Button>
-                        <button
-                          onClick={() => removeUploadedFile(uploadedFile.fileID)}
-                          className="text-[10px] text-muted-foreground hover:text-white underline transition-colors whitespace-nowrap"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            {/* File Context Chip - show when file is attached and active */}
+            {uploadedFile && uploadedFile.status !== 'processed' && uploadedFile.status !== 'error' && (
+              <div className="mb-3">
+                <FilePreviewChip 
+                  file={uploadedFile}
+                  onRemove={() => removeUploadedFile(uploadedFile.fileID)}
+                />
               </div>
             )}
 

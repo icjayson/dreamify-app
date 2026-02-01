@@ -5,11 +5,12 @@ import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
-import { fileService, type UploadResponse } from "@/services/fileService";
+import { fileService, type UploadResponse, type AssetRecord } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
-import { useChatStore } from "@/chat/useChatStore";
+import { useChatStore, type UploadedFile } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
+import FilePreviewChip from "../components/chat/FilePreviewChip";
 
 // Helper function to map workflow-status step values to display text
 const mapStepToDisplayText = (step: string): string => {
@@ -120,6 +121,35 @@ const RollingText = ({ isActive, stopSignal, successText = "", currentStep = nul
   );
 };
 
+// Fetch project assets for @mention feature
+const fetchProjectAssets = async (projectId: string): Promise<Array<{
+  id: string;
+  name: string;
+  ext: string;
+  projectId: string;
+  asset: AssetRecord;
+}>> => {
+  try {
+    const response = await fileService.listFiles();
+    if (response.success && response.files) {
+      // Filter by projectId
+      return response.files
+        .filter(file => file.asset?.project_id === projectId)
+        .map(file => ({
+          id: file.fileID,
+          name: file.filename,
+          ext: file.ext.toUpperCase(),
+          projectId: file.asset?.project_id || projectId,
+          asset: file.asset!,
+        }));
+    }
+    return [];
+  } catch (error) {
+    console.error('Failed to fetch project assets:', error);
+    return [];
+  }
+};
+
 interface ChatInterfaceProps {
   projectId?: string;
   onProcessedDataChange?: (data: any) => void;
@@ -131,6 +161,18 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  // @Mention state
+  const [showMentionList, setShowMentionList] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [projectAssets, setProjectAssets] = useState<Array<{
+    id: string;
+    name: string;
+    ext: string;
+    projectId: string;
+    asset: AssetRecord;
+  }>>([]);
+  const [mentionCursorPos, setMentionCursorPos] = useState(0);
 
   // Zustand stores
   const {
@@ -305,8 +347,66 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     }
   };
 
-
-
+  const handleAssetSelect = async (selectedAsset: { 
+    id: string; 
+    name: string; 
+    ext: string; 
+    projectId: string;
+    asset: AssetRecord; 
+  }) => {
+    try {
+      // We already have full asset data from fetchProjectAssets
+      // No need to fetch again - use existing data
+      const assetData = selectedAsset.asset;
+      
+      // Convert to UploadedFile format
+      // Status is 'uploaded' because file exists in project and is ready for processing
+      const newFile = {
+        fileID: assetData.asset_id,
+        filename: assetData.filename,
+        size: assetData.size_bytes,
+        ext: assetData.extension.toLowerCase(),
+        status: 'uploaded' as const,
+        projectId: assetData.project_id,
+        rowCount: assetData.row_count,
+        columnCount: assetData.column_count,
+      };
+      
+      // IMPORTANT: When selecting a file via @mention:
+      // - Keep conversation history (don't reset)
+      // - Simply replace uploadedFile to show selected file in UI
+      // - Backend will receive the new file as part of user message
+      
+      // Update store with selected file
+      // IMPORTANT: The existing processFileWithMessage flow (useChatStore.ts lines 536-566)
+      // will fetch asset data again using fileService.getAsset() to construct assetContents
+      // This ensures the workflow receives proper asset context with s3_bucket, s3_key, etc.
+      setUploadedFile(newFile);
+      
+      // Remove @mention text from input
+      const textBeforeCursor = inputValue.slice(0, mentionCursorPos);
+      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+      const textAfterMention = inputValue.slice(mentionCursorPos);
+      const newText = inputValue.slice(0, lastAtIndex) + textAfterMention;
+      setInputValue(newText);
+      
+      // Hide dropdown
+      setShowMentionList(false);
+      setMentionQuery('');
+      
+      toast({
+        title: "File added to context",
+        description: `${selectedAsset.name} is now available for analysis`,
+      });
+    } catch (error) {
+      console.error('Failed to add asset:', error);
+      toast({
+        title: "Failed to add file",
+        description: "Could not load the selected file",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -335,7 +435,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         status: 'uploading' as const 
       };
       
-      // Replace behavior: if an uploaded file exists, we'll delete it after new upload succeeds
+      // IMPORTANT: When uploading a new file in the same project:
+      // - Keep conversation history (don't reset)
+      // - Keep previous files (don't delete)
+      // - Replace uploadedFile state to show new file in UI
+      // - Backend will handle multiple assets in conversation
+      
+      // Simply replace the uploadedFile state to show new upload progress
       setUploadedFile(newFile);
 
       const res: UploadResponse = await fileService.uploadFile(file, { projectId: projectId ?? undefined });
@@ -349,10 +455,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         return;
       }
 
-      // Delete previous file if different
-      if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
-        void fileService.deleteFile(uploadedFile.fileID);
-      }
+      // DON'T delete previous file - keep all files in project for reference
+      // Each file can create its own dashboard
+      // Old code: if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
+      //   void fileService.deleteFile(uploadedFile.fileID);
+      // }
 
       const fallbackFilename = res.filename ?? file.name;
       const fallbackSize = res.size ?? file.size;
@@ -686,76 +793,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         </div>
       )}
 
-      {/* Bottom Area: File chip + Input */}
+      {/* Bottom Area: Input */}
       <div className="mt-auto">
-        {uploadedFile && (
-          <div className="mx-2 mt-4 mb-2">
-            <div className="group relative bg-black/95 border border-white/5 rounded-xl p-3">
-              {/* X button - top right, visible on hover */}
-              <button
-                onClick={() => removeUploadedFile(uploadedFile.fileID)}
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-white/10 rounded"
-                aria-label="Remove file"
-              >
-                <X className="w-3.5 h-3.5 text-white" />
-              </button>
-              
-              {/* File content */}
-              <div className="flex items-center gap-3 pr-10">
-                {/* File icon - left side */}
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                    <FileText className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                
-                {/* File info */}
-                <div className="flex-1 min-w-0">
-                  {/* Top line - Filename */}
-                  <div className="text-white font-semibold text-sm truncate">
-                    {uploadedFile.filename}
-                  </div>
-                  {/* Bottom line - Metadata */}
-                  <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                    {uploadedFile.rowCount?.toLocaleString() || 'N/A'} rows • {uploadedFile.columnCount || 'N/A'} cols • {formatFileSize(uploadedFile.size)}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Footer section - only when uploaded, processing, or processed */}
-              {(uploadedFile.status === 'uploaded' || uploadedFile.status === 'processing' || uploadedFile.status === 'processed') && (
-                <div className="border-t border-white/10 mt-2.5 pt-2.5 flex items-center justify-between">
-                  {/* Left side - Status indicator */}
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle className="w-3.5 h-3.5 text-white" />
-                    <span className="text-[10px] text-white">
-                      {formatAssetStatus(uploadedFile.status)}
-                    </span>
-                  </div>
-                  {/* Right side - Preview button */}
-                  <Button
-                    onClick={async () => {
-                      try {
-                        const { useAuth } = await import('@clerk/clerk-react');
-                        const token = await useAuth().getToken();
-                        const url = token
-                          ? `/preview/${uploadedFile.fileID}?token=${encodeURIComponent(token)}`
-                          : `/preview/${uploadedFile.fileID}`;
-                        window.open(url, '_blank');
-                      } catch {
-                        window.open(`/preview/${uploadedFile.fileID}`, '_blank');
-                      }
-                    }}
-                    className="button-gradient px-3 py-1 text-[10px] whitespace-nowrap h-auto"
-                  >
-                    Preview
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Input Area */}
         <div className="m-2">
         {/* Main Chat Input with Hero Section Styling */}
@@ -772,13 +811,85 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               <span className="text-sm text-primary font-medium">Drop file here to upload</span>
             </div>
           )}
+          
+          {/* Mention Dropdown */}
+          {showMentionList && (
+            <div className="absolute bottom-full left-0 mb-2 w-full max-w-md bg-[#1e1e1e] border border-white/20 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
+              <div className="p-2">
+                <p className="text-xs text-white/50 px-2 py-1">Select a file from this project:</p>
+                {projectAssets
+                  .filter(asset => 
+                    asset.name.toLowerCase().includes(mentionQuery.toLowerCase())
+                  )
+                  .map(asset => (
+                    <button
+                      key={asset.id}
+                      onClick={() => handleAssetSelect(asset)}
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left"
+                    >
+                      <FileText className="w-4 h-4 text-white/70 flex-shrink-0" />
+                      <span className="text-sm text-white truncate flex-1">{asset.name}</span>
+                      <span className="text-xs text-white/50">{asset.ext}</span>
+                    </button>
+                  ))}
+                {projectAssets.filter(asset => 
+                  asset.name.toLowerCase().includes(mentionQuery.toLowerCase())
+                ).length === 0 && (
+                  <p className="text-xs text-white/40 px-3 py-2">No files found in this project</p>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* File Context Chip - show when file is attached and active */}
+          {uploadedFile && uploadedFile.status !== 'processed' && uploadedFile.status !== 'error' && (
+            <div className="mb-3">
+              <FilePreviewChip 
+                file={uploadedFile}
+                onRemove={() => removeUploadedFile(uploadedFile.fileID)}
+              />
+            </div>
+          )}
+          
           {/* Textarea Row */}
           <div className="relative mb-3">
             <TextareaAutosize
               minRows={2}
               maxRows={6}
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setInputValue(value);
+                
+                // Detect @ mention
+                const cursorPos = e.target.selectionStart || 0;
+                const textBeforeCursor = value.slice(0, cursorPos);
+                const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+                
+                if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
+                  // User just typed @
+                  setShowMentionList(true);
+                  setMentionQuery('');
+                  setMentionCursorPos(cursorPos);
+                  
+                  // Fetch assets if not already loaded
+                  if (projectId && projectAssets.length === 0) {
+                    fetchProjectAssets(projectId).then(setProjectAssets);
+                  }
+                } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
+                  // User is typing after @
+                  const query = textBeforeCursor.slice(lastAtIndex + 1);
+                  if (!/\s/.test(query)) {
+                    // No space means still in mention mode
+                    setMentionQuery(query);
+                    setShowMentionList(true);
+                  } else {
+                    setShowMentionList(false);
+                  }
+                } else {
+                  setShowMentionList(false);
+                }
+              }}
               placeholder={isListening ? 'Listening...' : "Describe your dashboard..."}
               className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60"
               data-chat-input

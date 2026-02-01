@@ -62,7 +62,7 @@ const generateAIResponse = async (
   }
 };
 
-interface UploadedFile {
+export interface UploadedFile {
   fileID: string;
   filename: string;
   size: number;
@@ -322,6 +322,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           role: "user",
           content: content.trim(),
           timestamp: new Date(),
+          // Only attach file if it was just uploaded or @mentioned (status: uploading/uploaded)
+          // Don't attach if file is from previous workflow (status: processing/processed)
+          attachment: (uploadedFile && (uploadedFile.status === 'uploading' || uploadedFile.status === 'uploaded')) 
+            ? { kind: "csv", name: uploadedFile.filename } 
+            : undefined,
           template: get().selectedTemplate || undefined,
         };
         addMessage(userMessage);
@@ -338,13 +343,43 @@ export const useChatStore = create<ChatState>((set, get) => ({
           throw new Error('Project context missing. Please ensure you are in a project workspace.');
         }
 
-        // Call processing service with null assetId (with or without conversationId)
+        // Fetch asset data ONLY if file was just @mentioned or uploaded (not from previous workflow)
+        let assetContents: ConversationChatRequest['user_node_contents'] = undefined;
+        let assetId: string | null = null;
+        if (uploadedFile?.fileID && (uploadedFile.status === 'uploading' || uploadedFile.status === 'uploaded')) {
+          // Only attach file if it's actively being used (not from previous completed workflow)
+          try {
+            const { fileService } = await import('@/services/fileService');
+            const assetResponse = await fileService.getAsset(uploadedFile.fileID);
+            if (assetResponse.success && assetResponse.asset) {
+              const assetData = assetResponse.asset;
+              assetId = assetData.asset_id;
+              assetContents = [
+                {
+                  type: 'asset',
+                  data: {
+                    asset_id: assetData.asset_id,
+                    file_id: assetData.file_id,
+                    s3_bucket: assetData.s3_bucket,
+                    s3_key: assetData.s3_key,
+                    extension: assetData.extension,
+                    filename: assetData.filename,
+                  }
+                }
+              ] as ConversationChatRequest['user_node_contents'];
+            }
+          } catch (error) {
+            console.warn('Failed to fetch asset data for QnA:', error);
+          }
+        }
+
+        // Call processing service (with or without file attachment)
         const startResult = await processingService.runProcessing(
           projectId,
-          null,  // No asset_id for Q&A without file
+          assetId,  // Pass asset_id only if file is actively attached
           content,
           currentConversationId || undefined,  // Use existing conversation if available
-          undefined  // No attachment contents
+          assetContents  // Pass asset contents only if file is actively attached
         );
 
         console.log('Q&A processing result:', startResult);
@@ -363,6 +398,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
             (status) => {
               // Update status based on workflow status
               const workflowStatus = status.data?.workflow_status?.status;
+              
+              // For QnA: DON'T update uploadedFile status to 'processing'
+              // This prevents ProjectPage from showing "Generating Dashboard"
+              // Keep status as 'uploaded' until QnA completes
+              if (workflowStatus === 'error') {
+                if (uploadedFile) {
+                  setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
+                }
+              }
+              
               if (workflowStatus === 'error' || workflowStatus === 'stopped') {
                 setIsProcessing(false);
               }
@@ -439,6 +484,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
                 }
+                
+                // Clear uploadedFile after QnA completes (no dashboard, so no need to keep it)
+                // This prevents auto-attaching file to subsequent generic questions
+                console.log('Clearing uploadedFile after QnA completion');
+                setUploadedFile(null);
               } catch (error) {
                 console.error('Failed to load conversation for Q&A response:', error);
                 // Fallback to workflow status metadata
@@ -456,6 +506,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     timestamp: new Date(),
                   }
                 ]));
+                
+                // Clear uploadedFile even on error
+                console.log('Clearing uploadedFile after QnA error');
+                setUploadedFile(null);
               }
             }
           } else if (finalResult.data?.status === 'error') {
@@ -469,6 +523,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 timestamp: new Date(),
               }
             ]));
+            
+            // Clear uploadedFile on error to prevent auto-attaching to next message
+            if (uploadedFile) {
+              console.log('Clearing uploadedFile after QnA error');
+              setUploadedFile(null);
+            }
           }
         } else {
           const errorMsg = startResult.data?.error || 'Failed to start processing.';
@@ -481,6 +541,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
               timestamp: new Date(),
             }
           ]));
+          
+          // Clear uploadedFile on error
+          if (uploadedFile) {
+            console.log('Clearing uploadedFile after QnA start error');
+            setUploadedFile(null);
+          }
         }
       } catch (error) {
         console.error('Q&A processing error:', error);
@@ -493,6 +559,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             timestamp: new Date(),
           }
         ]));
+        
+        // Clear uploadedFile on error
+        if (uploadedFile) {
+          console.log('Clearing uploadedFile after QnA exception');
+          setUploadedFile(null);
+        }
       } finally {
         setIsTyping(false);
         setIsProcessing(false);
@@ -509,7 +581,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: "user",
         content: content.trim(),
         timestamp: new Date(),
-        attachment: { kind: "csv", name: uploadedFile.filename },
+        // Only attach file if it was just uploaded or @mentioned (status: uploading/uploaded)
+        // Don't attach if file is from previous workflow (status: processing/processed)
+        attachment: (uploadedFile.status === 'uploading' || uploadedFile.status === 'uploaded') 
+          ? { kind: "csv", name: uploadedFile.filename }
+          : undefined,
         template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
@@ -603,63 +679,113 @@ export const useChatStore = create<ChatState>((set, get) => ({
         );
         console.log('Final polling result:', finalResult);
 
-        if (finalResult.data?.success && finalResult.data?.status === 'completed' && finalResult.data?.dashboard_data) {
-          setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: finalResult.data?.dashboard_data } : prev);
-          // First successful generation: show initial loading for 10s, then mark shown
-          if (!get().hasShownInitialDashboard) {
-            set({ isInitialLoading: true });
-            setTimeout(() => {
-              set({ isInitialLoading: false, hasShownInitialDashboard: true });
-            }, 10000);
-          }
-
-          // Load conversation to get LLM's actual response text and dashboard_id
-          try {
-            const { conversationService } = await import('@/services/conversationService');
-            const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-            const conversation = conversationResponse.conversation;
-
-            // Extract dashboard_id from conversation
-            const dashboards = conversation.dashboards || [];
-            const latestDashboard = dashboards[dashboards.length - 1];
-            const dashboardId = latestDashboard?.dashboard_id || "";
-
-            // Set the latest dashboard as selected and update processedData
-            if (dashboardId) {
-              set({ selectedDashboardId: dashboardId });
-              // Update processedData with the new dashboard data
-              setUploadedFile((prev) => prev ? {
-                ...prev,
-                processedData: finalResult.data.dashboard_data
-              } : prev);
+        if (finalResult.data?.success && finalResult.data?.status === 'completed') {
+          // Check if response contains dashboard data or is a Q&A response
+          if (finalResult.data?.dashboard_data) {
+            // Dashboard response
+            setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: finalResult.data?.dashboard_data } : prev);
+            // First successful generation: show initial loading for 10s, then mark shown
+            if (!get().hasShownInitialDashboard) {
+              set({ isInitialLoading: true });
+              setTimeout(() => {
+                set({ isInitialLoading: false, hasShownInitialDashboard: true });
+              }, 10000);
             }
 
-            const restoredMessages = conversationNodesToMessages(conversation, {
-              sourceFileName: uploadedFile.filename,
-            });
-            if (restoredMessages.length) {
-              get().setMessages(restoredMessages);
-            }
-          } catch (error) {
-            console.error('Failed to load conversation for dashboard response:', error);
-            // No fallback message
-            updateMessages((prev) => ([
-              ...prev,
-              {
-                id: (Date.now() + 3).toString(),
-                role: 'assistant',
-                content: "",
-                dashboardCard: {
-                  sourceFileName: uploadedFile.filename,
-                  dashboardId: ""
-                },
-                timestamp: new Date(),
+            // Load conversation to get LLM's actual response text and dashboard_id
+            try {
+              const { conversationService } = await import('@/services/conversationService');
+              const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+              const conversation = conversationResponse.conversation;
+
+              // Extract dashboard_id from conversation
+              const dashboards = conversation.dashboards || [];
+              const latestDashboard = dashboards[dashboards.length - 1];
+              const dashboardId = latestDashboard?.dashboard_id || "";
+
+              // Set the latest dashboard as selected and update processedData
+              if (dashboardId) {
+                set({ selectedDashboardId: dashboardId });
+                // Update processedData with the new dashboard data
+                setUploadedFile((prev) => prev ? {
+                  ...prev,
+                  processedData: finalResult.data.dashboard_data
+                } : prev);
               }
-            ]));
-          }
 
-          if (conversationId) {
-            setCurrentConversationId(conversationId);
+              const restoredMessages = conversationNodesToMessages(conversation, {
+                sourceFileName: uploadedFile.filename,
+              });
+              if (restoredMessages.length) {
+                get().setMessages(restoredMessages);
+              }
+              
+              // DON'T clear uploadedFile - ProjectPage needs it to determine dashboard display
+              // The FilePreviewChip will be hidden based on processing status
+              // setUploadedFile(null); // REMOVED - causes dashboard to disappear in ProjectPage
+            } catch (error) {
+              console.error('Failed to load conversation for dashboard response:', error);
+              // No fallback message
+              updateMessages((prev) => ([
+                ...prev,
+                {
+                  id: (Date.now() + 3).toString(),
+                  role: 'assistant',
+                  content: "",
+                  dashboardCard: {
+                    sourceFileName: uploadedFile.filename,
+                    dashboardId: ""
+                  },
+                  timestamp: new Date(),
+                }
+              ]));
+              
+              // DON'T clear uploadedFile - see comment above
+              // setUploadedFile(null); // REMOVED
+            }
+
+            if (conversationId) {
+              setCurrentConversationId(conversationId);
+            }
+          } else {
+            // Q&A text response (with @mentioned file) - load conversation and show response
+            console.log('Q&A response detected (no dashboard_data) - loading conversation');
+            try {
+              const { conversationService } = await import('@/services/conversationService');
+              const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+              const conversation = conversationResponse.conversation;
+              const restoredMessages = conversationNodesToMessages(conversation);
+              console.log('Q&A conversation loaded, restored', restoredMessages.length, 'messages');
+              if (restoredMessages.length) {
+                get().setMessages(restoredMessages);
+              }
+              
+              // Clear uploadedFile after QnA completes (no dashboard, so no need to keep it)
+              // This prevents auto-attaching file to subsequent generic questions
+              console.log('Clearing uploadedFile after QnA completion (file upload path)');
+              setUploadedFile(null);
+            } catch (error) {
+              console.error('Failed to load conversation for Q&A response:', error);
+              // Fallback to workflow status metadata
+              const workflowStatus = finalResult.data?.workflow_status;
+              const responseText = workflowStatus?.metadata?.content ||
+                workflowStatus?.message ||
+                "I've processed your question.";
+
+              updateMessages((prev) => ([
+                ...prev,
+                {
+                  id: (Date.now() + 1).toString(),
+                  role: 'assistant',
+                  content: responseText,
+                  timestamp: new Date(),
+                }
+              ]));
+              
+              // Clear uploadedFile even on error
+              console.log('Clearing uploadedFile after QnA error (file upload path)');
+              setUploadedFile(null);
+            }
           }
         } else {
           if (finalResult.data?.status === 'error') {

@@ -172,27 +172,8 @@ class ProcessingService {
           const responseType = status.data?.workflow_status?.metadata?.response_type;
           
           if (responseType === 'message' || !responseType) {
-            // Q&A response or unknown - try to get dashboard, but don't fail if it doesn't exist
-            try {
-              const dashboardData = await conversationService.getDashboardData(conversationId, projectId);
-              if (dashboardData) {
-                return {
-                  success: true,
-                  data: {
-                    success: true,
-                    status: 'completed',
-                    fileID: assetId,
-                    conversation_id: conversationId,
-                    dashboard_data: dashboardData.dashboard_data,
-                  },
-                };
-              }
-            } catch (error) {
-              // Dashboard doesn't exist - this is OK for Q&A responses
-              console.log('No dashboard found - this is expected for Q&A responses');
-            }
-            
-            // Q&A response - return completed without dashboard_data
+            // Q&A response - DON'T fetch dashboard (it's redundant and causes UI confusion)
+            // Return completed without dashboard_data
             return {
               success: true,
               data: {
@@ -201,6 +182,7 @@ class ProcessingService {
                 fileID: assetId,
                 conversation_id: conversationId,
                 workflow_status: status.data?.workflow_status,
+                response_type: 'message', // Explicitly mark as QnA response
               },
             };
           } else {
@@ -262,22 +244,17 @@ class ProcessingService {
         // Continue polling if status is 'processing' or other intermediate states
 
       } catch (error) {
-        return {
-          success: false,
-          data: {
-            success: false,
-            status: 'error',
-            fileID: assetId,
-            conversation_id: conversationId,
-            error: error instanceof Error ? error.message : 'Unknown error occurred',
-          },
-        };
+        // Log error but continue polling - this handles temporary network glitches
+        console.warn(`Polling attempt ${attempts + 1}/${maxAttempts} failed:`, error);
+        // Don't return error immediately - let it retry
+        // Only fail if we've exhausted all attempts (will timeout below)
       }
 
       attempts += 1;
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
 
+    // Only return error after all attempts exhausted
     return {
       success: false,
       data: {
@@ -285,7 +262,7 @@ class ProcessingService {
         status: 'error',
         fileID: assetId,
         conversation_id: conversationId,
-        error: 'Processing timed out',
+        error: 'Processing timed out after maximum attempts',
       },
     };
   }

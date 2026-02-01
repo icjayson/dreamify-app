@@ -77,6 +77,8 @@ export function conversationNodesToMessages(
           dashboardTitle: dashboardMetadata?.title || undefined,
         };
       }
+      // Include attachment field for messages with asset content
+      // This shows "Attached file" badge for @mentioned files in QnA mode
       if (assetContent?.data) {
         normalized.attachment = {
           kind: assetContent?.data?.kind === 'file' ? 'file' : 'csv',

@@ -79,6 +79,11 @@ export default function ProjectPage() {
   const uploadedFile = useChatStore((s) => s.uploadedFile);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
+  
+  // Key insight: Show dashboard if we have processedData from previous build,
+  // even when a new file is uploaded (status='uploaded'). 
+  // Only hide dashboard when explicitly starting new processing.
+  const shouldShowDashboard = processedData || hasPolledStatus;
   const { user } = useUser();
   const { toast } = useToast();
   const displayName = user?.username || user?.fullName || user?.firstName || "you";
@@ -199,10 +204,14 @@ export default function ProjectPage() {
   }, [projectId, hydrateConversation, toast]);
   
   // Sync processedData from store to local state
+  // IMPORTANT: Only UPDATE processedData when new dashboard data arrives
+  // Never clear it when uploadedFile.processedData becomes undefined
+  // This preserves previous dashboard when uploading new files
   useEffect(() => {
     if (uploadedFile?.processedData) {
       setProcessedData(uploadedFile.processedData);
     }
+    // processedData is intentionally NOT cleared here to preserve previous dashboard
   }, [uploadedFile?.processedData]);
 
   return (
@@ -315,7 +324,7 @@ export default function ProjectPage() {
         {/* blank placeholder */}
         <div className={`${activeTab === 'dashboard' ? 'block' : 'hidden'} lg:col-span-3 lg:block`}>
            <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]">
-            {!hasPolledStatus ? (
+            {!shouldShowDashboard ? (
               <BlankState
                 subtexts={[
                   "Upload a CSV file and let Morpheus build dashboard",
@@ -361,7 +370,9 @@ export default function ProjectPage() {
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
               ) : isInitialLoading ? (
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
-              ) : (uploadedFile?.status === 'processed' && processedData) ? (
+              ) : processedData ? (
+                // Show dashboard if we have processedData, regardless of current upload status
+                // This preserves previous dashboard when uploading new files
                 <DashboardPreview processedData={processedData} className="h-full overflow-y-auto" />
               ) : (
                 <DashboardLoading title="Preparing Dashboard" description="Please wait..." durationSec={10} />

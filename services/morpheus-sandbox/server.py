@@ -718,7 +718,7 @@ def _process_conversation_background(
                     "dashboard_id": new_dashboard_record["dashboard_id"],
                     "s3_uri": new_dashboard_record["s3_uri"],
                     "created_at": datetime.utcnow().isoformat(),
-                    "dashboard_title": dashboard_title,
+                    "title": dashboard_title,
                 }
             )
 

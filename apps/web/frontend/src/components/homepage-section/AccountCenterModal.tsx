@@ -87,7 +87,7 @@ const PricingContent: React.FC = () => {
             <li>User roles & permissions</li>
             <li>7-day data retention</li>
           </ul>
-          <button 
+          <button
             onClick={isSignedIn ? undefined : handleGetStarted}
             className="mt-auto w-full button-outline rounded-md py-2 text-sm"
           >
@@ -108,7 +108,7 @@ const PricingContent: React.FC = () => {
             <li>Remove the Dreamify badge</li>
             <li>User roles & permissions</li>
           </ul>
-          <button 
+          <button
             onClick={handleProUpgrade}
             disabled={isUpgrading}
             className="mt-auto w-full button-gradient rounded-md py-2 text-sm disabled:opacity-50"
@@ -126,7 +126,7 @@ const PricingContent: React.FC = () => {
             <li>Group-based access control</li>
             <li>Custom design systems</li>
           </ul>
-          <button 
+          <button
             onClick={handleContactSales}
             className="mt-auto w-full button-outline rounded-md py-2 text-sm"
           >
@@ -207,7 +207,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
   const onHandlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     draggingRef.current = true;
     startYRef.current = e.clientY;
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { }
   };
 
   const onHandlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -223,7 +223,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
       onClose();
     }
     setDragY(0);
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { }
   };
 
   const displayName = user?.fullName || user?.firstName || "User";
@@ -232,13 +232,13 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
 
   const sidebarItems = useMemo(() => {
     const items = [
-      { key: "pricing" as AccountCenterTab, label: "Pricing", icon: <Star className="w-4 h-4" /> },
+      /* { key: "pricing" as AccountCenterTab, label: "Pricing", icon: <Star className="w-4 h-4" /> }, */
     ];
     if (isSignedIn) {
       items.push(
         { key: "account" as AccountCenterTab, label: "Manage Account", icon: <UserIcon className="w-4 h-4" /> },
-        { key: "billing" as AccountCenterTab, label: "Billing", icon: <CreditCard className="w-4 h-4" /> },
-        { key: "notifications" as AccountCenterTab, label: "Notifications", icon: <Bell className="w-4 h-4" /> },
+        /* { key: "billing" as AccountCenterTab, label: "Billing", icon: <CreditCard className="w-4 h-4" /> },
+        { key: "notifications" as AccountCenterTab, label: "Notifications", icon: <Bell className="w-4 h-4" /> },*/
       );
     }
     return items;
@@ -335,12 +335,12 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
                   </div>
 
                   {/* Content body */}
-            <div className="flex-1 overflow-y-auto">
-              {(isSignedIn ? mobileActiveTab : 'pricing') === "pricing" && <PricingContent />}
-              {isSignedIn && mobileActiveTab === "account" && <AccountSettings />}
-              {isSignedIn && mobileActiveTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-white" />} />}
-              {isSignedIn && mobileActiveTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-white" />} />}
-            </div>
+                  <div className="flex-1 overflow-y-auto">
+                    {(isSignedIn ? mobileActiveTab : 'pricing') === "pricing" && <PricingContent />}
+                    {isSignedIn && mobileActiveTab === "account" && <AccountSettings />}
+                    {isSignedIn && mobileActiveTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-white" />} />}
+                    {isSignedIn && mobileActiveTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-white" />} />}
+                  </div>
                 </div>
               )}
             </div>

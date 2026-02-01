@@ -68,7 +68,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
   const onHandlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     draggingRef.current = true;
     startYRef.current = e.clientY;
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { }
   };
 
   const onHandlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -84,7 +84,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
       onClose();
     }
     setDragY(0);
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { }
   };
 
   // Hardcoded template data
@@ -198,78 +198,84 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
                 </div>
 
                 {/* Template Grid */}
-                <div className="flex-1 overflow-y-auto p-4" style={{height: 'calc(80vh - 160px)'}}>
-                  <div className="grid grid-cols-1 gap-4">
-                    {templates.map((template) => (
-                      <div
-                        key={template.id}
-                        onClick={() => handleTemplateClick(template)}
-                        className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer hover:scale-[102%] transition-all duration-300 group ${
-                          selectedTemplate?.id === template.id ? 'ring-2 ring-primary' : ''
-                        }`}
-                      >
-                        <img 
-                          src={template.image} 
-                          alt={template.title}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
-                            if (nextElement) nextElement.style.display = 'flex';
-                          }}
-                        />
-                        <div className="w-full h-full bg-primary/20 flex items-center justify-center text-primary text-4xl font-medium" style={{display: 'none'}}>
-                          {template.category.charAt(0)}
+                <div className="relative flex-1" style={{ height: 'calc(80vh - 160px)' }}>
+                  <div className="absolute inset-0 overflow-y-auto p-4">
+                    <div className="grid grid-cols-1 gap-4">
+                      {templates.map((template) => (
+                        <div
+                          key={template.id}
+                          onClick={() => handleTemplateClick(template)}
+                          className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer hover:scale-[102%] transition-all duration-300 group ${selectedTemplate?.id === template.id ? 'ring-2 ring-primary' : ''
+                            }`}
+                        >
+                          <img
+                            src={template.image}
+                            alt={template.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                              if (nextElement) nextElement.style.display = 'flex';
+                            }}
+                          />
+                          <div className="w-full h-full bg-primary/20 flex items-center justify-center text-primary text-4xl font-medium" style={{ display: 'none' }}>
+                            {template.category.charAt(0)}
+                          </div>
+
+                          {/* Selected badge */}
+                          {selectedTemplate?.id === template.id && (
+                            <div className="absolute top-4 left-4 bg-muted text-white px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
+                              Selected
+                            </div>
+                          )}
+
+                          {/* Hover overlay with Select/Unselect Template button */}
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
+                            {/* Select/Unselect Template button - top right */}
+                            <div className="flex justify-end">
+                              {selectedTemplate?.id === template.id ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedTemplate(null);
+                                  }}
+                                  className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
+                                >
+                                  Unselect template
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTemplateClick(template);
+                                  }}
+                                  className="button-gradient px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
+                                >
+                                  Select template
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Title and description - bottom */}
+                            <div>
+                              <h3 className="font-semibold text-white text-sm mb-1">{template.title}</h3>
+                              <p className="text-xs text-white/70 line-clamp-2">{template.description}</p>
+                            </div>
+                          </div>
                         </div>
-                        
-                        {/* Selected badge */}
-                        {selectedTemplate?.id === template.id && (
-                          <div className="absolute top-4 left-4 bg-muted text-white px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1">
-                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12"></polyline>
-                            </svg>
-                            Selected
-                          </div>
-                        )}
-                        
-                        {/* Hover overlay with Select/Unselect Template button */}
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
-                          {/* Select/Unselect Template button - top right */}
-                          <div className="flex justify-end">
-                            {selectedTemplate?.id === template.id ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedTemplate(null);
-                                }}
-                                className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
-                              >
-                                Unselect template
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleTemplateClick(template);
-                                }}
-                                className="button-gradient px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
-                              >
-                                Select template
-                              </button>
-                            )}
-                          </div>
-                          
-                          {/* Title and description - bottom */}
-                          <div>
-                            <h3 className="font-semibold text-white text-sm mb-1">{template.title}</h3>
-                            <p className="text-xs text-white/70 line-clamp-2">{template.description}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  </div>
+                  {/* Coming Soon Overlay */}
+                  <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex flex-col gap-4 items-center justify-center">
+                    <img src="/logo-watermark.png" alt="Dreamify" className="w-32 h-32 object-contain" />
+                    <p className="text-2xl font-bold text-white tracking-wide">Template is coming soon</p>
                   </div>
                 </div>
-                
+
                 {/* Modal Footer */}
                 <div className="flex-shrink-0 px-4 py-4 border-t border-border bg-muted/50">
                   <div className="flex justify-end">
@@ -310,78 +316,84 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
           </div>
 
           {/* Template Grid */}
-          <div className="flex-1 overflow-y-auto p-6" style={{height: 'calc(80vh - 160px)'}}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {templates.map((template) => (
-                <div
-                  key={template.id}
-                  onClick={() => handleTemplateClick(template)}
-                  className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer hover:scale-[102%] transition-all duration-300 group ${
-                    selectedTemplate?.id === template.id ? 'ring-2 ring-primary' : ''
-                  }`}
-                >
-                  <img 
-                    src={template.image} 
-                    alt={template.title}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
-                      if (nextElement) nextElement.style.display = 'flex';
-                    }}
-                  />
-                  <div className="w-full h-full bg-primary/20 flex items-center justify-center text-primary text-6xl font-medium" style={{display: 'none'}}>
-                    {template.category.charAt(0)}
+          <div className="relative flex-1" style={{ height: 'calc(80vh - 160px)' }}>
+            <div className="absolute inset-0 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {templates.map((template) => (
+                  <div
+                    key={template.id}
+                    onClick={() => handleTemplateClick(template)}
+                    className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer hover:scale-[102%] transition-all duration-300 group ${selectedTemplate?.id === template.id ? 'ring-2 ring-primary' : ''
+                      }`}
+                  >
+                    <img
+                      src={template.image}
+                      alt={template.title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (nextElement) nextElement.style.display = 'flex';
+                      }}
+                    />
+                    <div className="w-full h-full bg-primary/20 flex items-center justify-center text-primary text-6xl font-medium" style={{ display: 'none' }}>
+                      {template.category.charAt(0)}
+                    </div>
+
+                    {/* Selected badge */}
+                    {selectedTemplate?.id === template.id && (
+                      <div className="absolute top-4 left-4 bg-muted text-white px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1">
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        Selected
+                      </div>
+                    )}
+
+                    {/* Hover overlay with Select/Unselect Template button */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
+                      {/* Select/Unselect Template button - top right */}
+                      <div className="flex justify-end">
+                        {selectedTemplate?.id === template.id ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTemplate(null);
+                            }}
+                            className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
+                          >
+                            Unselect template
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTemplateClick(template);
+                            }}
+                            className="button-gradient px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
+                          >
+                            Select template
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Title and description - bottom */}
+                      <div>
+                        <h3 className="font-semibold text-white text-sm mb-1">{template.title}</h3>
+                        <p className="text-xs text-white/70 line-clamp-2">{template.description}</p>
+                      </div>
+                    </div>
                   </div>
-                  
-                  {/* Selected badge */}
-                  {selectedTemplate?.id === template.id && (
-                    <div className="absolute top-4 left-4 bg-muted text-white px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1">
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                      Selected
-                    </div>
-                  )}
-                  
-                  {/* Hover overlay with Select/Unselect Template button */}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
-                    {/* Select/Unselect Template button - top right */}
-                    <div className="flex justify-end">
-                      {selectedTemplate?.id === template.id ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTemplate(null);
-                          }}
-                          className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
-                        >
-                          Unselect template
-                        </button>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleTemplateClick(template);
-                          }}
-                          className="button-gradient px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
-                        >
-                          Select template
-                        </button>
-                      )}
-                    </div>
-                    
-                    {/* Title and description - bottom */}
-                    <div>
-                      <h3 className="font-semibold text-white text-sm mb-1">{template.title}</h3>
-                      <p className="text-xs text-white/70 line-clamp-2">{template.description}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+            {/* Coming Soon Overlay */}
+            <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex flex-col gap-4 items-center justify-center">
+              <img src="/logo-watermark.png" alt="Dreamify" className="w-32 h-32 object-contain" />
+              <p className="text-3xl font-bold text-white tracking-wide">Template is coming soon</p>
             </div>
           </div>
-          
+
           {/* Modal Footer */}
           <div className="flex-shrink-0 px-6 py-4 border-t border-border bg-muted/50">
             <div className="flex justify-end">

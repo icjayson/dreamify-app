@@ -12,7 +12,7 @@ const AboutPage = () => {
   const navigate = useNavigate();
 
   const onGetStarted = () => {
-    navigate("/waitlist");
+    navigate("/login");
   };
 
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -34,10 +34,10 @@ const AboutPage = () => {
   return (
     <div className="min-h-screen overflow-y-auto">
       {/* Fixed WaveBackground Component for entire page */}
-      <WaveBackground 
+      <WaveBackground
         className="fixed inset-0 z-0"
       />
-      
+
       {/* Fixed overlay for better text readability */}
       <div className="fixed inset-0 bg-black/70 z-1"></div>
 
@@ -60,8 +60,8 @@ const AboutPage = () => {
       </main>
 
       {/* Projects sidebar */}
-      <ProjectsSidebar 
-        open={projectsOpen} 
+      <ProjectsSidebar
+        open={projectsOpen}
         onClose={closeProjects}
         onNewProject={() => navigate('/workspace/project')}
       />

@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText } from "lucide-react";
+import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, useAuth, useUser } from "@clerk/clerk-react";
@@ -21,6 +21,7 @@ import ProjectsSection from '@/components/homepage-section/ProjectsSection';
 import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
 import TemplateModal from '@/components/homepage-section/TemplateModal';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { ToastAction } from "@/components/ui/toast";
 import { CONNECTORS, type ConnectorItem } from '@/constants/connectors';
 import FilePreviewChip from '@/components/chat/FilePreviewChip';
 
@@ -35,7 +36,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const { user: clerkUser } = useUser();
   const [user, setUser] = useState<any | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  
+
   useEffect(() => {
     if (isSignedIn && clerkUser) {
       setUser(clerkUser);
@@ -51,10 +52,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       setToken(null);
     }
   }, [isSignedIn, clerkUser, getToken]);
-  
+
   // Toast hook
   const { toast } = useToast();
-  
+
   const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
 
@@ -110,7 +111,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         refreshProjects();
       }
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
     return () => {
@@ -242,20 +243,20 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     addMessage,
     processFileWithMessage
   } = useChatStore();
-  
+
   const {
     uploadState,
     uploadFile,
     validateClientFile,
     removeFile
   } = useFileStore();
-  
+
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [lottieData, setLottieData] = useState(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
-  
+
   // File upload integration
   const { uploadState: legacyUploadState, uploadCSVFile, uploadExcelFile } = useFileUpload();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -328,7 +329,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
-      
+
       if (dropdownOpen && !target.closest('.data-source-dropdown')) {
         setDropdownOpen(false);
       }
@@ -349,36 +350,36 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       toast({ title: "Upload required", description: "Upload a CSV before asking a question.", variant: "destructive" });
       return;
     }
-    
+
     // Create user message with file attachment immediately
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content: inputValue.trim(),
       timestamp: new Date(),
-      attachment: uploadedFile ? { 
-        kind: "csv", 
-        name: uploadedFile.filename 
+      attachment: uploadedFile ? {
+        kind: "csv",
+        name: uploadedFile.filename
       } : undefined,
       template: selectedTemplate || undefined,
     };
-    
+
     // Add message to store synchronously before switching views
     addMessage(userMessage);
-    
+
     // Ensure projectId exists before navigation
     if (!uploadedFile.projectId) {
-      toast({ 
-        title: "Project error", 
-        description: "Project context missing. Please try uploading the file again.", 
-        variant: "destructive" 
+      toast({
+        title: "Project error",
+        description: "Project context missing. Please try uploading the file again.",
+        variant: "destructive"
       });
       return;
     }
-    
+
     // Start processing in background
     void processFileWithMessage(inputValue.trim(), onProcessedDataChange, uploadedFile.projectId);
-    
+
     // Navigate to project workspace for unified chat + dashboard flow
     navigate(`/workspace/project?projectId=${uploadedFile.projectId}`);
   };
@@ -477,28 +478,42 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   };
 
   const processFileUpload = async (file: File) => {
+    if (!isSignedIn) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to upload files.",
+        variant: "destructive",
+        action: (
+          <ToastAction altText="Login" onClick={() => navigate('/login')} className="button-outline">
+            Login
+          </ToastAction>
+        ),
+      });
+      return;
+    }
+
     const validationError = validateClientFile(file);
     if (validationError) {
       toast({ title: "Upload error", description: validationError, variant: "destructive" });
       return;
     }
-    
+
     try {
       // Create new file object for upload
-      const newFile = { 
-        fileID: 'pending', 
-        filename: file.name, 
-        size: file.size, 
-        ext: (file.name.split('.').pop() || '').toLowerCase(), 
-        status: 'uploading' as const 
+      const newFile = {
+        fileID: 'pending',
+        filename: file.name,
+        size: file.size,
+        ext: (file.name.split('.').pop() || '').toLowerCase(),
+        status: 'uploading' as const
       };
-      
+
       // IMPORTANT: When uploading a new file:
       // - Keep conversation history (don't reset)
       // - Keep previous files (don't delete)
       // - Replace uploadedFile state to show new file in UI
       // - Backend will handle multiple assets in conversation
-      
+
       // Simply replace the uploadedFile state to show new upload progress
       setUploadedFile(newFile);
 
@@ -519,22 +534,22 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       const fallbackSize = res.size ?? file.size;
       const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
 
-      setUploadedFile({ 
-        fileID: res.fileID, 
-        filename: fallbackFilename, 
-        size: fallbackSize, 
-        ext: fallbackExt, 
+      setUploadedFile({
+        fileID: res.fileID,
+        filename: fallbackFilename,
+        size: fallbackSize,
+        ext: fallbackExt,
         status: 'uploaded',
         projectId: res.asset?.project_id
       });
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
     } catch (_e) {
-      setUploadedFile({ 
-        fileID: 'error', 
-        filename: file.name, 
-        size: file.size, 
-        ext: (file.name.split('.').pop() || '').toLowerCase(), 
-        status: 'error' 
+      setUploadedFile({
+        fileID: 'error',
+        filename: file.name,
+        size: file.size,
+        ext: (file.name.split('.').pop() || '').toLowerCase(),
+        status: 'error'
       });
       toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
     }
@@ -544,7 +559,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     const file = event.target.files?.[0];
     if (!file) return;
     await processFileUpload(file);
-    
+
     // Reset input
     event.target.value = '';
   };
@@ -664,209 +679,203 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   return (
     <div className="min-h-screen overflow-y-auto homepage-scrollbar">
       {/* Fixed WaveBackground Component for entire page */}
-      <WaveBackground 
+      <WaveBackground
         className="fixed inset-0 z-0"
       />
-      
+
       {/* Fixed overlay for better text readability */}
       <div className="fixed inset-0 bg-black/60 z-1"></div>
 
       <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-44">
 
-      <div className="relative z-10 max-w-6xl mx-auto text-center">
-        
-        {/* New 2-row heading layout */}
-        <div className="text-center mb-8 animate-slide-up">
-          {/* Row 1: The AI Data Analyst with gradient styling */}
-          <h1 className="text-5xl md:text-7xl font-bold mb-6 font-instrument-serif">
-            <span className="px-0 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
-              The AI Data Analyst
-            </span>
-          </h1>
-          
-          {/* Row 2: Logo + Build Fancy Dashboard in minutes */}
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            <h2 className="text-xl lg:text-3xl text-white font-inter">
-              Build Fancy Dashboard in minutes with
-            </h2>
-            <div className="button-gradient rounded-xl px-4 py-2 flex items-center gap-3">
-              <img 
-                src="/logo-full-horizon-white.png" 
-                alt="Dreamify Logo" 
-                className="w-20 sm:w-24 md:w-28 lg:w-36 h-auto rounded-lg object-contain"
-              />
+        <div className="relative z-10 max-w-6xl mx-auto text-center">
+
+          {/* New 2-row heading layout */}
+          <div className="text-center mb-8 animate-slide-up">
+            {/* Row 1: The AI Data Analyst with gradient styling */}
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 font-instrument-serif">
+              <span className="px-0 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
+                The AI Data Analyst
+              </span>
+            </h1>
+
+            {/* Row 2: Logo + Build Fancy Dashboard in minutes */}
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <h2 className="text-xl lg:text-3xl text-white font-inter">
+                Build Fancy Dashboard in minutes with
+              </h2>
+              <div className="button-gradient rounded-xl px-4 py-2 flex items-center gap-3">
+                <img
+                  src="/logo-full-horizon-white.png"
+                  alt="Dreamify Logo"
+                  className="w-20 sm:w-24 md:w-28 lg:w-36 h-auto rounded-lg object-contain"
+                />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Chat-First Interface */}
-        <div className="max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
-          {/* Main Chat Input */}
-          <div 
-            className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300 relative"
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            {/* Drag Overlay */}
-            {isDragging && (
-              <div className={`absolute inset-0 rounded-3xl border-2 border-dashed border-white/60 flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-white/10' : ''}`}>
-                <FileText className="w-10 h-10 text-white mb-3" />
-                <span className="text-base text-white font-medium">Drop file here to upload</span>
-              </div>
-            )}
-
-            {/* File Context Chip - show when file is attached and active */}
-            {uploadedFile && uploadedFile.status !== 'processed' && uploadedFile.status !== 'error' && (
-              <div className="mb-3">
-                <FilePreviewChip 
-                  file={uploadedFile}
-                  onRemove={() => removeUploadedFile(uploadedFile.fileID)}
-                />
-              </div>
-            )}
-
-           {/* Textarea Row */}
-            <div className="relative mb-4">
-              <TextareaAutosize
-                minRows={3}
-                maxRows={10}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder={isListening ? 'Listening...' : placeholders[placeholderIndex]}
-                className="w-full bg-transparent border-none outline-none resize-none text-lg placeholder:text-muted-foreground/60"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleChatSubmit();
-                  }
-                }}
-                autoFocus
-              />
-            </div>
-            
-            {/* Recording Bar - Positioned between textarea and buttons */}
-            <RecordingBar 
-              isVisible={isListening}
-              detectedLanguage={detectedLanguage}
-              onCancel={handleRecordingCancel}
-              onConfirm={handleRecordingConfirm}
-            />
-            
-            {/* Template Tag Row - Mobile Only - commented out (not functionable)
-            {selectedTemplate && (
-              <div className="flex justify-start mb-3 lg:hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
-                  <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                  </div>
-                  <span className="text-sm font-medium">{selectedTemplate.title}</span>
-                  <button
-                    onClick={handleTemplateRemove}
-                    className="w-4 h-4 flex items-center justify-center hover:bg-muted-foreground/20 rounded-sm transition-colors"
-                    aria-label="Remove template"
-                  >
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
+          {/* Chat-First Interface */}
+          <div className="max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
+            {/* Main Chat Input */}
+            <div
+              className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300 relative"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              {/* Drag Overlay */}
+              {isDragging && (
+                <div className={`absolute inset-0 rounded-3xl border-2 border-dashed border-white/60 flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-white/10' : ''}`}>
+                  <FileText className="w-10 h-10 text-white mb-3" />
+                  <span className="text-base text-white font-medium">Drop file here to upload</span>
                 </div>
-              </div>
-            )}
-            */}
-            
-            {/* Buttons Row */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              {/* Left side buttons */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Hidden file input */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept=".csv,.xlsx,.xls"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  aria-label="Select file"
-                />
+              )}
 
-                {/* Attach Button */}
-                <button
-                  onClick={handleAttachClick}
-                  disabled={uploadState.isUploading}
-                  className="px-3 py-1.5 text-sm button-outline rounded-md disabled:opacity-50 flex items-center gap-2"
-                  onMouseEnter={(e) => {
-                    if (!uploadState.isUploading) {
-                      e.currentTarget.classList.add('btn-primary-hover');
+              {/* File Context Chip - show when file is attached and active */}
+              {uploadedFile && uploadedFile.status !== 'processed' && uploadedFile.status !== 'error' && (
+                <div className="mb-3">
+                  <FilePreviewChip
+                    file={uploadedFile}
+                    onRemove={() => removeUploadedFile(uploadedFile.fileID)}
+                  />
+                </div>
+              )}
+
+              {/* Textarea Row */}
+              <div className="relative mb-4">
+                <TextareaAutosize
+                  minRows={3}
+                  maxRows={10}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder={isListening ? 'Listening...' : placeholders[placeholderIndex]}
+                  className="w-full bg-transparent border-none outline-none resize-none text-lg placeholder:text-muted-foreground/60"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleChatSubmit();
                     }
                   }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.classList.remove('btn-primary-hover');
-                  }}
-                  aria-label="Attach file"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'Attach'}</span>
-                </button>
+                  autoFocus
+                />
+              </div>
 
-                {/* Clone Template Button - commented out (not functionable)
-                <button
-                  onClick={handleCloneTemplateClick}
-                  className="px-3 py-1.5 text-sm button-outline rounded-md flex items-center gap-2"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.classList.add('btn-primary-hover');
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.classList.remove('btn-primary-hover');
-                  }}
-                  aria-label="Clone template"
-                >
-                  <LayoutTemplate className="w-4 h-4" />
-                  <span className="hidden sm:inline">Template</span>
-                </button>
-                */}
+              {/* Recording Bar - Positioned between textarea and buttons */}
+              <RecordingBar
+                isVisible={isListening}
+                detectedLanguage={detectedLanguage}
+                onCancel={handleRecordingCancel}
+                onConfirm={handleRecordingConfirm}
+              />
 
-                {/* Connect Data Source Dropdown */}
-                <div className="relative data-source-dropdown">
-                  <Button
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className={`rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto ${
-                      selectedDataSource 
+              {selectedTemplate && (
+                <div className="flex justify-start mb-3 lg:hidden">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
+                    <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
+                    </div>
+                    <span className="text-sm font-medium">{selectedTemplate.title}</span>
+                    <button
+                      onClick={handleTemplateRemove}
+                      className="w-4 h-4 flex items-center justify-center hover:bg-muted-foreground/20 rounded-sm transition-colors"
+                      aria-label="Remove template"
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Buttons Row */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                {/* Left side buttons */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    aria-label="Select file"
+                  />
+
+                  {/* Attach Button */}
+                  <button
+                    onClick={handleAttachClick}
+                    disabled={uploadState.isUploading}
+                    className="px-3 py-1.5 text-sm button-outline rounded-md disabled:opacity-50 flex items-center gap-2"
+                    onMouseEnter={(e) => {
+                      if (!uploadState.isUploading) {
+                        e.currentTarget.classList.add('btn-primary-hover');
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.classList.remove('btn-primary-hover');
+                    }}
+                    aria-label="Attach file"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'Attach'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleCloneTemplateClick}
+                    className="px-3 py-1.5 text-sm button-outline rounded-md flex items-center gap-2"
+                    onMouseEnter={(e) => {
+                      e.currentTarget.classList.add('btn-primary-hover');
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.classList.remove('btn-primary-hover');
+                    }}
+                    aria-label="Clone template"
+                  >
+                    <LayoutTemplate className="w-4 h-4" />
+                    <span className="hidden sm:inline">Template</span>
+                  </button>
+
+                  {/* Connect Data Source Dropdown */}
+                  <div className="relative data-source-dropdown">
+                    <Button
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      className={`rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto ${selectedDataSource
                         ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
                         : 'button-gradient'
-                    }`}
-                    aria-expanded={dropdownOpen}
-                    aria-haspopup="true"
-                    aria-label="Connect data source"
-                  >
-                    <span className="hidden sm:inline">{selectedDataSource || "Connect data source"}</span>
-                    <Link className={`w-4 h-4 transition-transform duration-200 ${
-                      dropdownOpen ? 'rotate-180' : ''
-                    }`} />
-                  </Button>
-                  
-                  {dropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
-                      <div className="py-1">
-                        {CONNECTORS.map((connector) => (
-                          <button
-                            key={connector.name}
-                            onClick={() => handleIntegrationClick(connector)}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10 transition-colors duration-200 flex items-center gap-2 cursor-pointer"
-                          >
-                            <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
-                            {connector.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                        }`}
+                      aria-expanded={dropdownOpen}
+                      aria-haspopup="true"
+                      aria-label="Connect data source"
+                    >
+                      <span className="hidden sm:inline">{selectedDataSource || "Connect data source"}</span>
+                      <Link className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''
+                        }`} />
+                    </Button>
 
-                {/* Selected Template Tag - Desktop Only - commented out (not functionable)
+                    {dropdownOpen && (
+                      <div className="absolute top-full left-0 mt-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
+                        <div className="py-1">
+                          {CONNECTORS.map((connector) => (
+                            <button
+                              key={connector.name}
+                              onClick={() => handleIntegrationClick(connector)}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10 transition-colors duration-200 flex items-center gap-2 cursor-pointer"
+                            >
+                              <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
+                              {connector.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected Template Tag - Desktop Only - commented out (not functionable)
                 {selectedTemplate && (
                   <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
                     <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
@@ -889,11 +898,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   </div>
                 )}
                 */}
-              </div>
-              
-              {/* Right side buttons */}
-              <div className="flex gap-2">
-                {/* Voice button - commented out (not functionable)
+                </div>
+
+                {/* Right side buttons */}
+                <div className="flex gap-2">
+                  {/* Voice button - commented out (not functionable)
                 <Button
                   onClick={handleMicClick}
                   className={`button-gradient p-3 ${
@@ -905,86 +914,108 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </Button>
                 */}
-                <Button
-                  onClick={handleChatSubmit}
-                  disabled={!inputValue.trim() || isProcessing}
-                  className="button-gradient p-3 disabled:opacity-50"
-                >
-                  {isProcessing ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      <span className="text-sm">Processing...</span>
-                    </div>
-                  ) : (
-                    <CornerRightUp className="w-4 h-4" />
-                  )}
-                </Button>
+                  <Button
+                    onClick={handleChatSubmit}
+                    disabled={!inputValue.trim() || isProcessing}
+                    className="button-gradient p-3 disabled:opacity-50"
+                  >
+                    {isProcessing ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span className="text-sm">Processing...</span>
+                      </div>
+                    ) : (
+                      <CornerRightUp className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Start Prompts */}
+            <div className="flex flex-col gap-2 mt-4 sm:mt-6 animate-fade-in w-full" style={{ animationDelay: '0s' }}>
+              <p className="text-xs text-white/40 text-left ml-1">Quick start prompts:</p>
+              <div className="flex flex-wrap gap-2">
+                {["Act as a Data Analyst: challenge assumptions and list caveats.", "Act as a Growth PM: prioritize the top 3 actions from this data.", "Act as a Sales Ops lead: translate insights into pipeline plays.", "Build a comprehensive dashboard from the connected data source"].map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => setInputValue(prompt)}
+                    className="px-4 py-2 text-xs bg-primary/20 text-white/40 border border-primary/50 rounded-full hover:bg-primary/40 hover:text-white/80 transition-all duration-200"
+                  >
+                    {prompt}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
+        </div>
+        {/* Sentinel marks the end of the hero section for header trigger */}
+        <div id="hero-sentinel" aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-px pointer-events-none" />
+      </section>
 
-          {/* Quick Start Prompts */}
-          <div className="flex flex-col gap-2 mt-4 sm:mt-6 animate-fade-in w-full" style={{ animationDelay: '0s' }}>
-            <p className="text-xs text-white/40 text-left ml-1">Quick start prompts:</p>
-            <div className="flex flex-wrap gap-2">
-            {["Act as a Data Analyst: challenge assumptions and list caveats.", "Act as a Growth PM: prioritize the top 3 actions from this data.", "Act as a Sales Ops lead: translate insights into pipeline plays.", "Build a comprehensive dashboard from the connected data source"].map((prompt) => (
-              <button
-                key={prompt}
-                onClick={() => setInputValue(prompt)}
-                className="px-4 py-2 text-xs bg-primary/20 text-white/40 border border-primary/50 rounded-full hover:bg-primary/40 hover:text-white/80 transition-all duration-200"
+      {/* Removed floating button here; header provides the button when signed in */}
+
+      {/* Projects sidebar */}
+      <ProjectsSidebar
+        open={projectsOpen}
+        onClose={closeProjects}
+        onNewProject={handleNewProject}
+        recents={projects}
+        onOpenProject={openProject}
+        onRenameProject={renameProject}
+        onDeleteProject={deleteProject}
+      />
+      <TemplateModal
+        open={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        onTemplateSelect={handleTemplateSelect}
+      />
+      <FooterSection />
+      {/* Waitlist modal for signed-out users */}
+      {/* <Dialog open={waitlistOpen} onOpenChange={setWaitlistOpen}>
+        <DialogContent className="bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6 w-full max-w-[92vw] sm:max-w-xl">
+          <DialogTitle className="text-2xl md:text-3xl font-semibold text-white">Join the waitlist to get early access</DialogTitle>
+          <DialogDescription className="text-white/70 mt-1 text-sm md:text-base">
+            Be among the first to try Dreamify when it's ready.
+          </DialogDescription>
+          <div className="mt-6 flex items-center gap-4">
+            <img src="/logo-watermark.png" alt="Dreamify" className="w-16 h-16 rounded-lg object-contain bg-transparent" />
+            <div className="ml-auto">
+              <Button
+                onClick={() => { setWaitlistOpen(false); navigate('/waitlist'); }}
+                className="button-gradient px-5 py-2 rounded-xl"
               >
-                {prompt}
-              </button>
-            ))}
+                Go to waitlist
+              </Button>
             </div>
           </div>
-        </div>
-      </div>
-      {/* Sentinel marks the end of the hero section for header trigger */}
-      <div id="hero-sentinel" aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-px pointer-events-none" />
-    </section>
+        </DialogContent>
+      </Dialog> */}
 
-    {/* Removed floating button here; header provides the button when signed in */}
-
-    {/* Projects sidebar */}
-    <ProjectsSidebar
-      open={projectsOpen}
-      onClose={closeProjects}
-      onNewProject={handleNewProject}
-      recents={projects}
-      onOpenProject={openProject}
-      onRenameProject={renameProject}
-      onDeleteProject={deleteProject}
-    />
-    <TemplateModal
-      open={templateModalOpen}
-      onClose={() => setTemplateModalOpen(false)}
-      onTemplateSelect={handleTemplateSelect}
-    />
-    <FooterSection />
-    {/* Waitlist modal for signed-out users */}
-    <Dialog open={waitlistOpen} onOpenChange={setWaitlistOpen}>
-      <DialogContent className="bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6 w-full max-w-[92vw] sm:max-w-xl">
-        <DialogTitle className="text-2xl md:text-3xl font-semibold text-white">Join the waitlist to get early access</DialogTitle>
-        <DialogDescription className="text-white/70 mt-1 text-sm md:text-base">
-          Be among the first to try Dreamify when it's ready.
-        </DialogDescription>
-        <div className="mt-6 flex items-center gap-4">
-          <img src="/logo-watermark.png" alt="Dreamify" className="w-16 h-16 rounded-lg object-contain bg-transparent" />
-          <div className="ml-auto">
-            <Button
-              onClick={() => { setWaitlistOpen(false); navigate('/waitlist'); }}
-              className="button-gradient px-5 py-2 rounded-xl"
-            >
-              Go to waitlist
-            </Button>
+      {/* Login modal for signed-out users */}
+      <Dialog open={waitlistOpen} onOpenChange={setWaitlistOpen}>
+        <DialogContent className="bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6 w-full max-w-[92vw] sm:max-w-xl">
+          <DialogTitle className="text-2xl md:text-3xl font-semibold text-white">Login to Dreamify</DialogTitle>
+          <DialogDescription className="text-white/70 mt-1 text-sm md:text-base">
+            Please login to access all features and start building your dashboards.
+          </DialogDescription>
+          <div className="mt-6 flex items-center gap-4">
+            <img src="/logo-watermark.png" alt="Dreamify" className="w-16 h-16 rounded-lg object-contain bg-transparent" />
+            <div className="ml-auto">
+              <Button
+                onClick={() => { setWaitlistOpen(false); navigate('/login'); }}
+                className="button-gradient px-5 py-2 rounded-xl flex items-center gap-2"
+              >
+                Login
+                <LogIn className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
 
-  </div>
-);
+    </div>
+  );
 };
 
 export default HomePage;

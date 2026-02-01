@@ -9,9 +9,8 @@ export const CTAContainerSection = () => {
     <section className="py-36 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
       <div className="container mx-auto px-6">
         <div
-          className={`relative mx-auto max-w-5xl rounded-[28px] overflow-hidden tracking-tight transition-all duration-700 ease-out ${
-            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-          }`}
+          className={`relative mx-auto max-w-5xl rounded-[28px] overflow-hidden tracking-tight transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+            }`}
           style={{ transitionDelay: "80ms" }}
         >
           <div
@@ -33,8 +32,8 @@ export const CTAContainerSection = () => {
             </p>
 
             <div className="mt-16 flex items-center gap-4">
-              <button onClick={() => navigate('/waitlist')} className="button-outline px-6 md:px-7 py-3 rounded-xl inline-flex items-center justify-center text-sm md:text-base group">
-                <span>Join waitlist</span>
+              <button onClick={() => navigate('/login')} className="button-outline px-6 md:px-7 py-3 rounded-xl inline-flex items-center justify-center text-sm md:text-base group">
+                <span>Log in</span>
                 <span aria-hidden className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover:w-4 group-hover:opacity-100 group-hover:ml-2">→</span>
               </button>
             </div>

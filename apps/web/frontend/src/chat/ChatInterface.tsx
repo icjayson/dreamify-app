@@ -36,7 +36,7 @@ const formatFileSize = (bytes: number): string => {
 // Helper function to format file status for display
 const formatAssetStatus = (status: string | null | undefined): string => {
   if (!status) return "Ready to analyze";
-  
+
   // Map status values to display text
   const statusMap: Record<string, string> = {
     "uploading": "Uploading",
@@ -46,7 +46,7 @@ const formatAssetStatus = (status: string | null | undefined): string => {
     "error": "Error",
     "accepted": "Processing",
   };
-  
+
   return statusMap[status] || status.charAt(0).toUpperCase() + status.slice(1);
 };
 
@@ -77,7 +77,7 @@ const RollingText = ({ isActive, stopSignal, successText = "", currentStep = nul
   // Watch for currentStep changes and add new line when step changes
   useEffect(() => {
     if (!started || stopped) return;
-    
+
     if (currentStep && currentStep !== prevStepRef.current) {
       const displayText = mapStepToDisplayText(currentStep);
       setLines((prev) => {
@@ -173,6 +173,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     asset: AssetRecord;
   }>>([]);
   const [mentionCursorPos, setMentionCursorPos] = useState(0);
+  // Track @mentioned asset IDs for selective processing
+  const [mentionedAssetIds, setMentionedAssetIds] = useState<string[]>([]);
 
   // Zustand stores
   const {
@@ -203,7 +205,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     processFileWithMessage,
     stopGeneration
   } = useChatStore();
-  
+
   const {
     attachedCsvName,
     attachedCsvSummary,
@@ -219,7 +221,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     clearAttachment,
     validateClientFile
   } = useFileStore();
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isSendingRef = useRef<boolean>(false);
@@ -311,7 +313,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
-      
+
       if (dropdownOpen && !target.closest('.data-source-dropdown')) {
         setDropdownOpen(false);
       }
@@ -327,7 +329,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
     isSendingRef.current = true;
     const messageContent = inputValue.trim();
-    
+
     try {
       // Delegate adding the user message to the store's process flow to avoid duplicates
       clearInput();
@@ -341,26 +343,44 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           textarea.value = '';
         }
       }, 10);
-      await processFileWithMessage(messageContent, onProcessedDataChange, projectId);
+
+      // Build final mentioned asset IDs:
+      // - Include any @mentioned assets from dropdown
+      // - Auto-include uploadedFile ONLY if it's a fresh upload (no conversationId yet)
+      // This tells backend which files to process for the INITIAL upload
+      let finalMentionedIds = [...mentionedAssetIds];
+
+      // Check if file is fresh (no conversationId assigned yet)
+      const isFreshUpload = uploadedFile?.fileID && !uploadedFile.conversationId;
+
+      if (isFreshUpload && !finalMentionedIds.includes(uploadedFile.fileID)) {
+        finalMentionedIds.push(uploadedFile.fileID);
+      }
+
+      // Pass mentionedAssetIds for selective asset processing
+      await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds);
+      // Clear mentioned IDs after sending
+      setMentionedAssetIds([]);
     } finally {
       isSendingRef.current = false;
     }
   };
 
-  const handleAssetSelect = async (selectedAsset: { 
-    id: string; 
-    name: string; 
-    ext: string; 
+  const handleAssetSelect = async (selectedAsset: {
+    id: string;
+    name: string;
+    ext: string;
     projectId: string;
-    asset: AssetRecord; 
+    asset: AssetRecord;
   }) => {
     try {
       // We already have full asset data from fetchProjectAssets
       // No need to fetch again - use existing data
       const assetData = selectedAsset.asset;
-      
+
       // Convert to UploadedFile format
       // Status is 'uploaded' because file exists in project and is ready for processing
+      // isFromMention: true indicates this file was selected from @mention dropdown (already exists in conversation)
       const newFile = {
         fileID: assetData.asset_id,
         filename: assetData.filename,
@@ -370,30 +390,36 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         projectId: assetData.project_id,
         rowCount: assetData.row_count,
         columnCount: assetData.column_count,
+        isFromMention: true,
       };
-      
+
       // IMPORTANT: When selecting a file via @mention:
       // - Keep conversation history (don't reset)
       // - Simply replace uploadedFile to show selected file in UI
       // - Backend will receive the new file as part of user message
-      
+
       // Update store with selected file
       // IMPORTANT: The existing processFileWithMessage flow (useChatStore.ts lines 536-566)
       // will fetch asset data again using fileService.getAsset() to construct assetContents
       // This ensures the workflow receives proper asset context with s3_bucket, s3_key, etc.
       setUploadedFile(newFile);
-      
+
+      // Track this asset as @mentioned for selective processing
+      setMentionedAssetIds(prev =>
+        prev.includes(assetData.asset_id) ? prev : [...prev, assetData.asset_id]
+      );
+
       // Remove @mention text from input
       const textBeforeCursor = inputValue.slice(0, mentionCursorPos);
       const lastAtIndex = textBeforeCursor.lastIndexOf('@');
       const textAfterMention = inputValue.slice(mentionCursorPos);
       const newText = inputValue.slice(0, lastAtIndex) + textAfterMention;
       setInputValue(newText);
-      
+
       // Hide dropdown
       setShowMentionList(false);
       setMentionQuery('');
-      
+
       toast({
         title: "File added to context",
         description: `${selectedAsset.name} is now available for analysis`,
@@ -427,20 +453,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     }
     try {
       // Create new file object for upload
-      const newFile = { 
-        fileID: 'pending', 
-        filename: file.name, 
-        size: file.size, 
-        ext: (file.name.split('.').pop() || '').toLowerCase(), 
-        status: 'uploading' as const 
+      const newFile = {
+        fileID: 'pending',
+        filename: file.name,
+        size: file.size,
+        ext: (file.name.split('.').pop() || '').toLowerCase(),
+        status: 'uploading' as const
       };
-      
+
       // IMPORTANT: When uploading a new file in the same project:
       // - Keep conversation history (don't reset)
       // - Keep previous files (don't delete)
       // - Replace uploadedFile state to show new file in UI
       // - Backend will handle multiple assets in conversation
-      
+
       // Simply replace the uploadedFile state to show new upload progress
       setUploadedFile(newFile);
 
@@ -465,11 +491,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       const fallbackSize = res.size ?? file.size;
       const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
 
-      setUploadedFile({ 
-        fileID: res.fileID, 
-        filename: fallbackFilename, 
-        size: fallbackSize, 
-        ext: fallbackExt, 
+      setUploadedFile({
+        fileID: res.fileID,
+        filename: fallbackFilename,
+        size: fallbackSize,
+        ext: fallbackExt,
         status: 'uploaded',
         projectId: res.asset?.project_id,
         rowCount: res.rowCount,
@@ -486,15 +512,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           const { useChatStore } = await import('@/chat/useChatStore');
           useChatStore.getState().setOriginalFile(null);
         }
-      } catch (_err) {}
+      } catch (_err) { }
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
     } catch (_e) {
-      setUploadedFile({ 
-        fileID: 'error', 
-        filename: file.name, 
-        size: file.size, 
-        ext: (file.name.split('.').pop() || '').toLowerCase(), 
-        status: 'error' 
+      setUploadedFile({
+        fileID: 'error',
+        filename: file.name,
+        size: file.size,
+        ext: (file.name.split('.').pop() || '').toLowerCase(),
+        status: 'error'
       });
       toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
     }
@@ -623,7 +649,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
 
   const removeUploadedFile = async (fileID: string) => {
-    await removeFile(fileID);
+    // Only delete from S3 if it's a fresh upload, not an @mention
+    // @mentioned files are existing project assets - don't delete them!
+    if (!uploadedFile?.isFromMention) {
+      await removeFile(fileID);
+    }
     setUploadedFile(null);
   };
 
@@ -689,7 +719,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                       <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
                     )}
                   </div>
-                  
+
                   <div className={`rounded-xl text-sm whitespace-pre-wrap break-words ${bubbleBgClass}`}>
                     {message.attachment && (
                       <div className="mb-2">
@@ -768,9 +798,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                       />
                     </div>
                   </div>
-              )}
+                )}
             </div>
-        )})}
+          )
+        })}
 
         <div ref={messagesEndRef} />
       </div>
@@ -797,121 +828,121 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       <div className="mt-auto">
         {/* Input Area */}
         <div className="m-2">
-        {/* Main Chat Input with Hero Section Styling */}
-        <div 
-          className="w-full min-h-[60px] text-sm p-4 pb-2 bg-[#292929] rounded-xl resize-none transition-all duration-300 relative"
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          {/* Drag Overlay */}
-          {isDragging && (
-            <div className={`absolute inset-0 rounded-xl border-2 border-dashed border-primary/60 flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-primary/10' : ''}`}>
-              <FileText className="w-8 h-8 text-primary mb-2" />
-              <span className="text-sm text-primary font-medium">Drop file here to upload</span>
-            </div>
-          )}
-          
-          {/* Mention Dropdown */}
-          {showMentionList && (
-            <div className="absolute bottom-full left-0 mb-2 w-full max-w-md bg-[#1e1e1e] border border-white/20 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
-              <div className="p-2">
-                <p className="text-xs text-white/50 px-2 py-1">Select a file from this project:</p>
-                {projectAssets
-                  .filter(asset => 
-                    asset.name.toLowerCase().includes(mentionQuery.toLowerCase())
-                  )
-                  .map(asset => (
-                    <button
-                      key={asset.id}
-                      onClick={() => handleAssetSelect(asset)}
-                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left"
-                    >
-                      <FileText className="w-4 h-4 text-white/70 flex-shrink-0" />
-                      <span className="text-sm text-white truncate flex-1">{asset.name}</span>
-                      <span className="text-xs text-white/50">{asset.ext}</span>
-                    </button>
-                  ))}
-                {projectAssets.filter(asset => 
-                  asset.name.toLowerCase().includes(mentionQuery.toLowerCase())
-                ).length === 0 && (
-                  <p className="text-xs text-white/40 px-3 py-2">No files found in this project</p>
-                )}
+          {/* Main Chat Input with Hero Section Styling */}
+          <div
+            className="w-full min-h-[60px] text-sm p-4 pb-2 bg-[#292929] rounded-xl resize-none transition-all duration-300 relative"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {/* Drag Overlay */}
+            {isDragging && (
+              <div className={`absolute inset-0 rounded-xl border-2 border-dashed border-primary/60 flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-primary/10' : ''}`}>
+                <FileText className="w-8 h-8 text-primary mb-2" />
+                <span className="text-sm text-primary font-medium">Drop file here to upload</span>
               </div>
-            </div>
-          )}
-          
-          {/* File Context Chip - show when file is attached and active */}
-          {uploadedFile && uploadedFile.status !== 'processed' && uploadedFile.status !== 'error' && (
-            <div className="mb-3">
-              <FilePreviewChip 
-                file={uploadedFile}
-                onRemove={() => removeUploadedFile(uploadedFile.fileID)}
-              />
-            </div>
-          )}
-          
-          {/* Textarea Row */}
-          <div className="relative mb-3">
-            <TextareaAutosize
-              minRows={2}
-              maxRows={6}
-              value={inputValue}
-              onChange={(e) => {
-                const value = e.target.value;
-                setInputValue(value);
-                
-                // Detect @ mention
-                const cursorPos = e.target.selectionStart || 0;
-                const textBeforeCursor = value.slice(0, cursorPos);
-                const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-                
-                if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
-                  // User just typed @
-                  setShowMentionList(true);
-                  setMentionQuery('');
-                  setMentionCursorPos(cursorPos);
-                  
-                  // Fetch assets if not already loaded
-                  if (projectId && projectAssets.length === 0) {
-                    fetchProjectAssets(projectId).then(setProjectAssets);
-                  }
-                } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
-                  // User is typing after @
-                  const query = textBeforeCursor.slice(lastAtIndex + 1);
-                  if (!/\s/.test(query)) {
-                    // No space means still in mention mode
-                    setMentionQuery(query);
+            )}
+
+            {/* Mention Dropdown */}
+            {showMentionList && (
+              <div className="absolute bottom-full left-0 mb-2 w-full max-w-md bg-[#1e1e1e] border border-white/20 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
+                <div className="p-2">
+                  <p className="text-xs text-white/50 px-2 py-1">Select a file from this project:</p>
+                  {projectAssets
+                    .filter(asset =>
+                      asset.name.toLowerCase().includes(mentionQuery.toLowerCase())
+                    )
+                    .map(asset => (
+                      <button
+                        key={asset.id}
+                        onClick={() => handleAssetSelect(asset)}
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left"
+                      >
+                        <FileText className="w-4 h-4 text-white/70 flex-shrink-0" />
+                        <span className="text-sm text-white truncate flex-1">{asset.name}</span>
+                        <span className="text-xs text-white/50">{asset.ext}</span>
+                      </button>
+                    ))}
+                  {projectAssets.filter(asset =>
+                    asset.name.toLowerCase().includes(mentionQuery.toLowerCase())
+                  ).length === 0 && (
+                      <p className="text-xs text-white/40 px-3 py-2">No files found in this project</p>
+                    )}
+                </div>
+              </div>
+            )}
+
+            {/* File Context Chip - show when file is attached and active */}
+            {uploadedFile && uploadedFile.status !== 'processed' && uploadedFile.status !== 'error' && (
+              <div className="mb-3">
+                <FilePreviewChip
+                  file={uploadedFile}
+                  onRemove={() => removeUploadedFile(uploadedFile.fileID)}
+                />
+              </div>
+            )}
+
+            {/* Textarea Row */}
+            <div className="relative mb-3">
+              <TextareaAutosize
+                minRows={2}
+                maxRows={6}
+                value={inputValue}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setInputValue(value);
+
+                  // Detect @ mention
+                  const cursorPos = e.target.selectionStart || 0;
+                  const textBeforeCursor = value.slice(0, cursorPos);
+                  const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+                  if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
+                    // User just typed @
                     setShowMentionList(true);
+                    setMentionQuery('');
+                    setMentionCursorPos(cursorPos);
+
+                    // Fetch assets if not already loaded
+                    if (projectId && projectAssets.length === 0) {
+                      fetchProjectAssets(projectId).then(setProjectAssets);
+                    }
+                  } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
+                    // User is typing after @
+                    const query = textBeforeCursor.slice(lastAtIndex + 1);
+                    if (!/\s/.test(query)) {
+                      // No space means still in mention mode
+                      setMentionQuery(query);
+                      setShowMentionList(true);
+                    } else {
+                      setShowMentionList(false);
+                    }
                   } else {
                     setShowMentionList(false);
                   }
-                } else {
-                  setShowMentionList(false);
-                }
-              }}
-              placeholder={isListening ? 'Listening...' : "Describe your dashboard..."}
-              className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60"
-              data-chat-input
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleSend();
-                }
-              }}
+                }}
+                placeholder={isListening ? 'Listening...' : "Describe your dashboard..."}
+                className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60"
+                data-chat-input
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSend();
+                  }
+                }}
+              />
+            </div>
+
+            {/* Recording Bar - Positioned between textarea and buttons */}
+            <RecordingBarSidebar
+              isVisible={isListening}
+              detectedLanguage={detectedLanguage}
+              onCancel={handleRecordingCancel}
+              onConfirm={handleRecordingConfirm}
             />
-          </div>
-          
-          {/* Recording Bar - Positioned between textarea and buttons */}
-          <RecordingBarSidebar 
-            isVisible={isListening}
-            detectedLanguage={detectedLanguage}
-            onCancel={handleRecordingCancel}
-            onConfirm={handleRecordingConfirm}
-          />
-          
-          {/* Template Tag Row - commented out (not functionable)
+
+            {/* Template Tag Row - commented out (not functionable)
           {selectedTemplate && (
             <div className="flex justify-start mb-1">
               <div className="flex items-center gap-2 px-2 py-2 rounded-md bg-muted border border-border text-white">
@@ -936,20 +967,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
             </div>
           )}
           */}
-          
-          {/* Buttons Row */}
-          <div className="flex items-center justify-between">
-            {/* Left side - File Upload and Data Connector Buttons */}
-            <div className="flex items-center gap-2">
-              {/* Upload Button - Icon only */}
-              <button
-                onClick={handleFileUpload}
-                className="p-2 flex items-center justify-center border border-white/30 rounded-md"
-              >
-                <Upload className="w-4 h-4" />
-              </button>
 
-              {/* Template Button - commented out (not functionable)
+            {/* Buttons Row */}
+            <div className="flex items-center justify-between">
+              {/* Left side - File Upload and Data Connector Buttons */}
+              <div className="flex items-center gap-2">
+                {/* Upload Button - Icon only */}
+                <button
+                  onClick={handleFileUpload}
+                  className="p-2 flex items-center justify-center border border-white/30 rounded-md"
+                >
+                  <Upload className="w-4 h-4" />
+                </button>
+
+                {/* Template Button - commented out (not functionable)
               <button
                 onClick={handleCloneTemplateClick}
                 className="p-2 flex items-center justify-center border border-white/30 rounded-md"
@@ -959,47 +990,45 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               </button>
               */}
 
-              {/* Data Connector Dropup */}
-              <div className="relative data-source-dropdown">
-                <button
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className={`p-2 flex items-center justify-center gap-1 rounded-md transition-all duration-200 ${
-                    selectedDataSource 
+                {/* Data Connector Dropup */}
+                <div className="relative data-source-dropdown">
+                  <button
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    className={`p-2 flex items-center justify-center gap-1 rounded-md transition-all duration-200 ${selectedDataSource
                       ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
                       : 'border border-white/30'
-                  }`}
-                  aria-expanded={dropdownOpen}
-                  aria-haspopup="true"
-                  aria-label="Connect data source"
-                >
-                  <Link className="w-4 h-4" />
-                  <ChevronUp className={`w-3 h-3 transition-transform duration-200 ${
-                    selectedDataSource ? 'text-white' : 'text-white/60'
-                  } ${dropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {dropdownOpen && (
-                  <div className="absolute bottom-full left-0 mb-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
-                    <div className="py-1">
-                      {CONNECTORS.map((connector) => (
-                        <button
-                          key={connector.name}
-                          onClick={() => handleIntegrationClick(connector)}
-                          className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-primary/10 transition-colors duration-200 cursor-pointer"
-                        >
-                          <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
-                          {connector.name}
-                        </button>
-                      ))}
+                      }`}
+                    aria-expanded={dropdownOpen}
+                    aria-haspopup="true"
+                    aria-label="Connect data source"
+                  >
+                    <Link className="w-4 h-4" />
+                    <ChevronUp className={`w-3 h-3 transition-transform duration-200 ${selectedDataSource ? 'text-white' : 'text-white/60'
+                      } ${dropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {dropdownOpen && (
+                    <div className="absolute bottom-full left-0 mb-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
+                      <div className="py-1">
+                        {CONNECTORS.map((connector) => (
+                          <button
+                            key={connector.name}
+                            onClick={() => handleIntegrationClick(connector)}
+                            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-primary/10 transition-colors duration-200 cursor-pointer"
+                          >
+                            <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
+                            {connector.name}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-            
-            {/* Right side - Mic and Send Buttons */}
-            <div className="flex gap-2">
-              {/* Voice button - commented out (not functionable)
+
+              {/* Right side - Mic and Send Buttons */}
+              <div className="flex gap-2">
+                {/* Voice button - commented out (not functionable)
               <button
                 onClick={handleMicClick}
                 className={`p-2 flex items-center justify-center ${
@@ -1011,26 +1040,26 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
               */}
-              {(isProcessing || uploadedFile?.status === 'processing') ? (
-                <Button
-                  onClick={() => stopGeneration()}
-                  className="button-gradient p-3"
-                >
-                  <Square className="w-4 h-4" />
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => handleSend()}
-                  disabled={!inputValue.trim() || isTyping}
-                  className="button-gradient p-3 disabled:opacity-50"
-                >
-                  <CornerRightUp className="w-4 h-4" />
-                </Button>
-              )}
+                {(isProcessing || uploadedFile?.status === 'processing') ? (
+                  <Button
+                    onClick={() => stopGeneration()}
+                    className="button-gradient p-3"
+                  >
+                    <Square className="w-4 h-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => handleSend()}
+                    disabled={!inputValue.trim() || isTyping}
+                    className="button-gradient p-3 disabled:opacity-50"
+                  >
+                    <CornerRightUp className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
         <input
           ref={fileInputRef}

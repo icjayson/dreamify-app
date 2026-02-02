@@ -22,7 +22,8 @@ class ProcessingService {
     assetId: string | null,  // Allow null for Q&A without files
     prompt: string,
     conversationId?: string,
-    additionalContents?: ConversationChatRequest['user_node_contents']
+    additionalContents?: ConversationChatRequest['user_node_contents'],
+    userNodeMetadata?: ConversationChatRequest['user_node_metadata']
   ): Promise<ProcessingResponse> {
     try {
       const textContent: ConversationChatRequest['user_node_contents'][number] = {
@@ -39,6 +40,7 @@ class ProcessingService {
           textContent,
           ...(additionalContents ?? []),
         ],
+        user_node_metadata: userNodeMetadata,
       };
       const response = await conversationService.sendChatMessage(request);
       return {
@@ -74,9 +76,9 @@ class ProcessingService {
         success: true,
         data: {
           success: true,
-          status: workflowStatus.status === 'completed' ? 'completed' : 
-                  workflowStatus.status === 'error' ? 'error' : 
-                  workflowStatus.status === 'stopped' ? 'stopped' : 'processing',
+          status: workflowStatus.status === 'completed' ? 'completed' :
+            workflowStatus.status === 'error' ? 'error' :
+              workflowStatus.status === 'stopped' ? 'stopped' : 'processing',
           fileID: '', // Not needed for workflow status
           conversation_id: conversationId,
           workflow_status: workflowStatus,
@@ -152,7 +154,7 @@ class ProcessingService {
         }
 
         const workflowStatus = status.data?.workflow_status?.status;
-        
+
         if (workflowStatus === 'stopped') {
           return {
             success: true,
@@ -166,11 +168,11 @@ class ProcessingService {
             },
           };
         }
-        
+
         if (workflowStatus === 'completed') {
           // Check response type from workflow status
           const responseType = status.data?.workflow_status?.metadata?.response_type;
-          
+
           if (responseType === 'message' || !responseType) {
             // Q&A response - DON'T fetch dashboard (it's redundant and causes UI confusion)
             // Return completed without dashboard_data

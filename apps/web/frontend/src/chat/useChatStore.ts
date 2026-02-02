@@ -73,6 +73,8 @@ export interface UploadedFile {
   processedData?: any;
   rowCount?: number;
   columnCount?: number;
+  /** True if file was selected from @mention dropdown (already exists in conversation) */
+  isFromMention?: boolean;
 }
 
 interface ChatState {
@@ -146,7 +148,7 @@ interface ChatState {
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: () => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string) => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[]) => Promise<void>;
   stopGeneration: () => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<void>;
 }
@@ -233,7 +235,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string) => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[]) => {
     const state = get();
     const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
 
@@ -245,7 +247,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setCurrentWorkflowStep(null);
 
     // Text-only message path: allow theme change after initial dashboard shown, only if currently light
-    const isTextOnly = !uploadedFile || uploadedFile.status !== 'uploaded';
+    // @mentioned files should use Q&A path (they're already in conversation)
+    const isTextOnly = !uploadedFile || uploadedFile.status !== 'uploaded' || uploadedFile.isFromMention;
     const detectedTheme = detectThemeChange(content);
     if (isTextOnly && hasShownInitialDashboard && dashboardTheme === 'light' && detectedTheme) {
       console.log('Theme change detected:', detectedTheme);
@@ -317,16 +320,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Process Q&A (with or without existing conversation)
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content !== content.trim()) {
+        // Determine if we should attach file context visually (show chip)
+        // Show chip if:
+        // 1. Fresh upload (no conversationId yet)
+        // 2. Explicitly @mentioned (isFromMention = true)
+        // Don't show if just a follow-up prompt on existing file
+        const isFromMention = currentConversationId && uploadedFile?.isFromMention;
+        const isFreshUpload = uploadedFile?.fileID && !uploadedFile.conversationId;
+        const shouldShowChip = uploadedFile && (isFreshUpload || isFromMention);
+
         const userMessage: Message = {
           id: Date.now().toString(),
           role: "user",
           content: content.trim(),
           timestamp: new Date(),
-          // Only attach file if it was just uploaded or @mentioned (status: uploading/uploaded)
-          // Don't attach if file is from previous workflow (status: processing/processed)
-          attachment: (uploadedFile && (uploadedFile.status === 'uploading' || uploadedFile.status === 'uploaded')) 
-            ? { kind: "csv", name: uploadedFile.filename } 
-            : undefined,
+          attachment: shouldShowChip ? { kind: "csv", name: uploadedFile.filename } : undefined,
           template: get().selectedTemplate || undefined,
         };
         addMessage(userMessage);
@@ -343,11 +351,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
           throw new Error('Project context missing. Please ensure you are in a project workspace.');
         }
 
-        // Fetch asset data ONLY if file was just @mentioned or uploaded (not from previous workflow)
+        // Only attach asset content if this is a NEW file upload, not an @mention of existing file
+        // If uploadedFile.isFromMention is true, it was selected from @mention dropdown (already in conversation)
+        // Skip attachment to prevent duplicates
         let assetContents: ConversationChatRequest['user_node_contents'] = undefined;
         let assetId: string | null = null;
-        if (uploadedFile?.fileID && (uploadedFile.status === 'uploading' || uploadedFile.status === 'uploaded')) {
-          // Only attach file if it's actively being used (not from previous completed workflow)
+
+        const isExistingAssetMention = currentConversationId && uploadedFile?.isFromMention;
+
+        // Only attach if:
+        // 1. File ID exists
+        // 2. Not an @mention of existing file (already in conversation)
+        // 3. File is FRESH (no conversationId yet in this session)
+        // processed files will have conversationId set, so we skip them
+        if (uploadedFile?.fileID && !isExistingAssetMention && !uploadedFile.conversationId) {
+          // Fresh upload OR no existing conversation - attach the asset
           try {
             const { fileService } = await import('@/services/fileService');
             const assetResponse = await fileService.getAsset(uploadedFile.fileID);
@@ -371,15 +389,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
           } catch (error) {
             console.warn('Failed to fetch asset data for QnA:', error);
           }
+        } else if (isExistingAssetMention) {
+          console.log('Skipping asset attachment - file selected from @mention (already in conversation):', uploadedFile?.fileID);
         }
+        // Build user node metadata for asset selection
+        const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
+          ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds }
+          : { asset_selection: 'all' as const };
 
-        // Call processing service (with or without file attachment)
+        // Call processing service with file attachment if available
         const startResult = await processingService.runProcessing(
           projectId,
-          assetId,  // Pass asset_id only if file is actively attached
+          assetId,
           content,
           currentConversationId || undefined,  // Use existing conversation if available
-          assetContents  // Pass asset contents only if file is actively attached
+          assetContents,
+          userNodeMetadata
         );
 
         console.log('Q&A processing result:', startResult);
@@ -398,7 +423,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             (status) => {
               // Update status based on workflow status
               const workflowStatus = status.data?.workflow_status?.status;
-              
+
               // For QnA: DON'T update uploadedFile status to 'processing'
               // This prevents ProjectPage from showing "Generating Dashboard"
               // Keep status as 'uploaded' until QnA completes
@@ -407,7 +432,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
                 }
               }
-              
+
               if (workflowStatus === 'error' || workflowStatus === 'stopped') {
                 setIsProcessing(false);
               }
@@ -484,11 +509,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
                 }
-                
-                // Clear uploadedFile after QnA completes (no dashboard, so no need to keep it)
-                // This prevents auto-attaching file to subsequent generic questions
-                console.log('Clearing uploadedFile after QnA completion');
-                setUploadedFile(null);
               } catch (error) {
                 console.error('Failed to load conversation for Q&A response:', error);
                 // Fallback to workflow status metadata
@@ -506,10 +526,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     timestamp: new Date(),
                   }
                 ]));
-                
-                // Clear uploadedFile even on error
-                console.log('Clearing uploadedFile after QnA error');
-                setUploadedFile(null);
               }
             }
           } else if (finalResult.data?.status === 'error') {
@@ -523,12 +539,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 timestamp: new Date(),
               }
             ]));
-            
-            // Clear uploadedFile on error to prevent auto-attaching to next message
-            if (uploadedFile) {
-              console.log('Clearing uploadedFile after QnA error');
-              setUploadedFile(null);
-            }
           }
         } else {
           const errorMsg = startResult.data?.error || 'Failed to start processing.';
@@ -541,12 +551,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
               timestamp: new Date(),
             }
           ]));
-          
-          // Clear uploadedFile on error
-          if (uploadedFile) {
-            console.log('Clearing uploadedFile after QnA start error');
-            setUploadedFile(null);
-          }
         }
       } catch (error) {
         console.error('Q&A processing error:', error);
@@ -559,12 +563,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             timestamp: new Date(),
           }
         ]));
-        
-        // Clear uploadedFile on error
-        if (uploadedFile) {
-          console.log('Clearing uploadedFile after QnA exception');
-          setUploadedFile(null);
-        }
       } finally {
         setIsTyping(false);
         setIsProcessing(false);
@@ -581,11 +579,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: "user",
         content: content.trim(),
         timestamp: new Date(),
-        // Only attach file if it was just uploaded or @mentioned (status: uploading/uploaded)
-        // Don't attach if file is from previous workflow (status: processing/processed)
-        attachment: (uploadedFile.status === 'uploading' || uploadedFile.status === 'uploaded') 
-          ? { kind: "csv", name: uploadedFile.filename }
-          : undefined,
+        // Always attach file if available
+        attachment: { kind: "csv", name: uploadedFile.filename },
         template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
@@ -620,7 +615,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
-      const assetContents = uploadedFile && assetData ? [
+      // Only attach asset content if this is a NEW file upload, not an @mention of existing file
+      // If uploadedFile.isFromMention is true, it was selected from @mention dropdown (already in conversation)
+      const existingConversationId = uploadedFile.conversationId || currentConversationId;
+      const isExistingAssetMention = existingConversationId && uploadedFile?.isFromMention;
+
+      const assetContents = uploadedFile && assetData && !isExistingAssetMention ? [
         {
           type: 'asset',
           data: {
@@ -634,12 +634,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       ] as ConversationChatRequest['user_node_contents'] : undefined;
 
+      if (isExistingAssetMention) {
+        console.log('File processing: Skipping asset attachment - file selected from @mention:', uploadedFile?.fileID);
+      }
+
+      // Build user node metadata for asset selection
+      const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
+        ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds }
+        : { asset_selection: 'all' as const };
+
       const startResult = await processingService.runProcessing(
         projectId,
         uploadedFile.fileID,
         content,
         uploadedFile.conversationId || currentConversationId || undefined,
-        assetContents
+        assetContents,
+        userNodeMetadata
       );
       console.log('Run processing result:', startResult);
       // processing or accepted
@@ -719,7 +729,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               if (restoredMessages.length) {
                 get().setMessages(restoredMessages);
               }
-              
+
               // DON'T clear uploadedFile - ProjectPage needs it to determine dashboard display
               // The FilePreviewChip will be hidden based on processing status
               // setUploadedFile(null); // REMOVED - causes dashboard to disappear in ProjectPage
@@ -739,7 +749,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   timestamp: new Date(),
                 }
               ]));
-              
+
               // DON'T clear uploadedFile - see comment above
               // setUploadedFile(null); // REMOVED
             }
@@ -759,11 +769,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
               if (restoredMessages.length) {
                 get().setMessages(restoredMessages);
               }
-              
-              // Clear uploadedFile after QnA completes (no dashboard, so no need to keep it)
-              // This prevents auto-attaching file to subsequent generic questions
-              console.log('Clearing uploadedFile after QnA completion (file upload path)');
-              setUploadedFile(null);
             } catch (error) {
               console.error('Failed to load conversation for Q&A response:', error);
               // Fallback to workflow status metadata
@@ -781,10 +786,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   timestamp: new Date(),
                 }
               ]));
-              
-              // Clear uploadedFile even on error
-              console.log('Clearing uploadedFile after QnA error (file upload path)');
-              setUploadedFile(null);
             }
           }
         } else {

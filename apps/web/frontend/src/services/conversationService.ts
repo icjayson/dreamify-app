@@ -8,6 +8,11 @@ export interface ConversationChatRequest {
     type: string;
     data: Record<string, any>;
   }>;
+  // Metadata for user node - used for selective asset processing
+  user_node_metadata?: {
+    asset_selection: 'explicit' | 'all';
+    selected_asset_ids?: string[];
+  };
 }
 
 export interface ConversationChatResponse {
@@ -68,7 +73,7 @@ class ConversationService {
 
   async getDashboardData(conversationId: string, projectId: string, dashboardId?: string): Promise<DashboardDataResponse | null> {
     try {
-      const url = dashboardId 
+      const url = dashboardId
         ? `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}&dashboard_id=${dashboardId}`
         : `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}`;
       const response = await api.get<DashboardDataResponse>(url);

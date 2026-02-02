@@ -39,6 +39,8 @@ class ConversationChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     project_id: str
     user_node_contents: List[Dict[str, Any]]
+    # Metadata for user node - used for selective asset processing
+    user_node_metadata: Optional[Dict[str, Any]] = None
 
 
 class ConversationChatResponse(BaseModel):
@@ -64,16 +66,19 @@ def _load_existing_conversation(user_id: str, project_id: str, conversation_id: 
     return load_conversation(s3_bucket, s3_key)
 
 
-def _create_user_node(contents: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _create_user_node(contents: List[Dict[str, Any]], metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Create user node matching existing structure."""
     now_iso = datetime.utcnow().isoformat()
-    return {
+    node = {
         "node_id": f"node_{uuid.uuid4().hex[:8]}",
         "role": "user",
         "status": "completed",
         "created_at": now_iso,
         "contents": contents,
     }
+    if metadata:
+        node["metadata"] = metadata
+    return node
 
 
 def _create_greeting_node() -> Dict[str, Any]:
@@ -221,7 +226,7 @@ async def conversation_chat(
     conversation_bucket = config.aws.s3.USER_ASSETS_BUCKET
     now_iso = datetime.utcnow().isoformat()
     
-    user_node = _create_user_node(enriched_contents)
+    user_node = _create_user_node(enriched_contents, request.user_node_metadata)
     
     is_new_conversation = False
     if request.conversation_id:

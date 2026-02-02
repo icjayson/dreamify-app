@@ -99,6 +99,7 @@ class StatefulAnalyzeCSVWorkflow:
         conversation_uri: Optional[str] = None,
         conversation_backup_uri: Optional[str] = None,
         post_status_fn: Optional[callable] = None,
+        assets: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Main entry point for workflow execution.
@@ -114,6 +115,7 @@ class StatefulAnalyzeCSVWorkflow:
             conversation_uri: Optional S3 URI for conversation persistence (enables live sync)
             conversation_backup_uri: Optional backup S3 URI
             post_status_fn: Optional callback to post status updates (from server.py)
+            assets: Optional list of filtered assets from server.py (avoids duplicate extraction)
             
         Returns:
             Dict with workflow output in legacy format for backward compatibility
@@ -133,6 +135,7 @@ class StatefulAnalyzeCSVWorkflow:
             user_prompt=user_prompt,
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
+            assets=assets,
         )
         
         # Run workflow loop
@@ -590,12 +593,10 @@ class StatefulAnalyzeCSVWorkflow:
         user_prompt: Optional[str] = None,
         conversation_uri: Optional[str] = None,
         conversation_backup_uri: Optional[str] = None,
+        assets: Optional[List[Dict[str, Any]]] = None,
     ) -> AgentState:
         """
         Build initial AgentState from inputs.
-        
-        Extracts user context, initializes working memory, and creates
-        the initial state object.
         
         Args:
             file_path: Path to CSV file
@@ -604,11 +605,16 @@ class StatefulAnalyzeCSVWorkflow:
             user_prompt: User's request/question
             conversation_uri: Optional S3 URI for conversation persistence
             conversation_backup_uri: Optional backup S3 URI
+            assets: Optional list of filtered assets from server.py
             
         Returns:
             Initialized AgentState
         """
         logger.info("Building initial state")
+        
+        # Use passed assets if available (already filtered by server.py)
+        # Otherwise fall back to extracting from conversation
+        user_assets = assets if assets is not None else self._extract_assets_from_conversation(conversation)
         
         # Extract user context
         user_state = UserState(
@@ -616,7 +622,7 @@ class StatefulAnalyzeCSVWorkflow:
             project_id=conversation.get("project_id", ""),
             conversation_id=conversation.get("conversation_id", ""),
             conversation_history=conversation.get("nodes", []),
-            user_assets=self._extract_assets_from_conversation(conversation),
+            user_assets=user_assets,
             dashboards=dashboards,
         )
         
@@ -811,15 +817,34 @@ class StatefulAnalyzeCSVWorkflow:
         """
         Extract asset information from conversation nodes.
         
+        Respects user_node_metadata.asset_selection to filter assets:
+        - 'explicit' with selected_asset_ids: Only return those specific assets
+        - 'all' or no metadata: Return all assets in conversation
+        
         Args:
             conversation: Conversation dict
             
         Returns:
             List of asset dicts with metadata
         """
-        assets = []
         nodes = conversation.get("nodes", [])
         
+        # Find latest user node to check for selection metadata
+        latest_user_node = None
+        for node in reversed(nodes):
+            if node.get("role") == "user":
+                latest_user_node = node
+                break
+        
+        # Check metadata for selection mode
+        metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
+        selection_mode = metadata.get("asset_selection", "all")
+        selected_ids = set(metadata.get("selected_asset_ids", []))
+        
+        logger.info(f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}")
+        
+        # Extract all assets from conversation
+        assets = []
         for node in nodes:
             node_created_at = node.get("created_at")
             contents = node.get("contents", [])
@@ -847,6 +872,13 @@ class StatefulAnalyzeCSVWorkflow:
         # Sort assets by created_at (newest first)
         assets.sort(key=lambda x: x.get("node_created_at", ""), reverse=True)
         
+        # Filter based on selection mode
+        if selection_mode == "explicit" and selected_ids:
+            filtered_assets = [a for a in assets if a.get("asset_id") in selected_ids]
+            logger.info(f"Filtered assets from {len(assets)} to {len(filtered_assets)} based on explicit selection")
+            return filtered_assets
+        
+        # Default: return all assets
         return assets
     
     def _check_workflow_stopped(self, state: AgentState) -> bool:

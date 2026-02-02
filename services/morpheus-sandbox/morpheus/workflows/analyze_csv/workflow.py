@@ -1059,6 +1059,7 @@ Please inform the user that a data file is required to generate a dashboard, and
         conversation_uri: Optional[str] = None,
         conversation_backup_uri: Optional[str] = None,
         post_status_fn: Optional[callable] = None,
+        assets: Optional[List[Dict[str, Any]]] = None,
     ):
         """
         Execute the CSV analysis workflow.
@@ -1073,6 +1074,7 @@ Please inform the user that a data file is required to generate a dashboard, and
             conversation_uri: S3 URI for conversation (for live sync)
             conversation_backup_uri: S3 backup URI for conversation (for live sync)
             post_status_fn: Optional callback to post status updates (from server.py)
+            assets: Optional list of filtered assets from server.py
             
         Returns:
             Dict with workflow output in legacy format
@@ -1092,6 +1094,7 @@ Please inform the user that a data file is required to generate a dashboard, and
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
             post_status_fn=post_status_fn,
+            assets=assets,
         )
 
 

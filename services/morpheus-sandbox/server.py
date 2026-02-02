@@ -279,10 +279,31 @@ def _post_node_status_sync(conversation_id: Optional[str], status: str, metadata
 
 
 def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Extract all asset content items from conversation nodes."""
-    assets = []
+    """
+    Extract asset content items from conversation nodes.
+    
+    Respects user_node_metadata.asset_selection to filter assets:
+    - 'explicit' with selected_asset_ids: Only return those specific assets
+    - 'all' or no metadata: Return all assets in conversation
+    """
     nodes = conversation.get("nodes", [])
     
+    # Find latest user node to check for selection metadata
+    latest_user_node = None
+    for node in reversed(nodes):
+        if node.get("role") == "user":
+            latest_user_node = node
+            break
+    
+    # Check metadata for selection mode
+    metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
+    selection_mode = metadata.get("asset_selection", "all")
+    selected_ids = set(metadata.get("selected_asset_ids", []))
+    
+    logger.info(f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}")
+    
+    # Extract all assets from conversation
+    assets = []
     for node in nodes:
         contents = node.get("contents", [])
         for content in contents:
@@ -300,6 +321,13 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
                         "filename": asset_data.get("filename", ""),
                     })
     
+    # Filter based on selection mode
+    if selection_mode == "explicit" and selected_ids:
+        filtered_assets = [a for a in assets if a.get("asset_id") in selected_ids]
+        logger.info(f"Filtered assets from {len(assets)} to {len(filtered_assets)} based on explicit selection")
+        return filtered_assets
+    
+    # Default: return all assets
     return assets
 
 
@@ -517,6 +545,7 @@ def _process_conversation_background(
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
             post_status_fn=_post_node_status_sync,
+            assets=assets,
         )
         
         # Validate result is not None

@@ -342,6 +342,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       setIsTyping(true);
       setIsProcessing(true);
+      
+      // Update file status to processing to show loading indicator in chip
+      if (uploadedFile) {
+        setUploadedFile((prev) => prev ? { ...prev, status: 'processing' } : prev);
+      }
 
       try {
         // Use projectId from parameter (required)
@@ -472,6 +477,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   // Update processedData with the new dashboard data
                   setUploadedFile((prev) => prev ? {
                     ...prev,
+                    status: 'processed',
                     processedData: finalResult.data.dashboard_data
                   } : prev);
                 }
@@ -509,6 +515,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
                 }
+                // Update file status to processed to hide chip
+                setUploadedFile((prev) => prev ? { ...prev, status: 'processed' } : prev);
               } catch (error) {
                 console.error('Failed to load conversation for Q&A response:', error);
                 // Fallback to workflow status metadata

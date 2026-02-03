@@ -366,14 +366,15 @@ export default function ProjectPage() {
             ) : (
               isProjectLoading ? (
                 <DashboardLoading title="Loading Project" description="Restoring your dashboard..." durationSec={5} />
+              ) : processedData ? (
+                // Prioritize showing dashboard if it exists, even during Q&A processing
+                // This preserves the view during Q&A mode while only new dashboard generation shows loading
+                <DashboardPreview processedData={processedData} className="h-full overflow-y-auto" />
               ) : uploadedFile?.status === 'processing' ? (
+                // Only show loading if no existing dashboard (fresh upload generating first dashboard)
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
               ) : isInitialLoading ? (
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
-              ) : processedData ? (
-                // Show dashboard if we have processedData, regardless of current upload status
-                // This preserves previous dashboard when uploading new files
-                <DashboardPreview processedData={processedData} className="h-full overflow-y-auto" />
               ) : (
                 <DashboardLoading title="Preparing Dashboard" description="Please wait..." durationSec={10} />
               )

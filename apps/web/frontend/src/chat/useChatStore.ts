@@ -538,6 +538,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           } else if (finalResult.data?.status === 'error') {
             const errorMsg = finalResult.data?.error || 'An error occurred while processing your question.';
+            // Set error status for file chip
+            if (uploadedFile) {
+              setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
+            }
             updateMessages((prev) => ([
               ...prev,
               {
@@ -562,6 +566,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       } catch (error) {
         console.error('Q&A processing error:', error);
+        // Set error status for file chip
+        if (uploadedFile) {
+          setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
+        }
         updateMessages((prev) => ([
           ...prev,
           {
@@ -797,7 +805,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           }
         } else {
-          if (finalResult.data?.status === 'error') {
+          // Set error status if processing failed or returned error
+          if (finalResult.data?.status === 'error' || !finalResult.success) {
             setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
           }
           await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
@@ -807,6 +816,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } catch (error) {
       console.error('Processing error:', error);
+      setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
       await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
     } finally {
       setIsTyping(false);

@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle } from "lucide-react";
 import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
@@ -12,14 +13,30 @@ import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
 
-// Helper function to map workflow-status step values to display text
+// Friendly AI persona step mapping for Fluid Morph loading
+const STEP_FRIENDLY_MAP: Record<string, string> = {
+  // Initialization
+  'start': "Waking up...",
+  'load_conversation': "Reading conversation context...",
+  'download_asset': "Analyzing file structure...",
+  
+  // Intelligence
+  'run_workflow': "Booting up data engine...",
+  'routing': "Understanding your goal...",
+  'reasoning': "Planning the best visualization...",
+  
+  // Action
+  'execution': "Crunching the numbers...",
+  'synthesis': "Designing your dashboard...",
+  'validation': "Double-checking results...",
+  
+  // Completion/Edge cases
+  'finish': "Finalizing...",
+  'error': "I ran into a hiccup.",
+};
+
 const mapStepToDisplayText = (step: string): string => {
-  const stepMap: Record<string, string> = {
-    "load_conversation": "Loading conversation...",
-    "download_asset": "Downloading file...",
-    "run_workflow": "Running workflow...",
-  };
-  return stepMap[step] || "Processing...";
+  return STEP_FRIENDLY_MAP[step] || "Processing...";
 };
 
 // Helper function to format file size
@@ -50,7 +67,7 @@ const formatAssetStatus = (status: string | null | undefined): string => {
   return statusMap[status] || status.charAt(0).toUpperCase() + status.slice(1);
 };
 
-// Rolling multiline log for loading animation
+// Fluid Morph single-line loading indicator
 interface RollingTextProps {
   isActive: boolean;
   stopSignal: boolean;
@@ -58,66 +75,58 @@ interface RollingTextProps {
   currentStep?: string | null;
 }
 
-const RollingText = ({ isActive, stopSignal, successText = "", currentStep = null }: RollingTextProps) => {
-  const [lines, setLines] = useState<string[]>([]);
-  const [started, setStarted] = useState(false);
-  const [stopped, setStopped] = useState(false);
+const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextProps) => {
+  const [currentText, setCurrentText] = useState<string>("");
   const prevStepRef = useRef<string | null>(null);
 
-  // Start when becoming active the first time
+  // Update current text when step changes
   useEffect(() => {
-    if (!started && isActive) {
-      setStarted(true);
-      setStopped(false);
-      setLines([]);
-      prevStepRef.current = null;
-    }
-  }, [isActive, started]);
-
-  // Watch for currentStep changes and add new line when step changes
-  useEffect(() => {
-    if (!started || stopped) return;
+    if (!isActive) return;
 
     if (currentStep && currentStep !== prevStepRef.current) {
       const displayText = mapStepToDisplayText(currentStep);
-      setLines((prev) => {
-        // Check if last line is different to avoid duplicates
-        const lastLine = prev[prev.length - 1];
-        if (lastLine !== displayText) {
-          // Keep all historical lines (limit to last 20 to prevent memory issues)
-          return [...prev, displayText].slice(-20);
-        }
-        return prev;
-      });
+      setCurrentText(displayText);
       prevStepRef.current = currentStep;
     }
-  }, [currentStep, started, stopped]);
+  }, [currentStep, isActive]);
 
-  // Stop when stopSignal becomes true
-  useEffect(() => {
-    if (started && !stopped && stopSignal) {
-      setStopped(true);
-      setLines((prev) => [...prev, successText].slice(-20));
-    }
-  }, [stopSignal, started, stopped, successText]);
-
-  // Render nothing until started
-  if (!started && lines.length === 0) return null;
+  // Don't render if never started or no text
+  if (!currentText) return null;
 
   return (
-    <div className="space-y-1 text-white">
-      {lines.map((line, i) => {
-        const isLast = i === lines.length - 1 && !stopped;
-        return (
-          <div
-            key={`${i}-${line}`}
-            className={`text-sm animate-fade-in-300 ${isLast ? 'active-breathing text-gradient-sweep caret' : 'text-white/90'}`}
-          >
-            {line}
+    <AnimatePresence>
+      {!stopSignal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+          className="flex items-center gap-2.5 h-6 overflow-hidden ml-8 mt-2"
+        >
+          {/* Sparkles Icon */}
+          <Sparkles className="w-4 h-4 text-blue-400 animate-pulse flex-shrink-0" />
+          
+          {/* Animated Text */}
+          <div className="relative flex-1">
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={currentText}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{
+                  duration: 0.3,
+                  ease: [0.4, 0.0, 0.2, 1]
+                }}
+                className="text-sm bg-clip-text text-transparent bg-gradient-to-r from-gray-200 via-white to-gray-200 inline-block"
+              >
+                {currentText}
+              </motion.span>
+            </AnimatePresence>
           </div>
-        );
-      })}
-    </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 
@@ -788,15 +797,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                 && index === messages.length - 1
                 && uploadedFile
                 && (isProcessing || uploadedFile.status === 'processing') && (
-                  <div className={`flex justify-start mt-1`}>
-                    <div className={`ml-8`}>
-                      <RollingText
-                        isActive={isProcessing || uploadedFile.status === 'processing'}
-                        stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
-                        successText=""
-                        currentStep={currentWorkflowStep}
-                      />
-                    </div>
+                  <div className="flex justify-start">
+                    <RollingText
+                      isActive={isProcessing || uploadedFile.status === 'processing'}
+                      stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
+                      successText=""
+                      currentStep={currentWorkflowStep}
+                    />
                   </div>
                 )}
             </div>

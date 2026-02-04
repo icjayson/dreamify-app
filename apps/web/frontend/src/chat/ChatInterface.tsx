@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle, FileStack } from "lucide-react";
 import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -12,6 +12,7 @@ import { useChatStore, type UploadedFile } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
+import ProjectContextPicker from "../components/chat/ProjectContextPicker";
 
 // Friendly AI persona step mapping for Fluid Morph loading
 const STEP_FRIENDLY_MAP: Record<string, string> = {
@@ -19,17 +20,17 @@ const STEP_FRIENDLY_MAP: Record<string, string> = {
   'start': "Waking up...",
   'load_conversation': "Reading conversation context...",
   'download_asset': "Analyzing file structure...",
-  
+
   // Intelligence
   'run_workflow': "Booting up data engine...",
   'routing': "Understanding your goal...",
   'reasoning': "Planning the best visualization...",
-  
+
   // Action
   'execution': "Crunching the numbers...",
   'synthesis': "Designing your dashboard...",
   'validation': "Double-checking results...",
-  
+
   // Completion/Edge cases
   'finish': "Finalizing...",
   'error': "I ran into a hiccup.",
@@ -105,7 +106,7 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
         >
           {/* Sparkles Icon */}
           <Sparkles className="w-4 h-4 text-blue-400 animate-pulse flex-shrink-0" />
-          
+
           {/* Animated Text */}
           <div className="relative flex-1">
             <AnimatePresence mode="wait">
@@ -172,7 +173,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const [isDragging, setIsDragging] = useState(false);
 
   // @Mention state
-  const [showMentionList, setShowMentionList] = useState(false);
+  // @Mention / Context Picker state
+  const [isContextPickerOpen, setIsContextPickerOpen] = useState(false);
+  const [pickerTriggerMode, setPickerTriggerMode] = useState<'mention' | 'button'>('mention');
   const [mentionQuery, setMentionQuery] = useState('');
   const [projectAssets, setProjectAssets] = useState<Array<{
     id: string;
@@ -327,6 +330,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       if (dropdownOpen && !target.closest('.data-source-dropdown')) {
         setDropdownOpen(false);
       }
+
+      // Close context picker if clicked outside
+      if (isContextPickerOpen && !target.closest('.project-context-picker-container') && !target.closest('.project-context-trigger')) {
+        setIsContextPickerOpen(false);
+      }
     };
 
     document.addEventListener('click', handleClickOutside);
@@ -402,7 +410,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           description: "You can only add up to 5 files at a time.",
           variant: "destructive"
         });
-        setShowMentionList(false);
+        setIsContextPickerOpen(false);
         return;
       }
       if (uploadedFiles.some(f => f.fileID === assetData.asset_id)) {
@@ -410,7 +418,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           title: "File already added",
           description: `${selectedAsset.name} is already in your file list.`,
         });
-        setShowMentionList(false);
+        setIsContextPickerOpen(false);
         return;
       }
 
@@ -421,15 +429,19 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         prev.includes(assetData.asset_id) ? prev : [...prev, assetData.asset_id]
       );
 
-      // Remove @mention text from input
-      const textBeforeCursor = inputValue.slice(0, mentionCursorPos);
-      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-      const textAfterMention = inputValue.slice(mentionCursorPos);
-      const newText = inputValue.slice(0, lastAtIndex) + textAfterMention;
-      setInputValue(newText);
+      // Remove @mention text from input ONLY if we are in mention mode
+      if (pickerTriggerMode === 'mention') {
+        const textBeforeCursor = inputValue.slice(0, mentionCursorPos);
+        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+        if (lastAtIndex !== -1) {
+          const textAfterMention = inputValue.slice(mentionCursorPos);
+          const newText = inputValue.slice(0, lastAtIndex) + textAfterMention;
+          setInputValue(newText);
+        }
+      }
 
       // Hide dropdown
-      setShowMentionList(false);
+      setIsContextPickerOpen(false);
       setMentionQuery('');
 
       toast({
@@ -863,33 +875,18 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               </div>
             )}
 
-            {/* Mention Dropdown */}
-            {showMentionList && (
-              <div className="absolute bottom-full left-0 mb-2 w-full max-w-md bg-[#1e1e1e] border border-white/20 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
-                <div className="p-2">
-                  <p className="text-xs text-white/50 px-2 py-1">Select a file from this project:</p>
-                  {projectAssets
-                    .filter(asset =>
-                      asset.name.toLowerCase().includes(mentionQuery.toLowerCase())
-                    )
-                    .map(asset => (
-                      <button
-                        key={asset.id}
-                        onClick={() => handleAssetSelect(asset)}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left"
-                      >
-                        <FileText className="w-4 h-4 text-white/70 flex-shrink-0" />
-                        <span className="text-sm text-white truncate flex-1">{asset.name}</span>
-                        <span className="text-xs text-white/50">{asset.ext}</span>
-                      </button>
-                    ))}
-                  {projectAssets.filter(asset =>
-                    asset.name.toLowerCase().includes(mentionQuery.toLowerCase())
-                  ).length === 0 && (
-                      <p className="text-xs text-white/40 px-3 py-2">No files found in this project</p>
-                    )}
-                </div>
-              </div>
+            {/* Context Picker */}
+            {isContextPickerOpen && (
+              <ProjectContextPicker
+                files={
+                  pickerTriggerMode === 'mention'
+                    ? projectAssets.filter(asset => asset.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+                    : projectAssets
+                }
+                onSelect={handleAssetSelect}
+                onPreview={(fileId) => window.open(`/preview/${fileId}`, '_blank')}
+                className={`project-context-picker-container ${pickerTriggerMode === 'button' ? 'bottom-full left-0 mb-2' : ''}`}
+              />
             )}
 
             {/* File Context Chips - horizontal scroll when files are attached */}
@@ -923,7 +920,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
                   if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
                     // User just typed @
-                    setShowMentionList(true);
+                    setIsContextPickerOpen(true);
+                    setPickerTriggerMode('mention');
                     setMentionQuery('');
                     setMentionCursorPos(cursorPos);
 
@@ -937,12 +935,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                     if (!/\s/.test(query)) {
                       // No space means still in mention mode
                       setMentionQuery(query);
-                      setShowMentionList(true);
+                      setIsContextPickerOpen(true);
+                      setPickerTriggerMode('mention');
                     } else {
-                      setShowMentionList(false);
+                      setIsContextPickerOpen(false);
                     }
                   } else {
-                    setShowMentionList(false);
+                    // Only close if we are in mention mode (don't close button mode on typing)
+                    if (pickerTriggerMode === 'mention') {
+                      setIsContextPickerOpen(false);
+                    }
                   }
                 }}
                 placeholder={isListening ? 'Listening...' : "Describe your dashboard..."}
@@ -999,9 +1001,33 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                 {/* Upload Button - Icon only */}
                 <button
                   onClick={handleFileUpload}
-                  className="p-2 flex items-center justify-center border border-white/30 rounded-md"
+                  className="p-2 flex items-center justify-center border border-white/30 rounded-md text-gray-400 hover:text-white transition-colors"
+                  title="Upload file"
                 >
                   <Upload className="w-4 h-4" />
+                </button>
+
+                {/* Project Context Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Toggle picker
+                    if (isContextPickerOpen && pickerTriggerMode === 'button') {
+                      setIsContextPickerOpen(false);
+                    } else {
+                      setIsContextPickerOpen(true);
+                      setPickerTriggerMode('button');
+                      // Ensure assets are loaded
+                      if (projectId && projectAssets.length === 0) {
+                        fetchProjectAssets(projectId).then(setProjectAssets);
+                      }
+                    }
+                  }}
+                  className={`project-context-trigger p-2 flex items-center justify-center border border-white/30 rounded-md text-gray-400 hover:text-white transition-colors ${isContextPickerOpen && pickerTriggerMode === 'button' ? 'bg-white/10 text-white' : ''
+                    }`}
+                  title="Project Context"
+                >
+                  <FileStack className="w-4 h-4" />
                 </button>
 
                 {/* Template Button - commented out (not functionable)
@@ -1020,7 +1046,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                     onClick={() => setDropdownOpen(!dropdownOpen)}
                     className={`p-2 flex items-center justify-center gap-1 rounded-md transition-all duration-200 ${selectedDataSource
                       ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
-                      : 'border border-white/30'
+                      : 'border border-white/30 text-gray-400 hover:text-white'
                       }`}
                     aria-expanded={dropdownOpen}
                     aria-haspopup="true"

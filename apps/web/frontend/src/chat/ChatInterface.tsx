@@ -721,7 +721,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     <div className="flex flex-col h-full min-h-0 bg-muted">
 
       {/* Messages Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 space-y-4">
         {messages.map((message, index) => {
           const isUser = message.role === "user";
           const isSystem = message.role === "system";
@@ -741,7 +741,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               <div
                 className={`chat-enter flex ${isUser ? "justify-end" : "justify-start"}`}
               >
-                <div className={`max-w-[90%] flex gap-2 ${bubbleLayoutClass}`}>
+                <div className={`max-w-[90%] min-w-0 flex gap-2 ${bubbleLayoutClass}`}>
                   <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${avatarClass}`}>
                     {isUser ? (
                       <User className="w-3 h-3 text-white" />
@@ -754,7 +754,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                     )}
                   </div>
 
-                  <div className={`rounded-xl text-sm whitespace-pre-wrap break-words ${bubbleBgClass}`}>
+                  <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words ${bubbleBgClass}`}>
                     {message.attachment && (
                       <div className="mb-2">
                         <span
@@ -800,10 +800,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         aria-label="Open dashboard"
                         onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
-                        className={`group w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between ${message.content ? 'mt-2' : ''}`}
+                        className={`group w-full max-w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between ${message.content ? 'mt-2' : ''}`}
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-white truncate">
+                          <div className="text-sm font-medium text-white truncate" title={message.dashboardCard.dashboardTitle || "Dashboard"}>
                             {message.dashboardCard.dashboardTitle || "Dashboard"}
                           </div>
                           <div className="text-xs text-white/70 mt-0.5 truncate">Source: {message.dashboardCard.sourceFileName}</div>

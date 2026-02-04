@@ -86,7 +86,7 @@ interface ChatState {
   messages: Message[];
 
   // File state
-  uploadedFile: UploadedFile | null;
+  uploadedFiles: UploadedFile[];
   currentConversationId: string | null;
 
   // Processing state
@@ -126,7 +126,10 @@ interface ChatState {
   setIsTyping: (typing: boolean) => void;
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
-  setUploadedFile: (file: UploadedFile | null | ((prev: UploadedFile | null) => UploadedFile | null)) => void;
+  addFiles: (files: UploadedFile[]) => void;
+  removeFile: (fileId: string) => void;
+  clearFiles: () => void;
+  updateFile: (fileId: string, updates: Partial<UploadedFile>) => void;
   setCurrentConversationId: (conversationId: string | null) => void;
   setDropdownOpen: (open: boolean) => void;
   setSelectedDataSource: (source: string) => void;
@@ -167,7 +170,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   inputValue: "",
   isTyping: false,
   messages: initialMessages,
-  uploadedFile: null,
+  uploadedFiles: [],
   currentConversationId: null,
   isProcessing: false,
   currentWorkflowStep: null,
@@ -193,8 +196,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addMessage: (message) => set((state) => ({
     messages: [...state.messages, message]
   })),
-  setUploadedFile: (file) => set((state) => ({
-    uploadedFile: typeof file === 'function' ? file(state.uploadedFile) : file
+  addFiles: (files) => set((state) => {
+    const currentLength = state.uploadedFiles.length;
+    const newLength = currentLength + files.length;
+    if (newLength > 5) {
+      console.warn('Maximum 5 files allowed');
+      return state;
+    }
+    const existingIds = new Set(state.uploadedFiles.map(f => f.fileID));
+    const uniqueFiles = files.filter(f => !existingIds.has(f.fileID));
+    return {
+      uploadedFiles: [...state.uploadedFiles, ...uniqueFiles]
+    };
+  }),
+  removeFile: (fileId) => set((state) => ({
+    uploadedFiles: state.uploadedFiles.filter(f => f.fileID !== fileId)
+  })),
+  clearFiles: () => set({ uploadedFiles: [] }),
+  updateFile: (fileId, updates) => set((state) => ({
+    uploadedFiles: state.uploadedFiles.map(f => f.fileID === fileId ? { ...f, ...updates } : f)
   })),
   setCurrentConversationId: (conversationId) => set({ currentConversationId: conversationId }),
   setDropdownOpen: (open) => set({ dropdownOpen: open }),
@@ -220,9 +240,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       role: "user",
       content: content.trim(),
       timestamp: new Date(),
-      attachment: get().uploadedFile ? {
+      attachment: get().uploadedFiles.length > 0 ? {
         kind: "csv",
-        name: get().uploadedFile!.filename
+        name: get().uploadedFiles.length === 1
+          ? get().uploadedFiles[0].filename
+          : `${get().uploadedFiles.length} files`
       } : undefined,
       template: get().selectedTemplate || undefined,
     };
@@ -237,7 +259,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[]) => {
     const state = get();
-    const { uploadedFile, setUploadedFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
+    const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
 
     // Create new AbortController for this processing session
     const abortController = new AbortController();
@@ -248,7 +270,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Text-only message path: allow theme change after initial dashboard shown, only if currently light
     // @mentioned files should use Q&A path (they're already in conversation)
-    const isTextOnly = !uploadedFile || uploadedFile.status !== 'uploaded' || uploadedFile.isFromMention;
+    const hasUploadedFiles = uploadedFiles.some(f => f.status === 'uploaded' && !f.isFromMention);
+    const isTextOnly = !hasUploadedFiles;
     const detectedTheme = detectThemeChange(content);
     if (isTextOnly && hasShownInitialDashboard && dashboardTheme === 'light' && detectedTheme) {
       console.log('Theme change detected:', detectedTheme);
@@ -325,16 +348,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // 1. Fresh upload (no conversationId yet)
         // 2. Explicitly @mentioned (isFromMention = true)
         // Don't show if just a follow-up prompt on existing file
-        const isFromMention = currentConversationId && uploadedFile?.isFromMention;
-        const isFreshUpload = uploadedFile?.fileID && !uploadedFile.conversationId;
-        const shouldShowChip = uploadedFile && (isFreshUpload || isFromMention);
+        const hasFileContext = uploadedFiles.length > 0 && uploadedFiles.some(f => (f.fileID && !f.conversationId) || f.isFromMention);
+        const firstFile = uploadedFiles[0];
 
         const userMessage: Message = {
           id: Date.now().toString(),
           role: "user",
           content: content.trim(),
           timestamp: new Date(),
-          attachment: shouldShowChip ? { kind: "csv", name: uploadedFile.filename } : undefined,
+          attachment: hasFileContext ? { kind: "csv", name: uploadedFiles.length === 1 ? firstFile.filename : `${uploadedFiles.length} files` } : undefined,
           template: get().selectedTemplate || undefined,
         };
         addMessage(userMessage);
@@ -344,9 +366,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       setIsProcessing(true);
       
       // Update file status to processing to show loading indicator in chip
-      if (uploadedFile) {
-        setUploadedFile((prev) => prev ? { ...prev, status: 'processing' } : prev);
-      }
+      uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'processing' }));
 
       try {
         // Use projectId from parameter (required)
@@ -357,50 +377,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
 
         // Only attach asset content if this is a NEW file upload, not an @mention of existing file
-        // If uploadedFile.isFromMention is true, it was selected from @mention dropdown (already in conversation)
-        // Skip attachment to prevent duplicates
+        const freshUploads = uploadedFiles.filter(f =>
+          f.fileID && !f.isFromMention && !f.conversationId && f.status === 'uploaded'
+        );
+
         let assetContents: ConversationChatRequest['user_node_contents'] = undefined;
-        let assetId: string | null = null;
+        let assetId: string | null = freshUploads[0]?.fileID ?? null;
 
-        const isExistingAssetMention = currentConversationId && uploadedFile?.isFromMention;
-
-        // Only attach if:
-        // 1. File ID exists
-        // 2. Not an @mention of existing file (already in conversation)
-        // 3. File is FRESH (no conversationId yet in this session)
-        // processed files will have conversationId set, so we skip them
-        if (uploadedFile?.fileID && !isExistingAssetMention && !uploadedFile.conversationId) {
-          // Fresh upload OR no existing conversation - attach the asset
+        const assetContentsList: ConversationChatRequest['user_node_contents'] = [];
+        for (const file of freshUploads) {
           try {
             const { fileService } = await import('@/services/fileService');
-            const assetResponse = await fileService.getAsset(uploadedFile.fileID);
+            const assetResponse = await fileService.getAsset(file.fileID);
             if (assetResponse.success && assetResponse.asset) {
               const assetData = assetResponse.asset;
-              assetId = assetData.asset_id;
-              assetContents = [
-                {
-                  type: 'asset',
-                  data: {
-                    asset_id: assetData.asset_id,
-                    file_id: assetData.file_id,
-                    s3_bucket: assetData.s3_bucket,
-                    s3_key: assetData.s3_key,
-                    extension: assetData.extension,
-                    filename: assetData.filename,
-                  }
+              assetContentsList.push({
+                type: 'asset',
+                data: {
+                  asset_id: assetData.asset_id,
+                  file_id: assetData.file_id,
+                  s3_bucket: assetData.s3_bucket,
+                  s3_key: assetData.s3_key,
+                  extension: assetData.extension,
+                  filename: assetData.filename,
                 }
-              ] as ConversationChatRequest['user_node_contents'];
+              });
             }
           } catch (error) {
             console.warn('Failed to fetch asset data for QnA:', error);
           }
-        } else if (isExistingAssetMention) {
-          console.log('Skipping asset attachment - file selected from @mention (already in conversation):', uploadedFile?.fileID);
         }
-        // Build user node metadata for asset selection
+        if (assetContentsList.length > 0) {
+          assetContents = assetContentsList;
+        }
+
+        const allFileIds = uploadedFiles.map(f => f.fileID).filter(Boolean);
         const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
           ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds }
-          : { asset_selection: 'all' as const };
+          : allFileIds.length > 0
+            ? { asset_selection: 'explicit' as const, selected_asset_ids: allFileIds }
+            : { asset_selection: 'all' as const };
 
         // Call processing service with file attachment if available
         const startResult = await processingService.runProcessing(
@@ -433,9 +449,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               // This prevents ProjectPage from showing "Generating Dashboard"
               // Keep status as 'uploaded' until QnA completes
               if (workflowStatus === 'error') {
-                if (uploadedFile) {
-                  setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
-                }
+                uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
               }
 
               if (workflowStatus === 'error' || workflowStatus === 'stopped') {
@@ -474,16 +488,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 // Set the latest dashboard as selected and update processedData
                 if (dashboardId) {
                   set({ selectedDashboardId: dashboardId });
-                  // Update processedData with the new dashboard data
-                  setUploadedFile((prev) => prev ? {
-                    ...prev,
-                    status: 'processed',
-                    processedData: finalResult.data.dashboard_data
-                  } : prev);
+                  // Update processedData with the new dashboard data (first file for display)
+                  const firstFile = get().uploadedFiles[0];
+                  if (firstFile) {
+                    updateFile(firstFile.fileID, { status: 'processed', processedData: finalResult.data.dashboard_data });
+                  }
                 }
 
+                const firstFile = get().uploadedFiles[0];
                 const restoredMessages = conversationNodesToMessages(conversation, {
-                  sourceFileName: uploadedFile?.filename || 'dashboard',
+                  sourceFileName: firstFile?.filename || 'dashboard',
                 });
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
@@ -498,7 +512,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     role: 'assistant',
                     content: "",
                     dashboardCard: {
-                      sourceFileName: uploadedFile?.filename || "dashboard",
+                      sourceFileName: get().uploadedFiles[0]?.filename || "dashboard",
                       dashboardId: ""
                     },
                     timestamp: new Date(),
@@ -516,7 +530,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   get().setMessages(restoredMessages);
                 }
                 // Update file status to processed to hide chip
-                setUploadedFile((prev) => prev ? { ...prev, status: 'processed' } : prev);
+                get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'processed' }));
               } catch (error) {
                 console.error('Failed to load conversation for Q&A response:', error);
                 // Fallback to workflow status metadata
@@ -538,10 +552,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           } else if (finalResult.data?.status === 'error') {
             const errorMsg = finalResult.data?.error || 'An error occurred while processing your question.';
-            // Set error status for file chip
-            if (uploadedFile) {
-              setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
-            }
+            uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
             updateMessages((prev) => ([
               ...prev,
               {
@@ -566,10 +577,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       } catch (error) {
         console.error('Q&A processing error:', error);
-        // Set error status for file chip
-        if (uploadedFile) {
-          setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
-        }
+        uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
         updateMessages((prev) => ([
           ...prev,
           {
@@ -587,6 +595,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     // Check if user message with this content already exists
+    const firstUploadedFile = uploadedFiles[0];
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content !== content.trim()) {
       // User message doesn't exist, add it
@@ -595,8 +604,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: "user",
         content: content.trim(),
         timestamp: new Date(),
-        // Always attach file if available
-        attachment: { kind: "csv", name: uploadedFile.filename },
+        attachment: uploadedFiles.length > 0 ? { kind: "csv", name: uploadedFiles.length === 1 ? firstUploadedFile.filename : `${uploadedFiles.length} files` } : undefined,
         template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
@@ -608,62 +616,53 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setIsProcessing(true);
 
     try {
-      // Start processing with user prompt
-      setUploadedFile({ ...uploadedFile, status: 'processing' });
-      // Prioritize projectIdParam when provided, fallback to uploadedFile.projectId
-      const projectId = projectIdParam || uploadedFile.projectId;
+      // Start processing with user prompt - set all files to processing
+      set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, status: 'processing' as const })) }));
+      const projectId = projectIdParam || firstUploadedFile.projectId;
       if (!projectId) {
         throw new Error('Project context missing for uploaded file');
       }
 
-      console.log('Starting processing for fileID:', uploadedFile.fileID);
-      // Fetch full asset data if not already available
-      let assetData: any = null;
-      if (uploadedFile.fileID) {
+      console.log('Starting processing for fileIDs:', uploadedFiles.map(f => f.fileID));
+      const freshUploadsForProcessing = uploadedFiles.filter(f =>
+        f.fileID && !f.isFromMention && !f.conversationId
+      );
+      const assetContentsList: ConversationChatRequest['user_node_contents'] = [];
+      for (const file of freshUploadsForProcessing) {
         try {
           const { fileService } = await import('@/services/fileService');
-          const assetResponse = await fileService.getAsset(uploadedFile.fileID);
+          const assetResponse = await fileService.getAsset(file.fileID);
           if (assetResponse.success && assetResponse.asset) {
-            assetData = assetResponse.asset;
+            const assetData = assetResponse.asset;
+            assetContentsList.push({
+              type: 'asset',
+              data: {
+                asset_id: assetData.asset_id,
+                file_id: assetData.file_id,
+                s3_bucket: assetData.s3_bucket,
+                s3_key: assetData.s3_key,
+                extension: assetData.extension,
+                filename: assetData.filename,
+              }
+            });
           }
         } catch (error) {
           console.warn('Failed to fetch asset data:', error);
         }
       }
-
-      // Only attach asset content if this is a NEW file upload, not an @mention of existing file
-      // If uploadedFile.isFromMention is true, it was selected from @mention dropdown (already in conversation)
-      const existingConversationId = uploadedFile.conversationId || currentConversationId;
-      const isExistingAssetMention = existingConversationId && uploadedFile?.isFromMention;
-
-      const assetContents = uploadedFile && assetData && !isExistingAssetMention ? [
-        {
-          type: 'asset',
-          data: {
-            asset_id: assetData.asset_id,
-            file_id: assetData.file_id,
-            s3_bucket: assetData.s3_bucket,
-            s3_key: assetData.s3_key,
-            extension: assetData.extension,
-            filename: assetData.filename,
-          }
-        }
-      ] as ConversationChatRequest['user_node_contents'] : undefined;
-
-      if (isExistingAssetMention) {
-        console.log('File processing: Skipping asset attachment - file selected from @mention:', uploadedFile?.fileID);
-      }
-
-      // Build user node metadata for asset selection
+      const assetContents = assetContentsList.length > 0 ? assetContentsList : undefined;
+      const allFileIdsForMeta = get().uploadedFiles.map(f => f.fileID).filter(Boolean);
       const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
         ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds }
-        : { asset_selection: 'all' as const };
+        : allFileIdsForMeta.length > 0
+          ? { asset_selection: 'explicit' as const, selected_asset_ids: allFileIdsForMeta }
+          : { asset_selection: 'all' as const };
 
       const startResult = await processingService.runProcessing(
         projectId,
-        uploadedFile.fileID,
+        firstUploadedFile.fileID,
         content,
-        uploadedFile.conversationId || currentConversationId || undefined,
+        firstUploadedFile.conversationId || currentConversationId || undefined,
         assetContents,
         userNodeMetadata
       );
@@ -672,28 +671,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
         const conversationId = startResult.data?.conversation_id;
         if (conversationId) {
-          setUploadedFile((prev) => prev ? { ...prev, conversationId } : prev);
+          set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, conversationId })), currentConversationId: conversationId }));
           setCurrentConversationId(conversationId);
         }
         console.log('Processing started, beginning polling...');
-        // Poll for completion
         const finalResult = await processingService.pollProcessingStatus(
-          uploadedFile.fileID,
+          firstUploadedFile.fileID,
           projectId,
           conversationId,
           (status) => {
-            // Update status based on workflow status
             const workflowStatus = status.data?.workflow_status?.status;
             if (workflowStatus === 'processing') {
-              setUploadedFile((prev) => prev ? { ...prev, status: 'processing' } : prev);
+              set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, status: 'processing' as const })) }));
             } else if (workflowStatus === 'error' || workflowStatus === 'stopped') {
-              setUploadedFile((prev) => prev ? { ...prev, status: workflowStatus === 'stopped' ? 'processed' : 'error' } : prev);
+              const newStatus = workflowStatus === 'stopped' ? 'processed' : 'error';
+              set((s) => ({
+                uploadedFiles: s.uploadedFiles.map(f => ({ ...f, status: newStatus }))
+              }));
             }
             if (workflowStatus === 'stopped') {
               setIsProcessing(false);
               setIsTyping(false);
             }
-            // Track current workflow step
             const step = status.data?.workflow_status?.metadata?.step;
             if (step) {
               setCurrentWorkflowStep(step);
@@ -706,10 +705,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         console.log('Final polling result:', finalResult);
 
         if (finalResult.data?.success && finalResult.data?.status === 'completed') {
-          // Check if response contains dashboard data or is a Q&A response
           if (finalResult.data?.dashboard_data) {
-            // Dashboard response
-            setUploadedFile((prev) => prev ? { ...prev, status: 'processed', processedData: finalResult.data?.dashboard_data } : prev);
+            const files = get().uploadedFiles;
+            if (files.length > 0) {
+              updateFile(files[0].fileID, { status: 'processed', processedData: finalResult.data?.dashboard_data });
+            }
             // First successful generation: show initial loading for 10s, then mark shown
             if (!get().hasShownInitialDashboard) {
               set({ isInitialLoading: true });
@@ -732,15 +732,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
               // Set the latest dashboard as selected and update processedData
               if (dashboardId) {
                 set({ selectedDashboardId: dashboardId });
-                // Update processedData with the new dashboard data
-                setUploadedFile((prev) => prev ? {
-                  ...prev,
-                  processedData: finalResult.data.dashboard_data
-                } : prev);
+                const files = get().uploadedFiles;
+                if (files.length > 0) {
+                  updateFile(files[0].fileID, { processedData: finalResult.data.dashboard_data });
+                }
               }
 
+              const currentFiles = get().uploadedFiles;
               const restoredMessages = conversationNodesToMessages(conversation, {
-                sourceFileName: uploadedFile.filename,
+                sourceFileName: currentFiles[0]?.filename ?? 'dashboard',
               });
               if (restoredMessages.length) {
                 get().setMessages(restoredMessages);
@@ -759,7 +759,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   role: 'assistant',
                   content: "",
                   dashboardCard: {
-                    sourceFileName: uploadedFile.filename,
+                    sourceFileName: get().uploadedFiles[0]?.filename ?? "dashboard",
                     dashboardId: ""
                   },
                   timestamp: new Date(),
@@ -805,19 +805,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           }
         } else {
-          // Set error status if processing failed or returned error
           if (finalResult.data?.status === 'error' || !finalResult.success) {
-            setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
+            get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
           }
-          await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
+          await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);
         }
       } else {
-        await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
+        await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);
       }
     } catch (error) {
       console.error('Processing error:', error);
-      setUploadedFile((prev) => prev ? { ...prev, status: 'error' } : prev);
-      await generateAIResponse(content, null, updatedMessages, updateMessages, uploadedFile?.filename);
+      get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
+      await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);
     } finally {
       setIsTyping(false);
       setIsProcessing(false);
@@ -835,11 +834,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       abortController.abort();
     }
 
-    // Call stop API if we have a conversation ID
     if (currentConversationId) {
       try {
-        // Get projectId from uploadedFile or state
-        const projectId = state.uploadedFile?.projectId;
+        const projectId = state.uploadedFiles[0]?.projectId;
         if (projectId) {
           const { conversationService } = await import('@/services/conversationService');
           await conversationService.stopWorkflow(currentConversationId, projectId);
@@ -861,7 +858,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     inputValue: "",
     isTyping: false,
     messages: initialMessages,
-    uploadedFile: null,
+    uploadedFiles: [],
     currentConversationId: null,
     isProcessing: false,
     currentWorkflowStep: null,
@@ -874,7 +871,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   }),
 
   selectDashboard: async (dashboardId: string, projectId: string) => {
-    const { currentConversationId, setUploadedFile } = get();
+    const { currentConversationId, updateFile, uploadedFiles } = get();
     if (!currentConversationId) return;
 
     try {
@@ -885,9 +882,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         dashboardId
       );
 
-      if (response?.dashboard_data) {
+      if (response?.dashboard_data && uploadedFiles.length > 0) {
         set({ selectedDashboardId: dashboardId });
-        setUploadedFile(prev => prev ? { ...prev, processedData: response.dashboard_data } : prev);
+        updateFile(uploadedFiles[0].fileID, { processedData: response.dashboard_data });
       }
     } catch (error) {
       console.error('Failed to load dashboard:', error);

@@ -76,9 +76,11 @@ export default function ProjectPage() {
       setIsRenaming(false);
     }
   };
-  const uploadedFile = useChatStore((s) => s.uploadedFile);
+  const uploadedFiles = useChatStore((s) => s.uploadedFiles);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
-  const hasPolledStatus = uploadedFile?.status === 'processing' || uploadedFile?.status === 'processed' || uploadedFile?.status === 'error';
+  const hasPolledStatus = uploadedFiles.some(f =>
+    f.status === 'processing' || f.status === 'processed' || f.status === 'error'
+  );
   
   // Key insight: Show dashboard if we have processedData from previous build,
   // even when a new file is uploaded (status='uploaded'). 
@@ -136,7 +138,8 @@ export default function ProjectPage() {
           conversationId,
           processedData: dashboardResponse.dashboard_data,
         };
-        useChatStore.getState().setUploadedFile(restoredFile);
+        useChatStore.getState().clearFiles();
+        useChatStore.getState().addFiles([restoredFile]);
         if (dashboardResponse.dashboard_id) {
           useChatStore.getState().setSelectedDashboardId(dashboardResponse.dashboard_id);
         }
@@ -204,15 +207,12 @@ export default function ProjectPage() {
   }, [projectId, hydrateConversation, toast]);
   
   // Sync processedData from store to local state
-  // IMPORTANT: Only UPDATE processedData when new dashboard data arrives
-  // Never clear it when uploadedFile.processedData becomes undefined
-  // This preserves previous dashboard when uploading new files
   useEffect(() => {
-    if (uploadedFile?.processedData) {
-      setProcessedData(uploadedFile.processedData);
+    const processedFile = uploadedFiles.find(f => f.processedData);
+    if (processedFile?.processedData) {
+      setProcessedData(processedFile.processedData);
     }
-    // processedData is intentionally NOT cleared here to preserve previous dashboard
-  }, [uploadedFile?.processedData]);
+  }, [uploadedFiles]);
 
   return (
     <div className="min-h-screen bg-muted">
@@ -370,7 +370,7 @@ export default function ProjectPage() {
                 // Prioritize showing dashboard if it exists, even during Q&A processing
                 // This preserves the view during Q&A mode while only new dashboard generation shows loading
                 <DashboardPreview processedData={processedData} className="h-full overflow-y-auto" />
-              ) : uploadedFile?.status === 'processing' ? (
+              ) : uploadedFiles.some(f => f.status === 'processing') ? (
                 // Only show loading if no existing dashboard (fresh upload generating first dashboard)
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
               ) : isInitialLoading ? (

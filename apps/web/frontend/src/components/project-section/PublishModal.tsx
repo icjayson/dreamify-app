@@ -28,7 +28,7 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
   const [copied, setCopied] = useState(false);
   const originalFileBlob = useChatStore(s => s.originalFileBlob);
   const originalFileName = useChatStore(s => s.originalFileName);
-  const uploadedFile = useChatStore(s => s.uploadedFile);
+  const uploadedFiles = useChatStore(s => s.uploadedFiles);
 
   // Detect desktop screens so we only mount one container: Sheet (mobile) or Dialog (desktop)
   const [isDesktop, setIsDesktop] = useState<boolean>(false);
@@ -139,8 +139,9 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
 
   const handleOpenPublishedDashboard = () => {
     try {
-      if (uploadedFile?.processedData) {
-        sessionStorage.setItem('project_preview_data', JSON.stringify(uploadedFile.processedData));
+      const processedFile = uploadedFiles.find(f => f.processedData);
+      if (processedFile?.processedData) {
+        sessionStorage.setItem('project_preview_data', JSON.stringify(processedFile.processedData));
       }
     } catch (_e) {
       // ignore errors

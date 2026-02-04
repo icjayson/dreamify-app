@@ -191,7 +191,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     isTyping,
     isProcessing,
     messages,
-    uploadedFile,
+    uploadedFiles,
+    addFiles,
+    removeFile,
+    clearFiles,
     dropdownOpen,
     selectedDataSource,
     isListening,
@@ -202,7 +205,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     setIsTyping,
     setMessages,
     addMessage,
-    setUploadedFile,
     setDropdownOpen,
     setSelectedDataSource,
     setIsListening,
@@ -224,7 +226,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     setAttachedCsvSummary,
     setAttachedCsvRaw,
     uploadFile,
-    removeFile,
     parseCsvToSummary,
     readCsvRawPreview,
     clearAttachment,
@@ -353,22 +354,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         }
       }, 10);
 
-      // Build final mentioned asset IDs:
-      // - Include any @mentioned assets from dropdown
-      // - Auto-include uploadedFile ONLY if it's a fresh upload (no conversationId yet)
-      // This tells backend which files to process for the INITIAL upload
       let finalMentionedIds = [...mentionedAssetIds];
+      uploadedFiles.forEach(file => {
+        if (file.fileID && !finalMentionedIds.includes(file.fileID)) {
+          finalMentionedIds.push(file.fileID);
+        }
+      });
 
-      // Check if file is fresh (no conversationId assigned yet)
-      const isFreshUpload = uploadedFile?.fileID && !uploadedFile.conversationId;
-
-      if (isFreshUpload && !finalMentionedIds.includes(uploadedFile.fileID)) {
-        finalMentionedIds.push(uploadedFile.fileID);
-      }
-
-      // Pass mentionedAssetIds for selective asset processing
       await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds);
-      // Clear mentioned IDs after sending
+      clearFiles();
       setMentionedAssetIds([]);
     } finally {
       isSendingRef.current = false;
@@ -402,16 +396,25 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         isFromMention: true,
       };
 
-      // IMPORTANT: When selecting a file via @mention:
-      // - Keep conversation history (don't reset)
-      // - Simply replace uploadedFile to show selected file in UI
-      // - Backend will receive the new file as part of user message
+      if (uploadedFiles.length >= 5) {
+        toast({
+          title: "Maximum files reached",
+          description: "You can only add up to 5 files at a time.",
+          variant: "destructive"
+        });
+        setShowMentionList(false);
+        return;
+      }
+      if (uploadedFiles.some(f => f.fileID === assetData.asset_id)) {
+        toast({
+          title: "File already added",
+          description: `${selectedAsset.name} is already in your file list.`,
+        });
+        setShowMentionList(false);
+        return;
+      }
 
-      // Update store with selected file
-      // IMPORTANT: The existing processFileWithMessage flow (useChatStore.ts lines 536-566)
-      // will fetch asset data again using fileService.getAsset() to construct assetContents
-      // This ensures the workflow receives proper asset context with s3_bucket, s3_key, etc.
-      setUploadedFile(newFile);
+      addFiles([newFile]);
 
       // Track this asset as @mentioned for selective processing
       setMentionedAssetIds(prev =>
@@ -470,18 +473,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         status: 'uploading' as const
       };
 
-      // IMPORTANT: When uploading a new file in the same project:
-      // - Keep conversation history (don't reset)
-      // - Keep previous files (don't delete)
-      // - Replace uploadedFile state to show new file in UI
-      // - Backend will handle multiple assets in conversation
-
-      // Simply replace the uploadedFile state to show new upload progress
-      setUploadedFile(newFile);
+      if (uploadedFiles.length >= 5) {
+        toast({
+          title: "Maximum files reached",
+          description: "You can only upload up to 5 files at a time.",
+          variant: "destructive"
+        });
+        return;
+      }
+      addFiles([newFile]);
 
       const res: UploadResponse = await fileService.uploadFile(file, { projectId: projectId ?? undefined });
       if (!res.success || !res.fileID || res.asset?.status !== 'uploaded') {
-        setUploadedFile({ ...newFile, status: 'error' });
+        removeFile('pending');
+        addFiles([{ ...newFile, status: 'error' }]);
         toast({
           title: "Upload failed",
           description: res.error || `Unexpected upload status: ${res.asset?.status ?? 'unknown'}`,
@@ -490,17 +495,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         return;
       }
 
-      // DON'T delete previous file - keep all files in project for reference
-      // Each file can create its own dashboard
-      // Old code: if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
-      //   void fileService.deleteFile(uploadedFile.fileID);
-      // }
-
       const fallbackFilename = res.filename ?? file.name;
       const fallbackSize = res.size ?? file.size;
       const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
 
-      setUploadedFile({
+      removeFile('pending');
+      addFiles([{
         fileID: res.fileID,
         filename: fallbackFilename,
         size: fallbackSize,
@@ -509,7 +509,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         projectId: res.asset?.project_id,
         rowCount: res.rowCount,
         columnCount: res.columnCount
-      });
+      }]);
       try {
         // Persist original file for CSV export if it's CSV
         if ((file.name.split('.').pop() || '').toLowerCase() === 'csv') {
@@ -524,13 +524,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       } catch (_err) { }
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
     } catch (_e) {
-      setUploadedFile({
+      removeFile('pending');
+      addFiles([{
         fileID: 'error',
         filename: file.name,
         size: file.size,
         ext: (file.name.split('.').pop() || '').toLowerCase(),
         status: 'error'
-      });
+      }]);
       toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
     }
   };
@@ -592,8 +593,17 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     e.preventDefault();
     setDragOver(false);
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+    if (uploadedFiles.length + files.length > 5) {
+      toast({
+        title: "Too many files",
+        description: `Maximum 5 files allowed. You can add ${5 - uploadedFiles.length} more file(s).`,
+        variant: "destructive"
+      });
+      return;
+    }
+    for (const file of files) {
       await processFileUpload(file);
     }
   };
@@ -658,12 +668,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
 
   const removeUploadedFile = async (fileID: string) => {
-    // Only delete from S3 if it's a fresh upload, not an @mention
-    // @mentioned files are existing project assets - don't delete them!
-    if (!uploadedFile?.isFromMention) {
-      await removeFile(fileID);
+    const file = uploadedFiles.find(f => f.fileID === fileID);
+    if (file && !file.isFromMention) {
+      try {
+        await fileService.deleteFile(fileID);
+      } catch (_e) {
+        // best-effort; ignore
+      }
     }
-    setUploadedFile(null);
+    removeFile(fileID);
   };
 
 
@@ -795,12 +808,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               {/* Inline Rolling Text under the last user message that started analysis */}
               {message.role === 'user'
                 && index === messages.length - 1
-                && uploadedFile
-                && (isProcessing || uploadedFile.status === 'processing') && (
+                && uploadedFiles.some(f => f.status === 'processing')
+                && isProcessing && (
                   <div className="flex justify-start">
                     <RollingText
-                      isActive={isProcessing || uploadedFile.status === 'processing'}
-                      stopSignal={uploadedFile.status === 'processed' || (!isProcessing && !isTyping)}
+                      isActive={isProcessing || uploadedFiles.some(f => f.status === 'processing')}
+                      stopSignal={uploadedFiles.every(f => f.status !== 'processing') || (!isProcessing && !isTyping)}
                       successText=""
                       currentStep={currentWorkflowStep}
                     />
@@ -879,13 +892,17 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               </div>
             )}
 
-            {/* File Context Chip - show when file is attached and active */}
-            {uploadedFile && uploadedFile.status !== 'processed' && uploadedFile.status !== 'error' && (
-              <div className="mb-3">
-                <FilePreviewChip
-                  file={uploadedFile}
-                  onRemove={() => removeUploadedFile(uploadedFile.fileID)}
-                />
+            {/* File Context Chips - horizontal scroll when files are attached */}
+            {uploadedFiles.length > 0 && (
+              <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                {uploadedFiles.map((file) => (
+                  <div key={file.fileID} className="flex-shrink-0">
+                    <FilePreviewChip
+                      file={file}
+                      onRemove={() => removeUploadedFile(file.fileID)}
+                    />
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1047,7 +1064,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
               */}
-                {(isProcessing || uploadedFile?.status === 'processing') ? (
+                {(isProcessing || uploadedFiles.some(f => f.status === 'processing')) ? (
                   <Button
                     onClick={() => stopGeneration()}
                     className="button-gradient p-3"
@@ -1072,11 +1089,24 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           ref={fileInputRef}
           type="file"
           accept=".csv,.json,.xlsx,.xls"
+          multiple
           className="hidden"
           onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            await processFileUpload(file);
+            const files = Array.from(e.target.files || []);
+            if (files.length === 0) return;
+            if (uploadedFiles.length + files.length > 5) {
+              toast({
+                title: "Too many files",
+                description: "Maximum 5 files allowed. Please remove some files first.",
+                variant: "destructive"
+              });
+              e.target.value = '';
+              return;
+            }
+            for (const file of files) {
+              await processFileUpload(file);
+            }
+            e.target.value = '';
           }}
         />
       </div>

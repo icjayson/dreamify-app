@@ -229,13 +229,14 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     dropdownOpen,
     isListening,
     detectedLanguage,
-    uploadedFile,
+    uploadedFiles,
+    addFiles,
+    removeFile,
     isProcessing,
     selectedTemplate,
     setInputValue,
     setSelectedDataSource,
     setDropdownOpen,
-    setUploadedFile,
     setIsListening,
     setDetectedLanguage,
     setSelectedTemplate,
@@ -247,8 +248,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const {
     uploadState,
     uploadFile,
-    validateClientFile,
-    removeFile
+    validateClientFile
   } = useFileStore();
 
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -346,42 +346,37 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       return;
     }
     if (!inputValue.trim()) return;
-    if (!uploadedFile || uploadedFile.status !== 'uploaded') {
-      toast({ title: "Upload required", description: "Upload a CSV before asking a question.", variant: "destructive" });
+    if (uploadedFiles.length === 0 || !uploadedFiles.some(f => f.status === 'uploaded')) {
+      toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
       return;
     }
 
-    // Create user message with file attachment immediately
+    const firstUploadedFile = uploadedFiles.find(f => f.status === 'uploaded');
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content: inputValue.trim(),
       timestamp: new Date(),
-      attachment: uploadedFile ? {
+      attachment: uploadedFiles.length > 0 ? {
         kind: "csv",
-        name: uploadedFile.filename
+        name: uploadedFiles.length === 1 ? firstUploadedFile!.filename : `${uploadedFiles.length} files`
       } : undefined,
       template: selectedTemplate || undefined,
     };
 
-    // Add message to store synchronously before switching views
     addMessage(userMessage);
 
-    // Ensure projectId exists before navigation
-    if (!uploadedFile.projectId) {
+    if (!firstUploadedFile?.projectId) {
       toast({
         title: "Project error",
-        description: "Project context missing. Please try uploading the file again.",
+        description: "No project context found. Please try uploading again.",
         variant: "destructive"
       });
       return;
     }
 
-    // Start processing in background
-    void processFileWithMessage(inputValue.trim(), onProcessedDataChange, uploadedFile.projectId);
-
-    // Navigate to project workspace for unified chat + dashboard flow
-    navigate(`/workspace/project?projectId=${uploadedFile.projectId}`);
+    void processFileWithMessage(inputValue.trim(), onProcessedDataChange, firstUploadedFile.projectId);
+    navigate(`/workspace/project?projectId=${firstUploadedFile.projectId}`);
   };
 
   const handleFileUpload = (files: FileList | null) => {
@@ -508,49 +503,47 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         status: 'uploading' as const
       };
 
-      // IMPORTANT: When uploading a new file:
-      // - Keep conversation history (don't reset)
-      // - Keep previous files (don't delete)
-      // - Replace uploadedFile state to show new file in UI
-      // - Backend will handle multiple assets in conversation
-
-      // Simply replace the uploadedFile state to show new upload progress
-      setUploadedFile(newFile);
+      if (uploadedFiles.length >= 5) {
+        toast({
+          title: "Maximum files reached",
+          description: "You can only upload up to 5 files at a time.",
+          variant: "destructive"
+        });
+        return;
+      }
+      addFiles([newFile]);
 
       const res: UploadResponse = await fileService.uploadFile(file);
       if (!res.success || !res.fileID || !res.ext || res.size === undefined || !res.filename) {
-        setUploadedFile({ ...newFile, status: 'error' });
+        removeFile('pending');
+        addFiles([{ ...newFile, status: 'error' }]);
         toast({ title: "Upload failed", description: res.error || 'Upload failed', variant: "destructive" });
         return;
       }
-
-      // DON'T delete previous file - keep all files in project for reference
-      // Each file can create its own dashboard
-      // Old code: if (uploadedFile && uploadedFile.fileID && uploadedFile.fileID !== 'pending') {
-      //   void fileService.deleteFile(uploadedFile.fileID);
-      // }
 
       const fallbackFilename = res.filename ?? file.name;
       const fallbackSize = res.size ?? file.size;
       const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
 
-      setUploadedFile({
+      removeFile('pending');
+      addFiles([{
         fileID: res.fileID,
         filename: fallbackFilename,
         size: fallbackSize,
         ext: fallbackExt,
         status: 'uploaded',
         projectId: res.asset?.project_id
-      });
+      }]);
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
     } catch (_e) {
-      setUploadedFile({
+      removeFile('pending');
+      addFiles([{
         fileID: 'error',
         filename: file.name,
         size: file.size,
         ext: (file.name.split('.').pop() || '').toLowerCase(),
         status: 'error'
-      });
+      }]);
       toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
     }
   };
@@ -646,8 +639,15 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   };
 
   const removeUploadedFile = async (fileID: string) => {
-    await removeFile(fileID);
-    setUploadedFile(null);
+    const file = uploadedFiles.find(f => f.fileID === fileID);
+    if (file && !file.isFromMention) {
+      try {
+        await fileService.deleteFile(fileID);
+      } catch (_e) {
+        // best-effort; ignore
+      }
+    }
+    removeFile(fileID);
   };
 
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -731,13 +731,17 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                 </div>
               )}
 
-              {/* File Context Chip - show when file is attached and active */}
-              {uploadedFile && uploadedFile.status !== 'processed' && uploadedFile.status !== 'error' && (
-                <div className="mb-3">
-                  <FilePreviewChip
-                    file={uploadedFile}
-                    onRemove={() => removeUploadedFile(uploadedFile.fileID)}
-                  />
+              {/* File Context Chips - horizontal scroll when files are attached */}
+              {uploadedFiles.length > 0 && (
+                <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  {uploadedFiles.map((file) => (
+                    <div key={file.fileID} className="flex-shrink-0">
+                      <FilePreviewChip
+                        file={file}
+                        onRemove={() => removeUploadedFile(file.fileID)}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
 

@@ -516,10 +516,6 @@ def _process_conversation_background(
         
         # Store primary_asset for later use in error handling and completion
         primary_asset = assets[0] if assets else None
-        
-        # Use first file path for backward compatibility with workflow (for now)
-        # TODO: Update workflow to accept multiple file paths
-        temp_file_path = temp_file_paths[0] if temp_file_paths else None
 
         workflow = AnalyzeCSVWorkflow()
         _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
@@ -538,7 +534,7 @@ def _process_conversation_background(
                     break
         
         result = workflow.execute(
-            file_path=temp_file_path,
+            file_paths=temp_file_paths,  # Pass all file paths for multi-file analysis
             conversation=conversation,
             dashboards=dashboards_cache,
             user_prompt=user_prompt,

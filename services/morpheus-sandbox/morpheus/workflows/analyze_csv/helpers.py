@@ -115,10 +115,11 @@ Reasoning: {route_decision.get('reasoning')}""")
     # 6. Available Context
     context_items = []
     
-    # File info
-    if state.file_path:
-        file_exists = os.path.exists(state.file_path) if state.file_path else False
-        context_items.append(f"- Data file: {state.file_path} ({'exists' if file_exists else 'missing'})")
+    # File info - show all available files
+    if state.file_paths:
+        for idx, fp in enumerate(state.file_paths):
+            file_exists = os.path.exists(fp) if fp else False
+            context_items.append(f"- Data file {idx + 1}: {fp} ({'exists' if file_exists else 'missing'})")
     
     # User assets count
     asset_count = len(state.user_state.user_assets)

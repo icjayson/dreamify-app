@@ -114,8 +114,18 @@ class AgentState(BaseModel):
     
     # Input/Output
     input_prompt: str = Field(description="User's request/question")
-    file_path: Optional[str] = Field(default=None, description="Path to CSV file being analyzed")
+    file_paths: List[str] = Field(default_factory=list, description="Paths to CSV/data files being analyzed")
     output: Optional[Dict[str, Any]] = Field(default=None, description="Final workflow output")
+    
+    @property
+    def file_path(self) -> Optional[str]:
+        """Backward compatibility: return first file path."""
+        return self.file_paths[0] if self.file_paths else None
+    
+    @property
+    def has_multiple_files(self) -> bool:
+        """Check if multiple files are available for analysis."""
+        return len(self.file_paths) > 1
     
     # Config
     conversation_id: Optional[str] = None

@@ -1052,14 +1052,15 @@ Please inform the user that a data file is required to generate a dashboard, and
     
     def execute(
         self,
-        file_path: str,
-        conversation: Dict[str, Any],
-        dashboards: Dict[str, Any],
+        file_paths: Optional[List[str]] = None,
+        conversation: Dict[str, Any] = None,
+        dashboards: Dict[str, Any] = None,
         user_prompt: Optional[str] = None,
         conversation_uri: Optional[str] = None,
         conversation_backup_uri: Optional[str] = None,
         post_status_fn: Optional[callable] = None,
         assets: Optional[List[Dict[str, Any]]] = None,
+        file_path: Optional[str] = None,  # Deprecated, for backward compat
     ):
         """
         Execute the CSV analysis workflow.
@@ -1067,7 +1068,7 @@ Please inform the user that a data file is required to generate a dashboard, and
         Delegates to StatefulAnalyzeCSVWorkflow for actual execution.
         
         Args:
-            file_path: Path to CSV file
+            file_paths: List of paths to CSV/data files
             conversation: Conversation dict from S3
             dashboards: Existing dashboards dict
             user_prompt: User's request/question
@@ -1075,19 +1076,27 @@ Please inform the user that a data file is required to generate a dashboard, and
             conversation_backup_uri: S3 backup URI for conversation (for live sync)
             post_status_fn: Optional callback to post status updates (from server.py)
             assets: Optional list of filtered assets from server.py
+            file_path: Deprecated - use file_paths instead
             
         Returns:
             Dict with workflow output in legacy format
         """
+        # Handle backward compatibility: convert single file_path to list
+        if file_paths is None:
+            if file_path:
+                file_paths = [file_path]
+            else:
+                file_paths = []
+        
         logger.info(
-            "Executing workflow (delegating to stateful implementation) for file: %s (conversation=%s)",
-            file_path,
-            conversation.get("conversation_id"),
+            "Executing workflow (delegating to stateful implementation) with %d file(s) (conversation=%s)",
+            len(file_paths),
+            conversation.get("conversation_id") if conversation else None,
         )
         
         # Delegate to stateful workflow
         return self._stateful_workflow.execute(
-            file_path=file_path,
+            file_paths=file_paths,
             conversation=conversation,
             dashboards=dashboards,
             user_prompt=user_prompt,

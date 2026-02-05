@@ -92,14 +92,15 @@ class StatefulAnalyzeCSVWorkflow:
     
     def execute(
         self,
-        file_path: str,
-        conversation: Dict[str, Any],
-        dashboards: Dict[str, Any],
+        file_paths: Optional[List[str]] = None,
+        conversation: Dict[str, Any] = None,
+        dashboards: Dict[str, Any] = None,
         user_prompt: Optional[str] = None,
         conversation_uri: Optional[str] = None,
         conversation_backup_uri: Optional[str] = None,
         post_status_fn: Optional[callable] = None,
         assets: Optional[List[Dict[str, Any]]] = None,
+        file_path: Optional[str] = None,  # Deprecated, for backward compatibility
     ) -> Dict[str, Any]:
         """
         Main entry point for workflow execution.
@@ -108,7 +109,7 @@ class StatefulAnalyzeCSVWorkflow:
         converts the final state to output format.
         
         Args:
-            file_path: Path to CSV file to analyze
+            file_paths: List of paths to CSV/data files to analyze
             conversation: Conversation dict from S3
             dashboards: Dict of dashboard_id -> dashboard_data
             user_prompt: Optional user prompt (extracted from conversation if not provided)
@@ -116,12 +117,21 @@ class StatefulAnalyzeCSVWorkflow:
             conversation_backup_uri: Optional backup S3 URI
             post_status_fn: Optional callback to post status updates (from server.py)
             assets: Optional list of filtered assets from server.py (avoids duplicate extraction)
+            file_path: Deprecated - use file_paths instead
             
         Returns:
             Dict with workflow output in legacy format for backward compatibility
         """
+        # Handle backward compatibility: convert single file_path to list
+        if file_paths is None:
+            if file_path:
+                file_paths = [file_path]
+            else:
+                file_paths = []
+        
         logger.info(
-            f"Starting workflow execution for conversation {conversation.get('conversation_id')}"
+            f"Starting workflow execution for conversation {conversation.get('conversation_id')} "
+            f"with {len(file_paths)} file(s)"
         )
         
         # Store callback for use in workflow loop
@@ -129,7 +139,7 @@ class StatefulAnalyzeCSVWorkflow:
         
         # Build initial state
         state = self._build_initial_state(
-            file_path=file_path,
+            file_paths=file_paths,
             conversation=conversation,
             dashboards=dashboards,
             user_prompt=user_prompt,
@@ -587,7 +597,7 @@ class StatefulAnalyzeCSVWorkflow:
     
     def _build_initial_state(
         self,
-        file_path: str,
+        file_paths: List[str],
         conversation: Dict[str, Any],
         dashboards: Dict[str, Any],
         user_prompt: Optional[str] = None,
@@ -599,7 +609,7 @@ class StatefulAnalyzeCSVWorkflow:
         Build initial AgentState from inputs.
         
         Args:
-            file_path: Path to CSV file
+            file_paths: List of paths to CSV/data files
             conversation: Conversation dict from S3
             dashboards: Existing dashboards dict
             user_prompt: User's request/question
@@ -610,7 +620,7 @@ class StatefulAnalyzeCSVWorkflow:
         Returns:
             Initialized AgentState
         """
-        logger.info("Building initial state")
+        logger.info(f"Building initial state with {len(file_paths)} file(s)")
         
         # Use passed assets if available (already filtered by server.py)
         # Otherwise fall back to extracting from conversation
@@ -645,7 +655,7 @@ class StatefulAnalyzeCSVWorkflow:
             working_memory=working_memory,
             workflow_history=workflow_history,
             input_prompt=effective_prompt,
-            file_path=file_path,
+            file_paths=file_paths,
             conversation_id=conversation.get("conversation_id"),
             project_id=conversation.get("project_id"),
             conversation_uri=conversation_uri,
@@ -654,7 +664,7 @@ class StatefulAnalyzeCSVWorkflow:
         
         logger.info(
             f"Initial state created: {len(user_state.user_assets)} assets, "
-            f"{len(user_state.conversation_history)} history nodes"
+            f"{len(file_paths)} file(s), {len(user_state.conversation_history)} history nodes"
         )
         
         return state

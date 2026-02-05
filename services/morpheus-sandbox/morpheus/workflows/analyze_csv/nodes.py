@@ -355,10 +355,12 @@ def node_start(state: AgentState, **kwargs) -> AgentState:
         f"{len(state.user_state.conversation_history)} conversation nodes"
     )
     
-    # Validate file path if provided
-    if state.file_path:
-        file_exists = os.path.exists(state.file_path)
-        logger.info(f"File path: {state.file_path} (exists: {file_exists})")
+    # Validate file paths if provided
+    if state.file_paths:
+        logger.info(f"Files to analyze: {len(state.file_paths)}")
+        for idx, fp in enumerate(state.file_paths):
+            file_exists = os.path.exists(fp)
+            logger.info(f"  File {idx + 1}: {fp} (exists: {file_exists})")
     
     return state
 
@@ -507,15 +509,29 @@ Based on the above context, decide your next action."""
     messages = [SystemMessage(content=system_prompt)]
     
     # Add file path instruction if available
-    if state.file_path:
-        file_exists = os.path.exists(state.file_path) if state.file_path else False
-        is_placeholder = state.file_path and "qa_" in state.file_path if state.file_path else False
+    if state.file_paths:
+        # Filter to valid, non-placeholder files
+        valid_files = [
+            fp for fp in state.file_paths 
+            if fp and os.path.exists(fp) and "qa_" not in fp
+        ]
         
-        if file_exists and not is_placeholder:
-            if mode == "dashboard":
-                instruction = f"User wants to: {state.input_prompt}\n\nCSV file available at: {state.file_path}"
+        if valid_files:
+            if len(valid_files) == 1:
+                # Single file - backward compatible prompt
+                file_info = f"CSV file available at: {valid_files[0]}"
             else:
-                instruction = f"User question: {state.input_prompt}\n\nCSV file available at: {state.file_path}"
+                # Multiple files - enhanced prompt with all file paths
+                files_list = "\n".join([f"- File {i+1}: {fp}" for i, fp in enumerate(valid_files)])
+                file_info = f"""Multiple CSV files available for analysis:
+{files_list}
+
+Load ALL files and combine/analyze as needed for the user's request. You can use pandas to merge, concatenate, or analyze files together."""
+            
+            if mode == "dashboard":
+                instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
+            else:
+                instruction = f"User question: {state.input_prompt}\n\n{file_info}"
             
             messages.append(HumanMessage(content=instruction))
     
@@ -599,19 +615,32 @@ Based on the above context, decide your next action."""
                 # Clear the pending response
                 state.working_memory.tool_outputs.pop("pending_qa_response", None)
             else:
-                # No pending response - force retry
+                # No pending response - force retry with first available file
                 logger.warning("Empty response from model in REASONING node - forcing retry")
+                
+                # Build retry query for all files
+                retry_file = state.file_path if state.file_path else "unknown"
+                retry_query = f"""# Retry: Load and analyze data file(s)
+import pandas as pd
+
+# Load primary file
+df = pd.read_csv('{retry_file}')
+print("File loaded:", '{retry_file}')
+print(df.head())
+print(df.info())
+print(df.columns.tolist())"""
+                
                 action_request = ActionRequest(
                     action_type="EXECUTE_TOOL",
                     tool_name="python_repl",
-                    arguments={"query": f"# Retry: Load and analyze {state.file_path}\nimport pandas as pd\ndf = pd.read_csv('{state.file_path}')\nprint(df.head())\nprint(df.info())\nprint(df.columns.tolist())"},
+                    arguments={"query": retry_query},
                     reasoning="Model returned empty response, retrying with data load...",
                 )
                 
                 # Create a dummy tool call for execution
                 state.working_memory.tool_outputs["pending_tool_calls"] = [{
                     "name": "python_repl",
-                    "args": {"query": f"# Retry: Load and analyze {state.file_path}\nimport pandas as pd\ndf = pd.read_csv('{state.file_path}')\nprint(df.head())\nprint(df.info())\nprint(df.columns.tolist())"},
+                    "args": {"query": retry_query},
                     "id": f"retry_{state.iteration}"
                 }]
         

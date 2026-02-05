@@ -750,7 +750,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         SYS
                       </span>
                     ) : (
-                      <img src="/logo-watermark.png" alt="Morpheus" className="h-3 w-auto object-contain" />
+                      <img src="/logo-watermark.png" alt="Dreamify" className="h-3 w-auto object-contain" />
                     )}
                   </div>
 

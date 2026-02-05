@@ -327,11 +327,11 @@ export default function ProjectPage() {
             {!shouldShowDashboard ? (
               <BlankState
                 subtexts={[
-                  "Upload a CSV file and let Morpheus build dashboard",
+                  "Upload a CSV file and let Dreamify build your dashboard",
                   "Connect Google Sheets, GA4, Meta, Stripe, and more",
-                  "Describe your dashboard — Morpheus designs it instantly",
+                  "Describe your dashboard — Dreamify designs it instantly",
                   "Cinematic motion and clear storytelling for your data",
-                  "Try now to observe Morpheus's capabilities",
+                  "Try now to experience Dreamify's capabilities",
                 ]}
                 intervalMs={1000}
                 onWatchTutorial={() => window.open('/tutorial', '_blank')}

@@ -160,7 +160,7 @@ const initialMessages: Message[] = [
   {
     id: "1",
     role: "assistant",
-    content: "Hi! I'm Morpheus, your analytics intern. Upload data, visualise motion-rich dashboard in seconds!",
+    content: "Hi! I'm Dreamify, your analytics intern. Upload data, visualise motion-rich dashboard in seconds!",
     timestamp: new Date()
   }
 ];

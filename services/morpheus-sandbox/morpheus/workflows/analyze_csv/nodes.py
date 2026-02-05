@@ -151,7 +151,7 @@ Use semantic tokens in ALL styling objects (NOT hex/HSL except trendUp/trendDown
 - border-card-color: for card borders
 
 Available Themes (choose ONE for entire dashboard):
-- monochrome, ocean, forest, sunset, midnight, sakura
+- monochrome
 
 CRITICAL THEME REQUIREMENT:
 - Choose ONE theme for the entire dashboard

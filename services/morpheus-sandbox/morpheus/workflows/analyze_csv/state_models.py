@@ -110,7 +110,7 @@ class AgentState(BaseModel):
     current_node: str = Field(default="START", description="Current node in state graph")
     status: Literal["RUNNING", "FINISHED", "ERROR", "STOPPED"] = Field(default="RUNNING", description="Workflow execution status")
     iteration: int = Field(default=0, description="Current iteration count")
-    max_iterations: int = Field(default=35, description="Maximum iterations before timeout")
+    max_iterations: int = Field(default=60, description="Maximum iterations before timeout")
     
     # Input/Output
     input_prompt: str = Field(description="User's request/question")

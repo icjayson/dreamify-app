@@ -77,6 +77,102 @@ CRITICAL TOOL USAGE:
 - Never make up tool names. Only use tools listed above.
 - If you receive an error about an unknown tool, STOP and use 'Python_REPL' instead.
 
+CRITICAL WORKFLOW REQUIREMENT:
+==============================
+You MUST use tools BEFORE generating any JSON output. Follow this workflow:
+
+1. ALWAYS start by calling Python_REPL to load and inspect the CSV file
+   - Use the file path provided in the user's message
+   - Load: df = pd.read_csv(file_path)
+   - Inspect: df.head(), df.info(), df.columns.tolist()
+   - Analyze data types, missing values, distributions
+
+2. Use Python_REPL again to compute ALL metrics and datasets
+   - Calculate aggregations: SUM, AVG, COUNT, groupby operations
+   - Store results in variables and PRINT them
+   - Extract all values you will embed in the dashboard JSON
+
+3. Use get_available_chart_types tool to see available chart options
+
+4. ONLY AFTER steps 1-3, generate the dashboard JSON with embedded computed data
+
+ROBUST DATA INGESTION (REQUIRED STEPS):
+=======================================
+1. Try reading with `encoding='utf-8'` then fallback to `encoding='latin-1'` or `chardet`
+2. Use delimiter sniffing (csv.Sniffer or `sep=None`, `engine='python'`) to detect `, ; \t |`
+3. Use `on_bad_lines='skip'` for problematic rows
+4. For large files (>100k rows), use chunked reading (`chunksize`) or sample-mode (first N rows)
+5. Coerce numeric-like strings with currency/thousands cleaning (regex)
+
+CARDINALITY GUIDELINES:
+=======================
+- Low (≤10): Ideal for color encoding, pie charts
+- Medium (11-50): Good for bar charts, filters
+- High (>50): Requires top-N filtering or hierarchical grouping
+
+CHART RECOMMENDATIONS:
+======================
+- Produce charts sorted by priority (high, medium, low)
+- Include evidence: {n_rows, cardinality_x, correlation_xy (nullable), trend_detected (nullable)}
+- Consider adding filters: date range, category multi-select, top-N, comparison toggles
+
+DATASET FORMATS BY CHART TYPE:
+==============================
+For line/area charts (time series):
+  {"label": "2022-03-31", "value": 101683.85}
+
+For bar charts (categorical):
+  {"label": "Electronics", "value": 25000}
+
+For pie/donut charts:
+  {"label": "Category A", "value": 45.5}
+
+NOTE: Do NOT include "color" fields in datasets. Frontend applies theme colors.
+
+TABLE FORMATTING REQUIREMENTS (CRITICAL):
+=========================================
+- For ALL tables, transform raw CSV column names into natural, human-readable labels
+- Examples of transformations:
+  - `orderId` → `Order ID`
+  - `qty` → `Quantity`
+  - `amount` → `Amount`
+  - `status` → `Status`
+  - `category` → `Category`
+  - `date` → `Date`
+  - `user_id` → `User ID`
+  - `subscription_type` → `Subscription Type`
+  - `is_churned` → `Churned`
+- Use proper capitalization and spacing
+- Make column names descriptive and professional
+- NEVER use raw CSV field names in table columns 
+
+COLUMN-LEVEL PROFILING (For Each Column):
+=========================================
+Identify data types:
+- `numeric`: int64, float64 (measures, KPIs)
+- `categorical`: object with <1000 unique values (dimensions, filters)
+- `temporal`: datetime or parseable date strings (time axis)
+- `boolean`: True/False, Yes/No, 0/1 patterns
+- `text`: High-cardinality strings (descriptions, IDs)
+- `geographic`: Country, State, City, ZIP patterns
+- `currency`: $ € £ symbols or decimal patterns
+
+Track for each column:
+- n_rows, n_nonnull, missing_rate
+- cardinality (unique values count)
+- distribution (for numeric: min/max/mean/median; for categorical: top values)
+
+KEY METRICS COMPUTATION:
+========================
+Prioritize metrics based on:
+1. Business relevance: Revenue, counts, rates, growth
+2. Statistical significance: High variance, strong correlations
+3. Actionability: Metrics that drive decisions
+
+For numeric columns, check keyword heuristics:
+- revenue/sales/amount/price → compute SUM, AVERAGE, COUNT
+- If time column exists → compute growth rates
+
 🚫 CRITICAL DATA EMBEDDING REQUIREMENT 🚫
 =========================================
 NO SQL QUERIES ALLOWED IN JSON OUTPUT:
@@ -85,6 +181,46 @@ NO SQL QUERIES ALLOWED IN JSON OUTPUT:
 - The datasets[].data[] arrays MUST contain actual numbers derived from your Python execution
 - NEVER use placeholders, query strings, or SQL statements in the output
 - All values in datasets[].data[] must be final computed numbers from Python
+
+⚠️ ANTI-HALLUCINATION RULES (MANDATORY) ⚠️
+==========================================
+1. NEVER FABRICATE DATA:
+   - Every single number in your JSON MUST come from a print() statement in Python REPL
+   - If you cannot find a value in your tool outputs, DO NOT include that metric/chart
+   - An INCOMPLETE dashboard with REAL data is BETTER than a complete one with FAKE data
+
+2. CITE YOUR SOURCES:
+   - Before writing any value, mentally trace it back to a specific print() output
+   - If you cannot find the source, the value is fabricated - DO NOT USE IT
+
+3. NO SYNTHETIC EXAMPLES:
+   - Do NOT use example values like 1000, 5000, 10000 or other round numbers
+   - Do NOT use placeholder dates, names, or categories
+   - ONLY use exact values from your Python analysis
+
+4. 🚨 STRING DATA RULES (CRITICAL) 🚨:
+   - ALL labels, names, categories MUST come EXACTLY from the CSV file or tool output
+   - NEVER invent product names, seller names, category names, or any text labels
+   - Before using a string label, print it from the data: print(df['column'].unique())
+   - Copy labels EXACTLY as they appear - do not paraphrase or summarize
+   - Common fabrications to AVOID:
+     * "Product A", "Product B", "Category 1" → USE ACTUAL NAMES FROM DATA
+     * "John Smith", "Jane Doe" → USE ACTUAL NAMES FROM DATA
+     * "Seller A", "Region X" → USE ACTUAL NAMES FROM DATA
+   - If you need top-N items, print and copy the EXACT strings:
+     * top_products = df.groupby('product_name')['revenue'].sum().nlargest(10)
+     * print(top_products)  # Copy these EXACT names
+
+5. MULTIPLE FILES REQUIREMENT:
+   - When given multiple files, you MUST load and analyze ALL files
+   - Do NOT generate a dashboard from just one file when multiple are provided
+   - Use pd.read_csv() on EACH file path provided
+
+6. DATA VALIDATION:
+   - Print all values that will go into the dashboard BEFORE generating JSON
+   - Store computed values in variables and reference them
+   - Example: total = df['amount'].sum(); print(f"Total: {total}")
+   - For string data: print the actual values you will use as labels
 
 ✅ CORRECT FORMAT (Use This):
 {
@@ -108,25 +244,6 @@ NO SQL QUERIES ALLOWED IN JSON OUTPUT:
     }
   ]
 }
-
-CRITICAL WORKFLOW REQUIREMENT:
-==============================
-You MUST use tools BEFORE generating any JSON output. Follow this workflow:
-
-1. ALWAYS start by calling Python_REPL to load and inspect the CSV file
-   - Use the file path provided in the user's message
-   - Load: df = pd.read_csv(file_path)
-   - Inspect: df.head(), df.info(), df.columns.tolist()
-   - Analyze data types, missing values, distributions
-
-2. Use Python_REPL again to compute ALL metrics and datasets
-   - Calculate aggregations: SUM, AVG, COUNT, groupby operations
-   - Store results in variables and PRINT them
-   - Extract all values you will embed in the dashboard JSON
-
-3. Use get_available_chart_types tool to see available chart options
-
-4. ONLY AFTER steps 1-3, generate the dashboard JSON with embedded computed data
 
 LAYOUT RULES (MANDATORY):
 =========================
@@ -159,15 +276,6 @@ CRITICAL THEME REQUIREMENT:
 - ALL cards MUST use the SAME theme value
 - Example: {"theme": "monochrome", "title": "title-color", ...}
 
-TABLE FORMATTING:
-=================
-Transform raw CSV column names to human-readable labels:
-- orderId → Order ID
-- qty → Quantity
-- amount → Amount
-- createdAt → Created Date
-
-NEVER use raw CSV field names in table columns.
 
 OUTPUT FORMAT:
 ==============
@@ -283,7 +391,12 @@ Generate JSON with this EXACT structure:
   "insights": [
     "Revenue increased by 12.27% compared to last month",
     "Top performing category is Electronics with $25M"
-  ]
+  ],
+  "data_quality": {
+    "total_records": 128975,
+    "completeness": 98.5,
+    "duplicates": 12
+  }
 }
 ```
 
@@ -298,6 +411,20 @@ CRITICAL OUTPUT RULES:
 7. All datasets[].data[] must contain objects with "label" and "value" keys
 8. All numeric values must be actual numbers from your Python computations
 9. Include layout (x, y, w, h, minW, minH) for every metric, chart, and table
+
+VALIDATION CHECKLIST (Before Output):
+=====================================
+✓ metrics[] with: id, title, value, change, trend, layout, styling (with theme)
+✓ charts[] with: id, chart_type, title, layout, datasets, config, styling (with theme), reasoning
+✓ tables[] with: id, title, layout, columns, data, styling (with theme)
+✓ insights[] with at least 3 insight strings
+✓ data_quality with: total_records, completeness, duplicates
+✓ ALL datasets contain actual computed data - NO empty arrays
+✓ ALL table columns use human-readable names
+✓ ALL styling objects include "theme" field with SAME value
+✓ Layout h >= minH for all components
+
+If ANY field is missing, your response is INCOMPLETE.
 
 REMEMBER:
 =========
@@ -540,6 +667,22 @@ Load ALL files and combine/analyze as needed for the user's request. You can use
     conversation_history = _build_conversation_history_from_executions(state)
     messages.extend(conversation_history)
     
+    # 🔥 ANTI-HALLUCINATION: If we previously flagged insufficient tool usage, add reminder
+    force_more_tools_msg = state.working_memory.tool_outputs.get("force_more_tools")
+    if force_more_tools_msg:
+        messages.append(HumanMessage(content=force_more_tools_msg))
+        # Clear the flag after adding to prevent repeated additions
+        state.working_memory.tool_outputs.pop("force_more_tools", None)
+    
+    # 🔥 DATA GROUNDING: If we have tool executions and in dashboard mode, add grounding reminder
+    if mode == "dashboard" and len(state.working_memory.python_execution_results) >= 1:
+        grounding_reminder = """
+REMINDER: When you generate your dashboard JSON:
+- Use ONLY values that came from your Python analysis above
+- Every number must be traceable to a print() statement you executed
+- If you did not compute a value with Python, do NOT include it in the dashboard"""
+        messages.append(HumanMessage(content=grounding_reminder))
+    
     # Call LLM
     try:
         response = model_with_tools.invoke(messages)
@@ -566,39 +709,80 @@ Load ALL files and combine/analyze as needed for the user's request. You can use
                 state.working_memory.tool_outputs["pending_qa_response"] = str(response.content)
             
         elif response.content:
-            # Agent provided final output
-            action_request = ActionRequest(
-                action_type="FINISH",
-                reasoning="Agent provided final output",
+            # Agent provided final output - BUT first check if we have enough SUCCESSFUL tool executions
+            successful_tool_count = sum(
+                1 for result in state.working_memory.python_execution_results 
+                if result.get("success", False)
             )
+            min_required = _get_minimum_tool_executions_required(state)
             
-            # Store output in working memory
-            if mode == "dashboard":
-                # Extract JSON from content
-                json_data = _extract_json_from_content(response.content)
+            if mode == "dashboard" and successful_tool_count < min_required:
+                # Not enough successful tool executions - force more analysis
+                logger.warning(
+                    f"LLM tried to finish with only {successful_tool_count} successful tool calls "
+                    f"(minimum {min_required} required for {len(state.file_paths)} file(s))"
+                )
                 
-                if json_data:
-                    state.working_memory.dashboard_json = json_data
-                    
-                    # Generate summary with simple LLM call
-                    try:
-                        summary = _generate_summary_for_dashboard(model, json_data, state.input_prompt)
-                        state.working_memory.dashboard_summary = summary
-                        logger.info(f"Generated summary: {summary[:50]}...")
-                    except Exception as e:
-                        logger.warning(f"Failed to generate summary: {e}, using default")
-                        charts_count = len(json_data.get("charts", []))
-                        metrics_count = len(json_data.get("metrics", []))
-                        state.working_memory.dashboard_summary = (
-                            f"I've created a dashboard with {charts_count} chart(s) and {metrics_count} metric(s) "
-                            f"based on your data analysis request."
-                        )
-                else:
-                    # No JSON found - text response
-                    logger.info("No JSON found in dashboard mode, treating as Q&A")
-                    state.working_memory.qa_response = str(response.content)
+                # Force the LLM to use more tools
+                grounding_context = _build_data_grounding_context(state)
+                force_tool_msg = f"""STOP! You have not analyzed the data sufficiently.
+
+You have only made {successful_tool_count} successful tool call(s), but you need at least {min_required} to properly analyze the data.
+
+{grounding_context}
+
+Please use Python_REPL to:
+1. Load ALL files provided
+2. Compute the specific metrics and values you will use in your dashboard
+3. Print ALL values before generating JSON
+
+DO NOT generate the dashboard JSON until you have computed all the values."""
+                
+                action_request = ActionRequest(
+                    action_type="EXECUTE_TOOL",
+                    tool_name="python_repl",
+                    arguments={"query": "# Please continue analyzing the data\nimport pandas as pd\n# Load and analyze files..."},
+                    reasoning="Insufficient tool executions - forcing more analysis"
+                )
+                
+                # Note: Don't actually execute this dummy query - it's just to signal retry
+                # Instead, append message asking for more tools
+                state.working_memory.tool_outputs["force_more_tools"] = force_tool_msg
             else:
-                state.working_memory.qa_response = str(response.content)
+                # Sufficient tool executions - proceed with finish
+                action_request = ActionRequest(
+                    action_type="FINISH",
+                    reasoning="Agent provided final output",
+                )
+                
+                # Store output in working memory
+                if mode == "dashboard":
+                    # Extract JSON from content
+                    json_data = _extract_json_from_content(response.content)
+                    
+                    if json_data:
+                        # Store JSON for validation in node_validation
+                        state.working_memory.dashboard_json = json_data
+                        
+                        # Generate summary with simple LLM call
+                        try:
+                            summary = _generate_summary_for_dashboard(model, json_data, state.input_prompt)
+                            state.working_memory.dashboard_summary = summary
+                            logger.info(f"Generated summary: {summary[:50]}...")
+                        except Exception as e:
+                            logger.warning(f"Failed to generate summary: {e}, using default")
+                            charts_count = len(json_data.get("charts", []))
+                            metrics_count = len(json_data.get("metrics", []))
+                            state.working_memory.dashboard_summary = (
+                                f"I've created a dashboard with {charts_count} chart(s) and {metrics_count} metric(s) "
+                                f"based on your data analysis request."
+                            )
+                    else:
+                        # No JSON found - text response
+                        logger.info("No JSON found in dashboard mode, treating as Q&A")
+                        state.working_memory.qa_response = str(response.content)
+                else:
+                    state.working_memory.qa_response = str(response.content)
         
         else:
             # Empty response - check if we have a pending Q&A response from a previous tool call
@@ -764,6 +948,28 @@ def node_execution(state: AgentState, python_tool=None, **kwargs) -> AgentState:
                             "timestamp": datetime.now().isoformat(),
                         })
                 
+                except SystemExit as e:
+                    # LLM generated code that calls exit() or quit() - handle gracefully
+                    error_msg = f"Code attempted to exit the interpreter (exit() or quit() called). This is not allowed. Please remove any exit() or quit() calls from your code."
+                    logger.warning(f"SystemExit caught in tool execution: {e}")
+                    
+                    state.working_memory.python_execution_results.append({
+                        "tool_name": tool_name,
+                        "tool_call_id": tool_call_id,
+                        "tool_args": tool_args,
+                        "success": False,
+                        "output": error_msg,
+                        "error": error_msg,
+                        "timestamp": datetime.now().isoformat(),
+                    })
+                    
+                    state.working_memory.errors.append({
+                        "tool": tool_name,
+                        "error": error_msg,
+                        "timestamp": datetime.now().isoformat(),
+                    })
+                    state.working_memory.retry_count += 1
+                
                 except Exception as e:
                     error_msg = f"Error executing {tool_name}: {str(e)}"
                     logger.error(error_msg)
@@ -877,10 +1083,10 @@ def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
 
 def node_validation(state: AgentState, **kwargs) -> AgentState:
     """
-    VALIDATION Node: Validate output format and completeness.
+    VALIDATION Node: Validate output format, completeness, and data authenticity.
     
-    Validates that the output meets schema requirements and contains
-    all necessary data.
+    Validates that the output meets schema requirements, contains all necessary data,
+    and checks for data hallucination (fabricated values).
     
     Args:
         state: Current agent state
@@ -904,8 +1110,77 @@ def node_validation(state: AgentState, **kwargs) -> AgentState:
     output_type = state.output.get("type")
     
     if output_type == "dashboard_config":
-        # Validate dashboard JSON
+        # Step 1: Validate dashboard JSON schema
         validation_result = _validate_dashboard_json(state.output.get("data"))
+        
+        # Step 2: Validate data authenticity (anti-hallucination check)
+        if validation_result.get("valid"):
+            dashboard_data = state.output.get("data", {})
+            data_validation = _validate_dashboard_data(dashboard_data, state)
+            
+            # Track validation retry attempts
+            validation_retries = state.working_memory.tool_outputs.get("validation_retries", 0)
+            max_validation_retries = 2
+            
+            # Log warnings and errors
+            if data_validation.get("warnings"):
+                for warning in data_validation["warnings"]:
+                    logger.warning(f"Data validation: {warning}")
+            
+            if data_validation.get("errors"):
+                for error in data_validation["errors"]:
+                    logger.error(f"Data validation error: {error}")
+            
+            # Check for critical issues (likely hallucinated data)
+            has_critical_issues = (
+                len(data_validation.get("errors", [])) > 0 or 
+                len(data_validation.get("warnings", [])) >= 1
+            )
+            
+            if has_critical_issues and validation_retries < max_validation_retries:
+                # Data appears to be fabricated - force retry
+                logger.warning(
+                    f"Dashboard data validation failed (attempt {validation_retries + 1}/{max_validation_retries}). "
+                    f"Likely fabricated data detected. Forcing regeneration."
+                )
+                
+                # Build error message for LLM
+                grounding_context = _build_data_grounding_context(state)
+                issues_list = "\n".join(
+                    [f"- ERROR: {e}" for e in data_validation.get("errors", [])] +
+                    [f"- WARNING: {w}" for w in data_validation.get("warnings", [])]
+                )
+                
+                validation_error_msg = f"""⚠️ YOUR DASHBOARD WAS REJECTED DUE TO DATA ISSUES ⚠️
+
+The following issues were detected - your data appears to be FABRICATED:
+{issues_list}
+
+{grounding_context}
+
+Please REGENERATE the dashboard JSON using ONLY the values from the Python analysis above.
+DO NOT include any values that you cannot trace back to a print() statement.
+It's better to have fewer charts with REAL data than more charts with FAKE data."""
+                
+                # Store for retry
+                state.working_memory.tool_outputs["force_more_tools"] = validation_error_msg
+                state.working_memory.tool_outputs["validation_retries"] = validation_retries + 1
+                
+                # Mark as invalid to trigger retry
+                validation_result = {
+                    "valid": False, 
+                    "error": "Data validation failed - likely fabricated data",
+                    "data_warnings": data_validation.get("warnings", []),
+                    "data_errors": data_validation.get("errors", []),
+                }
+            elif has_critical_issues:
+                # Max retries reached - accept with warning
+                logger.warning("Max validation retries reached, accepting dashboard despite data issues")
+                validation_result["data_warnings"] = data_validation.get("warnings", [])
+            else:
+                # Data validation passed
+                logger.info("Data authenticity validation passed")
+                
     elif output_type == "message":
         # Validate QA response
         validation_result = _validate_qa_response(state.output.get("content"))
@@ -1229,3 +1504,295 @@ def _build_conversation_history_from_executions(state: AgentState) -> list:
         messages = messages[-max_messages:]
     
     return messages
+
+
+def _build_data_grounding_context(state: AgentState) -> str:
+    """
+    Build a summary of all data values extracted from Python REPL outputs,
+    plus actual unique string values from the CSV files.
+    
+    This helps prevent hallucination by giving the LLM a clear reference
+    of what actual values were computed during analysis AND the real
+    string values available in the data.
+    
+    Args:
+        state: Current agent state with tool execution results
+        
+    Returns:
+        String summary of key data points from tool outputs and CSV data
+    """
+    import pandas as pd
+    
+    execution_results = state.working_memory.python_execution_results
+    
+    grounding_lines = []
+    grounding_lines.append("=" * 60)
+    grounding_lines.append("🚨 ALLOWED VALUES - USE ONLY THESE IN YOUR JSON 🚨")
+    grounding_lines.append("=" * 60)
+    
+    # Part 1: Extract unique string values directly from CSV files
+    if state.file_paths:
+        grounding_lines.append("")
+        grounding_lines.append("📋 ACTUAL STRING VALUES FROM YOUR DATA FILES:")
+        grounding_lines.append("-" * 50)
+        grounding_lines.append("Copy these EXACTLY when creating labels/names:")
+        grounding_lines.append("")
+        
+        for file_path in state.file_paths:
+            if file_path and os.path.exists(file_path):
+                try:
+                    df = pd.read_csv(file_path, nrows=1000)  # Read more rows for better coverage
+                    file_name = os.path.basename(file_path)
+                    grounding_lines.append(f"File: {file_name}")
+                    
+                    for col in df.columns:
+                        # Only process string/object columns
+                        if df[col].dtype == 'object':
+                            unique_vals = df[col].dropna().unique()  # ALL unique values
+                            if len(unique_vals) > 0:
+                                # Show all values, comma separated
+                                vals_str = ", ".join([f'"{v}"' for v in unique_vals])
+                                grounding_lines.append(f"  • {col}: {vals_str}")
+                    
+                    grounding_lines.append("")
+                except Exception as e:
+                    logger.warning(f"Could not extract values from {file_path}: {e}")
+    
+    # Part 2: Tool output values
+    if execution_results:
+        grounding_lines.append("")
+        grounding_lines.append("📊 VALUES FROM YOUR PYTHON ANALYSIS:")
+        grounding_lines.append("-" * 50)
+        
+        for idx, result in enumerate(execution_results):
+            if result.get("success") and result.get("output"):
+                output = result.get("output", "")
+                # Truncate very long outputs but keep enough context
+                if len(output) > 2000:
+                    output = output[:2000] + "\n... (truncated)"
+                
+                grounding_lines.append(f"--- Tool Call {idx + 1} Output ---")
+                grounding_lines.append(output)
+                grounding_lines.append("")
+    else:
+        grounding_lines.append("")
+        grounding_lines.append("⚠️ No tool outputs yet - you MUST use Python_REPL first!")
+    
+    grounding_lines.append("=" * 60)
+    grounding_lines.append("⚠️ CRITICAL: If a value is NOT listed above,")
+    grounding_lines.append("   DO NOT use it - it would be FABRICATED!")
+    grounding_lines.append("=" * 60)
+    
+    return "\n".join(grounding_lines)
+
+
+def _get_minimum_tool_executions_required(state: AgentState) -> int:
+    """
+    Determine minimum tool executions required before allowing final response.
+    
+    For dashboard mode with files, requires at least 2 tool executions per file
+    to ensure proper loading and analysis of each file.
+    
+    Args:
+        state: Current agent state
+        
+    Returns:
+        Minimum number of tool executions required
+    """
+    num_files = len(state.file_paths) if state.file_paths else 0
+    
+    if num_files == 0:
+        return 0  # Q&A mode without files
+    else:
+        # Require 2 tool executions per file (load + analyze each)
+        # Minimum of 2 even for single file
+        return max(2, num_files * 2)
+
+
+def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
+    """
+    Validate that dashboard data appears to come from actual tool outputs.
+    
+    This is a heuristic check - we look for signs of hallucinated data,
+    including both numeric values and string labels/names.
+    
+    Args:
+        dashboard_json: Generated dashboard configuration
+        state: Current agent state with tool execution history
+        
+    Returns:
+        Dict with 'valid': bool, 'warnings': list, 'errors': list
+    """
+    import re
+    import pandas as pd
+    
+    warnings = []
+    errors = []
+    
+    # Get all tool output text for reference
+    all_outputs = ""
+    for result in state.working_memory.python_execution_results:
+        if result.get("success") and result.get("output"):
+            all_outputs += result.get("output", "") + "\n"
+    
+    all_outputs_lower = all_outputs.lower()
+    
+    # Also load actual data from CSV files for validation
+    # This is important because LLM reads data directly via pandas
+    all_csv_values = set()
+    for file_path in (state.file_paths or []):
+        if file_path and os.path.exists(file_path):
+            try:
+                df = pd.read_csv(file_path, nrows=1000)  # Read first 1000 rows for validation
+                for col in df.columns:
+                    # Get unique string values from each column
+                    unique_vals = df[col].dropna().astype(str).unique()
+                    for val in unique_vals:
+                        if len(val) >= 3 and not val.replace(",", "").replace(".", "").replace("-", "").isdigit():
+                            all_csv_values.add(val.lower().strip())
+            except Exception as e:
+                logger.warning(f"Could not read {file_path} for validation: {e}")
+    
+    all_csv_values_str = " ".join(all_csv_values)
+    
+    if not all_outputs and not all_csv_values:
+        errors.append("No tool outputs or data files found - dashboard data may be fabricated")
+        return {"valid": False, "warnings": warnings, "errors": errors}
+    
+    # Common generic labels that are likely fabricated if not in tool output
+    # These are words that LLMs tend to make up
+    suspicious_patterns = [
+        r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # "John Smith", "Alice Johnson" pattern
+        r'\bSeller\s+[A-Z]\b',  # "Seller A", "Seller B" pattern
+        r'\bProduct\s+[A-Z]\b',  # "Product A", "Product B" pattern
+        r'\bCategory\s+\d+\b',  # "Category 1", "Category 2" pattern
+    ]
+    
+    def is_label_in_data(label: str) -> bool:
+        """Check if a label appears in tool outputs OR actual CSV data."""
+        if not label or len(label) < 3:
+            return True  # Skip very short labels
+        
+        label_lower = label.lower().strip()
+        
+        # Check in tool outputs
+        if label_lower in all_outputs_lower:
+            return True
+        
+        # Check in actual CSV data values (exact match in set)
+        if label_lower in all_csv_values:
+            return True
+        
+        # Partial match in CSV values (for truncated or slightly different values)
+        if label_lower in all_csv_values_str:
+            return True
+        
+        # Check if it's a common word (dates, months, etc.) - allow these
+        common_words = {
+            'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+            'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+            'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+            'q1', 'q2', 'q3', 'q4', 'total', 'average', 'sum', 'count', 'other', 'unknown',
+        }
+        if label_lower in common_words:
+            return True
+        
+        # Check for date patterns (2022-01, 2023-05-15, etc.)
+        if re.match(r'\d{4}[-/]\d{2}([-/]\d{2})?', label):
+            return True
+        
+        return False
+    
+    def extract_labels_from_data(data: list) -> list:
+        """Extract all string labels from chart data."""
+        labels = []
+        for item in data:
+            if isinstance(item, dict):
+                label = item.get("label") or item.get("name") or item.get("category")
+                if label and isinstance(label, str):
+                    labels.append(label)
+        return labels
+    
+    # Check metrics
+    metrics = dashboard_json.get("metrics", [])
+    for metric in metrics:
+        value = str(metric.get("value", ""))
+        title = metric.get("title", "Unknown")
+        
+        # Extract numeric part from value (e.g., "$1,234.56" -> "1234.56")
+        numbers = re.findall(r'[\d,]+\.?\d*', value)
+        
+        for num in numbers:
+            clean_num = num.replace(",", "")
+            if len(clean_num) > 3:  # Only check significant numbers
+                # Check if this number appears somewhere in tool outputs
+                if clean_num not in all_outputs and num not in all_outputs:
+                    warnings.append(f"Metric '{title}' value '{value}' may be fabricated - not found in tool outputs")
+    
+    # Check charts
+    charts = dashboard_json.get("charts", [])
+    for chart in charts:
+        chart_id = chart.get("id", "unknown")
+        chart_title = chart.get("title", chart_id)
+        datasets = chart.get("datasets", [])
+        
+        for dataset in datasets:
+            data = dataset.get("data", [])
+            dataset_label = dataset.get("label", "unknown")
+            
+            # Extract and validate string labels
+            labels = extract_labels_from_data(data)
+            fabricated_labels = []
+            
+            for label in labels:
+                if not is_label_in_data(label):
+                    fabricated_labels.append(label)
+            
+            # If more than 30% of labels are not found, likely fabricated
+            if labels and len(fabricated_labels) > len(labels) * 0.3:
+                warnings.append(
+                    f"Chart '{chart_title}' dataset '{dataset_label}' has labels not found in data: "
+                    f"{', '.join(fabricated_labels[:5])}{'...' if len(fabricated_labels) > 5 else ''}"
+                )
+            
+            # Count suspiciously round numbers
+            round_count = 0
+            for item in data:
+                val = item.get("value") if isinstance(item, dict) else item
+                if isinstance(val, (int, float)):
+                    # Check if it's a suspiciously round number (divisible by 100 or 1000)
+                    if val > 100 and val % 100 == 0:
+                        round_count += 1
+            
+            if len(data) > 3 and round_count > len(data) * 0.5:
+                warnings.append(f"Chart '{chart_title}' has suspiciously many round numbers - may be fabricated")
+    
+    # Check tables
+    tables = dashboard_json.get("tables", [])
+    for table in tables:
+        table_id = table.get("id", "unknown")
+        table_title = table.get("title", table_id)
+        rows = table.get("rows", []) or table.get("data", [])
+        
+        # Check sample of string values in table rows
+        fabricated_values = []
+        checked_count = 0
+        
+        for row in rows[:10]:  # Check first 10 rows
+            if isinstance(row, dict):
+                for key, val in row.items():
+                    if isinstance(val, str) and len(val) > 3 and not val.replace(",", "").replace(".", "").isdigit():
+                        checked_count += 1
+                        if not is_label_in_data(val):
+                            fabricated_values.append(val)
+        
+        if checked_count > 0 and len(fabricated_values) > checked_count * 0.3:
+            warnings.append(
+                f"Table '{table_title}' has values not found in data: "
+                f"{', '.join(fabricated_values[:3])}{'...' if len(fabricated_values) > 3 else ''}"
+            )
+    
+    valid = len(errors) == 0
+    
+    return {"valid": valid, "warnings": warnings, "errors": errors}
+

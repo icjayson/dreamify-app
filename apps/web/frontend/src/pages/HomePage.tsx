@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn } from "lucide-react";
+import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn, TrendingUp, AlertCircle, LayoutDashboard } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, useAuth, useUser } from "@clerk/clerk-react";
@@ -809,14 +809,24 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
             {/* Quick Start Prompts */}
             <div className="flex flex-col gap-2 mt-4 sm:mt-6 animate-fade-in w-full" style={{ animationDelay: '0s' }}>
               <p className="text-xs text-white/40 text-left ml-1">Quick start prompts:</p>
-              <div className="flex flex-wrap gap-2">
-                {["Act as a Data Analyst: challenge assumptions and list caveats.", "Act as a Growth PM: prioritize the top 3 actions from this data.", "Act as a Sales Ops lead: translate insights into pipeline plays.", "Build a comprehensive dashboard from the connected data source"].map((prompt) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {[
+                  { icon: TrendingUp, text: "Visualize the key trends in this dataset over time." },
+                  { icon: AlertCircle, text: "Identify anomalies or outliers in the data." },
+                  { icon: FileText, text: "Create a summary report of the most important metrics." },
+                  { icon: LayoutDashboard, text: "Build a comprehensive dashboard from connected data." }
+                ].map((item, index) => (
                   <button
-                    key={prompt}
-                    onClick={() => setInputValue(prompt)}
-                    className="px-4 py-2 text-xs bg-primary/20 text-white/40 border border-primary/50 rounded-full hover:bg-primary/40 hover:text-white/80 transition-all duration-200"
+                    key={index}
+                    onClick={() => setInputValue(item.text)}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer group text-left"
                   >
-                    {prompt}
+                    <div className="p-2 rounded-lg bg-primary/20 text-primary group-hover:bg-primary/30 transition-colors">
+                      <item.icon className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs sm:text-sm text-white/70 group-hover:text-white transition-colors line-clamp-2">
+                      {item.text}
+                    </span>
                   </button>
                 ))}
               </div>

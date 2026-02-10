@@ -39,10 +39,6 @@ export const ProblemSection = () => {
             <div aria-hidden className="absolute inset-0 z-10 bg-black/60 opacity-100 transition-opacity duration-300 pointer-events-none group-hover:opacity-0" />
             <div className="flex items-center justify-between gap-4 relative z-20">
               <h1 className="text-3xl md:text-4xl font-semibold font-instrument-serif text-white">Old Way</h1>
-              <button onClick={() => navigate('/login')} className="button-outline px-4 py-2 rounded-lg inline-flex items-center justify-center text-sm group/cta">
-                <span>Log in</span>
-                <span aria-hidden className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/cta:w-4 group-hover/cta:opacity-100 group-hover/cta:ml-2">→</span>
-              </button>
             </div>
             <h3 className="mt-4 text-lg md:text-xl font-medium text-white relative">Static. Slow. Tool-heavy.</h3>
             <p className="mt-0 text-white/60">Weeks of setup, endless dashboards, zero motion.</p>
@@ -73,10 +69,6 @@ export const ProblemSection = () => {
             <div aria-hidden className="absolute inset-0 z-10 bg-black/60 opacity-100 transition-opacity duration-300 pointer-events-none group-hover:opacity-0" />
             <div className="flex items-center justify-between gap-4 relative z-20">
               <h1 className="text-3xl md:text-4xl font-semibold font-instrument-serif text-white">Dreamify Way</h1>
-              <button onClick={() => navigate('/login')} className="button-gradient px-4 py-2 rounded-lg inline-flex items-center justify-center text-sm group/cta">
-                <span>Log in</span>
-                <span aria-hidden className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/cta:w-4 group-hover/cta:opacity-100 group-hover/cta:ml-2">→</span>
-              </button>
             </div>
             <h3 className="mt-4 text-lg md:text-xl font-medium text-white">Instant. Beautiful. Conversational</h3>
             <p className="mt-0 text-white/60">Chat with your data, and Dreamify builds the motion dashboard for you.</p>

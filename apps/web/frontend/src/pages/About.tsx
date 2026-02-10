@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { useAuth } from "@clerk/clerk-react";
 import { MissionSection } from "@/components/homepage-section/mission";
 import { ProblemSection } from "@/components/homepage-section/problem";
 import { FeaturesSection } from "@/components/homepage-section/features";
@@ -7,12 +8,27 @@ import { CTAContainerSection } from "@/components/homepage-section/cta";
 import { FooterSection } from "@/components/homepage-section/footer-section";
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
 import ProjectsSidebar from "@/components/homepage-section/ProjectsSidebar";
+import { useProjects } from "@/hooks/useProjects";
 
 const AboutPage = () => {
   const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
+  const {
+    projects,
+    createNewProject,
+    openProject,
+    renameProject,
+    deleteProject
+  } = useProjects();
 
-  const onGetStarted = () => {
-    navigate("/login");
+  const ctaText = isSignedIn ? "Go to workspace" : "Log in";
+  const ctaLink = isSignedIn ? "/" : "/login";
+  const handleCtaClick = () => {
+    if (isSignedIn) {
+      navigate("/");
+    } else {
+      navigate("/login");
+    }
   };
 
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -43,7 +59,7 @@ const AboutPage = () => {
 
       <main className="relative z-10">
         <div className="relative z-10">
-          <MissionSection />
+          <MissionSection ctaText={ctaText} ctaLink={ctaLink} />
         </div>
         <div className="relative z-10">
           <ProblemSection />
@@ -52,7 +68,7 @@ const AboutPage = () => {
           <FeaturesSection />
         </div>
         <div className="relative z-10">
-          <CTAContainerSection />
+          <CTAContainerSection ctaText={ctaText} onCtaClick={handleCtaClick} />
         </div>
         <div className="relative z-10">
           <FooterSection />
@@ -63,7 +79,11 @@ const AboutPage = () => {
       <ProjectsSidebar
         open={projectsOpen}
         onClose={closeProjects}
-        onNewProject={() => navigate('/workspace/project')}
+        onNewProject={() => createNewProject()}
+        recents={projects}
+        onOpenProject={openProject}
+        onRenameProject={renameProject}
+        onDeleteProject={deleteProject}
       />
     </div>
   );

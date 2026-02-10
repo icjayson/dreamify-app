@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-export function MissionSection() {
+export function MissionSection({ ctaText = "Log in", ctaLink = "/login" }: { ctaText?: string; ctaLink?: string }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -66,10 +66,10 @@ export function MissionSection() {
           style={{ transitionDelay: "320ms" }}
         >
           <Link
-            to="/login"
+            to={ctaLink}
             className="button-gradient px-6 py-3 rounded-lg inline-flex items-center justify-center group"
           >
-            <span>Log in</span>
+            <span>{ctaText}</span>
             <span
               aria-hidden="true"
               className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover:w-4 group-hover:opacity-100 group-hover:ml-2"

@@ -13,7 +13,7 @@ import RecordingBar from '@/components/ui/recording-bar';
 import { useChatStore } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import { fileService, type UploadResponse } from "@/services/fileService";
-import { projectService } from "@/services/projectService";
+import { useProjects } from "@/hooks/useProjects";
 import { Message } from "@/types/message";
 import { FooterSection } from '@/components/homepage-section/footer-section';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
@@ -56,8 +56,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   // Toast hook
   const { toast } = useToast();
 
-  const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+
 
   // Clear chat state on mount to ensure a clean slate
   useEffect(() => {
@@ -65,169 +64,13 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     useFileStore.getState().resetFileState();
   }, []);
 
-  // Fetch projects on mount when signed in
-  useEffect(() => {
-    if (isSignedIn) {
-      console.log('🚀 Initial project fetch on mount...');
-      setIsLoadingProjects(true);
-      projectService.listProjects()
-        .then((response) => {
-          console.log('📋 Initial projects response:', response);
-          if (response.success) {
-            const mappedProjects = response.projects.map((p) => ({
-              id: p.id,
-              title: p.latest_dashboard_id && p.dashboard_title ? p.dashboard_title : "Untitled Project",
-            }));
-            console.log('✅ Initial mapped projects:', mappedProjects);
-            setProjects(mappedProjects);
-          } else {
-            toast({
-              title: "Failed to load projects",
-              description: response.error || "Could not fetch your projects",
-              variant: "destructive",
-            });
-          }
-        })
-        .catch((error) => {
-          console.error('❌ Error fetching projects:', error);
-          toast({
-            title: "Error",
-            description: "Failed to load projects. Please try again.",
-            variant: "destructive",
-          });
-        })
-        .finally(() => {
-          setIsLoadingProjects(false);
-        });
-    } else {
-      setProjects([]);
-    }
-  }, [isSignedIn, toast]);
-
-  // Refresh projects when page becomes visible (user navigates back)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && isSignedIn) {
-        refreshProjects();
-      }
-    };
-
-    const handleFocus = () => {
-      if (isSignedIn) {
-        refreshProjects();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [isSignedIn]);
-
-  const refreshProjects = async () => {
-    if (!isSignedIn) return;
-    console.log('🔄 Refreshing projects list...');
-    try {
-      const response = await projectService.listProjects();
-      console.log('📋 Projects API response:', response);
-      if (response.success) {
-        const parseDate = (value?: string | null) => {
-          if (!value) return 0;
-          const timestamp = Date.parse(value);
-          return Number.isNaN(timestamp) ? 0 : timestamp;
-        };
-        const sortedProjects = [...response.projects].sort((a, b) => {
-          const first = parseDate(b.updated_at || b.created_at);
-          const second = parseDate(a.updated_at || a.created_at);
-          return first - second;
-        });
-        const mappedProjects = sortedProjects.map((p) => ({
-          id: p.id,
-          title: p.name || p.dashboard_title || "Untitled Project",
-        }));
-        console.log('✅ Mapped projects:', mappedProjects);
-        setProjects(mappedProjects);
-      } else {
-        console.error('❌ Failed to fetch projects:', response.error);
-      }
-    } catch (error) {
-      console.error('❌ Error refreshing projects:', error);
-    }
-  };
-
-  const openProject = (id: string) => {
-    navigate(`/workspace/project?projectId=${id}`);
-  };
-
-  const renameProject = async (id: string, newTitle: string) => {
-    try {
-      const response = await projectService.updateProject(id, newTitle);
-      if (response.success) {
-        await refreshProjects();
-      } else {
-        toast({
-          title: "Failed to rename project",
-          description: response.error || "Could not update project name",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error renaming project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to rename project. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const deleteProject = async (id: string) => {
-    try {
-      const response = await projectService.deleteProject(id);
-      if (response.success) {
-        await refreshProjects();
-      } else {
-        toast({
-          title: "Failed to delete project",
-          description: response.error || "Could not delete project",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error deleting project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete project. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleNewProject = async () => {
-    try {
-      const response = await projectService.createProject("Untitled Project");
-      if (response.success && response.project) {
-        // Reset chat store for new project
-        useChatStore.getState().resetChat();
-        navigate(`/workspace/project?projectId=${response.project.id}`);
-      } else {
-        toast({
-          title: "Failed to create project",
-          description: response.error || "Could not create new project",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error creating project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create project. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
+  const {
+    projects,
+    createNewProject,
+    renameProject,
+    deleteProject,
+    openProject
+  } = useProjects();
   // Zustand stores
   const {
     inputValue,
@@ -689,7 +532,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   useEffect(() => {
     if (projectsOpen && isSignedIn) {
       console.log('Sidebar opened - refreshing projects...');
-      refreshProjects();
+      // Projects are auto-refreshed by the hook
     }
   }, [projectsOpen, isSignedIn]);
 
@@ -990,7 +833,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       <ProjectsSidebar
         open={projectsOpen}
         onClose={closeProjects}
-        onNewProject={handleNewProject}
+        onNewProject={() => createNewProject()}
         recents={projects}
         onOpenProject={openProject}
         onRenameProject={renameProject}

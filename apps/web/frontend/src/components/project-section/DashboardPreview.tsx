@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
 import { DashboardGenerationRequest, LayoutType, ChartType } from "@/types/dashboard";
-import { 
+import {
   convertLLMStylingToChartStyling,
   validateChartStyling,
   getDefaultChartStyling,
@@ -29,7 +29,7 @@ interface DashboardPreviewProps {
   processedData?: any;
 }
 
-const DashboardPreview = ({ 
+const DashboardPreview = ({
   dataSource,
   dashboardId,
   className = "",
@@ -50,14 +50,14 @@ const DashboardPreview = ({
     // Try ISO format first
     const iso = new Date(label);
     if (!isNaN(iso.getTime())) return iso;
-    
+
     // Try common formats
     const formats = [
       /^(\d{4})-(\d{2})-(\d{2})/, // YYYY-MM-DD
       /^(\d{2})\/(\d{2})\/(\d{4})/, // MM/DD/YYYY
       /^(\d{2})-(\d{2})-(\d{2})$/, // MM-DD-YY
     ];
-    
+
     for (const format of formats) {
       const match = label.match(format);
       if (match) {
@@ -74,7 +74,7 @@ const DashboardPreview = ({
         }
       }
     }
-    
+
     return null;
   };
 
@@ -93,9 +93,9 @@ const DashboardPreview = ({
   };
 
   // Utility function to extract sparkline data from chart
-  const extractSparklineData = (chart: any): Array<{label: string, value: number}> | undefined => {
+  const extractSparklineData = (chart: any): Array<{ label: string, value: number }> | undefined => {
     if (!chart) return undefined;
-    
+
     // Try to get data from first dataset
     if (Array.isArray(chart.datasets) && chart.datasets.length > 0) {
       const firstDataset = chart.datasets[0];
@@ -106,24 +106,24 @@ const DashboardPreview = ({
         }));
       }
     }
-    
+
     return undefined;
   };
 
   // Utility function to compute time_comparison from sparkline data
   const computeTimeComparisonFromData = (
-    sparklineData: Array<{label: string, value: number}> | undefined,
+    sparklineData: Array<{ label: string, value: number }> | undefined,
     currentValue: number | null,
     period: string = 'wow'
   ): { period: string; current_value: number; previous_value: number; percentage_change: number } | null => {
     if (!sparklineData || sparklineData.length < 2) {
       return null;
     }
-    
+
     // Create a copy and try to sort by date if labels are dates
     let sortedData = [...sparklineData];
     const dates = sortedData.map(item => parseDateLabel(item.label)).filter(d => d !== null);
-    
+
     if (dates.length === sortedData.length) {
       // All labels are valid dates, sort by date
       sortedData.sort((a, b) => {
@@ -133,23 +133,23 @@ const DashboardPreview = ({
         return dateA.getTime() - dateB.getTime();
       });
     }
-    
+
     const latest = sortedData[sortedData.length - 1];
     const previous = sortedData[sortedData.length - 2];
-    
+
     if (!latest || !previous || typeof latest.value !== 'number' || typeof previous.value !== 'number') {
       return null;
     }
-    
+
     const current = currentValue !== null && isFinite(currentValue) ? currentValue : latest.value;
     const prev = previous.value;
-    
+
     if (prev === 0 || !isFinite(current) || !isFinite(prev)) {
       return null;
     }
-    
+
     const percentageChange = ((current - prev) / prev) * 100;
-    
+
     return {
       period,
       current_value: current,
@@ -161,39 +161,39 @@ const DashboardPreview = ({
   // Utility function to find matching chart for metric
   const findMatchingChartForMetric = (metricTitle: string, charts: any[]): any | null => {
     if (!metricTitle || !Array.isArray(charts) || charts.length === 0) return null;
-    
+
     // Normalize metric title
     const normalizedMetric = metricTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
+
     // Keywords that might appear in both metric and chart titles
     const keywords = ['revenue', 'users', 'orders', 'sales', 'stickiness', 'active', 'total', 'average', 'count'];
-    
+
     for (const chart of charts) {
       if (!chart.title) continue;
-      
+
       const normalizedChart = chart.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-      
+
       // Check if chart has time-series data
-      const hasTimeSeriesData = Array.isArray(chart.datasets) && 
-                                chart.datasets.length > 0 && 
-                                Array.isArray(chart.datasets[0]?.data) &&
-                                chart.datasets[0].data.length > 0;
-      
+      const hasTimeSeriesData = Array.isArray(chart.datasets) &&
+        chart.datasets.length > 0 &&
+        Array.isArray(chart.datasets[0]?.data) &&
+        chart.datasets[0].data.length > 0;
+
       if (!hasTimeSeriesData) continue;
-      
+
       // Check for keyword matches
       for (const keyword of keywords) {
         if (normalizedMetric.includes(keyword) && normalizedChart.includes(keyword)) {
           return chart;
         }
       }
-      
+
       // Check if metric title is a substring of chart title or vice versa
       if (normalizedMetric.length > 3 && (normalizedChart.includes(normalizedMetric) || normalizedMetric.includes(normalizedChart))) {
         return chart;
       }
     }
-    
+
     return null;
   };
 
@@ -202,32 +202,32 @@ const DashboardPreview = ({
     if (!dateRange || !dateRange.from || !dateRange.to || !data) {
       return data;
     }
-    
+
     const filtered = JSON.parse(JSON.stringify(data)); // Deep clone
-    
+
     // Filter charts
     if (Array.isArray(filtered.charts)) {
       filtered.charts = filtered.charts.map((chart: any) => {
         if (!Array.isArray(chart.datasets)) return chart;
-        
+
         const filteredChart = { ...chart };
         filteredChart.datasets = chart.datasets.map((dataset: any) => {
           if (!Array.isArray(dataset.data)) return dataset;
-          
+
           const filteredDataset = { ...dataset };
           filteredDataset.data = dataset.data.filter((item: any) => {
             const itemDate = parseDateLabel(item.label || String(item.label));
             if (!itemDate) return true; // Keep items without valid dates
             return itemDate >= dateRange.from! && itemDate <= dateRange.to!;
           });
-          
+
           return filteredDataset;
         });
-        
+
         return filteredChart;
       });
     }
-    
+
     // Recalculate metrics from filtered chart data
     if (Array.isArray(filtered.metrics)) {
       filtered.metrics = filtered.metrics.map((metric: any) => {
@@ -238,7 +238,7 @@ const DashboardPreview = ({
         } else {
           relatedChart = findMatchingChartForMetric(metric.title || metric.name, filtered.charts || []);
         }
-        
+
         if (relatedChart && Array.isArray(relatedChart.datasets) && relatedChart.datasets.length > 0) {
           const dataset = relatedChart.datasets[0];
           if (Array.isArray(dataset.data) && dataset.data.length > 0) {
@@ -246,12 +246,12 @@ const DashboardPreview = ({
               const val = typeof item.value === 'number' ? item.value : parseFloat(String(item.value)) || 0;
               return val;
             }).filter((v: number) => !isNaN(v));
-            
+
             if (values.length > 0) {
               // Recalculate metric value (sum for totals, average for averages)
               const metricTitleLower = (metric.title || metric.name || '').toLowerCase();
               let newValue: number;
-              
+
               if (metricTitleLower.includes('total') || metricTitleLower.includes('sum')) {
                 newValue = values.reduce((sum: number, val: number) => sum + val, 0);
               } else if (metricTitleLower.includes('average') || metricTitleLower.includes('avg') || metricTitleLower.includes('mean')) {
@@ -260,7 +260,7 @@ const DashboardPreview = ({
                 // Default to sum
                 newValue = values.reduce((sum: number, val: number) => sum + val, 0);
               }
-              
+
               // Format the value similar to original
               const originalValue = metric.value;
               if (typeof originalValue === 'string' && originalValue.includes('$')) {
@@ -273,11 +273,11 @@ const DashboardPreview = ({
             }
           }
         }
-        
+
         return metric;
       });
     }
-    
+
     return filtered;
   };
 
@@ -298,7 +298,7 @@ const DashboardPreview = ({
 
   const normalizeChartDatasets = (datasets: any[], chartType: string, config: any): any[] => {
     if (!Array.isArray(datasets) || datasets.length === 0) return [];
-    
+
     return datasets.map((dataset: any) => {
       // Handle treemap: convert children array to data array
       if (chartType === 'treemap' && Array.isArray(dataset.children)) {
@@ -310,7 +310,7 @@ const DashboardPreview = ({
           }))
         };
       }
-      
+
       // Handle radar: convert numeric array to objects with label/value
       if (chartType === 'radar' && Array.isArray(dataset.data)) {
         const labels = config?.labels || [];
@@ -325,7 +325,7 @@ const DashboardPreview = ({
           };
         }
       }
-      
+
       // Handle pie/donut: normalize data points (existing logic)
       if (chartType === 'pie' || chartType === 'donut') {
         return {
@@ -333,7 +333,7 @@ const DashboardPreview = ({
           data: normalizeChartDataPoints(dataset.data || [], chartType)
         };
       }
-      
+
       // Default: return dataset as-is
       return dataset;
     });
@@ -353,10 +353,10 @@ const DashboardPreview = ({
       data.metrics.forEach((m: any, idx: number) => {
         // Extract numeric value from formatted string
         const numericValue = extractNumericValue(m.value);
-        
+
         // Extract sparkline data first (needed for time_comparison computation)
-        let sparklineData: Array<{label: string, value: number}> | undefined;
-        
+        let sparklineData: Array<{ label: string, value: number }> | undefined;
+
         // Priority 1: Direct sparkline data from LLM
         if (m.sparkline_data && Array.isArray(m.sparkline_data)) {
           sparklineData = m.sparkline_data.map((item: any) => ({
@@ -378,7 +378,7 @@ const DashboardPreview = ({
             sparklineData = extractSparklineData(matchingChart);
           }
         }
-        
+
         // Compute time_comparison if missing
         let timeComparison = m.time_comparison;
         if (!timeComparison && sparklineData && sparklineData.length >= 2) {
@@ -387,12 +387,12 @@ const DashboardPreview = ({
             timeComparison = computed;
           }
         }
-        
+
         // Derive change and trend from time_comparison or existing logic
         const prev = timeComparison?.previous_value;
         let change: string | number | undefined = m.change;
         let trend: string | undefined = m.trend;
-        
+
         // Priority 1: Use time_comparison.percentage_change if available
         if (timeComparison?.percentage_change !== undefined && timeComparison.percentage_change !== null) {
           const pct = timeComparison.percentage_change;
@@ -409,7 +409,7 @@ const DashboardPreview = ({
         else if (change === undefined || change === null) {
           // Keep change and trend as undefined if we can't compute
         }
-        
+
         const layout = m?.layout;
         const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
         // Convert metric styling if it has theme property
@@ -417,7 +417,7 @@ const DashboardPreview = ({
         const validatedMetricStyling = metricStyling && validateChartStyling(metricStyling).isValid
           ? metricStyling
           : (dashboardStyling || getDefaultChartStyling());
-        
+
         components.push({
           id: `metric_${componentId++}`,
           type: 'metric',
@@ -465,7 +465,7 @@ const DashboardPreview = ({
       geographic: 'geographic',
       table: 'table',
       metric: 'metric',
-      
+
       // Legacy mappings for backward compatibility
       line_chart: 'line',
       bar_chart: 'bar',
@@ -483,17 +483,17 @@ const DashboardPreview = ({
     if (Array.isArray(data.charts)) {
       data.charts.forEach((c: any, idx: number) => {
         const mappedType = typeMap[(c.chart_type || '').toLowerCase()] || 'line';
-        
+
         // Handle tables in charts array - they need special processing
         if (mappedType === 'table') {
           const tableStyling = c.styling ? convertLLMStylingToChartStyling(c.styling) : undefined;
           const validatedTableStyling = tableStyling && validateChartStyling(tableStyling).isValid
             ? tableStyling
             : (dashboardStyling || getDefaultChartStyling());
-          
+
           const layout = c?.layout;
           const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
-          
+
           components.push({
             id: `table_${componentId++}`,
             type: 'table',
@@ -518,7 +518,7 @@ const DashboardPreview = ({
           });
           return; // Skip chart processing for tables
         }
-        
+
         // Regular chart processing
         const chartLevelStyling = c.styling ? convertLLMStylingToChartStyling(c.styling) : undefined;
         const validatedChartStyling = chartLevelStyling && validateChartStyling(chartLevelStyling).isValid
@@ -535,12 +535,12 @@ const DashboardPreview = ({
 
         const layout = c?.layout;
         const hasLayout = layout && Number.isFinite(layout.x) && Number.isFinite(layout.y) && Number.isFinite(layout.w) && Number.isFinite(layout.h);
-        
+
         // Normalize datasets based on chart type
         const normalizedDatasets = Array.isArray(c.datasets)
           ? normalizeChartDatasets(c.datasets, mappedType, c.config || {})
           : [];
-        
+
         components.push({
           id: `chart_${componentId++}`,
           type: 'chart',
@@ -566,9 +566,9 @@ const DashboardPreview = ({
 
     // Tables (Morpheus: columns string[] + rows objects)
     // Check both top-level and nested data.tables
-    const tablesToProcess = Array.isArray(data.tables) ? data.tables : 
-                           (data.data && Array.isArray(data.data.tables)) ? data.data.tables : [];
-    
+    const tablesToProcess = Array.isArray(data.tables) ? data.tables :
+      (data.data && Array.isArray(data.data.tables)) ? data.data.tables : [];
+
     if (tablesToProcess.length > 0) {
       tablesToProcess.forEach((t: any, idx: number) => {
         const layout = t?.layout;
@@ -578,7 +578,7 @@ const DashboardPreview = ({
         const validatedTableStyling = tableStyling && validateChartStyling(tableStyling).isValid
           ? tableStyling
           : (dashboardStyling || getDefaultChartStyling());
-        
+
         components.push({
           id: `table_${componentId++}`,
           type: 'table',
@@ -645,7 +645,7 @@ const DashboardPreview = ({
   const breakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 } as const;
   const cols = { lg: 24, md: 12, sm: 8, xs: 4, xxs: 2 } as const;
   const margin: [number, number] = [6, 6];
-  const containerPadding: [number, number] = [6,6];
+  const containerPadding: [number, number] = [6, 6];
   const rowHeight = 30;
 
   // Build normalized dashboards and active selection
@@ -659,7 +659,7 @@ const DashboardPreview = ({
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {
     if (type === 'metric') return { minW: 2, minH: 2 };
-    if (type === 'table') return { minW: 12, minH: 10 };
+    if (type === 'table') return { minW: 12, minH: 8 };
     return { minW: 4, minH: 4 }; // default for charts
   };
 
@@ -670,7 +670,23 @@ const DashboardPreview = ({
       const x = Number.isFinite(src.x) ? src.x : (Number.isFinite(c.position?.x) ? c.position.x : (index % 12));
       const y = Number.isFinite(src.y) ? src.y : (Number.isFinite(c.position?.y) ? c.position.y : Math.floor(index / 12));
       const w = Number.isFinite(src.w) ? src.w : (Number.isFinite(c.position?.width) ? c.position.width : 4);
-      const h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 4);
+
+      // Calculate dynamic height for tables if not explicitly provided
+      let h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 4);
+
+      if (c.type === 'table' && c.component_config?.data) {
+        const rowCount = Array.isArray(c.component_config.data) ? c.component_config.data.length : 0;
+        if (rowCount > 0) {
+          // Base overhead (header, title, padding) ~ 6 units
+          // Each row ~ 1.5 units
+          // Cap at 21 (approx 10 rows)
+          const calculatedH = Math.ceil(6 + (Math.min(rowCount, 10) * 1.5));
+          // Use calculated height if it's larger than provided height, or if no height provided
+          // This ensures we show up to 10 rows by default while respecting larger user overrides if they exist
+          h = Number.isFinite(src.h) ? Math.max(src.h, calculatedH) : (Number.isFinite(c.position?.height) ? Math.max(c.position.height, calculatedH) : calculatedH);
+        }
+      }
+
       // Enforce content-driven minima for first render if provided by backend; otherwise type defaults
       const minW = Number.isFinite(src.minW) ? src.minW : typeMin.minW;
       const minH = Number.isFinite(src.minH) ? src.minH : typeMin.minH;
@@ -703,7 +719,7 @@ const DashboardPreview = ({
     } as Layouts;
   };
 
-  const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v2`,[activeDashboard?.id]);
+  const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v2`, [activeDashboard?.id]);
 
   const [layouts, setLayouts] = useState<Layouts>({ lg: [], md: [], sm: [], xs: [], xxs: [] });
 
@@ -833,15 +849,15 @@ const DashboardPreview = ({
             {/* Row 1: Title and Controls */}
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1">
-                <h1 
-                  className="text-3xl font-bold" 
+                <h1
+                  className="text-3xl font-bold"
                   style={{ color: 'var(--highlight-color)' }}
                 >
                   {dashboardMetadata.title}
                 </h1>
                 {dashboardMetadata.description && (
-                  <p 
-                    className="text-base opacity-90 mt-1" 
+                  <p
+                    className="text-base opacity-90 mt-1"
                     style={{ color: 'var(--description-color)' }}
                   >
                     {dashboardMetadata.description}
@@ -855,7 +871,7 @@ const DashboardPreview = ({
                     <Button
                       variant="outline"
                       className="flex items-center gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity"
-                      style={{ 
+                      style={{
                         color: 'var(--highlight-color)',
                         backgroundColor: 'var(--bg-card-color)',
                         borderColor: 'var(--border-card-color)'
@@ -877,7 +893,7 @@ const DashboardPreview = ({
                       </span>
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent 
+                  <PopoverContent
                     className={`w-auto p-0 [&]:!bg-[var(--bg-card-color)] ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)}`}
                     align="end"
                     style={getDashboardThemeStyles(dashboardStylingForContainer)}
@@ -898,7 +914,7 @@ const DashboardPreview = ({
                   <button
                     onClick={() => setExpandedInsights(!expandedInsights)}
                     className="flex items-center justify-start gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity flex-shrink-0"
-                    style={{ 
+                    style={{
                       color: 'var(--highlight-color)',
                       backgroundColor: 'var(--bg-card-color)',
                       borderColor: 'var(--border-card-color)'
@@ -917,23 +933,23 @@ const DashboardPreview = ({
             {/* Expanded Insights List */}
             {dashboardMetadata?.insights && dashboardMetadata.insights.length > 0 && expandedInsights && (
               <div className="w-full mt-2">
-                <h2 
-                  className="text-lg font-medium mb-2" 
+                <h2
+                  className="text-lg font-medium mb-2"
                   style={{ color: 'var(--description-color)' }}
                 >
                   Key Insights
                 </h2>
                 <ul className="space-y-2">
                   {dashboardMetadata.insights.map((insight: string, index: number) => (
-                    <li 
+                    <li
                       key={index}
                       className="flex items-start gap-2"
                     >
-                      <span 
+                      <span
                         className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
                         style={{ backgroundColor: 'var(--highlight-color)' }}
                       />
-                      <span 
+                      <span
                         className="text-sm"
                         style={{ color: 'var(--highlight-color)' }}
                       >
@@ -987,7 +1003,7 @@ const DashboardPreview = ({
               preventCollision
               isBounded
               compactType={null}
-              resizeHandles={['se','e','s', 'w','n']}
+              resizeHandles={['se', 'e', 's', 'w', 'n']}
               onLayoutChange={handleLayoutChange}
             >
               {activeDashboard.components.map((component: any) => (

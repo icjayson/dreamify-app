@@ -81,7 +81,7 @@ export default function ProjectPage() {
   const hasPolledStatus = uploadedFiles.some(f =>
     f.status === 'processing' || f.status === 'processed' || f.status === 'error'
   );
-  
+
   // Key insight: Show dashboard if we have processedData from previous build,
   // even when a new file is uploaded (status='uploaded'). 
   // Only hide dashboard when explicitly starting new processing.
@@ -99,7 +99,7 @@ export default function ProjectPage() {
       const convoResponse = await conversationService.loadConversation(conversationId, projId);
       const conversation = convoResponse.conversation;
       const nodes = conversation?.nodes ?? [];
-      
+
       // Extract assets from nodes
       const assets: any[] = [];
       for (const node of nodes) {
@@ -110,14 +110,14 @@ export default function ProjectPage() {
             if (assetData.asset_id) {
               assets.push(assetData);
             }
-        }
+          }
         }
       }
-      
+
       // Use first asset for display name, fallback to "dashboard"
       const primaryAsset = assets[0];
       const assetName = primaryAsset?.filename || "dashboard";
-      
+
       const restoredMessages = conversationNodesToMessages(conversation, {
         sourceFileName: assetName,
       });
@@ -176,6 +176,23 @@ export default function ProjectPage() {
             if (latestConversationId) {
               await hydrateConversation(response.project.id, latestConversationId);
             }
+
+            // Check for pending action from HomePage
+            const pendingAction = useChatStore.getState().pendingAction;
+            if (pendingAction && pendingAction.projectId === projectId) {
+              console.log('Found pending action, executing...', pendingAction);
+              useChatStore.getState().addFiles(pendingAction.files);
+
+              // Execute processing
+              void useChatStore.getState().processFileWithMessage(
+                pendingAction.content,
+                undefined,
+                projectId
+              );
+
+              // Clear pending action
+              useChatStore.getState().setPendingAction(null);
+            }
           } else {
             toast({
               title: "Project unavailable",
@@ -205,7 +222,7 @@ export default function ProjectPage() {
       cancelled = true;
     };
   }, [projectId, hydrateConversation, toast]);
-  
+
   // Sync processedData from store to local state
   useEffect(() => {
     const processedFile = uploadedFiles.find(f => f.processedData);
@@ -301,29 +318,29 @@ export default function ProjectPage() {
       </div>
 
       {/* Content */}
-        {/* chatinterface */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
-            <div className={`${activeTab === 'chat' ? 'block' : 'hidden'} lg:col-span-1 lg:block`}>
-            <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
-                <div>
-                <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
-                    <ChatInterface 
-                      projectId={projectId ?? undefined} 
-                      onSwitchToDashboard={(dashboardId) => {
-                        if (dashboardId && projectId) {
-                          selectDashboard(dashboardId, projectId);
-                        }
-                        setActiveTab('dashboard');
-                      }} 
-                    />
-                </div>
-                </div>
+      {/* chatinterface */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
+        <div className={`${activeTab === 'chat' ? 'block' : 'hidden'} lg:col-span-1 lg:block`}>
+          <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
+            <div>
+              <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
+                <ChatInterface
+                  projectId={projectId ?? undefined}
+                  onSwitchToDashboard={(dashboardId) => {
+                    if (dashboardId && projectId) {
+                      selectDashboard(dashboardId, projectId);
+                    }
+                    setActiveTab('dashboard');
+                  }}
+                />
+              </div>
             </div>
+          </div>
         </div>
-      
+
         {/* blank placeholder */}
         <div className={`${activeTab === 'dashboard' ? 'block' : 'hidden'} lg:col-span-3 lg:block`}>
-           <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]">
+          <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]">
             {!shouldShowDashboard ? (
               <BlankState
                 subtexts={[
@@ -342,7 +359,7 @@ export default function ProjectPage() {
                     if (el && 'scrollIntoView' in el) {
                       (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
-                  } catch (_e) {}
+                  } catch (_e) { }
                 }}
                 onConnectDataSource={() => {
                   try {
@@ -351,7 +368,7 @@ export default function ProjectPage() {
                     if (el && 'scrollIntoView' in el) {
                       (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
-                  } catch (_e) {}
+                  } catch (_e) { }
                 }}
                 onUseSample={() => {
                   try {
@@ -360,7 +377,7 @@ export default function ProjectPage() {
                     if (el && 'scrollIntoView' in el) {
                       (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
-                  } catch (_e) {}
+                  } catch (_e) { }
                 }}
               />
             ) : (

@@ -59,6 +59,12 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
 
+  // Clear chat state on mount to ensure a clean slate
+  useEffect(() => {
+    useChatStore.getState().resetChat();
+    useFileStore.getState().resetFileState();
+  }, []);
+
   // Fetch projects on mount when signed in
   useEffect(() => {
     if (isSignedIn) {
@@ -352,19 +358,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     }
 
     const firstUploadedFile = uploadedFiles.find(f => f.status === 'uploaded');
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: inputValue.trim(),
-      timestamp: new Date(),
-      attachment: uploadedFiles.length > 0 ? {
-        kind: "csv",
-        name: uploadedFiles.length === 1 ? firstUploadedFile!.filename : `${uploadedFiles.length} files`
-      } : undefined,
-      template: selectedTemplate || undefined,
-    };
-
-    addMessage(userMessage);
 
     if (!firstUploadedFile?.projectId) {
       toast({
@@ -375,7 +368,14 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       return;
     }
 
-    void processFileWithMessage(inputValue.trim(), onProcessedDataChange, firstUploadedFile.projectId);
+    // Set pending action for ProjectPage to execute
+    useChatStore.getState().setPendingAction({
+      type: 'process_file',
+      content: inputValue.trim(),
+      files: uploadedFiles,
+      projectId: firstUploadedFile.projectId
+    });
+
     navigate(`/workspace/project?projectId=${firstUploadedFile.projectId}`);
   };
 
@@ -443,8 +443,20 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     e.preventDefault();
     setDragOver(false);
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+
+    const remainingSlots = 5 - uploadedFiles.length;
+    if (files.length > remainingSlots) {
+      toast({
+        title: "Too many files",
+        description: `Maximum 5 files allowed. You can add ${remainingSlots} more file(s).`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    for (const file of files) {
       await processFileUpload(file);
     }
   };
@@ -549,9 +561,23 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    await processFileUpload(file);
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    const remainingSlots = 5 - uploadedFiles.length;
+    if (files.length > remainingSlots) {
+      toast({
+        title: "Too many files",
+        description: `Maximum 5 files allowed. You can add ${remainingSlots} more file(s).`,
+        variant: "destructive"
+      });
+      event.target.value = '';
+      return;
+    }
+
+    for (const file of files) {
+      await processFileUpload(file);
+    }
 
     // Reset input
     event.target.value = '';
@@ -805,6 +831,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     type="file"
                     ref={fileInputRef}
                     accept=".csv,.xlsx,.xls"
+                    multiple
                     onChange={handleFileSelect}
                     className="hidden"
                     aria-label="Select file"

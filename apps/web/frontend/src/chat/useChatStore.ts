@@ -154,6 +154,17 @@ interface ChatState {
   processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[]) => Promise<void>;
   stopGeneration: () => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<void>;
+
+  // Pending action state for cross-page navigation
+  pendingAction: PendingAction | null;
+  setPendingAction: (action: PendingAction | null) => void;
+}
+
+export interface PendingAction {
+  type: 'process_file';
+  content: string;
+  files: UploadedFile[];
+  projectId: string;
 }
 
 const initialMessages: Message[] = [
@@ -188,6 +199,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   originalFileName: null,
   selectedTemplate: null,
   abortController: null,
+  pendingAction: null,
 
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -232,6 +244,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSelectedDashboardId: (dashboardId) => set({ selectedDashboardId: dashboardId }),
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
+  setPendingAction: (action) => set({ pendingAction: action }),
 
   // Complex actions
   sendMessage: (content) => {
@@ -364,7 +377,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       setIsTyping(true);
       setIsProcessing(true);
-      
+
       // Update file status to processing to show loading indicator in chip
       uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'processing' }));
 
@@ -498,6 +511,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const firstFile = get().uploadedFiles[0];
                 const restoredMessages = conversationNodesToMessages(conversation, {
                   sourceFileName: firstFile?.filename || 'dashboard',
+                  lastUserMessageAttachment: firstFile ? {
+                    kind: 'csv',
+                    name: firstFile.filename,
+                    mime: 'text/csv' // we can infer or pass real mime if available
+                  } : undefined
                 });
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
@@ -698,7 +716,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               setCurrentWorkflowStep(step);
             }
           },
-          60, // max attempts (60 seconds)
+          360, // max attempts (30 minutes)
           5000, // 5 second intervals
           abortController.signal
         );
@@ -805,10 +823,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           }
         } else {
+          // Explicitly handle error status from polling
           if (finalResult.data?.status === 'error' || !finalResult.success) {
+            const errorMsg = finalResult.data?.error || 'An error occurred while processing your request.';
             get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
+
+            updateMessages((prev) => ([
+              ...prev,
+              {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: `Sorry, I encountered an error: ${errorMsg}`,
+                timestamp: new Date(),
+              }
+            ]));
+          } else {
+            // Only generate generic response if it's not an explicit error (e.g. timeout or unknown state)
+            await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);
           }
-          await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);
         }
       } else {
         await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);

@@ -2,6 +2,11 @@ import type { Message } from '@/types/message';
 
 export interface ConversationNodesToMessagesOptions {
   sourceFileName?: string;
+  lastUserMessageAttachment?: {
+    kind: 'file' | 'csv';
+    name: string;
+    mime?: string;
+  };
 }
 
 /**
@@ -53,7 +58,21 @@ export function conversationNodesToMessages(
       }
       return false;
     })
-    .map((node: any) => {
+    .map((node: any, index: number, array: any[]) => {
+      // Check if this is the last user node in the filtered list
+      const isLastUserNode = node.role === 'user' && index === array.filter(n => n.role === 'user').length - 1; // Wait, array is ALL filtered nodes. 
+      // Correct logic to find if it's the last user node:
+      // We can't easily know if it's the "last user node" of the ENTIRE conversation relative to the time, 
+      // but we can check if it's the last node in the array that IS a user node.
+      // Actually, simplest is to check if it's the *last node overall* if the last node is user, but usually last node is assistant.
+
+      // Let's refine the "last user node" check in the context of the map.
+      // We need to identify the user node that triggered the current response.
+      // Generally, that's the last user node in the list.
+
+      // Since `map` doesn't give context of "last of type", let's assume we simply want to attach to the VERY LAST user node found.
+      const isLastUser = node.role === 'user' && array.slice(index + 1).findIndex((n: any) => n.role === 'user') === -1;
+
       const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
       const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
       const assetContent = node?.contents?.find?.(
@@ -79,6 +98,7 @@ export function conversationNodesToMessages(
       }
       // Include attachment field for messages with asset content
       // This shows "Attached file" badge for @mentioned files in QnA mode
+      // FALLBACK: If assetContent is missing but this is the last user node and we have a fallback, use it.
       if (assetContent?.data) {
         normalized.attachment = {
           kind: assetContent?.data?.kind === 'file' ? 'file' : 'csv',
@@ -88,6 +108,8 @@ export function conversationNodesToMessages(
             assetName,
           mime: assetContent?.data?.mime,
         };
+      } else if (isLastUser && options?.lastUserMessageAttachment) {
+        normalized.attachment = options.lastUserMessageAttachment;
       }
       return normalized;
     });

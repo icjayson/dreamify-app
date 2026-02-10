@@ -98,7 +98,7 @@ LAYOUT RULES (MANDATORY)
   - Charts default minH = 10
   - The following chart types require minH = 12: line, area, pie, donut, radial_bar, treemap, sankey
   - Other chart types (bar, scatter, composed, radar, funnel, geographic) use minH = 10
-  - Tables use minH = 10
+  - Tables use minH = 8
   - Metrics generally use minH = 4 (do not force above 4 unless already larger)
 
 ================================================================================

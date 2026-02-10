@@ -252,7 +252,7 @@ Every component MUST have layout: {x, y, w, h, minW, minH}
 Apply minimum height floors:
 - Charts requiring minH=12: line, area, pie, donut, radial_bar, treemap, sankey
 - Other charts minH=10: bar, scatter, composed, radar, funnel, geographic
-- Tables: minH=10
+- Tables: minH=8
 - Metrics: minH=4
 
 Ensure h >= minH for all components.

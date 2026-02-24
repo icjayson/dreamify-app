@@ -7,10 +7,16 @@ import { AdminAuthProvider } from '@/contexts/AdminAuthContext'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import { apiClient } from '@/services/api'
+import ReactGA from 'react-ga4';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Clerk Publishable Key")
+}
+
+const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_ID;
+if (GA_MEASUREMENT_ID) {
+  ReactGA.initialize(GA_MEASUREMENT_ID);
 }
 
 const AppWithRouter = () => {
@@ -29,8 +35,8 @@ const AppWithRouter = () => {
 
   return (
     <BrowserRouter>
-      <ClerkProvider 
-        publishableKey={PUBLISHABLE_KEY} 
+      <ClerkProvider
+        publishableKey={PUBLISHABLE_KEY}
         afterSignOutUrl="/"
         afterSignInUrl="/workspace"
       >

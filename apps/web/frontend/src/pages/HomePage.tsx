@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { ToastAction } from "@/components/ui/toast";
 import { CONNECTORS, type ConnectorItem } from '@/constants/connectors';
 import FilePreviewChip from '@/components/chat/FilePreviewChip';
+import ReactGA from 'react-ga4';
 
 interface HomePageProps {
   onGetStarted: () => void;
@@ -389,6 +390,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         status: 'uploaded',
         projectId: res.asset?.project_id
       }]);
+      ReactGA.event({
+        category: "File",
+        action: "Upload Success",
+        label: fallbackFilename
+      });
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
     } catch (_e) {
       removeFile('pending');

@@ -6,6 +6,8 @@ import { Routes, Route, useLocation } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import ReactGA from "react-ga4";
+import { useEffect } from "react";
 import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
 import Index from "./pages/Index";
@@ -32,6 +34,11 @@ const AppContent = () => {
   const { messages } = useChatStore();
   const isStarted = messages.length > 1; // Check if user has started chatting
   const location = useLocation();
+
+  useEffect(() => {
+    ReactGA.send({ hitType: "pageview", page: location.pathname + location.search });
+  }, [location]);
+
   const isAuthPath = location.pathname === "/login" || location.pathname === "/signup";
   const isWorkspacePath = location.pathname.startsWith("/workspace");
   const isAdminPath = location.pathname.startsWith("/admin");

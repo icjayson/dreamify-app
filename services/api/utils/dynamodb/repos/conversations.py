@@ -12,7 +12,7 @@ from utils.dynamodb.tables import tables
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now().isoformat()
 
 
 def create_conversation(

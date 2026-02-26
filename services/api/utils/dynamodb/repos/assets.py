@@ -14,7 +14,7 @@ ASSET_ID_INDEX = "asset_id_index"
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now().isoformat()
 
 
 def create_asset(

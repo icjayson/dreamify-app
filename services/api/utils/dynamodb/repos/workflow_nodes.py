@@ -12,7 +12,7 @@ from utils.logger import logger
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now().isoformat()
 
 
 def upsert_node_status(

@@ -68,7 +68,7 @@ def _load_existing_conversation(user_id: str, project_id: str, conversation_id: 
 
 def _create_user_node(contents: List[Dict[str, Any]], metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Create user node matching existing structure."""
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now().isoformat()
     node = {
         "node_id": f"node_{uuid.uuid4().hex[:8]}",
         "role": "user",
@@ -83,7 +83,7 @@ def _create_user_node(contents: List[Dict[str, Any]], metadata: Optional[Dict[st
 
 def _create_greeting_node() -> Dict[str, Any]:
     """Create initial greeting message node."""
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now().isoformat()
     return {
         "node_id": f"node_{uuid.uuid4().hex[:8]}",
         "role": "assistant",
@@ -103,7 +103,7 @@ def _create_greeting_node() -> Dict[str, Any]:
 def _update_conversation_with_user_node(conversation: Dict[str, Any], user_node: Dict[str, Any]) -> Dict[str, Any]:
     """Append user node and update timestamps."""
     conversation.setdefault("nodes", []).append(user_node)
-    conversation["updated_at"] = datetime.utcnow().isoformat()
+    conversation["updated_at"] = datetime.now().isoformat()
     return conversation
 
 
@@ -224,7 +224,7 @@ async def conversation_chat(
     enriched_contents = _enrich_user_node_contents(request.user_node_contents, user_id)
 
     conversation_bucket = config.aws.s3.USER_ASSETS_BUCKET
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now().isoformat()
     
     user_node = _create_user_node(enriched_contents, request.user_node_metadata)
     
@@ -512,7 +512,7 @@ async def stop_workflow(
         raise HTTPException(status_code=403, detail="Unauthorized")
     
     # Update workflow status to stopped
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now().isoformat()
     workflow_nodes_repo.upsert_node_status(
         conversation_id=conversation_id,
         node_id="workflow",

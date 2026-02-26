@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now().isoformat()
 
 
 def create_project(user_id: str, name: str, description: Optional[str] = None) -> Dict:

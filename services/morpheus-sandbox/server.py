@@ -806,7 +806,7 @@ def _process_conversation_background(
                 "status": "error",
                 "created_at": datetime.now().isoformat(),
                 "contents": [
-                    {"type": "text", "data": {"text": f"Workflow failed: {exc}"}}
+                    {"type": "text", "data": {"text": "Sorry, we encountered an error. Please try again."}}
                 ],
             }
             conversation.setdefault("nodes", []).append(error_node)
@@ -834,7 +834,7 @@ def _process_conversation_background(
             except Exception as upload_error:
                 logger.error(f"Failed to save error payload: {upload_error}")
 
-        _post_node_status_sync(conversation_id, "error", {"error": str(exc)})
+        _post_node_status_sync(conversation_id, "error", {"error": "Sorry, we encountered an error. Please try again."})
 
     finally:
         # Clean up all downloaded asset files

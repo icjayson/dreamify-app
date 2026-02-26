@@ -817,10 +817,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
               <p className="text-xs text-white/40 text-left ml-1">Quick start prompts:</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {[
-                  { icon: TrendingUp, text: "Visualize the key trends in this dataset over time." },
-                  { icon: AlertCircle, text: "Identify anomalies or outliers in the data." },
-                  { icon: FileText, text: "Create a summary report of the most important metrics." },
-                  { icon: LayoutDashboard, text: "Build a comprehensive dashboard from connected data." }
+                  { icon: TrendingUp, text: "Visualize key trends over time in an interactive dashboard." },
+                  { icon: AlertCircle, text: "Spot anomalies and outliers directly in your dashboard." },
+                  { icon: FileText, text: "Generate a dashboard of my most important metrics." },
+                  { icon: LayoutDashboard, text: "Build a comprehensive dashboard from all your connected data." }
                 ].map((item, index) => (
                   <button
                     key={index}

@@ -709,12 +709,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   };
 
   const suggestedPrompts = [
-    { text: "Act as a Data Analyst: challenge assumptions and list caveats.", icon: Database },
-    { text: "Act as a Growth PM: prioritize the top 3 actions from this data.", icon: TrendingUp },
-    { text: "Act as a Sales Ops lead: translate insights into pipeline plays.", icon: BarChart3 },
-    { text: "Build a comprehensive dashboard from connected data", icon: Users },
-    { text: "Analyze profit margins by product", icon: DollarSign },
-    { text: "Add geographic revenue distribution", icon: Sparkles }
+    { text: "Visualize key trends over time in an interactive dashboard.", icon: Database },
+    { text: "Spot anomalies and outliers directly in your dashboard.", icon: TrendingUp },
+    { text: "Generate a dashboard of my most important metrics.", icon: BarChart3 },
+    { text: "Build a comprehensive dashboard from all my connected data.", icon: Users },
   ];
 
   return (
@@ -889,11 +887,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               />
             )}
 
-            {/* File Context Chips - horizontal scroll when files are attached */}
+            {/* File Context Chips - each file on its own row (w-full) when multiple */}
             {uploadedFiles.length > 0 && (
-              <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              <div className="mb-3 flex min-w-0 flex-col gap-1">
                 {uploadedFiles.map((file) => (
-                  <div key={file.fileID} className="flex-shrink-0">
+                  <div key={file.fileID} className="min-w-0 w-full">
                     <FilePreviewChip
                       file={file}
                       onRemove={() => removeUploadedFile(file.fileID)}
@@ -947,7 +945,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                     }
                   }
                 }}
-                placeholder={isListening ? 'Listening...' : "Describe your dashboard..."}
+                placeholder={isListening ? 'Listening...' : "Use @ to select the data file to analyze"}
                 className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60"
                 data-chat-input
                 onKeyDown={(e) => {
@@ -1030,15 +1028,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                   <FileStack className="w-4 h-4" />
                 </button>
 
-                {/* Template Button - commented out (not functionable)
-              <button
-                onClick={handleCloneTemplateClick}
-                className="p-2 flex items-center justify-center border border-white/30 rounded-md"
-                aria-label="Choose template"
-              >
-                <LayoutTemplate className="w-4 h-4" />
-              </button>
-              */}
+                {/* Template Button */}
+                <button
+                  onClick={handleCloneTemplateClick}
+                  className="p-2 flex items-center justify-center border border-white/30 rounded-md text-gray-400 hover:text-white transition-colors"
+                  title="Choose template"
+                  aria-label="Choose template"
+                >
+                  <LayoutTemplate className="w-4 h-4" />
+                </button>
 
                 {/* Data Connector Dropup */}
                 <div className="relative data-source-dropdown">

@@ -10,7 +10,7 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
   const isProcessing = file.status === 'uploading' || file.status === 'processing';
   
   return (
-    <div className="group relative inline-flex items-center gap-2 p-2 pr-3 bg-[#1e1e1e] border border-white/10 rounded-xl">
+    <div className="group relative flex w-full min-w-0 items-center gap-2 p-2 pr-6 bg-[#1e1e1e] border border-white/10 rounded-xl overflow-hidden">
       {/* File Icon */}
       <div className="flex-shrink-0">
         {isProcessing ? (
@@ -21,12 +21,12 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
       </div>
       
       {/* Filename */}
-      <span className="text-sm text-white truncate max-w-[200px]">
+      <span className="text-xs text-white truncate min-w-0 flex-1 max-w-[280px]" title={file.filename}>
         {file.filename}
       </span>
       
       {/* Extension Badge */}
-      <span className="text-xs text-white/60">
+      <span className="text-xs text-white/60 flex-shrink-0">
         {file.ext.toUpperCase()}
       </span>
       

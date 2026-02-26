@@ -267,28 +267,34 @@ export default function PublishModal({ open, onOpenChange, projectId }: PublishM
             <div className="space-y-3 pt-4 border-t border-white/10">
               <div className="text-sm font-medium">Export Options</div>
               <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={handleExportPdf} 
-                disabled={isExportingPdf}
-                className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {isExportingPdf ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin"/>
-                    Exporting...
-                  </>
-                ) : (
-                  <>
+                <button 
+                  onClick={handleExportPdf} 
+                  disabled
+                  aria-busy={isExportingPdf}
+                  className="h-11 px-3 glass-panel rounded-xl text-sm font-medium opacity-80 cursor-not-allowed flex flex-col items-center justify-center gap-0.5"
+                >
+                  <div className="flex items-center justify-center gap-2 leading-none">
                     <Download className="w-4 h-4"/>
-                    Export PDF
-                  </>
-                )}
-              </button>
-              <button onClick={handleExportCsv} disabled={!originalFileBlob} className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"><Download className="w-4 h-4"/>Export CSV</button>
-            </div>
-            {!originalFileBlob && (
-              <div className="text-xs text-muted-foreground font-inter italic">CSV export is available when the original uploaded file is a CSV.</div>
-            )}
+                    <span>Export PDF</span>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground font-inter italic leading-none">
+                    Coming soon
+                  </span>
+                </button>
+                <button 
+                  onClick={handleExportCsv} 
+                  disabled={!originalFileBlob} 
+                  className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4"/>
+                  Export CSV
+                </button>
+              </div>
+              {!originalFileBlob && (
+                <div className="text-xs text-muted-foreground font-inter italic">
+                  CSV export is available when the original uploaded file is a CSV.
+                </div>
+              )}
             </div>
           </div>
         )}

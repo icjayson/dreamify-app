@@ -21,8 +21,9 @@ interface RechartsPieChartProps {
   datasets?: Array<{
     label: string;
     data: Array<{
-      label: string;
-      value: number | string;
+      label?: string;
+      name?: string;
+      value?: number | string;
       metadata?: Record<string, any>;
     }>;
     color?: string;
@@ -61,10 +62,19 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
     if (datasets.length === 0) return [];
 
     const firstDataset = datasets[0];
-    return firstDataset.data.map(point => ({
-      name: point.label,
-      value: typeof point.value === 'number' ? point.value : parseFloat(point.value.toString()) || 0
-    }));
+    return firstDataset.data.map(point => {
+      const rawValue = point.value;
+      const numValue =
+        typeof rawValue === 'number'
+          ? rawValue
+          : rawValue != null
+            ? parseFloat(String(rawValue)) || 0
+            : 0;
+      return {
+        name: point.label ?? point.name ?? '',
+        value: numValue
+      };
+    });
   }, [datasets]);
 
   // Assign colors to datasets

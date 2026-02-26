@@ -289,9 +289,42 @@ const DashboardPreview = ({
     return validation.isValid ? converted : getDefaultChartStyling();
   };
 
+  // Common key aliases for label (category/name) and value (numeric)
+  const LABEL_KEYS = ['label', 'name', 'Category', 'Name', 'Label', 'category', 'key', 'Key'];
+  const VALUE_KEYS = ['value', 'Value', 'Revenue', 'Amount', 'Count', 'revenue', 'amount', 'count', 'Total'];
+
+  const inferLabelFromPoint = (point: any): string => {
+    for (const k of LABEL_KEYS) {
+      if (point[k] != null && typeof point[k] === 'string') return String(point[k]);
+    }
+    for (const [k, v] of Object.entries(point)) {
+      if (v != null && typeof v === 'string' && k !== 'metadata') return String(v);
+    }
+    return '';
+  };
+
+  const inferValueFromPoint = (point: any): number => {
+    for (const k of VALUE_KEYS) {
+      const v = point[k];
+      if (typeof v === 'number') return v;
+      if (v != null && typeof v === 'string' && !Number.isNaN(parseFloat(v))) return parseFloat(v);
+    }
+    for (const [k, v] of Object.entries(point)) {
+      if (typeof v === 'number') return v;
+      if (v != null && typeof v === 'string' && !Number.isNaN(parseFloat(v))) return parseFloat(v);
+    }
+    return 0;
+  };
+
   const normalizeChartDataPoints = (dataPoints: any[], chartType: string): any[] => {
     if (chartType === 'pie' || chartType === 'donut') {
-      return dataPoints.map(point => ({ ...point, label: point.label || point.name || '' }));
+      return dataPoints.map(point => ({
+        ...point,
+        label: point.label ?? point.name ?? inferLabelFromPoint(point),
+        value: point.value !== undefined && point.value !== null
+          ? (typeof point.value === 'number' ? point.value : parseFloat(String(point.value)) || 0)
+          : inferValueFromPoint(point)
+      }));
     }
     return dataPoints;
   };

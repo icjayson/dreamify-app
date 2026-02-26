@@ -686,6 +686,12 @@ REMINDER: When you generate your dashboard JSON:
     # Call LLM
     try:
         response = model_with_tools.invoke(messages)
+        # Normalize response.content to string (Gemini returns a list)
+        if isinstance(response.content, list):
+            response.content = "\n".join(
+                item.get("text", "") if isinstance(item, dict) else str(item)
+                for item in response.content
+            )
         
         # Parse response for action decision
         if response.tool_calls and len(response.tool_calls) > 0:

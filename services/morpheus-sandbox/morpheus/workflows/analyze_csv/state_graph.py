@@ -11,7 +11,7 @@ import uuid
 import sys
 import importlib.util
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from morpheus.workflows.analyze_csv.state_models import (
     AgentState,

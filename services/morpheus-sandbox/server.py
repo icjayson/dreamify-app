@@ -344,14 +344,14 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
         if isinstance(msg, dict):
             msg_type = msg.get("type", "unknown")
             msg_content = msg.get("content", "")
-            msg_timestamp = msg.get("timestamp", datetime.utcnow())
+            msg_timestamp = msg.get("timestamp", datetime.now())
             msg_tool_calls = msg.get("tool_calls")
             msg_tool_call_id = msg.get("tool_call_id")
         else:
             # Pydantic model access
             msg_type = getattr(msg, 'type', 'unknown')
             msg_content = getattr(msg, 'content', '')
-            msg_timestamp = getattr(msg, 'timestamp', datetime.utcnow())
+            msg_timestamp = getattr(msg, 'timestamp', datetime.now())
             msg_tool_calls = getattr(msg, 'tool_calls', None)
             msg_tool_call_id = getattr(msg, 'tool_call_id', None)
         
@@ -374,7 +374,7 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
         elif hasattr(msg_timestamp, 'isoformat'):
             timestamp_iso = msg_timestamp.isoformat()
         else:
-            timestamp_iso = datetime.utcnow().isoformat()
+            timestamp_iso = datetime.now().isoformat()
         
         # Build node
         node = {
@@ -572,7 +572,7 @@ def _process_conversation_background(
             # The postprocessed_nodes should already contain the assistant's text response
             
             # Q&A responses don't generate dashboards, just save conversation with text response
-            conversation["updated_at"] = datetime.utcnow().isoformat()
+            conversation["updated_at"] = datetime.now().isoformat()
             _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
             
             # Post completion status with Q&A content in metadata
@@ -724,7 +724,7 @@ def _process_conversation_background(
                         "node_id": f"node_{uuid.uuid4().hex[:8]}",
                         "role": "assistant",
                         "status": "completed",
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": datetime.now().isoformat(),
                         "contents": [
                             {
                                 "type": "dashboard",
@@ -742,12 +742,12 @@ def _process_conversation_background(
                 {
                     "dashboard_id": new_dashboard_record["dashboard_id"],
                     "s3_uri": new_dashboard_record["s3_uri"],
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now().isoformat(),
                     "title": dashboard_title,
                 }
             )
 
-        conversation["updated_at"] = datetime.utcnow().isoformat()
+        conversation["updated_at"] = datetime.now().isoformat()
         _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
         
         completion_file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") if primary_asset else conversation_id
@@ -804,13 +804,13 @@ def _process_conversation_background(
                 "node_id": f"node_{uuid.uuid4().hex[:8]}",
                 "role": "assistant",
                 "status": "error",
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now().isoformat(),
                 "contents": [
                     {"type": "text", "data": {"text": f"Workflow failed: {exc}"}}
                 ],
             }
             conversation.setdefault("nodes", []).append(error_node)
-            conversation["updated_at"] = datetime.utcnow().isoformat()
+            conversation["updated_at"] = datetime.now().isoformat()
             try:
                 _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
             except Exception as persist_error:

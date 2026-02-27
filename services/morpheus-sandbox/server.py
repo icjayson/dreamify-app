@@ -14,7 +14,7 @@ from pydantic import BaseModel
 import aiohttp
 import requests
 
-from morpheus.workflows.analyze_csv.workflow import AnalyzeCSVWorkflow
+from morpheus.workflows.analyze_csv.state_graph import StatefulAnalyzeCSVWorkflow
 from utils.config import config
 from utils.dynamodb import save_dashboard_metadata
 from utils.health import check_health
@@ -517,7 +517,7 @@ def _process_conversation_background(
         # Store primary_asset for later use in error handling and completion
         primary_asset = assets[0] if assets else None
 
-        workflow = AnalyzeCSVWorkflow()
+        workflow = StatefulAnalyzeCSVWorkflow()
         _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
         
         # Extract user prompt from latest user node

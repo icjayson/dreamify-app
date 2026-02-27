@@ -60,6 +60,12 @@ class WorkingMemory(BaseModel):
         arbitrary_types_allowed = True
 
 
+class RouteDecision(BaseModel):
+    """Router decision model for workflow routing."""
+    next_step: Literal["dashboard", "qa"] = Field(..., description="The next workflow to run based on user intent.")
+    reasoning: str = Field(..., description="Brief reason for this routing decision.")
+
+
 class WorkflowHistoryEntry(BaseModel):
     """
     Single entry in the workflow execution history.

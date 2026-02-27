@@ -108,7 +108,7 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
           <Sparkles className="w-4 h-4 text-blue-400 animate-pulse flex-shrink-0" />
 
           {/* Animated Text */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <AnimatePresence mode="wait">
               <motion.span
                 key={currentText}
@@ -119,7 +119,7 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
                   duration: 0.3,
                   ease: [0.4, 0.0, 0.2, 1]
                 }}
-                className="text-sm bg-clip-text text-transparent bg-gradient-to-r from-gray-200 via-white to-gray-200 inline-block"
+                className="text-sm truncate bg-clip-text text-transparent bg-gradient-to-r from-gray-200 via-white to-gray-200 inline-block max-w-full"
               >
                 {currentText}
               </motion.span>

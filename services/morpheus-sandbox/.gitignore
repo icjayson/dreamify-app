@@ -237,3 +237,7 @@ runs/
 
 development/*
 streamlit/
+uv.lock
+.python-version
+pyproject.toml
+.agent/*

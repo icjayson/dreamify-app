@@ -50,8 +50,8 @@ def save_dashboard_metadata(
         "s3_key": s3_key,
         "status": status,
         "metadata": metadata or {},
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat(),
     }
     table.put_item(Item=item)
 

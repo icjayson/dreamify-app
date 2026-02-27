@@ -1,16 +1,36 @@
+"""
+CSV Analysis Workflow - Legacy Compatibility Layer
+
+This module maintains backward compatibility with the original workflow interface
+while delegating to the new stateful agentic workflow implementation.
+
+For new development, import from state_graph.py directly.
+For legacy integration, use AnalyzeCSVWorkflow from this module.
+"""
+
+import os
+from typing import Any, Dict, Optional
+
+# Import new stateful workflow
+from morpheus.workflows.analyze_csv.state_graph import StatefulAnalyzeCSVWorkflow
+
+# Keep original imports for RouteDecision model (used by nodes.py)
+from pydantic import BaseModel, Field
+from typing import Literal
+
+# Legacy imports (kept for compatibility)
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from morpheus.tools.python_repl.tool import PythonREPLTool, PersistentPythonREPLTool
 from morpheus.tools.charts_knowledge.tool import get_available_chart_types
+from morpheus.workflows.analyze_csv.prompts.analysis_prompts import SYSTEM_PROMPT, QA_SYSTEM_PROMPT
+from morpheus.workflows.analyze_csv.intent_detector import detect_user_intent
 from morpheus.workflows.base import WorkflowOutput
-from morpheus.models.base import get_model_for_agent
 from utils.config import load_config
 from utils.logger import logger
 from utils.postprocess import clean_json
-from pydantic import BaseModel, Field
 import json
 import re
-import os
 from typing import Any, Dict, Optional, List, Union, Literal
 
 # Q&A System Prompt
@@ -78,7 +98,7 @@ LAYOUT RULES (MANDATORY)
   - Charts default minH = 10
   - The following chart types require minH = 12: line, area, pie, donut, radial_bar, treemap, sankey
   - Other chart types (bar, scatter, composed, radar, funnel, geographic) use minH = 10
-  - Tables use minH = 10
+  - Tables use minH = 8
   - Metrics generally use minH = 4 (do not force above 4 unless already larger)
 
 ================================================================================
@@ -532,51 +552,29 @@ class DashboardConfig(BaseModel):
     insights: List[str] = []
 
 class AnalyzeCSVWorkflow:
+    """
+    Legacy wrapper for backward compatibility.
+    
+    This class maintains the original interface while delegating to
+    the new StatefulAnalyzeCSVWorkflow implementation.
+    """
     
     def __init__(self):
-        self.config = load_config()
-        self.model = get_model_for_agent()
-        self.python_tool = PythonREPLTool()
-        self.tools = [self.python_tool, get_available_chart_types]
-        self.model_with_tools = self.model.bind_tools(self.tools)
+        """Initialize with stateful workflow instance."""
+        logger.info("Initializing AnalyzeCSVWorkflow (using stateful implementation)")
+        self._stateful_workflow = StatefulAnalyzeCSVWorkflow()
+        
+        # Keep these for backward compatibility if anything accesses them directly
+        self.config = self._stateful_workflow.config
+        self.model = self._stateful_workflow.model
+        self.python_tool = self._stateful_workflow.python_tool
+        self.tools = self._stateful_workflow.tools
+        self.model_with_tools = self._stateful_workflow.model_with_tools
         self.messages = []
+        self.chart_recommendations = []
+        self.metrics = []
+        self.frontend_contract = None
         self.workflow_output = None
-
-    def _get_context_flags(self, conversation: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Extract context flags from conversation for Router Agent.
-        
-        Returns:
-            Dict with has_dashboard, has_asset, and dashboard_count
-        """
-        has_dashboard = False
-        has_asset = False
-        dashboard_count = 0
-        
-        # Check conversation.dashboards
-        dashboards_list = conversation.get("dashboards") or []
-        dashboard_count = len(dashboards_list)
-        if dashboard_count > 0:
-            has_dashboard = True
-        
-        # Scan nodes for dashboard content type
-        nodes = conversation.get("nodes", [])
-        for node in nodes:
-            contents = node.get("contents", [])
-            for content in contents:
-                content_type = (content.get("type") or "").lower()
-                if content_type == "dashboard":
-                    has_dashboard = True
-                elif content_type in ["asset", "attachment"]:
-                    asset_data = content.get("data", {})
-                    if asset_data.get("asset_id") and asset_data.get("s3_bucket") and asset_data.get("s3_key"):
-                        has_asset = True
-        
-        return {
-            "has_dashboard": has_dashboard,
-            "has_asset": has_asset,
-            "dashboard_count": dashboard_count,
-        }
 
     def init_messages(
         self,
@@ -587,93 +585,82 @@ class AnalyzeCSVWorkflow:
         mode: str = "dashboard",
     ):
         """Initialize conversation history with prior nodes and latest request."""
-        # Select system prompt based on mode
-        if mode == "qa":
-            system_prompt = QA_SYSTEM_PROMPT
-        else:
-            system_prompt = DASHBOARD_SYSTEM_PROMPT
+        system_prompt = QA_SYSTEM_PROMPT if mode == "qa" else SYSTEM_PROMPT
         self.messages = [SystemMessage(content=system_prompt)]
 
-        # Include all nodes without filtering
-        nodes = conversation.get("nodes", [])
-
-        for node in nodes:
-            message = self._node_to_message(node, dashboards)
-            if message is not None:
-                self.messages.append(message)
+        for node in conversation.get("nodes", []):
+            content_text = self._render_node_contents(node, dashboards)
+            if not content_text:
+                continue
+            role = (node.get("role") or "").lower()
+            if role == "user":
+                self.messages.append(HumanMessage(content=content_text))
+            elif role == "assistant":
+                self.messages.append(AIMessage(content=content_text))
 
         effective_prompt = (
             user_prompt
             or conversation.get("metadata", {}).get("prompt")
-            or "Please analyze the data."
+            or f"Please analyze the CSV file at '{file_path}' and recommend appropriate chart types for visualization."
         )
 
-        # File availability check
-        file_exists = file_path and os.path.exists(file_path) if file_path else False
-        is_placeholder = file_path and "qa_" in file_path if file_path else False
-        
-        # Build instruction message based on mode
-        if mode == "dashboard" and file_exists and not is_placeholder:
-            # Dashboard mode with real file - simple instruction: user prompt + file path
-            instruction = f"User wants to: {effective_prompt}\n\nCSV file available at: {file_path}"
+        if mode == "qa":
+            # Check if file exists and is not a placeholder
+            file_exists = file_path and os.path.exists(file_path) if file_path else False
+            is_placeholder = file_path and "qa_" in file_path if file_path else False
             
-        elif mode == "qa" and file_exists and not is_placeholder:
-            # Q&A mode with real file - conditionally suggest Python based on question type
-            # Check if question seems data-related (contains data-related keywords)
-            data_keywords = ["data", "csv", "file", "column", "row", "value", "calculate", "sum", "average", "count", "total", "metric", "statistic"]
-            question_lower = effective_prompt.lower()
-            is_data_question = any(keyword in question_lower for keyword in data_keywords)
-            
-            instruction_parts = [
-                f"User question: {effective_prompt}",
-            ]
-            
-            if is_data_question:
-                instruction_parts.extend([
-                    f"",
-                    f"CSV file available at: {file_path}",
-                    f"",
-                    f"If the question requires data from the CSV file, use the python_repl tool to read and analyze it.",
-                ])
-            else:
-                instruction_parts.extend([
-                    f"",
-                    f"Note: A CSV file is available at {file_path}, but this question appears to be about general knowledge.",
-                    f"Answer the question directly using your knowledge. Only use the python_repl tool if the question specifically requires data from the file.",
-                ])
-            
-            instruction = "\n".join(instruction_parts)
-            
-        else:
-            # Fallback for cases without file or placeholder files
-            context_parts = []
             if file_exists and not is_placeholder:
-                context_parts.append(f"📊 CSV file available at: {file_path}")
+                instruction = f"""
+CSV file location: {file_path}
+
+User question: {effective_prompt}
+
+Please answer the user's question. If the question is about data, use Python REPL to load and analyze the CSV file. 
+If it's a general question, answer it directly without accessing the file.
+Provide a clear, conversational answer.
+""".strip()
             else:
-                context_parts.append("ℹ️  No data file available")
+                # No file available - answer general questions
+                instruction = f"""
+User question: {effective_prompt}
+
+Please answer the user's question directly. This is a general question, not about data analysis.
+If the user asks about data or analysis, politely explain that a data file is needed.
+Be friendly and conversational.
+""".strip()
+        else:
+            # Dashboard mode - ensure file context is clear
+            file_exists = file_path and os.path.exists(file_path) if file_path else False
+            is_placeholder = file_path and "qa_" in file_path if file_path else False
             
-            if dashboards:
-                dashboard_count = len(dashboards)
-                context_parts.append(f"📈 {dashboard_count} dashboard(s) exist in this conversation")
-            
-            context_parts.append(f"🎯 User request: {effective_prompt}")
-            
-            if mode == "dashboard":
-                context_parts.append(
-                    "IMPORTANT: You MUST use the `python_repl` tool to inspect the dataframe "
-                    "(e.g., df.head(), df.info()) to understand the column names and data types "
-                    "BEFORE generating the dashboard JSON. Do not hallucinate column names. "
-                    "Output ONLY valid JSON after analysis."
-                )
-            elif mode == "qa":
-                # For Q&A without file, clarify tool usage
-                if not file_exists or is_placeholder:
-                    context_parts.append(
-                        "Answer the question directly. Only use tools if the question requires data analysis or calculations."
-                    )
-            
-            instruction = "\n\n".join(context_parts)
-        
+            if file_exists and not is_placeholder:
+                instruction = f"""
+IMPORTANT: A CSV data file is available and ready for analysis at: {file_path}
+
+The user has requested: {effective_prompt}
+
+You MUST:
+1. Load and analyze the CSV file at {file_path} using Python REPL. The file EXISTS and is AVAILABLE.
+2. Use print statements to get variable values from Python REPL.
+3. Use get_available_chart_types to see what charts are available
+4. Based on your analysis of the ACTUAL DATA from the file, recommend specific chart types with reasoning
+5. Calculate key metrics from the data (totals, averages, counts, etc.) using the actual data from the file
+6. IMPORTANT: End your response with the structured JSON format as specified in the system prompt
+
+The file is already uploaded and available - you do NOT need to ask for it. Start analyzing immediately.
+
+Do NOT create any visualizations - only analyze and recommend.
+""".strip()
+            else:
+                # No file available - this shouldn't happen in dashboard mode, but handle gracefully
+                instruction = f"""
+User request: {effective_prompt}
+
+NOTE: No data file is currently available. However, the user is requesting a dashboard.
+
+Please inform the user that a data file is required to generate a dashboard, and ask them to upload a CSV file.
+""".strip()
+
         self.messages.append(HumanMessage(content=instruction))
         return self.messages
     
@@ -829,7 +816,7 @@ class AnalyzeCSVWorkflow:
                     self.workflow_output.add_message(msg)
                     break
         
-        max_iterations = 10
+        max_iterations = 25
         final_content = ""
         
         try:
@@ -1065,62 +1052,117 @@ class AnalyzeCSVWorkflow:
     
     def execute(
         self,
-        file_path: str,
-        conversation: Dict[str, Any],
-        dashboards: Dict[str, Any],
+        file_paths: Optional[List[str]] = None,
+        conversation: Dict[str, Any] = None,
+        dashboards: Dict[str, Any] = None,
         user_prompt: Optional[str] = None,
+        conversation_uri: Optional[str] = None,
+        conversation_backup_uri: Optional[str] = None,
+        post_status_fn: Optional[callable] = None,
+        assets: Optional[List[Dict[str, Any]]] = None,
+        file_path: Optional[str] = None,  # Deprecated, for backward compat
     ):
-        """Execute the CSV analysis workflow with Router Agent"""
+        """
+        Execute the CSV analysis workflow.
         
-        # Create workflow output instance
-        self.workflow_output = WorkflowOutput.create_new(
-            workflow_name="analyze_csv",
-            input_data={
-                "file_path": file_path,
-                "conversation_id": conversation.get("conversation_id"),
-                "project_id": conversation.get("project_id"),
-                "user_prompt": user_prompt or conversation.get("metadata", {}).get("prompt"),
-            }
-        )
+        Delegates to StatefulAnalyzeCSVWorkflow for actual execution.
+        
+        Args:
+            file_paths: List of paths to CSV/data files
+            conversation: Conversation dict from S3
+            dashboards: Existing dashboards dict
+            user_prompt: User's request/question
+            conversation_uri: S3 URI for conversation (for live sync)
+            conversation_backup_uri: S3 backup URI for conversation (for live sync)
+            post_status_fn: Optional callback to post status updates (from server.py)
+            assets: Optional list of filtered assets from server.py
+            file_path: Deprecated - use file_paths instead
+            
+        Returns:
+            Dict with workflow output in legacy format
+        """
+        # Handle backward compatibility: convert single file_path to list
+        if file_paths is None:
+            if file_path:
+                file_paths = [file_path]
+            else:
+                file_paths = []
         
         logger.info(
-            "Starting CSV analysis workflow for file: %s (conversation=%s)",
-            file_path,
-            conversation.get("conversation_id"),
+            "Executing workflow (delegating to stateful implementation) with %d file(s) (conversation=%s)",
+            len(file_paths),
+            conversation.get("conversation_id") if conversation else None,
         )
         
-        try:
-            # Get effective prompt
-            effective_prompt = (
-                user_prompt
-                or conversation.get("metadata", {}).get("prompt")
-                or "Please analyze the data."
-            )
-            
-            # Route request using Router Agent
-            route_decision = self._route_request(effective_prompt, conversation)
-            logger.info(f"Router decision: {route_decision.next_step} - {route_decision.reasoning}")
-            
-            # Extract conversation_id and project_id for status checking
-            conversation_id = conversation.get("conversation_id")
-            project_id = conversation.get("project_id")
-            
-            # Dispatch to appropriate workflow
-            if route_decision.next_step == "dashboard":
-                return self._run_dashboard_workflow(file_path, conversation, dashboards, user_prompt, conversation_id, project_id)
-            elif route_decision.next_step == "qa":
-                return self._run_qa_workflow(file_path, conversation, dashboards, user_prompt, conversation_id, project_id)
-            else:
-                # Default to dashboard (backwards compatibility)
-                logger.warning(f"Unknown route decision: {route_decision.next_step}, defaulting to dashboard")
-                return self._run_dashboard_workflow(file_path, conversation, dashboards, user_prompt, conversation_id, project_id)
-        
-        except Exception as e:
-            error_msg = f"Workflow execution error: {str(e)}"
-            logger.error(error_msg)
-            self.workflow_output.set_completed("error", error_msg)
-            return {"type": "dashboard_config", "error": str(e), "workflow_output": self.workflow_output}
+        # Delegate to stateful workflow
+        return self._stateful_workflow.execute(
+            file_paths=file_paths,
+            conversation=conversation,
+            dashboards=dashboards,
+            user_prompt=user_prompt,
+            conversation_uri=conversation_uri,
+            conversation_backup_uri=conversation_backup_uri,
+            post_status_fn=post_status_fn,
+            assets=assets,
+        )
+
+
+# ==============================================================================
+# LEGACY CODE BELOW - KEPT FOR REFERENCE ONLY
+# ==============================================================================
+# The methods below are from the original monolithic implementation and are
+# no longer used. They are kept here temporarily for reference during migration.
+# New development should use the stateful workflow components in:
+# - state_models.py
+# - nodes.py
+# - edges.py
+# - state_graph.py
+# - helpers.py
+# ==============================================================================
+
+# Original helper methods (now moved to helpers.py in stateful implementation)
+class _LegacyHelpers:
+    """Legacy helper methods - DO NOT USE in new code"""
     
+    def _extract_frontend_contract(self, final_response: str):
+        """Extract the full frontend-contract JSON from the final LLM response"""
+        
+        logger.info("Extracting structured recommendations from final response")
+        
+        try:
+            # Look for JSON structure in the response
+            json_match = re.search(r'```json\s*(\{[\s\S]*?\})\s*```', final_response, re.DOTALL)
+            
+            if json_match:
+                json_str = json_match.group(1)
+                structured_data = json.loads(json_str)
+                
+                # Store the entire structured object as the frontend contract
+                self.frontend_contract = structured_data
+                charts_count = len(structured_data.get("charts", [])) if isinstance(structured_data, dict) else 0
+                metrics_count = len(structured_data.get("metrics", [])) if isinstance(structured_data, dict) else 0
+                logger.info(f"Extracted frontend contract with {charts_count} charts and {metrics_count} metrics")
+                    
+            else:
+                logger.warning("No structured JSON found in response, falling back to simple extraction")
+                self._fallback_extraction(final_response)
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from response: {e}")
+            self._fallback_extraction(final_response)
+        except Exception as e:
+            logger.error(f"Error extracting recommendations: {e}")
+            self._fallback_extraction(final_response)
+    
+    def _fallback_extraction(self, final_response: str):
+        """Fallback extraction method if structured JSON parsing fails. Sets minimal error contract."""
+        logger.info("Using fallback extraction method")
+        self.frontend_contract = {
+            "status": "failed",
+            "success": False,
+            "insights": ["Failed to parse structured JSON from agent response."],
+        }
+
     def _render_node_contents(self, node: Dict[str, Any], dashboards: Dict[str, Any]) -> str:
         chunks = []
         for content in node.get("contents", []):
@@ -1138,157 +1180,110 @@ class AnalyzeCSVWorkflow:
                     chunks.append(f"Attached dashboard ({dash_id}):\n{dash_block}")
         return "\n\n".join(chunk for chunk in chunks if chunk).strip()
 
-    def _node_to_message(self, node: Dict[str, Any], dashboards: Dict[str, Any]):
-        """
-        Convert a conversation node to appropriate LangChain message type.
-        
-        Args:
-            node: Conversation node dict with role, contents, and optional metadata
-            dashboards: Dict of dashboard_id -> dashboard_data for rendering
-            
-        Returns:
-            HumanMessage, AIMessage, SystemMessage, ToolMessage, or None if invalid
-        """
-        role = (node.get("role") or "").lower()
-        content_text = self._render_node_contents(node, dashboards)
-        
-        # Handle empty content - still create message objects for structure
-        if not content_text:
-            content_text = ""
-        
-        if role == "user":
-            return HumanMessage(content=content_text)
-        elif role == "assistant":
-            return AIMessage(content=content_text)
-        elif role == "system":
-            return SystemMessage(content=content_text)
-        elif role == "tool":
-            metadata = node.get("metadata", {})
-            tool_call_id = metadata.get("tool_call_id")
-            if not tool_call_id:
-                logger.warning(f"Tool node missing tool_call_id in metadata, skipping: {node.get('node_id', 'unknown')}")
-                return None
-            return ToolMessage(content=content_text, tool_call_id=tool_call_id)
-        else:
-            logger.warning(f"Unknown node role '{role}', skipping node: {node.get('node_id', 'unknown')}")
-            return None
-
     def _build_summary(self, charts_len: int, metrics_len: int) -> str:
         return (
             f"Generated dashboard with {charts_len} chart(s) "
             f"and {metrics_len} metric(s)."
         )
     
-    def _extract_json_from_content(self, content: Union[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _detect_intent(self, user_prompt: Optional[str], conversation: Dict[str, Any]) -> str:
         """
-        Extract and parse JSON from LLM response content.
+        Detect user intent: Q&A or Dashboard generation.
         
         Args:
-            content: The LLM response content (may contain JSON in code blocks or be a dict)
-            
+            user_prompt: Current user prompt
+            conversation: Conversation dictionary with nodes
+        
         Returns:
-            Parsed JSON dict if successful, None otherwise
+            "qa" or "dashboard"
         """
-        # Handle dict input (already parsed JSON from LLM)
-        if isinstance(content, dict):
-            logger.info("Content is already a dict, returning directly")
-            return content
-        
-        # Handle string input
-        if not content or (isinstance(content, str) and not content.strip()):
-            logger.warning("Empty content provided for JSON extraction")
-            return None
-        
-        try:
-            # Search for JSON code blocks
-            json_match = re.search(r'```json\s*(.*?)\s*```', content, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                # Try to find any code block
-                code_match = re.search(r'```\s*(.*?)\s*```', content, re.DOTALL)
-                if code_match:
-                    json_str = code_match.group(1)
-                else:
-                    # Use entire content
-                    json_str = content
-            
-            # Clean the JSON string
-            cleaned_json = clean_json(json_str)
-            
-            # Parse JSON
-            parsed = json.loads(cleaned_json)
-            
-            # Validate it's a dict
-            if not isinstance(parsed, dict):
-                logger.warning(f"Extracted JSON is not a dict, got type: {type(parsed)}")
-                return None
-            
-            return parsed
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from content: {str(e)}")
-            return None
-        except Exception as e:
-            logger.error(f"Error extracting JSON from content: {str(e)}")
-            return None
+        if not user_prompt:
+            # Default to dashboard if no prompt
+            return "dashboard"
+
+        # ---- RULE-BASED OVERRIDE: FEATURE-AWARE INTENT ----
+        # If a data asset is attached to the conversation, no dashboards exist yet,
+        # and the latest user prompt explicitly asks for a dashboard/visualization,
+        # we force "dashboard" intent without consulting the classifier.
+
+        # Detect whether an asset is present on the conversation by checking nodes
+        asset_present = False
+        nodes = conversation.get("nodes", [])
+        for node in nodes:
+            contents = node.get("contents", [])
+            for content in contents:
+                if content.get("type") in ["asset", "attachment"]:
+                    asset_data = content.get("data", {})
+                    if asset_data.get("asset_id") and asset_data.get("s3_bucket") and asset_data.get("s3_key"):
+                        asset_present = True
+                        break
+            if asset_present:
+                break
+
+        # Detect whether any dashboards already exist for this conversation
+        dashboards = conversation.get("dashboards") or []
+        has_existing_dashboard = bool(dashboards)
+
+        # Simple keyword-based detection of explicit dashboard requests
+        lower_prompt = user_prompt.lower()
+        dashboard_keywords = [
+            "dashboard",
+            "visualize",
+            "visualise",
+            "visualization",
+            "visualisation",
+            "chart",
+            "charts",
+            "graph",
+            "graphs",
+            "plot",
+            "plots",
+            "create dashboard",
+            "build dashboard",
+            "make dashboard",
+            "generate dashboard",
+        ]
+        explicit_dashboard_request = any(keyword in lower_prompt for keyword in dashboard_keywords)
+
+        if asset_present and not has_existing_dashboard and explicit_dashboard_request:
+            logger.info(
+                "Forcing intent to 'dashboard' (asset present, no dashboards yet, explicit dashboard request detected)."
+            )
+            return "dashboard"
+
+        # ---- FALLBACK: LLM-BASED INTENT DETECTION ----
+        # Extract conversation history for context
+        conversation_history = conversation.get("nodes", [])
+
+        # Detect intent using LLM
+        intent = detect_user_intent(user_prompt, conversation_history)
+        logger.info(f"Detected intent: {intent} for prompt: {user_prompt[:50]}...")
+        return intent
     
-    
-    def _run_qa_workflow(
+    def _execute_qa_mode(
         self,
         file_path: str,
         conversation: Dict[str, Any],
         dashboards: Dict[str, Any],
         user_prompt: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ):
         """
-        Execute Q&A workflow: answer questions textually without generating dashboard.
+        Execute Q&A mode: answer questions without generating dashboard.
         
         Returns:
             Dict with type="message", content, and workflow_output
         """
-        logger.info("Running Q&A workflow")
+        logger.info("Executing Q&A mode")
         
         # Initialize messages with Q&A system prompt
         self.init_messages(file_path, conversation, dashboards, user_prompt, mode="qa")
         
-        max_iterations = 10
+        max_iterations = 25
         final_content = "I'm processing your question..."
         
         try:
             for iteration in range(max_iterations):
                 logger.info(f"Q&A workflow iteration {iteration + 1}")
-                
-                # Check workflow status before each iteration
-                if conversation_id and project_id:
-                    import sys
-                    import os
-                    # Add parent directory to path to import from server
-                    server_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'server.py')
-                    if os.path.exists(server_path):
-                        import importlib.util
-                        spec = importlib.util.spec_from_file_location("server", server_path)
-                        server_module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(server_module)
-                        status = server_module._check_workflow_status(conversation_id, project_id)
-                    else:
-                        status = None
-                    if status == "stopped":
-                        logger.info("Workflow stopped by user")
-                        self.workflow_output.set_completed("stopped", "Workflow stopped by user")
-                        # Extract partial content from messages if available
-                        partial_content = "Workflow stopped by user."
-                        for msg in reversed(self.messages):
-                            if isinstance(msg, AIMessage) and msg.content:
-                                partial_content = str(msg.content)
-                                break
-                        return {
-                            "type": "message",
-                            "content": partial_content,
-                            "workflow_output": self.workflow_output,
-                        }
                 
                 # Get model response
                 response = self.model_with_tools.invoke(self.messages)
@@ -1304,7 +1299,7 @@ class AnalyzeCSVWorkflow:
                 if not response.tool_calls:
                     logger.info("No more tool calls - Q&A complete")
                     # Extract final text response
-                    final_content = str(response.content) if response.content else "I've completed the analysis."
+                    final_content = response.content or "I've completed the analysis."
                     break
 
                 # Process tool calls

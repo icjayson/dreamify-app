@@ -46,7 +46,7 @@ class StatusRequest(BaseModel):
     project_id: str
 
 # Backend API URL for updating file records
-BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "http://localhost:8080")
+BACKEND_API_URL = "http://localhost:5000"
 MORPHEUS_API_KEY = os.environ.get("MORPHEUS_API_KEY", "dev-secret-key")
 
 logger.info(
@@ -278,37 +278,33 @@ def _post_node_status_sync(conversation_id: Optional[str], status: str, metadata
     return loop.run_until_complete(_post_node_status(conversation_id, status, metadata))
 
 
-def _check_workflow_status(conversation_id: str, project_id: str) -> Optional[str]:
-    """Check workflow status from database via backend API."""
-    try:
-        response = requests.get(
-            f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status/{conversation_id}",
-            params={"project_id": project_id},
-            timeout=5,
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return data.get("status")
-        else:
-            logger.warning(
-                f"Failed to check workflow status: HTTP {response.status_code} for conversation {conversation_id}"
-            )
-            return None
-    except requests.exceptions.RequestException as e:
-        logger.warning(f"Error checking workflow status for conversation {conversation_id}: {str(e)}")
-        return None
-    except Exception as e:
-        logger.warning(f"Unexpected error checking workflow status for conversation {conversation_id}: {str(e)}")
-        return None
-
-
 def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Extract all asset content items from conversation nodes."""
-    assets = []
+    """
+    Extract asset content items from conversation nodes.
+    
+    Respects user_node_metadata.asset_selection to filter assets:
+    - 'explicit' with selected_asset_ids: Only return those specific assets
+    - 'all' or no metadata: Return all assets in conversation
+    """
     nodes = conversation.get("nodes", [])
     
+    # Find latest user node to check for selection metadata
+    latest_user_node = None
+    for node in reversed(nodes):
+        if node.get("role") == "user":
+            latest_user_node = node
+            break
+    
+    # Check metadata for selection mode
+    metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
+    selection_mode = metadata.get("asset_selection", "all")
+    selected_ids = set(metadata.get("selected_asset_ids", []))
+    
+    logger.info(f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}")
+    
+    # Extract all assets from conversation
+    assets = []
     for node in nodes:
-        node_created_at = node.get("created_at")
         contents = node.get("contents", [])
         for content in contents:
             content_type = content.get("type")
@@ -323,13 +319,15 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
                         "s3_key": asset_data.get("s3_key"),
                         "extension": asset_data.get("extension", "csv"),
                         "filename": asset_data.get("filename", ""),
-                        "node_created_at": node_created_at,
                     })
     
-    # Sort assets by node_created_at (newest first)
-    assets.sort(key=lambda x: x.get("node_created_at", ""), reverse=True)
-    logger.info(f"Extracted {len(assets)} asset(s), sorted by created_at (newest first)")
+    # Filter based on selection mode
+    if selection_mode == "explicit" and selected_ids:
+        filtered_assets = [a for a in assets if a.get("asset_id") in selected_ids]
+        logger.info(f"Filtered assets from {len(assets)} to {len(filtered_assets)} based on explicit selection")
+        return filtered_assets
     
+    # Default: return all assets
     return assets
 
 
@@ -346,39 +344,29 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
         if isinstance(msg, dict):
             msg_type = msg.get("type", "unknown")
             msg_content = msg.get("content", "")
-            msg_timestamp = msg.get("timestamp", datetime.utcnow())
+            msg_timestamp = msg.get("timestamp", datetime.now())
             msg_tool_calls = msg.get("tool_calls")
             msg_tool_call_id = msg.get("tool_call_id")
         else:
             # Pydantic model access
             msg_type = getattr(msg, 'type', 'unknown')
             msg_content = getattr(msg, 'content', '')
-            msg_timestamp = getattr(msg, 'timestamp', datetime.utcnow())
+            msg_timestamp = getattr(msg, 'timestamp', datetime.now())
             msg_tool_calls = getattr(msg, 'tool_calls', None)
             msg_tool_call_id = getattr(msg, 'tool_call_id', None)
         
-        # Map message types to conversation roles with strict logic
-        # Distinguish tool executions, system instructions, and final responses
-        if msg_type == "human":
-            # Check if this is a workflow-generated instruction vs actual user prompt
-            content_lower = str(msg_content).lower()
-            workflow_keywords = ["user wants to:", "csv file available at:", "important:", "you must use tools"]
-            if any(keyword in content_lower for keyword in workflow_keywords):
-                role = "system"  # Workflow-generated instruction
-            else:
-                role = "user"  # Actual user prompt
-        elif msg_type == "ai":
-            # AI messages with tool_calls are tool execution triggers, not final responses
-            if msg_tool_calls:
-                role = "tool"  # AI message triggering tool execution
-            else:
-                role = "assistant"  # Final user-facing response
-        elif msg_type == "system":
-            role = "system"
-        elif msg_type == "tool":
-            role = "tool"  # Tool execution result
-        else:
-            role = "assistant"  # Fallback
+        # Map message types to conversation roles
+        role_map = {
+            "human": "user",
+            "ai": "assistant",
+            "system": "system",
+            "tool": "tool",
+        }
+        role = role_map.get(msg_type, "system")
+        
+        # If AIMessage has tool_calls, treat it as 'tool' role (tool invocation)
+        if msg_type == "ai" and msg_tool_calls:
+            role = "tool"
         
         # Get timestamp as ISO string
         if isinstance(msg_timestamp, str):
@@ -386,61 +374,9 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
         elif hasattr(msg_timestamp, 'isoformat'):
             timestamp_iso = msg_timestamp.isoformat()
         else:
-            timestamp_iso = datetime.utcnow().isoformat()
+            timestamp_iso = datetime.now().isoformat()
         
-        # Build node(s)
-        # Check if this is an AI message with both text explanation and JSON block
-        # If so, split into two nodes: assistant (text) and system (JSON)
-        content_str = str(msg_content)
-        if role == "assistant" and "```json" in content_str:
-            import re
-            # Try to extract text before JSON block and JSON block separately
-            json_match = re.search(r'```json\s*(.*?)\s*```', content_str, re.DOTALL)
-            if json_match:
-                # Extract text before JSON block
-                json_start = content_str.find("```json")
-                text_before = content_str[:json_start].strip()
-                json_block = json_match.group(0)  # Full ```json...``` block
-                
-                # Create assistant node with text explanation (if exists)
-                if text_before:
-                    assistant_node = {
-                        "node_id": f"node_{uuid.uuid4().hex[:8]}",
-                        "role": "assistant",
-                        "status": "completed",
-                        "created_at": timestamp_iso,
-                        "contents": [
-                            {
-                                "type": "text",
-                                "data": {
-                                    "text": text_before,
-                                },
-                            }
-                        ],
-                    }
-                    nodes.append(assistant_node)
-                
-                # Create system node with JSON block (for debugging/admin view)
-                system_node = {
-                    "node_id": f"node_{uuid.uuid4().hex[:8]}",
-                    "role": "system",
-                    "status": "completed",
-                    "created_at": timestamp_iso,
-                    "contents": [
-                        {
-                            "type": "text",
-                            "data": {
-                                "text": json_block,
-                            },
-                        }
-                    ],
-                }
-                nodes.append(system_node)
-                
-                # Skip the regular node creation below
-                continue
-        
-        # Regular node creation for messages without JSON blocks
+        # Build node
         node = {
             "node_id": f"node_{uuid.uuid4().hex[:8]}",
             "role": role,
@@ -580,11 +516,6 @@ def _process_conversation_background(
         
         # Store primary_asset for later use in error handling and completion
         primary_asset = assets[0] if assets else None
-        
-        # Use first file path for backward compatibility with workflow (for now)
-        # TODO: Update workflow to accept multiple file paths
-        temp_file_path = temp_file_paths[0] if temp_file_paths else None
-        logger.info(f"Selected primary file path: {temp_file_path} (from {len(temp_file_paths)} downloaded assets)")
 
         workflow = AnalyzeCSVWorkflow()
         _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
@@ -603,10 +534,14 @@ def _process_conversation_background(
                     break
         
         result = workflow.execute(
-            file_path=temp_file_path,
+            file_paths=temp_file_paths,  # Pass all file paths for multi-file analysis
             conversation=conversation,
             dashboards=dashboards_cache,
             user_prompt=user_prompt,
+            conversation_uri=conversation_uri,
+            conversation_backup_uri=conversation_backup_uri,
+            post_status_fn=_post_node_status_sync,
+            assets=assets,
         )
         
         # Validate result is not None
@@ -616,21 +551,8 @@ def _process_conversation_background(
             _post_node_status_sync(conversation_id, "error", {"error": error_msg})
             return
         
-        # Detect response type from result structure
-        # Dashboard: has "data" dict with charts/metrics
-        # Q&A: has "content" string
-        response_type = result.get("type")
-        if not response_type:
-            # Auto-detect if type not provided
-            if result.get("data") and isinstance(result.get("data"), dict):
-                response_type = "dashboard_config"
-            elif result.get("content") and isinstance(result.get("content"), str):
-                response_type = "message"
-            else:
-                # Default to dashboard for backward compatibility
-                response_type = "dashboard_config"
-        
-        logger.info(f"Detected response type: {response_type}")
+        # Check response type to route handling
+        response_type = result.get("type", "dashboard_config")  # Default to dashboard for backward compatibility
         
         # Postprocess workflow messages into conversation nodes
         workflow_output = result.get("workflow_output")
@@ -650,7 +572,7 @@ def _process_conversation_background(
             # The postprocessed_nodes should already contain the assistant's text response
             
             # Q&A responses don't generate dashboards, just save conversation with text response
-            conversation["updated_at"] = datetime.utcnow().isoformat()
+            conversation["updated_at"] = datetime.now().isoformat()
             _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
             
             # Post completion status with Q&A content in metadata
@@ -802,7 +724,7 @@ def _process_conversation_background(
                         "node_id": f"node_{uuid.uuid4().hex[:8]}",
                         "role": "assistant",
                         "status": "completed",
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": datetime.now().isoformat(),
                         "contents": [
                             {
                                 "type": "dashboard",
@@ -820,11 +742,12 @@ def _process_conversation_background(
                 {
                     "dashboard_id": new_dashboard_record["dashboard_id"],
                     "s3_uri": new_dashboard_record["s3_uri"],
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now().isoformat(),
+                    "title": dashboard_title,
                 }
             )
 
-        conversation["updated_at"] = datetime.utcnow().isoformat()
+        conversation["updated_at"] = datetime.now().isoformat()
         _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
         
         completion_file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") if primary_asset else conversation_id
@@ -881,13 +804,13 @@ def _process_conversation_background(
                 "node_id": f"node_{uuid.uuid4().hex[:8]}",
                 "role": "assistant",
                 "status": "error",
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now().isoformat(),
                 "contents": [
-                    {"type": "text", "data": {"text": f"Workflow failed: {exc}"}}
+                    {"type": "text", "data": {"text": "Sorry, we encountered an error. Please try again."}}
                 ],
             }
             conversation.setdefault("nodes", []).append(error_node)
-            conversation["updated_at"] = datetime.utcnow().isoformat()
+            conversation["updated_at"] = datetime.now().isoformat()
             try:
                 _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
             except Exception as persist_error:
@@ -911,7 +834,7 @@ def _process_conversation_background(
             except Exception as upload_error:
                 logger.error(f"Failed to save error payload: {upload_error}")
 
-        _post_node_status_sync(conversation_id, "error", {"error": str(exc)})
+        _post_node_status_sync(conversation_id, "error", {"error": "Sorry, we encountered an error. Please try again."})
 
     finally:
         # Clean up all downloaded asset files

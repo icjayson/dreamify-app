@@ -1,15 +1,206 @@
 """
 Admin monitoring endpoints for tracking and debugging AnalyzeCSVWorkflow LLM execution.
 """
+import time
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
+
+from boto3.dynamodb.conditions import Attr
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.dependencies.admin_auth import require_admin
+from utils.dynamodb.client import get_table
+from utils.dynamodb.tables import tables
 from utils.dynamodb.repos import conversations as conversations_repo
 from utils.s3.conversations import load_conversation
+from utils.s3.client import download_bytes
+from app.api.route_modules.conversation import DashboardDataResponse
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+class MetricsCache:
+    def __init__(self, ttl_seconds=300):
+        self.ttl = ttl_seconds
+        self.data = None
+        self.timestamp = 0
+
+    def get(self):
+        if self.data and (time.time() - self.timestamp) < self.ttl:
+            return self.data
+        return None
+
+    def set(self, data):
+        self.data = data
+        self.timestamp = time.time()
+
+
+metrics_cache = MetricsCache(ttl_seconds=300)
+
+@router.get("/metrics")
+async def get_admin_metrics(
+    _: bool = Depends(require_admin),
+):
+    """
+    Get high-level dashboard metrics directly from DynamoDB.
+    Results are cached in memory for 5 minutes.
+    """
+    cached = metrics_cache.get()
+    if cached:
+        return cached
+
+    try:
+        total_unique_users = set()
+        total_conversations = 0
+        total_messages = 0
+        
+        last_key = None
+        while True:
+            result = conversations_repo.scan_all_conversations(limit=1000, last_evaluated_key=last_key)
+            items = result.get("Items", [])
+            for item in items:
+                total_conversations += 1
+                if "user_id" in item:
+                    total_unique_users.add(item["user_id"])
+                
+                node_count = item.get("node_count")
+                if node_count is not None:
+                    total_messages += int(node_count)
+                else:
+                    total_messages += 2
+            
+            last_key = result.get("LastEvaluatedKey")
+            if not last_key:
+                break
+                
+        table = get_table(tables.workflow_status)
+        completed = 0
+        errors = 0
+        
+        last_status_key = None
+        while True:
+            status_kwargs = {
+                "Limit": 1000,
+                "FilterExpression": Attr("node_id").eq("workflow"),
+                "ProjectionExpression": "#st",
+                "ExpressionAttributeNames": {"#st": "status"}
+            }
+            if last_status_key:
+                status_kwargs["ExclusiveStartKey"] = last_status_key
+                
+            resp = table.scan(**status_kwargs)
+            for item in resp.get("Items", []):
+                s = item.get("status")
+                if s == "completed":
+                    completed += 1
+                elif s == "error":
+                    errors += 1
+            
+            last_status_key = resp.get("LastEvaluatedKey")
+            if not last_status_key:
+                break
+                
+        total_runs = completed + errors
+        success_rate = (completed / total_runs * 100) if total_runs > 0 else 100.0
+        
+        total_users_count = len(total_unique_users)
+        avg_msgs = (total_messages / total_users_count) if total_users_count > 0 else 0.0
+        
+        metrics = {
+            "total_users": total_users_count,
+            "total_conversations": total_conversations,
+            "total_messages": total_messages,
+            "avg_msgs_per_user": round(avg_msgs, 1),
+            "success_rate": round(success_rate, 1)
+        }
+        metrics_cache.set(metrics)
+        return metrics
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to calculate metrics: {str(e)}")
+
+
+timeseries_cache = MetricsCache(ttl_seconds=300)
+
+@router.get("/metrics/timeseries")
+async def get_admin_metrics_timeseries(
+    days: int = Query(30, ge=1, le=90),
+    _: bool = Depends(require_admin),
+):
+    """
+    Get time-series metrics for the last N days.
+    """
+    cache_key = f"timeseries_{days}"
+    
+    # We cheat the MetricsCache by storing a dict of cache keys inside
+    cached_data = timeseries_cache.get()
+    if cached_data and cache_key in cached_data:
+        return cached_data[cache_key]
+
+    try:
+        start_date = datetime.now() - timedelta(days=days)
+        start_date_iso = start_date.isoformat()
+        
+        # Initialize buckets
+        buckets = {}
+        for i in range(days):
+            d = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            buckets[d] = {
+                "date": d,
+                "messages": 0,
+                "conversations": 0,
+                "users_set": set(),
+                "active_users": 0
+            }
+            
+        last_key = None
+        while True:
+            result = conversations_repo.scan_recent_conversations(
+                start_date_iso=start_date_iso, 
+                limit=1000, 
+                last_evaluated_key=last_key
+            )
+            for item in result.get("Items", []):
+                created_at = item.get("created_at", "")
+                if len(created_at) >= 10:
+                    date_prefix = created_at[:10]
+                    if date_prefix in buckets:
+                        buckets[date_prefix]["conversations"] += 1
+                        
+                        node_count = item.get("node_count")
+                        if node_count is not None:
+                            buckets[date_prefix]["messages"] += int(node_count)
+                        else:
+                            buckets[date_prefix]["messages"] += 2
+                            
+                        if "user_id" in item:
+                            buckets[date_prefix]["users_set"].add(item["user_id"])
+            
+            last_key = result.get("LastEvaluatedKey")
+            if not last_key:
+                break
+                
+        # Format output
+        output = []
+        # Sort keys chronologically (oldest to newest)
+        for d in sorted(buckets.keys()):
+            bucket = buckets[d]
+            bucket["active_users"] = len(bucket["users_set"])
+            del bucket["users_set"]
+            output.append(bucket)
+            
+        # Save to cache
+        current_cache = timeseries_cache.get() or {}
+        current_cache[cache_key] = output
+        timeseries_cache.set(current_cache)
+        
+        return output
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to calculate time-series: {str(e)}")
 
 
 class ConversationListItem(BaseModel):
@@ -17,6 +208,8 @@ class ConversationListItem(BaseModel):
     conversation_id: str
     project_id: str
     user_id: str
+    user_name: Optional[str] = None
+    user_avatar: Optional[str] = None
     title: str
     created_at: str
     updated_at: str
@@ -80,12 +273,35 @@ async def list_conversations(
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         paginated_items = all_items[start_idx:end_idx]
+        # Collect unique user IDs from current page
+        unique_user_ids = list(set(item.get("user_id") for item in paginated_items if item.get("user_id")))
+        user_metadata_map = {}
+        
+        # Fetch user profiles from Clerk if there are any users
+        if unique_user_ids:
+            try:
+                from clerk_backend_api import Clerk
+                from utils.config import config
+                clerk = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
+                clerk_users = clerk.users.list(request={"user_id": unique_user_ids})
+                for u in clerk_users:
+                    name_parts = filter(None, [u.first_name, u.last_name])
+                    full_name = " ".join(name_parts)
+                    user_metadata_map[u.id] = {
+                        "name": full_name if full_name else u.username,
+                        "avatar": u.image_url
+                    }
+            except Exception as e:
+                # Log error but don't fail the request (metadata will just be empty)
+                print(f"Failed to fetch Clerk user metadata: {e}")
         
         conversations = [
             ConversationListItem(
                 conversation_id=item.get("conversation_id", ""),
                 project_id=item.get("project_id", ""),
                 user_id=item.get("user_id", ""),
+                user_name=user_metadata_map.get(item.get("user_id"), {}).get("name"),
+                user_avatar=user_metadata_map.get(item.get("user_id"), {}).get("avatar"),
                 title=item.get("title", "Conversation"),
                 created_at=item.get("created_at", ""),
                 updated_at=item.get("updated_at", ""),
@@ -171,4 +387,119 @@ async def get_conversation_nodes(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load conversation nodes: {str(e)}")
+
+
+@router.get("/conversations/{conversation_id}/dashboard", response_model=DashboardDataResponse)
+async def get_conversation_dashboard(
+    conversation_id: str,
+    project_id: str = Query(..., description="Project ID"),
+    dashboard_id: Optional[str] = Query(None, description="Specific dashboard ID to fetch"),
+    _: bool = Depends(require_admin),
+):
+    """Get dashboard data from a specific dashboard or the latest dashboard in conversation for Admin."""
+    logger.info(
+        "Admin fetching dashboard for conversation: project_id=%s, conversation_id=%s, dashboard_id=%s",
+        project_id,
+        conversation_id,
+        dashboard_id,
+    )
+
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation_meta:
+        logger.warning(
+            "Conversation not found for dashboard request: project_id=%s, conversation_id=%s",
+            project_id,
+            conversation_id,
+        )
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    s3_bucket = conversation_meta["s3_bucket"]
+    s3_key = conversation_meta["s3_key"]
+    conversation = load_conversation(s3_bucket, s3_key)
+    
+    # Get dashboards list
+    dashboards = conversation.get("dashboards", [])
+    if not dashboards:
+        logger.info(
+            "No dashboards present in conversation: project_id=%s, conversation_id=%s",
+            project_id,
+            conversation_id,
+        )
+        return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
+    
+    # Select specific dashboard if ID provided, otherwise get latest
+    if dashboard_id:
+        target_dashboard = next((d for d in dashboards if d.get("dashboard_id") == dashboard_id), None)
+        if not target_dashboard:
+            logger.warning(
+                "Dashboard not found: project_id=%s, conversation_id=%s, dashboard_id=%s",
+                project_id,
+                conversation_id,
+                dashboard_id,
+            )
+            raise HTTPException(status_code=404, detail=f"Dashboard {dashboard_id} not found")
+    else:
+        target_dashboard = dashboards[-1]
+    
+    dash_id = target_dashboard.get("dashboard_id")
+    s3_uri = target_dashboard.get("s3_uri")
+    
+    if not dash_id or not s3_uri:
+        logger.warning(
+            "Dashboard metadata incomplete for conversation: project_id=%s, conversation_id=%s, dashboard=%s",
+            project_id,
+            conversation_id,
+            target_dashboard,
+        )
+        return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
+    
+    # Parse s3://bucket/key format
+    if not s3_uri.startswith("s3://"):
+        logger.error(
+            "Invalid S3 URI format for dashboard: project_id=%s, conversation_id=%s, dashboard_id=%s, s3_uri=%s",
+            project_id,
+            conversation_id,
+            dash_id,
+            s3_uri,
+        )
+        raise HTTPException(status_code=500, detail="Invalid S3 URI format for dashboard")
+    
+    uri_parts = s3_uri[5:].split("/", 1)
+    if len(uri_parts) != 2:
+        logger.error(
+            "Invalid S3 URI format (missing key) for dashboard: project_id=%s, conversation_id=%s, dashboard_id=%s, s3_uri=%s",
+            project_id,
+            conversation_id,
+            dash_id,
+            s3_uri,
+        )
+        raise HTTPException(status_code=500, detail="Invalid S3 URI format for dashboard")
+    
+    bucket = uri_parts[0]
+    key = uri_parts[1].lstrip("/")
+    
+    try:
+        dashboard_bytes = download_bytes(bucket, key)
+        dashboard_data = json.loads(dashboard_bytes.decode("utf-8"))
+        
+        logger.info(
+            "Successfully loaded dashboard from S3: bucket=%s, key=%s, dashboard_id=%s",
+            bucket,
+            key,
+            dash_id,
+        )
+
+        return DashboardDataResponse(
+            dashboard_id=dash_id,
+            dashboard_data=dashboard_data,
+        )
+    except FileNotFoundError:
+        logger.warning(
+            "Dashboard data not found in S3, treating as no dashboard yet: bucket=%s, key=%s, dashboard_id=%s",
+            bucket,
+            key,
+            dash_id,
+        )
+        return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
+
 

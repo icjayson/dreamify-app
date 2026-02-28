@@ -195,6 +195,7 @@ def _save_conversation_to_s3_and_dynamodb(
             title=title or "Conversation",
             metadata={},
             conversation_id=conversation_id,
+            node_count=len(conversation.get("nodes", [])),
         )
 
 

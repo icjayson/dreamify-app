@@ -75,10 +75,11 @@ export function conversationNodesToMessages(
 
       const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
       const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
-      const assetContent = node?.contents?.find?.(
+      const assetContents = node?.contents?.filter?.(
         (c: any) =>
-          c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file'
-      );
+          c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file' || c?.type === 'mention'
+      ) ?? [];
+      const assetContent = assetContents[0];
       const normalized: Message = {
         id: node?.node_id || crypto.randomUUID(),
         role: node?.role === 'user' ? 'user' : 'assistant',
@@ -100,12 +101,13 @@ export function conversationNodesToMessages(
       // This shows "Attached file" badge for @mentioned files in QnA mode
       // FALLBACK: If assetContent is missing but this is the last user node and we have a fallback, use it.
       if (assetContent?.data) {
+        const firstName =
+          assetContent?.data?.filename ||
+          assetContent?.data?.name ||
+          assetName;
         normalized.attachment = {
           kind: assetContent?.data?.kind === 'file' ? 'file' : 'csv',
-          name:
-            assetContent?.data?.filename ||
-            assetContent?.data?.name ||
-            assetName,
+          name: assetContents.length > 1 ? `${assetContents.length} files` : firstName,
           mime: assetContent?.data?.mime,
         };
       } else if (isLastUser && options?.lastUserMessageAttachment) {

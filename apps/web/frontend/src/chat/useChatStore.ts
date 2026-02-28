@@ -88,6 +88,7 @@ interface ChatState {
   // File state
   uploadedFiles: UploadedFile[];
   currentConversationId: string | null;
+  currentProjectId: string | null;
 
   // Processing state
   isProcessing: boolean;
@@ -183,6 +184,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: initialMessages,
   uploadedFiles: [],
   currentConversationId: null,
+  currentProjectId: null,
   isProcessing: false,
   currentWorkflowStep: null,
   dropdownOpen: false,
@@ -276,7 +278,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Create new AbortController for this processing session
     const abortController = new AbortController();
-    set({ abortController });
+    set({ abortController, currentProjectId: projectIdParam || null });
 
     // Clear current workflow step at start
     setCurrentWorkflowStep(null);
@@ -413,6 +415,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
             console.warn('Failed to fetch asset data for QnA:', error);
           }
         }
+
+        // Add @mentioned files as 'mention' content entries so badge persists in conversation JSON
+        // Uses 'mention' type so backend doesn't treat them as new assets to process
+        if (mentionedAssetIds && mentionedAssetIds.length > 0) {
+          for (const mentionedId of mentionedAssetIds) {
+            if (assetContentsList.some(c => c.data?.asset_id === mentionedId)) continue;
+            const mentionedFile = uploadedFiles.find(f => f.fileID === mentionedId);
+            if (mentionedFile) {
+              assetContentsList.push({
+                type: 'mention',
+                data: {
+                  asset_id: mentionedId,
+                  filename: mentionedFile.filename,
+                  kind: mentionedFile.ext === 'csv' ? 'csv' : 'file',
+                }
+              });
+            }
+          }
+        }
+
         if (assetContentsList.length > 0) {
           assetContents = assetContentsList;
         }
@@ -662,6 +684,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
           console.warn('Failed to fetch asset data:', error);
         }
       }
+
+      // Add @mentioned files as 'mention' content entries so badge persists in conversation JSON
+      if (mentionedAssetIds && mentionedAssetIds.length > 0) {
+        for (const mentionedId of mentionedAssetIds) {
+          if (assetContentsList.some(c => c.data?.asset_id === mentionedId)) continue;
+          const mentionedFile = uploadedFiles.find(f => f.fileID === mentionedId);
+          if (mentionedFile) {
+            assetContentsList.push({
+              type: 'mention',
+              data: {
+                asset_id: mentionedId,
+                filename: mentionedFile.filename,
+                kind: mentionedFile.ext === 'csv' ? 'csv' : 'file',
+              }
+            });
+          }
+        }
+      }
+
       const assetContents = assetContentsList.length > 0 ? assetContentsList : undefined;
       const allFileIdsForMeta = get().uploadedFiles.map(f => f.fileID).filter(Boolean);
       const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
@@ -890,7 +931,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (currentConversationId) {
       try {
-        const projectId = state.uploadedFiles[0]?.projectId;
+        const projectId = state.currentProjectId || state.uploadedFiles[0]?.projectId;
         if (projectId) {
           const { conversationService } = await import('@/services/conversationService');
           await conversationService.stopWorkflow(currentConversationId, projectId);

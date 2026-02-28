@@ -102,10 +102,10 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
-          className="flex items-center gap-2.5 h-6 overflow-hidden ml-8 mt-2"
+          className="flex items-center gap-2.5 ml-8 mt-2"
         >
           {/* Sparkles Icon */}
-          <Sparkles className="w-4 h-4 text-blue-400 animate-pulse flex-shrink-0" />
+          <Sparkles className="w-4 h-4 text-blue-400 animate-pulse flex-shrink-0 leading-none" />
 
           {/* Animated Text */}
           <div className="relative flex-1 min-w-0">
@@ -119,7 +119,7 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
                   duration: 0.3,
                   ease: [0.4, 0.0, 0.2, 1]
                 }}
-                className="text-sm truncate bg-clip-text text-transparent bg-gradient-to-r from-gray-200 via-white to-gray-200 inline-block max-w-full"
+                className="text-sm truncate bg-clip-text text-transparent bg-gradient-to-r from-gray-200 via-white to-gray-200 block max-w-full leading-normal"
               >
                 {currentText}
               </motion.span>

@@ -422,6 +422,22 @@ def _process_conversation_background(
 
     try:
         logger.info(f"Starting workflow for conversation {conversation_id}")
+        
+        # Clear any stale stop_signal from a previous run
+        try:
+            requests.post(
+                f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status",
+                json={
+                    "conversation_id": conversation_id,
+                    "node_id": "stop_signal",
+                    "status": "cleared",
+                    "metadata": {},
+                },
+                timeout=5,
+            )
+        except Exception:
+            pass
+        
         _post_node_status_sync(conversation_id, "processing", {"step": "load_conversation"})
 
         try:

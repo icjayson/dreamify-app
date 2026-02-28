@@ -893,42 +893,37 @@ class StatefulAnalyzeCSVWorkflow:
     
     def _check_workflow_stopped(self, state: AgentState) -> bool:
         """
-        Check if workflow should be stopped externally.
+        Check if workflow has been stopped by the user.
         
-        Checks backend API for stop signals from user.
-        
-        Args:
-            state: Current agent state
-            
-        Returns:
-            True if workflow should stop, False otherwise
+        Reads the 'stop_signal' node from DynamoDB (via backend API).
+        This is separate from 'workflow' node to avoid race conditions 
+        where Morpheus progress updates overwrite the stop flag.
         """
         if not state.conversation_id or not state.project_id:
             return False
         
         try:
-            # Import here to avoid circular dependency
-            import sys
-            import importlib.util
-            
-            # Try to load server module dynamically
-            server_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-                'server.py'
+            import requests as _requests
+            backend_url = os.environ.get("BACKEND_API_URL", "http://localhost:5000")
+            morpheus_key = os.environ.get("MORPHEUS_API_KEY", "dev-secret-key")
+            response = _requests.get(
+                f"{backend_url}/api/v1/morpheus/node-status",
+                params={
+                    "conversation_id": state.conversation_id,
+                    "project_id": state.project_id,
+                    "node_id": "stop_signal",
+                },
+                headers={"X-Morpheus-Key": morpheus_key},
+                timeout=5,
             )
-            
-            if os.path.exists(server_path):
-                spec = importlib.util.spec_from_file_location("server", server_path)
-                server_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(server_module)
-                status = server_module._check_workflow_status(
-                    state.conversation_id,
-                    state.project_id
-                )
-                return status == "stopped"
-        
+            if response.status_code == 200:
+                data = response.json()
+                nodes = data.get("nodes", [])
+                if nodes and nodes[0].get("status") == "stopped":
+                    return True
+            # 404 = no stop signal exists, that's fine
         except Exception as e:
-            logger.debug(f"Could not check workflow status: {str(e)}")
+            logger.debug(f"Could not check stop signal: {str(e)}")
         
         return False
     

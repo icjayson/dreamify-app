@@ -46,8 +46,14 @@ export function ConversationCard({ conversation }: ConversationCardProps) {
             <span className="font-mono text-xs truncate">{conversation.project_id}</span>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
-            <User className="h-3 w-3" />
-            <span className="font-mono text-xs truncate">{conversation.user_id}</span>
+            {conversation.user_avatar ? (
+              <img src={conversation.user_avatar} alt={conversation.user_name || 'User'} className="h-4 w-4 rounded-full object-cover" />
+            ) : (
+              <User className="h-4 w-4" />
+            )}
+            <span className="text-xs truncate">
+              {conversation.user_name || <span className="font-mono">{conversation.user_id}</span>}
+            </span>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="h-3 w-3" />

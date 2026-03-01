@@ -592,8 +592,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: `Sorry, I encountered an error: ${errorMsg}`,
+                content: 'error while generating dashboard',
                 timestamp: new Date(),
+                isError: true,
               }
             ]));
           }
@@ -604,8 +605,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             {
               id: (Date.now() + 1).toString(),
               role: 'assistant',
-              content: `Sorry, I couldn't process your question: ${errorMsg}`,
+              content: 'error while generating dashboard',
               timestamp: new Date(),
+              isError: true,
             }
           ]));
         }
@@ -617,8 +619,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            content: 'error while generating dashboard',
             timestamp: new Date(),
+            isError: true,
           }
         ]));
       } finally {
@@ -868,8 +871,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: `Sorry, I encountered an error. Please try again.`,
+                content: 'error while generating dashboard',
                 timestamp: new Date(),
+                isError: true,
               }
             ]));
           } else {
@@ -880,8 +884,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: 'Sorry, I encountered an issue. Please try again.',
+                content: 'error while generating dashboard',
                 timestamp: new Date(),
+                isError: true,
               }
             ]));
           }
@@ -894,8 +899,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: `Sorry, I couldn't process your request. Please try again.`,
+            content: 'error while generating dashboard',
             timestamp: new Date(),
+            isError: true,
           }
         ]));
       }
@@ -908,8 +914,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: `Sorry, I encountered an error. Please try again.`,
+          content: 'error while generating dashboard',
           timestamp: new Date(),
+          isError: true,
         }
       ]));
     } finally {

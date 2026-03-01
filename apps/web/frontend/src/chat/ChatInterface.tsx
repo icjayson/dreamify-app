@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle, FileStack } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle, FileStack, AlertCircle } from "lucide-react";
 import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -380,6 +380,27 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
       clearFiles();
       setMentionedAssetIds([]);
+    } finally {
+      isSendingRef.current = false;
+    }
+  };
+
+  const handleRetry = async () => {
+    if (isSendingRef.current) return;
+    isSendingRef.current = true;
+    try {
+      const activeFiles = uploadedFiles.filter(f => f.status !== 'processed');
+      let finalMentionedIds = [...mentionedAssetIds];
+      activeFiles.forEach(file => {
+        if (file.fileID && !finalMentionedIds.includes(file.fileID)) {
+          finalMentionedIds.push(file.fileID);
+        }
+      });
+      const activeFileAttachment = activeFiles.length > 0
+        ? { kind: 'csv' as const, name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` }
+        : undefined;
+
+      await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
     } finally {
       isSendingRef.current = false;
     }
@@ -792,11 +813,32 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                       </div>
                     )}
                     {/* Render text content if present */}
-                    {message.content && (
+                    {message.content && !message.isError && (
                       <div
                         className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
                         dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
                       />
+                    )}
+                    {message.isError && (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2 text-red-500">
+                          <AlertCircle className="w-4 h-4" />
+                          <span
+                            title="llm are not perfect"
+                            className="text-sm cursor-help focus:outline-none"
+                          >
+                            {message.content}
+                          </span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRetry}
+                          className="self-start h-7 px-3 text-xs bg-transparent border-red-500/30 text-red-500 hover:bg-red-500/10"
+                        >
+                          Retry
+                        </Button>
+                      </div>
                     )}
                     {/* Render dashboard card if present */}
                     {message.role === 'assistant' && message.dashboardCard && (

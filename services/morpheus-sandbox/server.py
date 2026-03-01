@@ -241,6 +241,7 @@ async def _post_node_status(conversation_id: Optional[str], status: str, metadat
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
                 f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status",
+                headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
                 json={
                     "conversation_id": conversation_id,
                     "node_id": "workflow",
@@ -653,9 +654,11 @@ def _process_conversation_background(
         if asset_id and processed_json_s3_key:
             try:
                 update_url = f"{BACKEND_API_URL}/api/v1/morpheus/asset/{asset_id}/processed-key"
+                headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
                 response = requests.put(
                     update_url,
                     json={"processed_json_s3_key": processed_json_s3_key},
+                    headers=headers,
                     timeout=10,
                 )
                 if response.status_code != 200:
@@ -922,9 +925,11 @@ async def get_workflow_status(request: StatusRequest):
             "Received status request for conversation %s",
             request.conversation_id,
         )
+        headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
         response = requests.get(
             f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status/{request.conversation_id}",
             params={"project_id": request.project_id},
+            headers=headers,
             timeout=10,
         )
         if response.status_code == 200:

@@ -102,13 +102,13 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
-          className="flex items-center gap-2.5 h-6 overflow-hidden ml-8 mt-2"
+          className="flex items-center gap-2.5 ml-8 mt-2"
         >
           {/* Sparkles Icon */}
-          <Sparkles className="w-4 h-4 text-blue-400 animate-pulse flex-shrink-0" />
+          <Sparkles className="w-4 h-4 text-blue-400 animate-pulse flex-shrink-0 leading-none" />
 
           {/* Animated Text */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <AnimatePresence mode="wait">
               <motion.span
                 key={currentText}
@@ -119,7 +119,7 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
                   duration: 0.3,
                   ease: [0.4, 0.0, 0.2, 1]
                 }}
-                className="text-sm bg-clip-text text-transparent bg-gradient-to-r from-gray-200 via-white to-gray-200 inline-block"
+                className="text-sm truncate bg-clip-text text-transparent bg-gradient-to-r from-gray-200 via-white to-gray-200 block max-w-full leading-normal"
               >
                 {currentText}
               </motion.span>
@@ -362,14 +362,22 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         }
       }, 10);
 
+      // Compute active files (exclude restored/processed files) for mentions and attachment
+      const activeFiles = uploadedFiles.filter(f => f.status !== 'processed');
+
       let finalMentionedIds = [...mentionedAssetIds];
-      uploadedFiles.forEach(file => {
+      activeFiles.forEach(file => {
         if (file.fileID && !finalMentionedIds.includes(file.fileID)) {
           finalMentionedIds.push(file.fileID);
         }
       });
 
-      await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds);
+      // Compute attachment badge info from active files only
+      const activeFileAttachment = activeFiles.length > 0
+        ? { kind: 'csv' as const, name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` }
+        : undefined;
+
+      await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
       clearFiles();
       setMentionedAssetIds([]);
     } finally {
@@ -818,12 +826,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               {/* Inline Rolling Text under the last user message that started analysis */}
               {message.role === 'user'
                 && index === messages.length - 1
-                && uploadedFiles.some(f => f.status === 'processing')
                 && isProcessing && (
                   <div className="flex justify-start">
                     <RollingText
-                      isActive={isProcessing || uploadedFiles.some(f => f.status === 'processing')}
-                      stopSignal={uploadedFiles.every(f => f.status !== 'processing') || (!isProcessing && !isTyping)}
+                      isActive={isProcessing}
+                      stopSignal={!isProcessing && !isTyping}
                       successText=""
                       currentStep={currentWorkflowStep}
                     />
@@ -887,11 +894,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               />
             )}
 
-            {/* File Context Chips - each file on its own row (w-full) when multiple */}
-            {uploadedFiles.length > 0 && (
-              <div className="mb-3 flex min-w-0 flex-col gap-1">
-                {uploadedFiles.map((file) => (
-                  <div key={file.fileID} className="min-w-0 w-full">
+            {/* File Context Chips - horizontal scroll when files are attached */}
+            {/* Filter out 'processed' files — they're restored from previous conversations and shouldn't show as input chips */}
+            {uploadedFiles.filter(f => f.status !== 'processed').length > 0 && (
+              <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                {uploadedFiles.filter(f => f.status !== 'processed').map((file) => (
+                  <div key={file.fileID} className="flex-shrink-0">
                     <FilePreviewChip
                       file={file}
                       onRemove={() => removeUploadedFile(file.fileID)}

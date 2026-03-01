@@ -10,13 +10,13 @@ export const API_CONFIG = {
 export const API_ENDPOINTS = {
   // File Upload
   UPLOAD_FILE: '/api/v1/files/upload',
-  
+
   // Analytics
   ANALYTICS: '/api/v1/analytics',
   ANALYTICS_SUMMARY: '/api/v1/analytics/summary',
   ANALYTICS_CHARTS: '/api/v1/analytics/charts',
   ANALYTICS_DATA: '/api/v1/analytics/data',
-  
+
   // Dashboard (aligned with FastAPI backend)
   DASHBOARD_GENERATE: '/api/v1/dashboard/generate',
   DASHBOARD_CONFIG: '/api/v1/dashboard/config',
@@ -24,14 +24,16 @@ export const API_ENDPOINTS = {
   DASHBOARD_CHART_DATA: '/api/v1/dashboard/chart-data',
   DASHBOARD_LIST: '/api/v1/dashboard/list',
   DASHBOARD_DELETE: '/api/v1/dashboard/delete',
-  
+
   // Health Check
   HEALTH: '/health',
-  
+
   // Admin
   ADMIN_CONVERSATIONS: '/api/v1/admin/conversations',
   ADMIN_CONVERSATION: '/api/v1/admin/conversations',
   ADMIN_CONVERSATION_NODES: '/api/v1/admin/conversations',
+  ADMIN_METRICS: '/api/v1/admin/metrics',
+  ADMIN_TIMESERIES: '/api/v1/admin/metrics/timeseries',
 } as const;
 
 // HTTP Methods

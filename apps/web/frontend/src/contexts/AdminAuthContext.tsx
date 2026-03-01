@@ -44,7 +44,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       // Test authentication by making a simple request
       const authHeader = `Basic ${btoa(`${username}:${password}`)}`;
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/v1/admin/conversations?limit=1`,
+        `${import.meta.env.VITE_API_URL || ''}/api/v1/admin/conversations?limit=1`,
         {
           method: 'GET',
           headers: {

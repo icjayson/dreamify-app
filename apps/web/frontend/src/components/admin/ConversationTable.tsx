@@ -36,7 +36,7 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
   const sortedConversations = [...conversations].sort((a, b) => {
     const aValue = a[sortField];
     const bValue = b[sortField];
-    
+
     if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
     if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
     return 0;
@@ -137,8 +137,21 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
               <TableCell className="font-mono text-xs">
                 {conv.project_id.slice(0, 8)}...
               </TableCell>
-              <TableCell className="font-mono text-xs">
-                {conv.user_id.slice(0, 12)}...
+              <TableCell>
+                {conv.user_name ? (
+                  <div className="flex items-center gap-2">
+                    {conv.user_avatar ? (
+                      <img src={conv.user_avatar} alt={conv.user_name} className="h-5 w-5 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] text-muted-foreground border">
+                        {conv.user_name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="text-sm font-medium">{conv.user_name}</span>
+                  </div>
+                ) : (
+                  <span className="font-mono text-xs text-muted-foreground">{conv.user_id.slice(0, 12)}...</span>
+                )}
               </TableCell>
               <TableCell>{conv.title}</TableCell>
               <TableCell className="text-sm text-muted-foreground">

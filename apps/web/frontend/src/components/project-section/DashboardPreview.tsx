@@ -9,7 +9,7 @@ import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
-import { DashboardGenerationRequest, LayoutType, ChartType } from "@/types/dashboard";
+import { DashboardGenerationRequest, LayoutType, ChartType, DashboardConfiguration } from "@/types/dashboard";
 import {
   convertLLMStylingToChartStyling,
   validateChartStyling,
@@ -27,6 +27,7 @@ interface DashboardPreviewProps {
   className?: string;
   style?: React.CSSProperties;
   processedData?: any;
+  staticConfig?: DashboardConfiguration | null;
 }
 
 const DashboardPreview = ({
@@ -34,13 +35,20 @@ const DashboardPreview = ({
   dashboardId,
   className = "",
   style = {},
-  processedData
+  processedData,
+  staticConfig
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(dashboardId);
+  // Pass undefined to useDashboard if staticConfig exists so it doesn't try to fetch
+  const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(staticConfig ? undefined : dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Determine which configuration to use (static from parent vs fetched from state)
+  const configuration = staticConfig || dashboardState.configuration;
+  const isLoading = !staticConfig && dashboardState.loading;
+  const errorMsg = !staticConfig && dashboardState.error;
 
   // No automatic dashboard generation on mount
 
@@ -669,9 +677,10 @@ const DashboardPreview = ({
 
   // Filter processedData by date range
   const filteredProcessedData = useMemo(() => {
-    if (!processedData) return null;
-    return filterDataByDateRange(processedData, dateRange);
-  }, [processedData, dateRange]);
+    const dataToFilter = processedData || (configuration && !configuration.components ? configuration : null);
+    if (!dataToFilter) return null;
+    return filterDataByDateRange(dataToFilter, dateRange);
+  }, [processedData, configuration, dateRange]);
 
   // Grid layout config
   const ResponsiveGridLayout = useMemo(() => WidthProvider(Responsive), []);
@@ -685,9 +694,9 @@ const DashboardPreview = ({
   const normalizedProcessed = useMemo(() => filteredProcessedData ? normalizeDashboard(filteredProcessedData) : null, [filteredProcessedData]);
   const activeDashboard = useMemo(() => {
     if (normalizedProcessed) return normalizedProcessed;
-    if (dashboardState.configuration) return dashboardState.configuration as any;
+    if (configuration && configuration.components) return configuration as any;
     return null;
-  }, [normalizedProcessed, dashboardState.configuration]);
+  }, [normalizedProcessed, configuration]);
 
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {
@@ -1051,7 +1060,7 @@ const DashboardPreview = ({
           </div>
         )}
 
-        {!processedData && !dashboardState.configuration && !dashboardState.loading && !dashboardState.error && (
+        {!processedData && !configuration && !dashboardState.loading && !dashboardState.error && (
           <div className="space-y-6">
             <Alert>
               <AlertCircle className="h-4 w-4" />

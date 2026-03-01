@@ -36,7 +36,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
-    
+
     const defaultOptions: RequestInit = { headers: { 'Content-Type': CONTENT_TYPES.JSON } };
 
     // Merge provided options
@@ -57,9 +57,20 @@ class ApiClient {
       // ignore token retrieval errors; request proceeds unauthenticated
     }
 
+    // Enforce timeout using AbortController
+    const timeoutController = new AbortController();
+    const existingSignal = config.signal as AbortSignal | undefined;
+    const timeoutId = setTimeout(() => timeoutController.abort(), this.timeout);
+
+    // Merge with any existing abort signal (e.g. from user-initiated cancellation)
+    const mergedSignal = existingSignal
+      ? AbortSignal.any([existingSignal, timeoutController.signal])
+      : timeoutController.signal;
+
     try {
-      const response = await fetch(url, config);
-      
+      const response = await fetch(url, { ...config, signal: mergedSignal });
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -67,6 +78,10 @@ class ApiClient {
       const data = await response.json();
       return { success: true, data };
     } catch (error) {
+      clearTimeout(timeoutId);
+      if (timeoutController.signal.aborted && !(existingSignal?.aborted)) {
+        return { success: false, error: `Request timed out after ${this.timeout}ms` };
+      }
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       return { success: false, error: errorMessage };
     }
@@ -122,7 +137,7 @@ class ApiClient {
     }
 
     const url = `${this.baseURL}${endpoint}`;
-    
+
     try {
       const restOptions = { ...(options || {}) };
       const headers: Record<string, string> = {};
@@ -132,7 +147,7 @@ class ApiClient {
           const token = await this.authTokenProvider();
           if (token) headers.Authorization = `Bearer ${token}`;
         }
-      } catch (_) {}
+      } catch (_) { }
 
       const response = await fetch(url, {
         method: HTTP_METHODS.POST,
@@ -140,7 +155,7 @@ class ApiClient {
         headers, // let browser set multipart boundary, we only add Authorization
         ...restOptions,
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

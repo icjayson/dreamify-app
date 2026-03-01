@@ -88,6 +88,7 @@ interface ChatState {
   // File state
   uploadedFiles: UploadedFile[];
   currentConversationId: string | null;
+  currentProjectId: string | null;
 
   // Processing state
   isProcessing: boolean;
@@ -151,7 +152,7 @@ interface ChatState {
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: () => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[]) => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string }) => Promise<void>;
   stopGeneration: () => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<void>;
 
@@ -183,6 +184,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: initialMessages,
   uploadedFiles: [],
   currentConversationId: null,
+  currentProjectId: null,
   isProcessing: false,
   currentWorkflowStep: null,
   dropdownOpen: false,
@@ -270,13 +272,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[]) => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string }) => {
     const state = get();
     const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
 
     // Create new AbortController for this processing session
     const abortController = new AbortController();
-    set({ abortController });
+    set({ abortController, currentProjectId: projectIdParam || null });
 
     // Clear current workflow step at start
     setCurrentWorkflowStep(null);
@@ -356,20 +358,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Process Q&A (with or without existing conversation)
       const lastMessage = messages[messages.length - 1];
       if (!lastMessage || lastMessage.role !== 'user' || lastMessage.content !== content.trim()) {
-        // Determine if we should attach file context visually (show chip)
-        // Show chip if:
-        // 1. Fresh upload (no conversationId yet)
-        // 2. Explicitly @mentioned (isFromMention = true)
-        // Don't show if just a follow-up prompt on existing file
-        const hasFileContext = uploadedFiles.length > 0 && uploadedFiles.some(f => (f.fileID && !f.conversationId) || f.isFromMention);
-        const firstFile = uploadedFiles[0];
-
         const userMessage: Message = {
           id: Date.now().toString(),
           role: "user",
           content: content.trim(),
           timestamp: new Date(),
-          attachment: hasFileContext ? { kind: "csv", name: uploadedFiles.length === 1 ? firstFile.filename : `${uploadedFiles.length} files` } : undefined,
+          attachment: activeFileAttachment || undefined,
           template: get().selectedTemplate || undefined,
         };
         addMessage(userMessage);
@@ -379,7 +373,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       setIsProcessing(true);
 
       // Update file status to processing to show loading indicator in chip
-      uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'processing' }));
+      // Skip files already 'processed' from previous conversation (restored on reload)
+      uploadedFiles.filter(f => f.status !== 'processed').forEach(f => updateFile(f.fileID, { status: 'processing' }));
 
       try {
         // Use projectId from parameter (required)
@@ -420,11 +415,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
             console.warn('Failed to fetch asset data for QnA:', error);
           }
         }
+
+        // Add @mentioned files as 'mention' content entries so badge persists in conversation JSON
+        // Uses 'mention' type so backend doesn't treat them as new assets to process
+        if (mentionedAssetIds && mentionedAssetIds.length > 0) {
+          for (const mentionedId of mentionedAssetIds) {
+            if (assetContentsList.some(c => c.data?.asset_id === mentionedId)) continue;
+            const mentionedFile = uploadedFiles.find(f => f.fileID === mentionedId);
+            if (mentionedFile) {
+              assetContentsList.push({
+                type: 'mention',
+                data: {
+                  asset_id: mentionedId,
+                  filename: mentionedFile.filename,
+                  kind: mentionedFile.ext === 'csv' ? 'csv' : 'file',
+                }
+              });
+            }
+          }
+        }
+
         if (assetContentsList.length > 0) {
           assetContents = assetContentsList;
         }
 
-        const allFileIds = uploadedFiles.map(f => f.fileID).filter(Boolean);
+        // Exclude restored files (already processed from previous conversation)
+        const allFileIds = uploadedFiles.filter(f => !(f.status === 'processed' && f.conversationId)).map(f => f.fileID).filter(Boolean);
         const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
           ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds }
           : allFileIds.length > 0
@@ -477,7 +493,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 setCurrentWorkflowStep(step);
               }
             },
-            60,
+            360,
             5000,
             abortController.signal
           );
@@ -622,7 +638,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: "user",
         content: content.trim(),
         timestamp: new Date(),
-        attachment: uploadedFiles.length > 0 ? { kind: "csv", name: uploadedFiles.length === 1 ? firstUploadedFile.filename : `${uploadedFiles.length} files` } : undefined,
+        attachment: activeFileAttachment || (uploadedFiles.length > 0 ? { kind: "csv", name: uploadedFiles.length === 1 ? firstUploadedFile.filename : `${uploadedFiles.length} files` } : undefined),
         template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
@@ -668,6 +684,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
           console.warn('Failed to fetch asset data:', error);
         }
       }
+
+      // Add @mentioned files as 'mention' content entries so badge persists in conversation JSON
+      if (mentionedAssetIds && mentionedAssetIds.length > 0) {
+        for (const mentionedId of mentionedAssetIds) {
+          if (assetContentsList.some(c => c.data?.asset_id === mentionedId)) continue;
+          const mentionedFile = uploadedFiles.find(f => f.fileID === mentionedId);
+          if (mentionedFile) {
+            assetContentsList.push({
+              type: 'mention',
+              data: {
+                asset_id: mentionedId,
+                filename: mentionedFile.filename,
+                kind: mentionedFile.ext === 'csv' ? 'csv' : 'file',
+              }
+            });
+          }
+        }
+      }
+
       const assetContents = assetContentsList.length > 0 ? assetContentsList : undefined;
       const allFileIdsForMeta = get().uploadedFiles.map(f => f.fileID).filter(Boolean);
       const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
@@ -833,22 +868,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
               {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: `Sorry, I encountered an error: ${errorMsg}`,
+                content: `Sorry, I encountered an error. Please try again.`,
                 timestamp: new Date(),
               }
             ]));
           } else {
-            // Only generate generic response if it's not an explicit error (e.g. timeout or unknown state)
-            await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);
+            // Timeout or unknown state — show explicit error to user
+            const timeoutMsg = finalResult.data?.error || 'Processing timed out. Please try again.';
+            updateMessages((prev) => ([
+              ...prev,
+              {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: 'Sorry, I encountered an issue. Please try again.',
+                timestamp: new Date(),
+              }
+            ]));
           }
         }
       } else {
-        await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);
+        // startResult failed — show error to user
+        const startErrorMsg = startResult.data?.error || 'Failed to start processing.';
+        updateMessages((prev) => ([
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: `Sorry, I couldn't process your request. Please try again.`,
+            timestamp: new Date(),
+          }
+        ]));
       }
     } catch (error) {
       console.error('Processing error:', error);
       get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
-      await generateAIResponse(content, null, updatedMessages, updateMessages, get().uploadedFiles[0]?.filename);
+      const errorMsg = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      updateMessages((prev) => ([
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `Sorry, I encountered an error. Please try again.`,
+          timestamp: new Date(),
+        }
+      ]));
     } finally {
       setIsTyping(false);
       setIsProcessing(false);
@@ -868,7 +931,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (currentConversationId) {
       try {
-        const projectId = state.uploadedFiles[0]?.projectId;
+        const projectId = state.currentProjectId || state.uploadedFiles[0]?.projectId;
         if (projectId) {
           const { conversationService } = await import('@/services/conversationService');
           await conversationService.stopWorkflow(currentConversationId, projectId);

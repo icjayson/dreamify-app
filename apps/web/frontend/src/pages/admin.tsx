@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Search, LayoutGrid, Table2, PanelLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, LayoutGrid, Table2, PanelLeft, ChevronLeft, ChevronRight, Activity, MessageSquare, LogOut } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { ConversationTable } from '@/components/admin/ConversationTable';
 import { ConversationCard } from '@/components/admin/ConversationCard';
+import { SplitPaneChatView } from '@/components/admin/SplitPaneChatView';
 import { AdminLoginModal } from '@/components/admin/AdminLoginModal';
+import { AdminMetricsPanel } from '@/components/admin/AdminMetricsPanel';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { adminService, type ConversationListItem } from '@/services/adminService';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,15 +21,15 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type ViewMode = 'table' | 'card';
+type ViewMode = 'table' | 'card' | 'split';
 const PAGE_SIZE = 20;
 
 export default function AdminPage() {
-  const { isAuthenticated, credentials, login } = useAdminAuth();
+  const { isAuthenticated, credentials, login, logout } = useAdminAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('table');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(!isAuthenticated);
   const [projectIdFilter, setProjectIdFilter] = useState(searchParams.get('project_id') || '');
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1', 10));
@@ -94,36 +95,42 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted">
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: `${sidebarCollapsed ? '4rem' : '16rem'} 1fr` }}
-      >
-        <AdminSidebar
-          collapsed={sidebarCollapsed}
-          onCollapsedChange={setSidebarCollapsed}
-        />
-        
-        <main className="p-6 h-[calc(100vh)] overflow-y-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="p-1.5 rounded-md hover:bg-background transition-colors"
-                  onClick={() => setSidebarCollapsed((v) => !v)}
-                >
-                  <PanelLeft className="w-5 h-5" />
-                </button>
-                <div className="h-4 w-px bg-border mx-1" />
-                <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-              </div>
-            </div>
+    <div className="min-h-screen bg-muted flex flex-col">
+      <main className="flex-1 p-6 h-[calc(100vh)] overflow-y-auto">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground mr-2">
+              Logged in as <span className="font-medium text-foreground">{credentials?.username}</span>
+            </span>
+            <Button variant="outline" size="sm" onClick={() => logout()} className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10">
+              <LogOut className="h-4 w-4" />
+              Log Out
+            </Button>
           </div>
+        </div>
 
-          {/* Filters and Controls */}
-          <div className="mb-6 space-y-4">
+        {/* Tabs Navigation */}
+        <Tabs defaultValue="analytics" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="analytics" className="gap-2">
+              <Activity className="h-4 w-4" />
+              Analytics
+            </TabsTrigger>
+            <TabsTrigger value="chat-logs" className="gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Chat Logs
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="analytics" className="space-y-6">
+            {/* Metrics Panel */}
+            <AdminMetricsPanel />
+          </TabsContent>
+
+          <TabsContent value="chat-logs" className="space-y-6">
+            {/* Filters and Controls */}
             <div className="flex items-center gap-4">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -135,6 +142,14 @@ export default function AdminPage() {
                 />
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  variant={viewMode === 'split' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('split')}
+                >
+                  <PanelLeft className="h-4 w-4 mr-2" />
+                  Split
+                </Button>
                 <Button
                   variant={viewMode === 'table' ? 'default' : 'outline'}
                   size="sm"
@@ -153,123 +168,126 @@ export default function AdminPage() {
                 </Button>
               </div>
             </div>
-          </div>
 
-          {/* Content */}
-          {isLoading && (
-            <Card>
-              <CardContent className="p-6 text-center">
-                <p>Loading conversations...</p>
-              </CardContent>
-            </Card>
-          )}
+            {/* Content */}
+            {isLoading && (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <p>Loading conversations...</p>
+                </CardContent>
+              </Card>
+            )}
 
-          {error && (
-            <Card>
-              <CardContent className="p-6">
-                <p className="text-destructive">Error loading conversations: {error instanceof Error ? error.message : 'Unknown error'}</p>
-                <Button onClick={() => refetch()} className="mt-4">
-                  Retry
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+            {error && (
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-destructive">Error loading conversations: {error instanceof Error ? error.message : 'Unknown error'}</p>
+                  <Button onClick={() => refetch()} className="mt-4">
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
-          {data && !isLoading && !error && (
-            <>
-              <div className="mb-4 text-sm text-muted-foreground">
-                Showing {((currentPage - 1) * PAGE_SIZE) + 1} to {Math.min(currentPage * PAGE_SIZE, data.total)} of {data.total} conversations
-              </div>
-              {viewMode === 'table' ? (
-                <ConversationTable conversations={data.conversations} />
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {data.conversations.map((conv) => (
-                    <ConversationCard key={conv.conversation_id} conversation={conv} />
-                  ))}
+            {data && !isLoading && !error && (
+              <>
+                <div className="mb-4 text-sm text-muted-foreground">
+                  Showing {((currentPage - 1) * PAGE_SIZE) + 1} to {Math.min(currentPage * PAGE_SIZE, data.total)} of {data.total} conversations
                 </div>
-              )}
-              
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="mt-6">
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (currentPage > 1) {
-                              handlePageChange(currentPage - 1);
+
+                {viewMode === 'split' ? (
+                  <SplitPaneChatView conversations={data.conversations} projectIdFilter={projectIdFilter} />
+                ) : viewMode === 'table' ? (
+                  <ConversationTable conversations={data.conversations} />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {data.conversations.map((conv) => (
+                      <ConversationCard key={conv.conversation_id} conversation={conv} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="mt-6">
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (currentPage > 1) {
+                                handlePageChange(currentPage - 1);
+                              }
+                            }}
+                            disabled={currentPage === 1}
+                            className="gap-1"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            Previous
+                          </Button>
+                        </PaginationItem>
+
+                        {/* Page numbers */}
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                          // Show first page, last page, current page, and pages around current
+                          const showPage =
+                            pageNum === 1 ||
+                            pageNum === totalPages ||
+                            (pageNum >= currentPage - 1 && pageNum <= currentPage + 1);
+
+                          if (!showPage) {
+                            // Show ellipsis
+                            if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
+                              return (
+                                <PaginationItem key={pageNum}>
+                                  <PaginationEllipsis />
+                                </PaginationItem>
+                              );
                             }
-                          }}
-                          disabled={currentPage === 1}
-                          className="gap-1"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                          Previous
-                        </Button>
-                      </PaginationItem>
-                      
-                      {/* Page numbers */}
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                        // Show first page, last page, current page, and pages around current
-                        const showPage =
-                          pageNum === 1 ||
-                          pageNum === totalPages ||
-                          (pageNum >= currentPage - 1 && pageNum <= currentPage + 1);
-                        
-                        if (!showPage) {
-                          // Show ellipsis
-                          if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
-                            return (
-                              <PaginationItem key={pageNum}>
-                                <PaginationEllipsis />
-                              </PaginationItem>
-                            );
+                            return null;
                           }
-                          return null;
-                        }
-                        
-                        return (
-                          <PaginationItem key={pageNum}>
-                            <Button
-                              variant={currentPage === pageNum ? 'outline' : 'ghost'}
-                              size="sm"
-                              onClick={() => handlePageChange(pageNum)}
-                              className="min-w-[2.5rem]"
-                            >
-                              {pageNum}
-                            </Button>
-                          </PaginationItem>
-                        );
-                      })}
-                      
-                      <PaginationItem>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (currentPage < totalPages) {
-                              handlePageChange(currentPage + 1);
-                            }
-                          }}
-                          disabled={currentPage === totalPages}
-                          className="gap-1"
-                        >
-                          Next
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                </div>
-              )}
-            </>
-          )}
-        </main>
-      </div>
+
+                          return (
+                            <PaginationItem key={pageNum}>
+                              <Button
+                                variant={currentPage === pageNum ? 'outline' : 'ghost'}
+                                size="sm"
+                                onClick={() => handlePageChange(pageNum)}
+                                className="min-w-[2.5rem]"
+                              >
+                                {pageNum}
+                              </Button>
+                            </PaginationItem>
+                          );
+                        })}
+
+                        <PaginationItem>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (currentPage < totalPages) {
+                                handlePageChange(currentPage + 1);
+                              }
+                            }}
+                            disabled={currentPage === totalPages}
+                            className="gap-1"
+                          >
+                            Next
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                )}
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
+      </main>
     </div>
   );
 }

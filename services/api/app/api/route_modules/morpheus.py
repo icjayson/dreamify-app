@@ -84,16 +84,10 @@ def _ensure_morpheus_key(header: Optional[str]) -> None:
 @router.get("/morpheus/node-status", response_model=NodeStatusListResponse)
 async def list_node_status(
     conversation_id: str,
-    project_id: str,
-    request: Request,
     node_id: Optional[str] = None,
-    user_id: str = Depends(require_user),
     x_morpheus_key: Optional[str] = Header(None),
 ):
     _ensure_morpheus_key(x_morpheus_key)
-    conversation = conversations_repo.get_conversation(project_id, conversation_id)
-    if not conversation or conversation.get("user_id") != user_id:
-        raise HTTPException(status_code=404, detail="Conversation not found")
     if node_id:
         node = workflow_nodes_repo.get_node(conversation_id, node_id)
         if not node:
@@ -106,14 +100,9 @@ async def list_node_status(
 @router.get("/morpheus/workflow-status/{conversation_id}", response_model=NodeStatusResponse)
 async def get_workflow_status(
     conversation_id: str,
-    project_id: str,
-    user_id: str = Depends(require_user),
     x_morpheus_key: Optional[str] = Header(None),
 ):
     _ensure_morpheus_key(x_morpheus_key)
-    conversation = conversations_repo.get_conversation(project_id, conversation_id)
-    if not conversation or conversation.get("user_id") != user_id:
-        raise HTTPException(status_code=404, detail="Conversation not found")
     node = workflow_nodes_repo.get_node(conversation_id, "workflow")
     if not node:
         raise HTTPException(status_code=404, detail="Workflow status not found")

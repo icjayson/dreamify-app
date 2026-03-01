@@ -46,8 +46,8 @@ class StatusRequest(BaseModel):
     project_id: str
 
 # Backend API URL for updating file records
-BACKEND_API_URL = "http://localhost:5000"
-MORPHEUS_API_KEY = os.environ.get("MORPHEUS_API_KEY", "dev-secret-key")
+BACKEND_API_URL = config.app.backend_url.rstrip("/")
+MORPHEUS_API_KEY = config.app.morpheus_api_key
 
 logger.info(
     "Config AWS credentials present: %s", "yes" if getattr(config, "aws", None) else "no"

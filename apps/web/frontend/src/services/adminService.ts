@@ -1,6 +1,7 @@
 import { api } from './api';
 import { API_ENDPOINTS } from '@/api/config';
 import type { DashboardConfiguration } from '@/types/dashboard';
+import type { FilePreviewData } from './filePreviewService';
 
 export interface ConversationListItem {
   conversation_id: string;
@@ -201,6 +202,27 @@ class AdminService {
       return response.data;
     }
     throw new Error(response.error || 'Failed to get time-series metrics');
+  }
+
+  async getFilePreview(
+    username: string,
+    password: string,
+    conversationId: string,
+    projectId: string,
+    assetId: string
+  ): Promise<FilePreviewData> {
+    const endpoint = `/api/v1/admin/conversations/${conversationId}/assets/${assetId}/preview?project_id=${projectId}`;
+    const response = await this.requestWithAuth<FilePreviewData>(
+      endpoint,
+      { method: 'GET' },
+      username,
+      password
+    );
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.error || 'Failed to get file preview');
   }
 }
 

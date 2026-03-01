@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AdminDashboardPreview } from './AdminDashboardPreview';
+import { AdminDatasetPreview } from './AdminDatasetPreview';
 
 interface ChatTimelineNodesViewProps {
     nodes: Array<Record<string, any>>;
@@ -14,6 +15,7 @@ interface ChatTimelineNodesViewProps {
 
 export function ChatTimelineNodesView({ nodes, conversationId, projectId }: ChatTimelineNodesViewProps) {
     const [previewDashboardId, setPreviewDashboardId] = useState<string | null>(null);
+    const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
 
     const renderContent = (contents: Array<any>, nodeRole?: string) => {
         if (!contents || contents.length === 0) return <span className="italic opacity-50">No content</span>;
@@ -62,7 +64,17 @@ export function ChatTimelineNodesView({ nodes, conversationId, projectId }: Chat
             } else if (content.type === 'asset' || content.type === 'attachment') {
                 return (
                     <div key={idx} className="text-xs mt-2 bg-muted p-2 rounded inline-block">
-                        📎 Attached: {content.data?.filename || content.data?.name || 'N/A'}
+                        📎 Attached:{' '}
+                        {content.data?.asset_id && (content.data?.filename?.toLowerCase().endsWith('.csv') || content.data?.name?.toLowerCase().endsWith('.csv')) ? (
+                            <button
+                                onClick={() => setPreviewAssetId(content.data.asset_id)}
+                                className="font-semibold text-primary hover:underline"
+                            >
+                                {content.data?.filename || content.data?.name || 'Dataset'}
+                            </button>
+                        ) : (
+                            content.data?.filename || content.data?.name || 'N/A'
+                        )}
                     </div>
                 );
             }
@@ -174,6 +186,30 @@ export function ChatTimelineNodesView({ nodes, conversationId, projectId }: Chat
                             <div className="flex items-center justify-center h-full text-muted-foreground flex-col gap-2">
                                 <p>Missing conversation or project context.</p>
                                 <p className="text-xs">Cannot load the dashboard preview for {previewDashboardId}.</p>
+                            </div>
+                        ) : null}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Dataset Preview Modal */}
+            <Dialog open={!!previewAssetId} onOpenChange={(open) => !open && setPreviewAssetId(null)}>
+                <DialogContent className="max-w-[90vw] w-[1200px] h-[90vh] flex flex-col p-4 overflow-hidden">
+                    <DialogHeader className="p-0 border-b pb-4 shrink-0 bg-background text-foreground z-10 relative">
+                        <DialogTitle>Dataset Preview</DialogTitle>
+                        <DialogDescription className="sr-only">Preview of the uploaded dataset</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-1 overflow-y-auto bg-muted/10 p-0 relative min-h-0 pt-4">
+                        {previewAssetId && conversationId && projectId ? (
+                            <AdminDatasetPreview
+                                assetId={previewAssetId}
+                                conversationId={conversationId}
+                                projectId={projectId}
+                            />
+                        ) : previewAssetId ? (
+                            <div className="flex items-center justify-center h-full text-muted-foreground flex-col gap-2">
+                                <p>Missing conversation or project context.</p>
+                                <p className="text-xs">Cannot load the dataset preview for {previewAssetId}.</p>
                             </div>
                         ) : null}
                     </div>

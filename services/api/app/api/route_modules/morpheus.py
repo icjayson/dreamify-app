@@ -3,7 +3,7 @@ Morpheus workflow integration endpoints.
 """
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from app.dependencies.auth import require_user
@@ -85,6 +85,7 @@ def _ensure_morpheus_key(header: Optional[str]) -> None:
 async def list_node_status(
     conversation_id: str,
     project_id: str,
+    request: Request,
     node_id: Optional[str] = None,
     user_id: str = Depends(require_user),
     x_morpheus_key: Optional[str] = Header(None),
@@ -194,6 +195,29 @@ async def update_project_metadata(
     )
     if not updated_project:
         raise HTTPException(status_code=404, detail="Project not found")
+    return {"success": True}
+
+
+class ConversationNodeCountUpdateRequest(BaseModel):
+    node_count: int
+
+
+@router.put("/morpheus/project/{project_id}/conversation/{conversation_id}/node-count")
+async def update_conversation_node_count(
+    project_id: str,
+    conversation_id: str,
+    request: ConversationNodeCountUpdateRequest,
+    x_morpheus_key: Optional[str] = Header(None),
+):
+    _ensure_morpheus_key(x_morpheus_key)
+
+    updated = conversations_repo.update_conversation_node_count(
+        project_id=project_id,
+        conversation_id=conversation_id,
+        node_count=request.node_count,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     return {"success": True}
 
 

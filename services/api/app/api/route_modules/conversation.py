@@ -195,6 +195,7 @@ def _save_conversation_to_s3_and_dynamodb(
             title=title or "Conversation",
             metadata={},
             conversation_id=conversation_id,
+            node_count=len(conversation.get("nodes", [])),
         )
 
 
@@ -511,11 +512,12 @@ async def stop_workflow(
     if conversation_meta.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
-    # Update workflow status to stopped
+    # Write stop signal to a SEPARATE node_id so Morpheus progress updates
+    # (which write to node_id="workflow") don't overwrite it
     now_iso = datetime.now().isoformat()
     workflow_nodes_repo.upsert_node_status(
         conversation_id=conversation_id,
-        node_id="workflow",
+        node_id="stop_signal",
         status="stopped",
         metadata={
             "stopped_at": now_iso,

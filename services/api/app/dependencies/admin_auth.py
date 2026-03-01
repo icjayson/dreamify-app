@@ -27,11 +27,15 @@ def require_admin(request: Request) -> bool:
     
     # Extract Authorization header
     authorization = request.headers.get("Authorization")
+    
+    # DEBUG: write to a file to inspect exactly what the browser is sending
+    with open("auth_debug.txt", "a") as f:
+        f.write(f"URL: {request.url} | Header: {authorization}\n")
+
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization header missing",
-            headers={"WWW-Authenticate": "Basic"},
         )
     
     # Extract credentials from "Basic <base64_encoded_credentials>"
@@ -43,11 +47,12 @@ def require_admin(request: Request) -> bool:
         # Decode base64 credentials
         decoded = base64.b64decode(encoded).decode("utf-8")
         username, password = decoded.split(":", 1)
+        with open("auth_debug.txt", "a") as f:
+            f.write(f"Parsed: user='{username}', pass='{password}'\n")
     except (ValueError, UnicodeDecodeError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization header format. Expected: Basic <base64_encoded_credentials>",
-            headers={"WWW-Authenticate": "Basic"},
         )
     
     # Verify credentials against list of admins
@@ -63,14 +68,12 @@ def require_admin(request: Request) -> bool:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Basic"},
         )
     
     if not verify_password(password, admin_found.get("password_hash", "")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Basic"},
         )
     
     return True

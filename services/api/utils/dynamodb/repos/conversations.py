@@ -23,6 +23,7 @@ def create_conversation(
     title: Optional[str] = None,
     metadata: Optional[Dict] = None,
     conversation_id: Optional[str] = None,
+    node_count: int = 0,
 ) -> Dict:
     table = get_table(tables.conversations)
     conversation_id = conversation_id or str(uuid.uuid4())
@@ -32,8 +33,8 @@ def create_conversation(
         "user_id": user_id,
         "s3_bucket": s3_bucket,
         "s3_key": s3_key,
-        "title": title or "Conversation",
         "metadata": metadata or {},
+        "node_count": node_count,
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
     }
@@ -67,6 +68,22 @@ def update_conversation_metadata(
         UpdateExpression="SET metadata = :metadata, updated_at = :updated_at",
         ExpressionAttributeValues={
             ":metadata": metadata,
+            ":updated_at": _now_iso(),
+        },
+        ReturnValues="ALL_NEW",
+    )
+    return resp.get("Attributes")
+
+
+def update_conversation_node_count(
+    project_id: str, conversation_id: str, node_count: int
+) -> Optional[Dict]:
+    table = get_table(tables.conversations)
+    resp = table.update_item(
+        Key={"project_id": project_id, "conversation_id": conversation_id},
+        UpdateExpression="SET node_count = :node_count, updated_at = :updated_at",
+        ExpressionAttributeValues={
+            ":node_count": node_count,
             ":updated_at": _now_iso(),
         },
         ReturnValues="ALL_NEW",
@@ -144,3 +161,23 @@ def scan_conversations_by_project(project_id: str, limit: Optional[int] = None) 
     return all_items
 
 
+def scan_recent_conversations(
+    start_date_iso: str, limit: int = 1000, last_evaluated_key: Optional[Dict] = None
+) -> Dict:
+    """
+    Scans for all conversations created on or after start_date_iso.
+    Requires a full table scan with FilterExpression, so use with caution.
+    """
+    table = get_table(tables.conversations)
+    kwargs = {
+        "Limit": limit,
+        "FilterExpression": Attr("created_at").gte(start_date_iso),
+    }
+    if last_evaluated_key:
+        kwargs["ExclusiveStartKey"] = last_evaluated_key
+
+    resp = table.scan(**kwargs)
+    return {
+        "Items": resp.get("Items", []),
+        "LastEvaluatedKey": resp.get("LastEvaluatedKey"),
+    }

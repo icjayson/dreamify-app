@@ -11,6 +11,7 @@ from utils.config import config
 from utils.dynamodb.repos import conversations as conversations_repo
 from utils.dynamodb.repos import projects as projects_repo
 from utils.dynamodb.repos import workflow_nodes as workflow_nodes_repo
+from utils.dynamodb.repos import assets as assets_repo
 from utils.logger import logger
 
 router = APIRouter(tags=["morpheus"])
@@ -86,7 +87,9 @@ async def list_node_status(
     project_id: str,
     node_id: Optional[str] = None,
     user_id: str = Depends(require_user),
+    x_morpheus_key: Optional[str] = Header(None),
 ):
+    _ensure_morpheus_key(x_morpheus_key)
     conversation = conversations_repo.get_conversation(project_id, conversation_id)
     if not conversation or conversation.get("user_id") != user_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -104,7 +107,9 @@ async def get_workflow_status(
     conversation_id: str,
     project_id: str,
     user_id: str = Depends(require_user),
+    x_morpheus_key: Optional[str] = Header(None),
 ):
+    _ensure_morpheus_key(x_morpheus_key)
     conversation = conversations_repo.get_conversation(project_id, conversation_id)
     if not conversation or conversation.get("user_id") != user_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -117,7 +122,9 @@ async def get_workflow_status(
 @router.post("/morpheus/workflow-status", response_model=NodeStatusResponse)
 async def upsert_workflow_status(
     request: NodeStatusUpdateRequest,
+    x_morpheus_key: Optional[str] = Header(None),
 ):
+    _ensure_morpheus_key(x_morpheus_key)
     item = workflow_nodes_repo.upsert_node_status(
         conversation_id=request.conversation_id,
         node_id=request.node_id,
@@ -131,8 +138,9 @@ async def upsert_workflow_status(
 async def update_asset_processed_key(
     asset_id: str,
     request: ProcessedKeyUpdateRequest,
+    x_morpheus_key: Optional[str] = Header(None),
 ):
-    from utils.dynamodb.repos import assets as assets_repo
+    _ensure_morpheus_key(x_morpheus_key)
     asset = assets_repo.set_processed_json_key_by_asset_id(
         asset_id=asset_id,
         processed_key=request.processed_json_s3_key,
@@ -145,8 +153,9 @@ async def update_asset_processed_key(
 @router.get("/morpheus/asset/{asset_id}", response_model=MorpheusAssetResponse)
 async def get_asset_for_morpheus(
     asset_id: str,
+    x_morpheus_key: Optional[str] = Header(None),
 ):
-    from utils.dynamodb.repos import assets as assets_repo
+    _ensure_morpheus_key(x_morpheus_key)
     asset = assets_repo.get_asset_by_id(asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")

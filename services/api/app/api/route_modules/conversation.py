@@ -357,6 +357,40 @@ class StopWorkflowResponse(BaseModel):
     conversation_id: str
 
 
+class WorkflowStatusResponse(BaseModel):
+    conversation_id: str
+    node_id: str
+    status: str
+    metadata: Dict[str, Any]
+    updated_at: Optional[str] = None
+
+
+def _map_workflow_node(item: Dict[str, Any]) -> WorkflowStatusResponse:
+    return WorkflowStatusResponse(
+        conversation_id=item["conversation_id"],
+        node_id=item["node_id"],
+        status=item.get("status", ""),
+        metadata=item.get("metadata", {}),
+        updated_at=item.get("updated_at"),
+    )
+
+
+@router.get("/conversation/workflow-status/{conversation_id}", response_model=WorkflowStatusResponse)
+async def get_conversation_workflow_status(
+    conversation_id: str,
+    project_id: str,
+    user_id: str = Depends(require_user),
+):
+    """Get workflow status for a conversation."""
+    conversation = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation or conversation.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    node = workflow_nodes_repo.get_node(conversation_id, "workflow")
+    if not node:
+        raise HTTPException(status_code=404, detail="Workflow status not found")
+    return _map_workflow_node(node)
+
+
 @router.get("/conversation/{conversation_id}/dashboard", response_model=DashboardDataResponse)
 async def get_conversation_dashboard(
     conversation_id: str,

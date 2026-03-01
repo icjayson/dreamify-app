@@ -62,7 +62,7 @@ class ConversationService {
 
   async getWorkflowStatus(conversationId: string, projectId: string, abortSignal?: AbortSignal): Promise<WorkflowStatusResponse> {
     const response = await api.get<WorkflowStatusResponse>(
-      `/api/v1/morpheus/workflow-status/${conversationId}?project_id=${projectId}`,
+      `/api/v1/conversation/workflow-status/${conversationId}?project_id=${projectId}`,
       abortSignal ? { signal: abortSignal } : undefined
     );
     if (response.success && response.data) {

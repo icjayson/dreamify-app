@@ -16,8 +16,12 @@ from utils.dynamodb.repos import conversations as conversations_repo
 from utils.s3.conversations import load_conversation
 from utils.s3.client import download_bytes
 from app.api.route_modules.conversation import DashboardDataResponse
+from app.api.route_modules.user import FilePreviewResponse
+from utils.dynamodb.repos import assets as assets_repo
 import json
 import logging
+import csv
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -502,4 +506,90 @@ async def get_conversation_dashboard(
         )
         return DashboardDataResponse(dashboard_id=None, dashboard_data=None)
 
+@router.get("/conversations/{conversation_id}/assets/{asset_id}/preview", response_model=FilePreviewResponse)
+async def get_conversation_asset_preview(
+    conversation_id: str,
+    asset_id: str,
+    project_id: str = Query(..., description="Project ID"),
+    _: bool = Depends(require_admin),
+):
+    """Preview CSV file data as JSON for Admin."""
+    try:
+        conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+        if not conversation_meta:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        user_id = conversation_meta.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User ID not found in conversation")
+
+        # Get asset
+        asset = assets_repo.get_asset(user_id, asset_id)
+        if not asset:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        
+        # Check if file is CSV
+        extension = asset.get("extension", "").lower()
+        if extension != "csv":
+            raise HTTPException(status_code=400, detail="Preview only supported for CSV files")
+        
+        # Download file from S3
+        try:
+            file_data = download_bytes(asset["s3_bucket"], asset["s3_key"])
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="File not found in storage")
+        
+        # Parse CSV
+        try:
+            # Try different encodings
+            encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+            content_str = None
+            for encoding in encodings:
+                try:
+                    content_str = file_data.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if content_str is None:
+                raise HTTPException(status_code=500, detail="Could not decode file with any encoding")
+            
+            # Parse CSV with proper handling of quoted fields
+            csv_reader = csv.reader(io.StringIO(content_str))
+            rows = []
+            total_rows = 0
+            max_display_rows = 1000
+            
+            for row in csv_reader:
+                total_rows += 1
+                if total_rows <= max_display_rows:
+                    rows.append(row)
+            
+            if len(rows) == 0:
+                raise HTTPException(status_code=400, detail="CSV file is empty")
+            
+            # First row is headers
+            columns = rows[0] if rows else []
+            data_rows = rows[1:] if len(rows) > 1 else []
+            
+            filename = asset.get("filename", "file.csv")
+            
+            return FilePreviewResponse(
+                success=True,
+                filename=filename,
+                columns=columns,
+                rows=data_rows,
+                total_rows=max(0, total_rows - 1),  # Exclude header
+                displayed_rows=len(data_rows)
+            )
+            
+        except csv.Error as e:
+            raise HTTPException(status_code=500, detail=f"CSV parsing error: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 

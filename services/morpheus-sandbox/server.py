@@ -247,6 +247,7 @@ async def _post_node_status(conversation_id: Optional[str], status: str, metadat
                     "status": status,
                     "metadata": metadata or {},
                 },
+                headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
             ) as response:
                 if response.status != 200:
                     response_text = await response.text()
@@ -433,6 +434,7 @@ def _process_conversation_background(
                     "status": "cleared",
                     "metadata": {},
                 },
+                headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
                 timeout=5,
             )
         except Exception:
@@ -672,6 +674,7 @@ def _process_conversation_background(
                 response = requests.put(
                     update_url,
                     json={"processed_json_s3_key": processed_json_s3_key},
+                    headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
                     timeout=10,
                 )
                 if response.status_code != 200:
@@ -941,6 +944,7 @@ async def get_workflow_status(request: StatusRequest):
         response = requests.get(
             f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status/{request.conversation_id}",
             params={"project_id": request.project_id},
+            headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
             timeout=10,
         )
         if response.status_code == 200:

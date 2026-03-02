@@ -65,20 +65,26 @@ const RechartsBarChart: React.FC<RechartsBarChartProps> = ({
     // Get all unique labels from all datasets
     const allLabels = new Set<string>();
     datasets.forEach(dataset => {
-      dataset.data.forEach(point => {
-        allLabels.add(point.label);
-      });
+      if (Array.isArray(dataset.data)) {
+        dataset.data.forEach(point => {
+          allLabels.add(point.label);
+        });
+      }
     });
 
     // Create data points for each label
     return Array.from(allLabels).map(label => {
       const dataPoint: Record<string, any> = { label };
-      
+
       datasets.forEach(dataset => {
-        const point = dataset.data.find(p => p.label === label);
-        dataPoint[dataset.label] = point ? point.value : 0;
+        if (Array.isArray(dataset.data)) {
+          const point = dataset.data.find(p => p.label === label);
+          dataPoint[dataset.label] = point ? point.value : 0;
+        } else {
+          dataPoint[dataset.label] = 0;
+        }
       });
-      
+
       return dataPoint;
     });
   }, [datasets]);
@@ -127,22 +133,22 @@ const RechartsBarChart: React.FC<RechartsBarChartProps> = ({
             bottom: 20,
           }}
         >
-          <CartesianGrid 
-            strokeDasharray="3 3" 
+          <CartesianGrid
+            strokeDasharray="3 3"
             className="chart-grid"
           />
-          <XAxis 
-            dataKey="label" 
+          <XAxis
+            dataKey="label"
             className="chart-axis"
             tick={{ fill: 'var(--element-color)' }}
           />
-          <YAxis 
+          <YAxis
             className="chart-axis"
             tick={{ fill: 'var(--element-color)' }}
           />
           <Tooltip content={<CustomTooltip />} />
           {styling?.legendPosition !== 'none' && (
-            <Legend 
+            <Legend
               className="chart-legend"
               verticalAlign={styling?.legendPosition === 'top' ? 'top' : 'bottom'}
             />

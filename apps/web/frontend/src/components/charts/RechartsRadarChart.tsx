@@ -63,17 +63,23 @@ const RechartsRadarChart: React.FC<RechartsRadarChartProps> = ({
 
     const allLabels = new Set<string>();
     datasets.forEach(dataset => {
-      dataset.data.forEach(point => {
-        allLabels.add(point.label);
-      });
+      if (Array.isArray(dataset.data)) {
+        dataset.data.forEach(point => {
+          allLabels.add(point.label);
+        });
+      }
     });
 
     return Array.from(allLabels).map(label => {
       const dataPoint: Record<string, any> = { label };
       datasets.forEach(dataset => {
-        const point = dataset.data.find(p => p.label === label);
-        const raw = point ? point.value : 0;
-        dataPoint[dataset.label] = typeof raw === 'number' ? raw : parseFloat(raw.toString()) || 0;
+        if (Array.isArray(dataset.data)) {
+          const point = dataset.data.find(p => p.label === label);
+          const raw = point ? point.value : 0;
+          dataPoint[dataset.label] = typeof raw === 'number' ? raw : parseFloat(raw.toString()) || 0;
+        } else {
+          dataPoint[dataset.label] = 0;
+        }
       });
       return dataPoint;
     });
@@ -117,7 +123,7 @@ const RechartsRadarChart: React.FC<RechartsRadarChartProps> = ({
           <PolarRadiusAxis className="chart-axis" tick={{ fill: 'var(--element-color)' }} />
           <Tooltip content={<CustomTooltip />} />
           {styling?.legendPosition !== 'none' && (
-            <Legend 
+            <Legend
               className="chart-legend"
               verticalAlign={styling?.legendPosition === 'top' ? 'top' : 'bottom'}
             />

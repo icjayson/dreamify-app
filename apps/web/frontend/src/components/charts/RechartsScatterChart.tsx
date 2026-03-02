@@ -63,14 +63,14 @@ const RechartsScatterChart: React.FC<RechartsScatterChartProps> = ({
     if (datasets.length === 0) return [];
 
     const result: Record<string, any>[] = [];
-    
+
     // Check if first dataset has scatter format (x, y properties directly)
     const firstDataset = datasets[0];
-    if (firstDataset && firstDataset.data && firstDataset.data.length > 0) {
+    if (firstDataset && Array.isArray(firstDataset.data) && firstDataset.data.length > 0) {
       const firstPoint = firstDataset.data[0];
-      
-      // Check if data is in scatter format: { x: number, y: number }
-      if (firstPoint && typeof firstPoint.x === 'number' && typeof firstPoint.y === 'number') {
+
+      // Check if data is in scatter format: has x and y directly
+      if (firstPoint && 'x' in firstPoint && 'y' in firstPoint && typeof (firstPoint as any).x === 'number' && typeof (firstPoint as any).y === 'number') {
         // Scatter format: data points have x and y directly
         firstDataset.data.forEach((point: any) => {
           if (point && typeof point.x === 'number' && typeof point.y === 'number') {
@@ -84,41 +84,45 @@ const RechartsScatterChart: React.FC<RechartsScatterChartProps> = ({
         return result;
       }
     }
-    
+
     // Fallback to standard format: { label: string, value: number }
     if (datasets.length >= 2) {
       const xDataset = datasets[0];
       const yDataset = datasets[1];
-      
-      xDataset.data.forEach((xPoint, index) => {
-        const yPoint = yDataset.data[index];
-        if (yPoint && xPoint) {
-          const xValue = typeof xPoint.value === 'number' ? xPoint.value : 
-                        (xPoint.value ? parseFloat(String(xPoint.value)) : 0);
-          const yValue = typeof yPoint.value === 'number' ? yPoint.value : 
-                        (yPoint.value ? parseFloat(String(yPoint.value)) : 0);
-          result.push({
-            x: xValue || 0,
-            y: yValue || 0,
-            label: xPoint.label || yPoint.label || `${xValue}, ${yValue}`
-          });
-        }
-      });
+
+      if (Array.isArray(xDataset.data) && Array.isArray(yDataset.data)) {
+        xDataset.data.forEach((xPoint, index) => {
+          const yPoint = yDataset.data[index];
+          if (yPoint && xPoint) {
+            const xValue = typeof xPoint.value === 'number' ? xPoint.value :
+              (xPoint.value ? parseFloat(String(xPoint.value)) : 0);
+            const yValue = typeof yPoint.value === 'number' ? yPoint.value :
+              (yPoint.value ? parseFloat(String(yPoint.value)) : 0);
+            result.push({
+              x: xValue || 0,
+              y: yValue || 0,
+              label: xPoint.label || yPoint.label || `${xValue}, ${yValue}`
+            });
+          }
+        });
+      }
     } else if (datasets.length === 1) {
       // Single dataset - use index as x, value as y
-      datasets[0].data.forEach((point, index) => {
-        if (point) {
-          const yValue = typeof point.value === 'number' ? point.value : 
-                        (point.value ? parseFloat(String(point.value)) : 0);
-          result.push({
-            x: index,
-            y: yValue || 0,
-            label: point.label || `${index}, ${yValue}`
-          });
-        }
-      });
+      if (Array.isArray(datasets[0].data)) {
+        datasets[0].data.forEach((point, index) => {
+          if (point) {
+            const yValue = typeof point.value === 'number' ? point.value :
+              (point.value ? parseFloat(String(point.value)) : 0);
+            result.push({
+              x: index,
+              y: yValue || 0,
+              label: point.label || `${index}, ${yValue}`
+            });
+          }
+        });
+      }
     }
-    
+
     return result;
   }, [datasets]);
 
@@ -168,18 +172,18 @@ const RechartsScatterChart: React.FC<RechartsScatterChartProps> = ({
             bottom: 20,
           }}
         >
-          <CartesianGrid 
-            strokeDasharray="3 3" 
+          <CartesianGrid
+            strokeDasharray="3 3"
             className="chart-grid"
           />
-          <XAxis 
+          <XAxis
             type="number"
             dataKey="x"
             name="X"
             className="chart-axis"
             tick={{ fill: 'var(--element-color)' }}
           />
-          <YAxis 
+          <YAxis
             type="number"
             dataKey="y"
             name="Y"
@@ -188,7 +192,7 @@ const RechartsScatterChart: React.FC<RechartsScatterChartProps> = ({
           />
           <Tooltip content={<CustomTooltip />} />
           {styling?.legendPosition !== 'none' && (
-            <Legend 
+            <Legend
               className="chart-legend"
               verticalAlign={styling?.legendPosition === 'top' ? 'top' : 'bottom'}
             />

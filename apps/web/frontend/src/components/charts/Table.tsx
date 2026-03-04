@@ -50,7 +50,7 @@ const formatCellValue = (value: any, type: TableColumn["type"]) => {
   }
 };
 
-const Table = ({ 
+const Table = ({
   title,
   description,
   columns,
@@ -79,11 +79,11 @@ const Table = ({
   // Sort data
   const sortedData = useMemo(() => {
     if (!sortConfig || !hasData) return data;
-    
+
     return [...data].sort((a, b) => {
       const aValue = a[sortConfig.key];
       const bValue = b[sortConfig.key];
-      
+
       if (aValue < bValue) {
         return sortConfig.direction === 'asc' ? -1 : 1;
       }
@@ -105,7 +105,7 @@ const Table = ({
   const handleSort = (key: string) => {
     setSortConfig(prev => {
       if (prev?.key === key) {
-        return prev.direction === 'asc' 
+        return prev.direction === 'asc'
           ? { key, direction: 'desc' }
           : null;
       }
@@ -132,78 +132,84 @@ const Table = ({
           {!hasStructure ? "No columns provided" : "No data available"}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
-          <div className="rounded-md border" style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}>
-            <table className="w-full">
-              <thead 
-                className="sticky top-0 z-10"
-                style={{ 
-                  backgroundColor: styling?.headerBg || 'var(--highlight-color)',
-                  color: styling?.headerText || 'var(--bg-card-color)'
-                }}
-              >
-                <tr>
-                  {columns.map((column) => (
-                    <th
-                      key={column.key}
-                      className="h-12 px-4 text-left align-middle font-medium cursor-pointer hover:bg-opacity-80 transition-colors first:rounded-tl-md last:rounded-tr-md"
-                      style={{ textAlign: column.align || 'left' }}
-                      onClick={() => handleSort(column.key)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{column.label}</span>
-                        <span className="text-xs opacity-60">{getSortIcon(column.key)}</span>
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedData.map((row, index) => (
-                  <tr
-                    key={index}
-                    className="animate-slide-up border-b transition-colors hover:bg-opacity-50"
-                    style={{ 
-                      animationDelay: `${index * 100}ms`,
-                      backgroundColor: index % 2 === 1 ? styling?.rowAltBg : styling?.rowBg || 'transparent',
-                      borderBottomColor: 'var(--element-color)',
-                      color: descriptionColor
-                    }}
-                  >
+        <>
+          <div className="flex-1 overflow-y-auto">
+            <div className="rounded-md border" style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}>
+              <table className="w-full">
+                <thead
+                  className="sticky top-0 z-10"
+                  style={{
+                    backgroundColor: styling?.headerBg || 'var(--highlight-color)',
+                    color: styling?.headerText || 'var(--bg-card-color)'
+                  }}
+                >
+                  <tr>
                     {columns.map((column) => (
-                      <td
+                      <th
                         key={column.key}
-                        className="p-4 align-middle"
+                        className="h-12 px-4 text-left align-middle font-medium cursor-pointer hover:bg-opacity-80 transition-colors first:rounded-tl-md last:rounded-tr-md"
                         style={{ textAlign: column.align || 'left' }}
+                        onClick={() => handleSort(column.key)}
                       >
-                        <div className={`${column.key === 'name' ? 'font-medium truncate' : ''}`}>
-                          {formatCellValue(row[column.key], column.type)}
+                        <div className="flex items-center gap-2">
+                          <span>{column.label}</span>
+                          <span className="text-xs opacity-60">{getSortIcon(column.key)}</span>
                         </div>
-                      </td>
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paginatedData.map((row, index) => (
+                    <tr
+                      key={index}
+                      className="animate-slide-up border-b transition-colors hover:bg-opacity-50"
+                      style={{
+                        animationDelay: `${index * 100}ms`,
+                        backgroundColor: index % 2 === 1 ? styling?.rowAltBg : styling?.rowBg || 'transparent',
+                        borderBottomColor: 'var(--element-color)',
+                        color: descriptionColor
+                      }}
+                    >
+                      {columns.map((column) => (
+                        <td
+                          key={column.key}
+                          className="p-4 align-middle"
+                          style={{ textAlign: column.align || 'left' }}
+                        >
+                          <div className={`${column.key === 'name' ? 'font-medium truncate' : ''}`}>
+                            {formatCellValue(row[column.key], column.type)}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-          
+
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-end space-x-2 py-4">
+            <div className="flex items-center justify-end space-x-2 py-4 mt-auto border-t relative z-10" style={{ borderColor: 'var(--element-color, transparent)' }}>
               <div className="text-muted-foreground flex-1 text-sm">
                 Showing {currentPage * pageSize + 1} to{" "}
                 {Math.min((currentPage + 1) * pageSize, sortedData.length)} of {sortedData.length} entries
               </div>
               <div className="space-x-2">
                 <button
-                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  className="px-3 py-1 text-sm border rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                  style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}
                   onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
                   disabled={currentPage === 0}
                 >
                   Previous
                 </button>
                 <button
-                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  className="px-3 py-1 text-sm border rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                  style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}
                   onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
                   disabled={currentPage >= totalPages - 1}
                 >
@@ -212,7 +218,7 @@ const Table = ({
               </div>
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );

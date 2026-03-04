@@ -68,6 +68,18 @@ class ConversationService {
     if (response.success && response.data) {
       return response.data;
     }
+
+    // If the workflow node hasn't been created yet by Morpheus, the backend returns 404.
+    // We treat this gracefully as a 'starting' state instead of throwing an error.
+    if (response.error && response.error.includes('404')) {
+      return {
+        conversation_id: conversationId,
+        node_id: 'workflow',
+        status: 'starting',
+        metadata: { step: 'initializing' }
+      };
+    }
+
     throw new Error(response.error || 'Failed to get workflow status');
   }
 

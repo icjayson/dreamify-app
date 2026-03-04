@@ -10,6 +10,7 @@ import ReactGA from "react-ga4";
 import { useEffect } from "react";
 import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
+import FinancePage from "./pages/Finance";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login.tsx";
@@ -44,14 +45,16 @@ const AppContent = () => {
   const isAdminPath = location.pathname.startsWith("/admin");
   const isHomePath = location.pathname === "/";
   const isAboutPath = location.pathname === "/about";
+  const isFinancePath = location.pathname === "/finance";
   const isPreviewPath = location.pathname.startsWith("/preview/");
 
   return (
     <>
-      {(isHomePath || isAboutPath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath)) && <Header />}
+      {(isHomePath || isAboutPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/finance" element={<FinancePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/waitlist" element={<WaitlistPage />} />

@@ -8,7 +8,7 @@ interface FilePreviewChipProps {
 
 const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
   const isProcessing = file.status === 'uploading' || file.status === 'processing';
-  
+
   return (
     <div className="group relative flex w-full min-w-0 items-center gap-2 p-2 pr-6 bg-[#1e1e1e] border border-white/10 rounded-xl overflow-hidden">
       {/* File Icon */}
@@ -19,17 +19,17 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
           <FileText className="w-4 h-4 text-white/70" />
         )}
       </div>
-      
+
       {/* Filename */}
       <span className="text-xs text-white truncate min-w-0 flex-1 max-w-[280px]" title={file.filename}>
         {file.filename}
       </span>
-      
+
       {/* Extension Badge */}
       <span className="text-xs text-white/60 flex-shrink-0">
         {file.ext.toUpperCase()}
       </span>
-      
+
       {/* Remove Button - visible on hover */}
       <button
         onClick={onRemove}

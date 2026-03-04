@@ -25,6 +25,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { CONNECTORS, type ConnectorItem } from '@/constants/connectors';
 import FilePreviewChip from '@/components/chat/FilePreviewChip';
 import ReactGA from 'react-ga4';
+import { FeedbackFloatingButton } from "@/components/ui/feedback-button";
 
 interface HomePageProps {
   onGetStarted: () => void;
@@ -860,6 +861,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         onClose={() => setTemplateModalOpen(false)}
         onTemplateSelect={handleTemplateSelect}
       />
+      <FeedbackFloatingButton />
       <FooterSection />
       {/* Waitlist modal for signed-out users */}
       {/* <Dialog open={waitlistOpen} onOpenChange={setWaitlistOpen}>

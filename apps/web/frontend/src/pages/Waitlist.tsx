@@ -14,8 +14,8 @@ export default function WaitlistPage() {
       <style dangerouslySetInnerHTML={{ __html: `header { display: none !important; }` }} />
 
       {/* Background */}
-      <WaveBackground 
-      className="absolute inset-0 z-0" />
+      <WaveBackground
+        className="absolute inset-0 z-0" />
       <div className="absolute inset-0 bg-black/60 z-1"></div>
 
       {/* Back button */}
@@ -34,7 +34,7 @@ export default function WaitlistPage() {
             <span className="text-2xl font-medium text-foreground font-outfit">Dreamify</span>
           </div>
           <h1 className="text-xl md:text-4xl font-bold tracking-tight text-foreground leading-relaxed flex flex-wrap items-center justify-center gap-2">
-            Join the 
+            Join the
             <span className="inline-flex align-middle px-3 py-1 rounded-lg ml-1 mr-1 button-gradient">
               waitlist
             </span>
@@ -52,8 +52,8 @@ export default function WaitlistPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-auto xl:gap-auto place-content-center lg:min-h-0 lg:place-content-stretch">
           {/* Video placeholder (left, 2/3 width) */}
           <section className="lg:col-span-2 flex items-center justify-center order-2 lg:order-1 z-0">
-              <video className="w-full rounded-2xl border border-white/50 max-w-5xl aspect-video object-cover bg-card/50" controls preload="auto" loop={true} autoPlay src="/video-demo-main.mov">
-              </video>
+            <video className="w-full rounded-2xl border border-white/50 max-w-5xl aspect-video object-cover bg-card/50" controls preload="auto" loop={true} autoPlay src="/video-about-full.mov">
+            </video>
           </section>
 
           {/* Waitlist (right, 1/3 width) */}
@@ -62,35 +62,35 @@ export default function WaitlistPage() {
               <WaitlistStatusCheck />
             </div>
             <Waitlist
-            appearance={{
-                  baseTheme: dark,
-                  elements: {
-                    headerTitle: "text-white",
-                    headerSubtitle: "text-white",
-                    formButtonPrimary: "w-full button-gradient",
-                    card: "bg-muted shadow-none border",
-                    socialButtonsBlockButton: "w-full button-gradient mb-4",
-                    dividerLine: "bg-border",
-                    fontFamily: "Inter",
-                    dividerText: "text-xs text-muted-foreground",
-                    formFieldInput: "bg-input border-border text-foreground",
-                    formFieldLabel: "text-sm font-medium text-foreground",
-                    footerActionLink: "text-white hover:text-accent hover:underline",
-                    identityPreviewText: "text-muted-foreground",
-                    formFieldSuccessText: "text-green-500",
-                    formFieldErrorText: "text-red-500"
+              appearance={{
+                baseTheme: dark,
+                elements: {
+                  headerTitle: "text-white",
+                  headerSubtitle: "text-white",
+                  formButtonPrimary: "w-full button-gradient",
+                  card: "bg-muted shadow-none border",
+                  socialButtonsBlockButton: "w-full button-gradient mb-4",
+                  dividerLine: "bg-border",
+                  fontFamily: "Inter",
+                  dividerText: "text-xs text-muted-foreground",
+                  formFieldInput: "bg-input border-border text-foreground",
+                  formFieldLabel: "text-sm font-medium text-foreground",
+                  footerActionLink: "text-white hover:text-accent hover:underline",
+                  identityPreviewText: "text-muted-foreground",
+                  formFieldSuccessText: "text-green-500",
+                  formFieldErrorText: "text-red-500"
 
-                   },
-                  variables: {
-                    colorText: "#ffffff",
-                    colorBackground: "#161C27",
-                  },
-                  layout: {
-                    unsafe_disableDevelopmentModeWarnings: true,
-                    animations: true,
-                  }
-                }}
-                />
+                },
+                variables: {
+                  colorText: "#ffffff",
+                  colorBackground: "#161C27",
+                },
+                layout: {
+                  unsafe_disableDevelopmentModeWarnings: true,
+                  animations: true,
+                }
+              }}
+            />
           </section>
         </div>
       </main>

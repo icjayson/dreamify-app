@@ -13,6 +13,7 @@ import { projectService } from "@/services/projectService";
 import { conversationService } from "@/services/conversationService";
 import { conversationNodesToMessages } from "@/chat/conversationToMessages";
 import { useToast } from "@/hooks/use-toast";
+import { FeedbackProjectButton } from "@/components/ui/feedback-button";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -291,6 +292,7 @@ export default function ProjectPage() {
             </div>
           </div>
           <div className="flex items-center">
+            <FeedbackProjectButton />
             <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center"><span>Publish</span>
               <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
             </button>

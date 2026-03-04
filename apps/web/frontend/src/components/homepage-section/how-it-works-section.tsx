@@ -37,7 +37,7 @@ export const HowItWorksSection = () => {
   return (
     <section className="pt-40 pb-24 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
       {/* Background removed to show WaveBackground */}
-      
+
       {/* Animated elements */}
       <div className={`flex justify-center mb-4 ${isVisible ? 'animate-bounce-in' : 'opacity-0'}`}>
         <div className="flex space-x-4">
@@ -53,14 +53,14 @@ export const HowItWorksSection = () => {
           {/* Icon */}
           <div className="flex justify-center mb-4">
             <div className="w-20 h-20 rounded-lg flex items-center justify-center">
-              <img 
-                src="/logo-watermark.png" 
-                alt="Dreamify Logo" 
+              <img
+                src="/logo-watermark.png"
+                alt="Dreamify Logo"
                 className="w-full h-full object-contain hover:animate-spin transition-all duration-300"
               />
             </div>
           </div>
-          
+
           {/* Title with gradient panel */}
           <h2 className="text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap">
             <span className="text-white">How</span>
@@ -68,7 +68,7 @@ export const HowItWorksSection = () => {
               <span className="text-white font-bold text-3xl md:text-5xl">It Works</span>
             </div>
           </h2>
-          
+
           <p className="text-md text-white/60 max-w-3xl mx-auto">
             Four simple steps to transform your data into stunning visualizations
           </p>
@@ -84,7 +84,7 @@ export const HowItWorksSection = () => {
             autoPlay
             muted
             aria-label="Product demo video"
-            src="/video-demo-main.mov"
+            src="/video-about-full.mov"
           >
           </video>
         </div>
@@ -94,9 +94,9 @@ export const HowItWorksSection = () => {
           <div className="grid md:grid-cols-4 gap-8 relative">
             {/* Connection Line - Hidden on mobile */}
             <div className="hidden md:block absolute top-24 left-0 right-0 h-0.5 bg-gradient-to-r from-primary via-secondary to-accent opacity-30"></div>
-            
+
             {steps.map((step, index) => (
-              <div 
+              <div
                 key={index}
                 className={`relative text-center ${isVisible ? 'animate-slide-in-left' : 'opacity-0'}`}
                 style={{ animationDelay: `${index * 0.2}s` }}
@@ -106,7 +106,7 @@ export const HowItWorksSection = () => {
                   <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto relative z-10">
                     <span className="text-2xl font-bold text-white">{step.number}</span>
                   </div>
-                  
+
                   {/* Icon with animation */}
                   <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2">
                     <div className="w-12 h-12 rounded-full glass-panel flex items-center justify-center hover:scale-110 transition-transform duration-200">
@@ -145,7 +145,7 @@ export const HowItWorksSection = () => {
                 <div className="w-3 h-3 rounded-full bg-green-500"></div>
               </div>
             </div>
-            
+
             <div className="text-left space-y-4">
               <div className="flex items-start space-x-4">
                 <div className="w-8 h-8 rounded-full bg-primary flex-shrink-0 flex items-center justify-center">
@@ -155,7 +155,7 @@ export const HowItWorksSection = () => {
                   <p className="text-foreground">"Show me sales performance by region with animated bars"</p>
                 </div>
               </div>
-              
+
               <div className="flex items-start space-x-4 justify-end">
                 <div className="glass-panel rounded-2xl px-4 py-3 max-w-md hover:scale-105 transition-transform duration-200">
                   <p className="text-muted-foreground">✨ Creating your animated dashboard...</p>

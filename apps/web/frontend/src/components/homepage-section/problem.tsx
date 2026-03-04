@@ -83,7 +83,7 @@ export const ProblemSection = () => {
                 playsInline
                 preload="metadata"
                 aria-label="Dreamify way demo video"
-                src="/video-demo-main.mov"
+                src="/video-about-full.mov"
               />
             </div>
           </div>

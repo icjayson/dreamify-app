@@ -9,6 +9,7 @@ import { FooterSection } from "@/components/homepage-section/footer-section";
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
 import ProjectsSidebar from "@/components/homepage-section/ProjectsSidebar";
 import { useProjects } from "@/hooks/useProjects";
+import { FeedbackFloatingButton } from "@/components/ui/feedback-button";
 
 const AboutPage = () => {
   const navigate = useNavigate();
@@ -74,6 +75,7 @@ const AboutPage = () => {
           <FooterSection />
         </div>
       </main>
+      <FeedbackFloatingButton />
 
       {/* Projects sidebar */}
       <ProjectsSidebar

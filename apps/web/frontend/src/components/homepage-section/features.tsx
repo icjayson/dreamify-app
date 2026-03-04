@@ -18,35 +18,36 @@ export const FeaturesSection = () => {
     () => [
       {
         id: "conversational",
-        title: "Conversational Input",
-        description: "Type what you want to see — Dreamify understands context and intent.",
+        title: "Quick Dashboard Generation",
+        description: "Say 'create dashboard' to Dreamify, it analyse your data and generate desired output.",
         icon: MessageCircle,
-        videoSrc: "/video-demo-main.mov",
+        videoSrc: "/video-about-dashboard.mov",
         bullets: [
-          "Type what you want to see",
-          "Understands context and intent",
+          "Upload your data",
+          "Describe your desired dashboard output",
+          "Dreamify will generate dashboard in 3 minutes",
         ],
       },
       {
         id: "insight",
-        title: "AI Insight Engine",
-        description: "Instantly analyzes data and suggests the best visual motion narrative.",
+        title: "Easy Layout Editation and Insight Collection",
+        description: "You can edit layout and collect insights in seconds.",
         icon: Brain,
-        videoSrc: "/video-demo-main.mov",
+        videoSrc: "/video-about-editandinsight.mov",
         bullets: [
-          "Analyzes your data instantly",
-          "Suggests best motion narrative",
+          "Manually edit layout or chat with Dreamify",
+          "Collect instant and deep insights for each metrics",
         ],
       },
       {
         id: "visualization",
-        title: "Motion-First Visualization → Export / Share",
-        description: "Your insights come alive in seconds — no BI setup, no static reports.",
+        title: "Unique Dashboard Shared Link",
+        description: "You can share your dashboard with anyone in seconds.",
         icon: Sparkles,
-        videoSrc: "/video-demo-main.mov",
+        videoSrc: "/video-about-exportl.mov",
         bullets: [
-          "Animated visuals in seconds",
-          "Export or share instantly",
+          "Unique dashboard link",
+          "Fully control the permission of dashboard link",
         ],
       },
     ],
@@ -66,7 +67,7 @@ export const FeaturesSection = () => {
     if (video.getAttribute("src") !== src) {
       video.setAttribute("src", src);
     }
-    video.play().catch(() => {});
+    video.play().catch(() => { });
   }, [activeIndex, steps]);
 
   const onClick = useCallback((index: number) => setActiveIndex(index), []);
@@ -74,8 +75,7 @@ export const FeaturesSection = () => {
   return (
     <section className="py-24 relative overflow-hidden" ref={ref as React.RefObject<HTMLElement>}>
       <div className="relative z-10 container mx-auto px-6 ">
-        <div className={`text-center mb-16 tracking-tight transition-all duration-700 ease-out ${
-            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+        <div className={`text-center mb-16 tracking-tight transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
           style={{ transitionDelay: "80ms" }}>
           <h2 className="text-4xl md:text-6xl font-instrument-serif text-white">From chat to cinematic dashboard — all in one interface</h2>
@@ -84,10 +84,9 @@ export const FeaturesSection = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
           {/* Left: Minimalist list (no outer frame), clickable rows with divider */}
-          <div className={`tracking-tight transition-all duration-700 ease-out ${
-            isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[-120px]"
-          }`}
-          style={{ transitionDelay: "160ms" }}>
+          <div className={`tracking-tight transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[-120px]"
+            }`}
+            style={{ transitionDelay: "160ms" }}>
             {steps.map((step, i) => {
               const Icon = step.icon;
               const active = i === activeIndex;
@@ -95,9 +94,8 @@ export const FeaturesSection = () => {
                 <button
                   key={step.id}
                   onClick={() => onClick(i)}
-                  className={`group relative w-full text-left px-3 md:px-5 lg:px-6 py-5 rounded-xl transition-all duration-300 border-b border-white/10 ${
-                    active ? 'bg-white/5 ring-1 ring-white/40 shadow-[0_0_0_1px_hsl(var(--white)_/_0.2)]' : 'hover:bg-white/5'
-                  }`}
+                  className={`group relative w-full text-left px-3 md:px-5 lg:px-6 py-5 rounded-xl transition-all duration-300 border-b border-white/10 ${active ? 'bg-white/5 ring-1 ring-white/40 shadow-[0_0_0_1px_hsl(var(--white)_/_0.2)]' : 'hover:bg-white/5'
+                    }`}
                   aria-current={active ? 'step' : undefined}
                 >
                   {/* Active left bar */}
@@ -111,11 +109,10 @@ export const FeaturesSection = () => {
                     </div>
                     <div className="flex-1">
                       <div
-                        className={`h-0.5 w-full mb-3 ${
-                          active
-                            ? 'bg-white'
-                            : 'bg-white/40'
-                        }`}
+                        className={`h-0.5 w-full mb-3 ${active
+                          ? 'bg-white'
+                          : 'bg-white/40'
+                          }`}
                       />
                       <div className={`text-xl md:text-2xl font-semibold font-instrument-serif ${active ? 'text-white' : 'text-white'}`}>{step.title}</div>
                       <div className="text-sm text-white/90 mt-2 leading-relaxed">{step.description}</div>
@@ -138,10 +135,9 @@ export const FeaturesSection = () => {
 
           {/* Right: Sticky demo video (click to reveal) */}
           <div className="lg:sticky lg:top-24">
-            <div className={`tracking-tight transition-all duration-700 ease-out ${
-            isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[120px]"
-          }`}
-          style={{ transitionDelay: "160ms" }}>
+            <div className={`tracking-tight transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[120px]"
+              }`}
+              style={{ transitionDelay: "160ms" }}>
               <div className="rounded-2xl overflow-hidden">
                 {activeIndex >= 0 ? (
                   <video

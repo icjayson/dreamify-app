@@ -248,7 +248,6 @@ async def _post_node_status(conversation_id: Optional[str], status: str, metadat
                     "status": status,
                     "metadata": metadata or {},
                 },
-                headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
             ) as response:
                 if response.status != 200:
                     response_text = await response.text()

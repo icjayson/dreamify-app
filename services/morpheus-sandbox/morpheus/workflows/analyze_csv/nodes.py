@@ -1252,14 +1252,21 @@ def node_validation(state: AgentState, **kwargs) -> AgentState:
                 for warning in data_validation["warnings"]:
                     logger.warning(f"Data validation: {warning}")
             
+            if data_validation.get("metric_warnings"):
+                for warning in data_validation["metric_warnings"]:
+                    logger.warning(f"Data validation (metric - non-critical): {warning}")
+            
             if data_validation.get("errors"):
                 for error in data_validation["errors"]:
                     logger.error(f"Data validation error: {error}")
             
             # Check for critical issues (likely hallucinated data)
+            # A single metric warning is non-critical (lowest severity) and passes validation.
+            # But >=2 metric warnings still trigger retry.
             has_critical_issues = (
                 len(data_validation.get("errors", [])) > 0 or 
-                len(data_validation.get("warnings", [])) >= 1
+                len(data_validation.get("warnings", [])) >= 1 or
+                len(data_validation.get("metric_warnings", [])) >= 2
             )
             
             if has_critical_issues and validation_retries < max_validation_retries:
@@ -1273,7 +1280,8 @@ def node_validation(state: AgentState, **kwargs) -> AgentState:
                 grounding_context = _build_data_grounding_context(state)
                 issues_list = "\n".join(
                     [f"- ERROR: {e}" for e in data_validation.get("errors", [])] +
-                    [f"- WARNING: {w}" for w in data_validation.get("warnings", [])]
+                    [f"- WARNING: {w}" for w in data_validation.get("warnings", [])] +
+                    [f"- METRIC WARNING (non-critical): {w}" for w in data_validation.get("metric_warnings", [])]
                 )
                 
                 validation_error_msg = f"""⚠️ YOUR DASHBOARD WAS REJECTED DUE TO DATA ISSUES ⚠️
@@ -1752,6 +1760,7 @@ def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
     import pandas as pd
     
     warnings = []
+    metric_warnings = []
     errors = []
     
     # Get all tool output text for reference
@@ -1852,7 +1861,7 @@ def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
             if len(clean_num) > 3:  # Only check significant numbers
                 # Check if this number appears somewhere in tool outputs
                 if clean_num not in all_outputs and num not in all_outputs:
-                    warnings.append(f"Metric '{title}' value '{value}' may be fabricated - not found in tool outputs")
+                    metric_warnings.append(f"Metric '{title}' value '{value}' may be fabricated - not found in tool outputs")
     
     # Check charts
     charts = dashboard_json.get("charts", [])
@@ -1919,5 +1928,5 @@ def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
     
     valid = len(errors) == 0
     
-    return {"valid": valid, "warnings": warnings, "errors": errors}
+    return {"valid": valid, "warnings": warnings, "metric_warnings": metric_warnings, "errors": errors}
 

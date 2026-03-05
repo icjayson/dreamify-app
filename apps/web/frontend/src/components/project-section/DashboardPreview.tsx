@@ -41,8 +41,8 @@ const DashboardPreview = ({
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  // Pass undefined to useDashboard if staticConfig exists so it doesn't try to fetch
-  const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(staticConfig ? undefined : dashboardId);
+  // Pass undefined to useDashboard if staticConfig or processedData exists so it doesn't try to fetch
+  const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(staticConfig || processedData ? undefined : dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Determine which configuration to use (static from parent vs fetched from state)
@@ -380,7 +380,7 @@ const DashboardPreview = ({
     });
   };
 
-  const normalizeDashboard = (data: any) => {
+  const normalizeDashboard = (data: any, overrideId?: string) => {
     if (!data) return null;
     const components: any[] = [];
     let componentId = 1;
@@ -648,7 +648,7 @@ const DashboardPreview = ({
 
     const gridColumns = data?.layout?.recommended_grid?.length ? 12 : 12;
     const dashboardConfig = {
-      id: 'processed_dashboard',
+      id: overrideId || 'processed_dashboard',
       layout: { type: 'grid', grid_columns: gridColumns, grid_rows: 20 },
       components
     };
@@ -691,7 +691,7 @@ const DashboardPreview = ({
   const rowHeight = 30;
 
   // Build normalized dashboards and active selection
-  const normalizedProcessed = useMemo(() => filteredProcessedData ? normalizeDashboard(filteredProcessedData) : null, [filteredProcessedData]);
+  const normalizedProcessed = useMemo(() => filteredProcessedData ? normalizeDashboard(filteredProcessedData, dashboardId) : null, [filteredProcessedData, dashboardId]);
   const activeDashboard = useMemo(() => {
     if (normalizedProcessed) return normalizedProcessed;
     if (configuration && configuration.components) return configuration as any;
@@ -761,12 +761,14 @@ const DashboardPreview = ({
     } as Layouts;
   };
 
-  const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v2`, [activeDashboard?.id]);
+  const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v3`, [activeDashboard?.id]);
 
   const [layouts, setLayouts] = useState<Layouts>({ lg: [], md: [], sm: [], xs: [], xxs: [] });
+  const [isLayoutReady, setIsLayoutReady] = useState(false);
 
   // Initialize or update layouts when active dashboard changes
   useEffect(() => {
+    setIsLayoutReady(false);
     if (!activeDashboard) {
       setLayouts({ lg: [], md: [], sm: [], xs: [], xxs: [] });
       return;
@@ -774,27 +776,44 @@ const DashboardPreview = ({
 
     const initial = buildLayoutsFromComponents(activeDashboard.components);
 
-    // If rendering from processedData (fresh dashboard), always use backend defaults first
-    if (normalizedProcessed) {
-      setLayouts(initial);
-      return;
-    }
-
-    // Otherwise, try to restore saved layouts for persisted dashboards
+    // Try to restore saved layouts for persisted dashboards (even processed ones with a legitimate ID)
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved) as Layouts;
-        setLayouts(parsed);
-        return;
+
+        // Validation: Verify if the saved layouts still match the components we have.
+        // If the LLM generates 5 totally new charts but the saved layout has 2 layout boxes, we must use initial.
+        // Compare the keys in the 'lg' array.
+        const activeComponentIds = new Set(activeDashboard.components.map((c: any) => String(c.id)));
+        const savedComponentIds = new Set(parsed.lg?.map((item) => item.i));
+
+        // Check if there's significant overlap. Fast heuristic: do they differ in size, or missing required IDs?
+        let isValid = true;
+        for (const id of activeComponentIds) {
+          if (!savedComponentIds.has(id)) {
+            isValid = false;
+            break;
+          }
+        }
+
+        if (isValid) {
+          setLayouts(parsed);
+          setIsLayoutReady(true);
+          return;
+        }
       }
     } catch (_e) {
       // ignore parse errors and fall back to initial
     }
+
+    // Default to the backend's generated layout if storage fails or layout is deemed invalidated.
     setLayouts(initial);
-  }, [activeDashboard, storageKey, normalizedProcessed]);
+    setIsLayoutReady(true);
+  }, [activeDashboard, storageKey]);
 
   const handleLayoutChange = (current: Layout[], all: Layouts) => {
+    if (!isLayoutReady) return;
     setLayouts(all);
     // Persist per dashboard id
     try {
@@ -1030,7 +1049,7 @@ const DashboardPreview = ({
         )}
 
         {/* Responsive Drag & Resize Grid */}
-        {activeDashboard && (
+        {activeDashboard && isLayoutReady && (
           <div className="space-y-6">
             <ResponsiveGridLayout
               className="layout"

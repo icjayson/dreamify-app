@@ -94,6 +94,7 @@ export default function ProjectPage() {
   const setCurrentConversationId = useChatStore((s) => s.setCurrentConversationId);
   const setHasShownInitialDashboard = useChatStore((s) => s.setHasShownInitialDashboard);
   const selectDashboard = useChatStore((s) => s.selectDashboard);
+  const selectedDashboardId = useChatStore((s) => s.selectedDashboardId);
 
   const hydrateConversation = useCallback(async (projId: string, conversationId: string) => {
     try {
@@ -388,7 +389,7 @@ export default function ProjectPage() {
               ) : processedData ? (
                 // Prioritize showing dashboard if it exists, even during Q&A processing
                 // This preserves the view during Q&A mode while only new dashboard generation shows loading
-                <DashboardPreview processedData={processedData} className="h-full overflow-y-auto" />
+                <DashboardPreview dashboardId={selectedDashboardId || undefined} processedData={processedData} className="h-full overflow-y-auto" />
               ) : uploadedFiles.some(f => f.status === 'processing') ? (
                 // Only show loading if no existing dashboard (fresh upload generating first dashboard)
                 <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />

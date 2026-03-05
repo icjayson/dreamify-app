@@ -1,5 +1,4 @@
 // File Preview Service
-import { API_CONFIG } from '@/api/config';
 
 export interface FilePreviewData {
   success: boolean;
@@ -14,10 +13,11 @@ export async function getFilePreview(
   assetId: string,
   token?: string
 ): Promise<FilePreviewData> {
-  // Use relative URL so Vite proxy can forward to backend
-  const url = token
+  const baseUrl = import.meta.env.VITE_API_URL || '';
+  const path = token
     ? `/api/v1/files/preview/${assetId}?token=${encodeURIComponent(token)}`
     : `/api/v1/files/preview/${assetId}`;
+  const url = `${baseUrl}${path}`;
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -45,6 +45,12 @@ export async function getFilePreview(
       throw new Error(errorData.detail || 'Invalid file format');
     }
     throw new Error(`Failed to load preview: ${response.statusText}`);
+  }
+
+  // Guard against HTML responses (e.g. SPA fallback serving index.html)
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('Server returned an unexpected response. Please check the API configuration.');
   }
 
   return await response.json();

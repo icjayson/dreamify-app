@@ -115,6 +115,8 @@ class AgentState(BaseModel):
     # Input/Output
     input_prompt: str = Field(description="User's request/question")
     file_paths: List[str] = Field(default_factory=list, description="Paths to CSV/data files being analyzed")
+    assets_dict: Dict[str, str] = Field(default_factory=dict, description="Dictionary mapping filenames to their local temp paths")
+    data_profile: Optional[str] = Field(default=None, description="Output of the exploration step")
     output: Optional[Dict[str, Any]] = Field(default=None, description="Final workflow output")
     
     @property

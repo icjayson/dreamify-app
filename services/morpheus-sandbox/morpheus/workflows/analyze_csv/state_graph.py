@@ -49,6 +49,7 @@ class StatefulAnalyzeCSVWorkflow:
         # Node registry: maps node names to node functions
         self.nodes = {
             "START": nodes.node_start,
+            "EXPLORE_FILES": nodes.node_explore_files,
             "ROUTING": nodes.node_routing,
             "REASONING": nodes.node_reasoning,
             "EXECUTION": nodes.node_execution,
@@ -649,6 +650,18 @@ class StatefulAnalyzeCSVWorkflow:
             or "Please analyze the data."
         )
         
+        # Build assets mapping
+        assets_dict = {}
+        if user_assets and file_paths:
+            # Try to match user_assets (which have filenames) to the downloaded file_paths
+            # This relies on the file_paths retaining the original ordering or similar names
+            for i, fp in enumerate(file_paths):
+                if i < len(user_assets):
+                    filename = user_assets[i].get("filename") or f"file_{i}.csv"
+                    assets_dict[filename] = fp
+                else:
+                    assets_dict[f"file_{i}.csv"] = fp
+
         # Create agent state
         state = AgentState(
             user_state=user_state,
@@ -656,6 +669,7 @@ class StatefulAnalyzeCSVWorkflow:
             workflow_history=workflow_history,
             input_prompt=effective_prompt,
             file_paths=file_paths,
+            assets_dict=assets_dict,
             conversation_id=conversation.get("conversation_id"),
             project_id=conversation.get("project_id"),
             conversation_uri=conversation_uri,

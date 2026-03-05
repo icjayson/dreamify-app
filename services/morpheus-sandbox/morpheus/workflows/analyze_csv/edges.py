@@ -91,6 +91,9 @@ def decide_next_node(state: AgentState) -> str:
     current = state.current_node
     
     if current == "START":
+        return "EXPLORE_FILES"
+    
+    elif current == "EXPLORE_FILES":
         return "ROUTING"
     
     elif current == "ROUTING":

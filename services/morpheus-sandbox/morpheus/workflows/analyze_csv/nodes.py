@@ -492,6 +492,110 @@ def node_start(state: AgentState, **kwargs) -> AgentState:
     return state
 
 
+def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
+    """
+    EXPLORE_FILES Node: Data Profiler agent to automatically profile all available datasets.
+    
+    This node serves as a prefix step. It uses PythonREPL to analyze the datasets
+    mapped in state.assets_dict and saves a summary in state.data_profile.
+    """
+    logger.info("Running EXPLORE_FILES node")
+    
+    if not state.assets_dict:
+        logger.info("No assets to explore. Proceeding to ROUTING.")
+        return state
+        
+    try:
+        # Get or create python tool
+        python_tool = PythonREPLTool()
+        
+        # INJECT locals/globals into the REPL environment
+        if hasattr(python_tool.python_repl, 'globals') and isinstance(python_tool.python_repl.globals, dict):
+            python_tool.python_repl.globals['file_paths'] = state.assets_dict
+        elif hasattr(python_tool.python_repl, 'locals') and isinstance(python_tool.python_repl.locals, dict):
+            python_tool.python_repl.locals['file_paths'] = state.assets_dict
+
+        if model is None:
+            model = get_model_for_agent()
+
+        profiler_prompt = f"""You are the 'Data Profiler', an expert data scientist. 
+Your sole objective is to explore and profile multiple datasets provided by the user before any deep analysis begins.
+
+You have access to a Python_REPL tool.
+The paths to the user's uploaded files are already stored in a predefined Python dictionary called `file_paths` in your execution environment, where the key is the filename and the value is the local file path.
+
+**YOUR INSTRUCTIONS:**
+1. Use the Python_REPL tool to iterate through the `file_paths` dictionary.
+2. For EACH file, load it using pandas (`pd.read_csv(path)`) and extract the following information:
+   - File Name
+   - File Size (in MB - you can compute from os.path.getsize)
+   - DataFrame Shape (Number of rows and columns)
+   - Column Names and their Data Types (dtypes)
+   - The first 3 rows of data (df.head(3))
+   - Number of missing values (Null/NaN) per column.
+3. **Crucial Constraints:** Do NOT print the entire dataframe. Data can be massive. Only use `.head(3)` or `.info()`.
+4. After executing the Python code to gather this data, synthesize the output into a concise, structured 'Data Profile Summary' in text format.
+
+**OUTPUT FORMAT:**
+Provide a structured summary of ALL files. Do not perform any deep analysis or answer user queries. Just output the profile.
+Ensure the format easily provides the schema for the next reasoning agent."""
+
+        model_with_tools = model.bind_tools([python_tool])
+        messages = [
+            SystemMessage(content=profiler_prompt),
+            HumanMessage(content="Please profile all datasets in the file_paths dictionary and produce the summary.")
+        ]
+        
+        logger.info("Calling Data Profiler LLM to explore files.")
+        
+        # Standard ReAct loop just for the profiler
+        max_turns = 5
+        for turn in range(max_turns):
+            response = model_with_tools.invoke(messages)
+            if isinstance(response.content, list):
+                response.content = "\n".join(
+                    item.get("text", "") if isinstance(item, dict) else str(item)
+                    for item in response.content
+                )
+            
+            messages.append(response)
+            
+            if response.tool_calls and len(response.tool_calls) > 0:
+                # Execute all tools
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+                    tool_call_id = tool_call["id"]
+                    
+                    if tool_name.lower() == "python_repl":
+                        query = tool_args.get("query", "")
+                        logger.info(f"[Data Profiler] Executing Python code:\n{query}")
+                        result = python_tool.run(query)
+                        result_str = str(result)
+                        preview = result_str[:300] + "...\n[Output truncated]" if len(result_str) > 300 else result_str
+                        logger.info(f"[Data Profiler] Execution result preview:\n{preview}")
+                    elif tool_name.lower() == "get_available_chart_types":
+                        logger.info("[Data Profiler] Tool check: get_available_chart_types")
+                        result = get_available_chart_types.invoke({})
+                    else:
+                        logger.info(f"[Data Profiler] Tool error: Unknown tool {tool_name}")
+                        result = f"Error: Unknown tool {tool_name}"
+                        
+                    tool_msg = ToolMessage(content=str(result), tool_call_id=tool_call_id)
+                    messages.append(tool_msg)
+            else:
+                # Finished
+                state.data_profile = str(response.content)
+                logger.info(f"[Data Profiler] Data exploration complete.\nSummary Preview:\n{str(response.content)[:500]}...")
+                break
+                
+    except Exception as e:
+        logger.error(f"Error exploring files: {str(e)}")
+        state.data_profile = f"Exploration failed: {str(e)}"
+        
+    return state
+
+
 def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
     """
     ROUTING Node: Decide workflow type (dashboard or qa).
@@ -644,16 +748,24 @@ Based on the above context, decide your next action."""
         ]
         
         if valid_files:
+            file_info = ""
+            
+            # Inject Data Profile from EXPLORE_FILES node if available
+            if state.data_profile:
+                file_info += f"=== DATASET PROFILES ===\n{state.data_profile}\n========================\n\n"
+            
             if len(valid_files) == 1:
                 # Single file - backward compatible prompt
-                file_info = f"CSV file available at: {valid_files[0]}"
+                file_info += f"CSV file available at: {valid_files[0]}"
             else:
                 # Multiple files - enhanced prompt with all file paths
                 files_list = "\n".join([f"- File {i+1}: {fp}" for i, fp in enumerate(valid_files)])
-                file_info = f"""Multiple CSV files available for analysis:
+                file_info += f"""Multiple CSV files available for analysis:
 {files_list}
 
 Load ALL files and combine/analyze as needed for the user's request. You can use pandas to merge, concatenate, or analyze files together."""
+
+            file_info += "\n\nCRITICAL: When writing Python code, load the files using the paths pre-loaded in the `file_paths` dictionary object in your environment (e.g. `file_paths['users.csv']`)."
             
             if mode == "dashboard":
                 instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
@@ -870,6 +982,13 @@ def node_execution(state: AgentState, python_tool=None, **kwargs) -> AgentState:
     # Get or create python tool
     if python_tool is None:
         python_tool = PythonREPLTool()
+        
+    # INJECT locals/globals into the REPL environment for the Execution node
+    if state.assets_dict:
+        if hasattr(python_tool.python_repl, 'globals') and isinstance(python_tool.python_repl.globals, dict):
+            python_tool.python_repl.globals['file_paths'] = state.assets_dict
+        elif hasattr(python_tool.python_repl, 'locals') and isinstance(python_tool.python_repl.locals, dict):
+            python_tool.python_repl.locals['file_paths'] = state.assets_dict
     
     # Get pending action
     pending_action_dict = state.working_memory.tool_outputs.get("pending_action")

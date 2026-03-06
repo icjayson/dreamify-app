@@ -494,10 +494,12 @@ def node_start(state: AgentState, **kwargs) -> AgentState:
 
 def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
     """
-    EXPLORE_FILES Node: Data Profiler agent to automatically profile all available datasets.
+    EXPLORE_FILES Node: Data Profiler & Merge Strategist.
     
-    This node serves as a prefix step. It uses PythonREPL to analyze the datasets
-    mapped in state.assets_dict and saves a summary in state.data_profile.
+    This node profiles all available datasets and, when multiple files exist,
+    analyzes their relationships to propose a concrete merge/join strategy.
+    The merge strategy is stored in state.data_profile so the downstream
+    reasoning node can act on it immediately.
     """
     logger.info("Running EXPLORE_FILES node")
     
@@ -506,7 +508,6 @@ def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
         return state
         
     try:
-        # Get or create python tool
         python_tool = PythonREPLTool()
         
         # INJECT locals/globals into the REPL environment
@@ -518,38 +519,88 @@ def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
         if model is None:
             model = get_model_for_agent()
 
-        profiler_prompt = f"""You are the 'Data Profiler', an expert data scientist. 
-Your sole objective is to explore and profile multiple datasets provided by the user before any deep analysis begins.
+        has_multiple_files = len(state.assets_dict) > 1
+        user_prompt = state.input_prompt or ""
+        
+        # Build merge-aware profiler prompt
+        merge_section = ""
+        if has_multiple_files:
+            user_guidance_section = ""
+            if user_prompt.strip():
+                user_guidance_section = f"""
+**USER'S REQUEST (may contain merge/join guidance):**
+\"{user_prompt}\"
+If the user mentions how to combine, merge, or join the files, prioritize their instructions when proposing the merge strategy."""
+
+            merge_section = f"""
+--- PHASE 2: MERGE STRATEGY (MULTI-FILE ONLY) ---
+After profiling ALL files, you MUST analyze how these datasets relate and can be merged.
+
+{user_guidance_section}
+
+Use the Python_REPL tool to investigate:
+1. **Common columns**: Find columns that exist in multiple files (same name or similar name).
+2. **Key candidates**: For each pair of files, identify potential join keys by comparing column names, dtypes, and sample values.
+3. **Value overlap**: For candidate join keys, check the overlap of unique values between files (e.g., how many IDs from file A exist in file B).
+4. **Merge recommendation**: Based on the above, propose the best merge strategy.
+
+**OUTPUT for Phase 2 — include a section titled "=== MERGE STRATEGY ===" with:**
+- Which files should be merged and in what order
+- Join type (inner, left, right, outer) and why
+- Join key column(s) for each merge step
+- Ready-to-use pandas code snippet (e.g., `pd.merge(df1, df2, on='column', how='left')`)
+- If files are NOT related (no common keys), state that clearly and recommend analyzing them separately
+- Any data preparation needed before merging (e.g., renaming columns, type casting)
+"""
+
+        profiler_prompt = f"""You are the 'Data Profiler & Merge Strategist', an expert data scientist.
+Your objective is to explore, profile, and analyze the relationships between the user's datasets.
 
 You have access to a Python_REPL tool.
-The paths to the user's uploaded files are already stored in a predefined Python dictionary called `file_paths` in your execution environment, where the key is the filename and the value is the local file path.
+The variable `file_paths` is ALREADY defined in your Python environment as a dictionary mapping filenames to local file paths.
 
-**YOUR INSTRUCTIONS:**
+🚨 CRITICAL RULES:
+- NEVER redefine or reassign `file_paths`. It is already set for you.
+- NEVER hardcode file paths. Always use `file_paths[key]` to get the path.
+- Start your code with `for name, path in file_paths.items():` to iterate.
+
+--- PHASE 1: DATA PROFILING ---
 1. Use the Python_REPL tool to iterate through the `file_paths` dictionary.
-2. For EACH file, load it using pandas (`pd.read_csv(path)`) and extract the following information:
+2. For EACH file, load it using pandas (`pd.read_csv(path)`) and extract:
    - File Name
-   - File Size (in MB - you can compute from os.path.getsize)
-   - DataFrame Shape (Number of rows and columns)
-   - Column Names and their Data Types (dtypes)
-   - The first 3 rows of data (df.head(3))
-   - Number of missing values (Null/NaN) per column.
-3. **Crucial Constraints:** Do NOT print the entire dataframe. Data can be massive. Only use `.head(3)` or `.info()`.
-4. After executing the Python code to gather this data, synthesize the output into a concise, structured 'Data Profile Summary' in text format.
+   - File Size (in MB — use os.path.getsize)
+   - DataFrame Shape (rows × columns)
+   - Column Names and Data Types (dtypes)
+   - First 3 rows (df.head(3))
+   - Missing values (Null/NaN) count per column
+3. **Constraint:** Do NOT print the entire dataframe. Use `.head(3)` or `.info()` only.
+{merge_section}
+--- FINAL OUTPUT ---
+Provide a structured summary containing:
+1. **Data Profile Summary** for each file (from Phase 1)
+{"2. **Merge Strategy** section with concrete join plan and pandas code (from Phase 2)" if has_multiple_files else ""}
 
-**OUTPUT FORMAT:**
-Provide a structured summary of ALL files. Do not perform any deep analysis or answer user queries. Just output the profile.
-Ensure the format easily provides the schema for the next reasoning agent."""
+Ensure the format is clear and actionable for the next reasoning agent."""
+
+        # Pre-run: show LLM the actual file_paths so it doesn't hallucinate paths
+        actual_paths_output = python_tool.run("print(file_paths)")
+        logger.info(f"[Data Profiler] Actual file_paths: {actual_paths_output}")
 
         model_with_tools = model.bind_tools([python_tool])
         messages = [
             SystemMessage(content=profiler_prompt),
-            HumanMessage(content="Please profile all datasets in the file_paths dictionary and produce the summary.")
+            HumanMessage(content=f"The `file_paths` variable is already loaded in your Python environment with these files:\n{actual_paths_output}\n\n"
+                         f"Please profile all datasets and produce the summary"
+                         + (" with merge strategy." if has_multiple_files else ".")
+                         + "\n\nRemember: do NOT redefine `file_paths`. Just use it directly.")
         ]
         
-        logger.info("Calling Data Profiler LLM to explore files.")
+        logger.info("Calling Data Profiler LLM to explore files"
+                     + (" (with merge analysis)" if has_multiple_files else "") + ".")
         
-        # Standard ReAct loop just for the profiler
-        max_turns = 5
+        # Allow more turns for multi-file merge analysis
+        max_turns = 18 if has_multiple_files else 15
+        tool_executed = False
         for turn in range(max_turns):
             response = model_with_tools.invoke(messages)
             if isinstance(response.content, list):
@@ -561,7 +612,6 @@ Ensure the format easily provides the schema for the next reasoning agent."""
             messages.append(response)
             
             if response.tool_calls and len(response.tool_calls) > 0:
-                # Execute all tools
                 for tool_call in response.tool_calls:
                     tool_name = tool_call["name"]
                     tool_args = tool_call["args"]
@@ -571,6 +621,7 @@ Ensure the format easily provides the schema for the next reasoning agent."""
                         query = tool_args.get("query", "")
                         logger.info(f"[Data Profiler] Executing Python code:\n{query}")
                         result = python_tool.run(query)
+                        tool_executed = True
                         result_str = str(result)
                         preview = result_str[:300] + "...\n[Output truncated]" if len(result_str) > 300 else result_str
                         logger.info(f"[Data Profiler] Execution result preview:\n{preview}")
@@ -584,9 +635,24 @@ Ensure the format easily provides the schema for the next reasoning agent."""
                     tool_msg = ToolMessage(content=str(result), tool_call_id=tool_call_id)
                     messages.append(tool_msg)
             else:
-                # Finished
+                if not tool_executed:
+                    # LLM tried to respond without running any code — force it to use the tool
+                    logger.warning(f"[Data Profiler] Turn {turn + 1}: LLM skipped tool usage. Nudging to use Python_REPL.")
+                    messages.append(HumanMessage(
+                        content="You MUST use the Python_REPL tool to actually load and inspect the files. "
+                                "Do not summarize without executing code first. "
+                                "Call Python_REPL now to profile the datasets."
+                    ))
+                    continue
+                
                 state.data_profile = str(response.content)
-                logger.info(f"[Data Profiler] Data exploration complete.\nSummary Preview:\n{str(response.content)[:500]}...")
+                # Log merge strategy if present, otherwise brief summary
+                content_str = str(response.content)
+                if "=== MERGE STRATEGY ===" in content_str:
+                    merge_part = content_str[content_str.index("=== MERGE STRATEGY ==="):]
+                    logger.info(f"[Data Profiler] Data exploration complete.\nMerge Strategy:\n{merge_part}")
+                else:
+                    logger.info(f"[Data Profiler] Data exploration complete. (No merge strategy — single file or unrelated datasets)")
                 break
                 
     except Exception as e:
@@ -827,80 +893,40 @@ REMINDER: When you generate your dashboard JSON:
                 state.working_memory.tool_outputs["pending_qa_response"] = str(response.content)
             
         elif response.content:
-            # Agent provided final output - BUT first check if we have enough SUCCESSFUL tool executions
-            successful_tool_count = sum(
-                1 for result in state.working_memory.python_execution_results 
-                if result.get("success", False)
+            # Agent provided final output - proceed with finish
+            action_request = ActionRequest(
+                action_type="FINISH",
+                reasoning="Agent provided final output",
             )
-            min_required = _get_minimum_tool_executions_required(state)
             
-            if mode == "dashboard" and successful_tool_count < min_required:
-                # Not enough successful tool executions - force more analysis
-                logger.warning(
-                    f"LLM tried to finish with only {successful_tool_count} successful tool calls "
-                    f"(minimum {min_required} required for {len(state.file_paths)} file(s))"
-                )
+            # Store output in working memory
+            if mode == "dashboard":
+                # Extract JSON from content
+                json_data = _extract_json_from_content(response.content)
                 
-                # Force the LLM to use more tools
-                grounding_context = _build_data_grounding_context(state)
-                force_tool_msg = f"""STOP! You have not analyzed the data sufficiently.
-
-You have only made {successful_tool_count} successful tool call(s), but you need at least {min_required} to properly analyze the data.
-
-{grounding_context}
-
-Please use Python_REPL to:
-1. Load ALL files provided
-2. Compute the specific metrics and values you will use in your dashboard
-3. Print ALL values before generating JSON
-
-DO NOT generate the dashboard JSON until you have computed all the values."""
-                
-                action_request = ActionRequest(
-                    action_type="EXECUTE_TOOL",
-                    tool_name="python_repl",
-                    arguments={"query": "# Please continue analyzing the data\nimport pandas as pd\n# Load and analyze files..."},
-                    reasoning="Insufficient tool executions - forcing more analysis"
-                )
-                
-                # Note: Don't actually execute this dummy query - it's just to signal retry
-                # Instead, append message asking for more tools
-                state.working_memory.tool_outputs["force_more_tools"] = force_tool_msg
-            else:
-                # Sufficient tool executions - proceed with finish
-                action_request = ActionRequest(
-                    action_type="FINISH",
-                    reasoning="Agent provided final output",
-                )
-                
-                # Store output in working memory
-                if mode == "dashboard":
-                    # Extract JSON from content
-                    json_data = _extract_json_from_content(response.content)
+                if json_data:
+                    # Store JSON for validation in node_validation
+                    state.working_memory.dashboard_json = json_data
                     
-                    if json_data:
-                        # Store JSON for validation in node_validation
-                        state.working_memory.dashboard_json = json_data
-                        
-                        # Generate summary with simple LLM call
-                        try:
-                            summary = _generate_summary_for_dashboard(model, json_data, state.input_prompt)
-                            state.working_memory.dashboard_summary = summary
-                            logger.info(f"Generated summary: {summary[:50]}...")
-                        except Exception as e:
-                            logger.warning(f"Failed to generate summary: {e}, using default")
-                            charts_count = len(json_data.get("charts", []))
-                            metrics_count = len(json_data.get("metrics", []))
-                            state.working_memory.dashboard_summary = (
-                                f"I've created a dashboard with {charts_count} chart(s) and {metrics_count} metric(s) "
-                                f"based on your data analysis request."
-                            )
-                    else:
-                        # No JSON found - text response
-                        logger.info("No JSON found in dashboard mode, treating as Q&A")
-                        state.working_memory.qa_response = str(response.content)
+                    # Generate summary with simple LLM call
+                    try:
+                        summary = _generate_summary_for_dashboard(model, json_data, state.input_prompt)
+                        state.working_memory.dashboard_summary = summary
+                        logger.info(f"Generated summary: {summary[:50]}...")
+                    except Exception as e:
+                        logger.warning(f"Failed to generate summary: {e}, using default")
+                        charts_count = len(json_data.get("charts", []))
+                        metrics_count = len(json_data.get("metrics", []))
+                        state.working_memory.dashboard_summary = (
+                            f"I've created a dashboard with {charts_count} chart(s) and {metrics_count} metric(s) "
+                            f"based on your data analysis request."
+                        )
                 else:
+                    # No JSON found - text response
+                    logger.info("No JSON found in dashboard mode, treating as Q&A")
                     state.working_memory.qa_response = str(response.content)
+            else:
+                state.working_memory.qa_response = str(response.content)
         
         else:
             # Empty response - check if we have a pending Q&A response from a previous tool call

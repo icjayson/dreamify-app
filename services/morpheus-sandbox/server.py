@@ -279,6 +279,109 @@ def _post_node_status_sync(conversation_id: Optional[str], status: str, metadata
     return loop.run_until_complete(_post_node_status(conversation_id, status, metadata))
 
 
+async def _get_workflow_status(conversation_id: str, project_id: str) -> Optional[str]:
+    """Get the current workflow status from the backend."""
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status/{conversation_id}",
+                params={"project_id": project_id},
+                headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    logger.info(f"Workflow status response for {conversation_id}: {json.dumps(data, default=str)[:500]}")
+                    nodes = data.get("nodes", [])
+                    for node in nodes:
+                        if node.get("node_id") == "workflow":
+                            return node.get("status")
+                    # Fallback: check top-level status field
+                    if data.get("status"):
+                        return data.get("status")
+                else:
+                    logger.debug(f"Workflow status returned HTTP {response.status} for {conversation_id}")
+                return None
+    except Exception as e:
+        logger.debug(f"Could not get workflow status: {e}")
+        return None
+
+
+async def _wait_for_workflow_completion(
+    conversation_id: str, project_id: str, timeout: float = 60.0, poll_interval: float = 1.0
+) -> bool:
+    """
+    Wait for any running workflow to fully stop before starting a new one.
+    Returns True if no workflow is running (or it stopped within timeout), False on timeout.
+    """
+    status = await _get_workflow_status(conversation_id, project_id)
+    logger.info(f"Initial workflow status for {conversation_id}: {status}")
+    if status != "processing":
+        return True
+
+
+    logger.info(f"Previous workflow still running for {conversation_id}, waiting for it to stop...")
+    elapsed = 0.0
+    while elapsed < timeout:
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+        status = await _get_workflow_status(conversation_id, project_id)
+        if status != "processing":
+            logger.info(f"Previous workflow stopped for {conversation_id} after {elapsed:.1f}s")
+            return True
+
+    logger.warning(f"Previous workflow did not stop within {timeout}s for {conversation_id}")
+    return False
+
+
+async def _clear_stop_signal(conversation_id: str):
+    """Clear any stale stop_signal from a previous run."""
+    try:
+        timeout = aiohttp.ClientTimeout(total=5)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status",
+                headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
+                json={
+                    "conversation_id": conversation_id,
+                    "node_id": "stop_signal",
+                    "status": "cleared",
+                    "metadata": {},
+                },
+            ) as response:
+                if response.status != 200:
+                    logger.warning(f"Failed to clear stop signal: HTTP {response.status}")
+    except Exception:
+        pass
+
+
+def _wait_for_workflow_completion_sync(
+    conversation_id: str, project_id: str, timeout: float = 60.0, poll_interval: float = 1.0
+) -> bool:
+    """Synchronous wrapper for _wait_for_workflow_completion to use in background tasks."""
+    try:
+        loop = asyncio.new_event_loop()
+        return loop.run_until_complete(
+            _wait_for_workflow_completion(conversation_id, project_id, timeout, poll_interval)
+        )
+    except Exception as e:
+        logger.warning(f"Error in _wait_for_workflow_completion_sync: {e}")
+        return True
+    finally:
+        loop.close()
+
+
+def _clear_stop_signal_sync(conversation_id: str):
+    """Synchronous wrapper for _clear_stop_signal to use in background tasks."""
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(_clear_stop_signal(conversation_id))
+    except Exception as e:
+        logger.warning(f"Error in _clear_stop_signal_sync: {e}")
+    finally:
+        loop.close()
+
+
 def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Extract asset content items from conversation nodes.
@@ -423,23 +526,17 @@ def _process_conversation_background(
 
     try:
         logger.info(f"Starting workflow for conversation {conversation_id}")
-        
-        # Clear any stale stop_signal from a previous run
-        try:
-            requests.post(
-                f"{BACKEND_API_URL}/api/v1/morpheus/workflow-status",
-                json={
-                    "conversation_id": conversation_id,
-                    "node_id": "stop_signal",
-                    "status": "cleared",
-                    "metadata": {},
-                },
-                headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
-                timeout=5,
+
+        # Wait for any running workflow to fully stop before starting a new one
+        workflow_stopped = _wait_for_workflow_completion_sync(conversation_id, project_id)
+        if not workflow_stopped:
+            logger.warning(
+                f"Previous workflow did not stop within timeout for {conversation_id}, proceeding anyway"
             )
-        except Exception:
-            pass
-        
+
+        # Clear stale stop signal AFTER previous workflow has stopped
+        _clear_stop_signal_sync(conversation_id)
+
         _post_node_status_sync(conversation_id, "processing", {"step": "load_conversation"})
 
         try:

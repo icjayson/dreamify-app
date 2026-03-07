@@ -517,6 +517,7 @@ def _process_conversation_background(
     conversation_backup_uri: Optional[str],
     project_id: str,
     user_id: str,
+    wait_for_previous: bool = False,
 ):
     """Background processing function for workflow execution."""
     temp_file_path = None
@@ -527,15 +528,26 @@ def _process_conversation_background(
     try:
         logger.info(f"Starting workflow for conversation {conversation_id}")
 
-        # Wait for any running workflow to fully stop before starting a new one
-        workflow_stopped = _wait_for_workflow_completion_sync(conversation_id, project_id)
-        if not workflow_stopped:
-            logger.warning(
-                f"Previous workflow did not stop within timeout for {conversation_id}, proceeding anyway"
-            )
+        if wait_for_previous:
+            # Wait for any running workflow to fully stop before starting a new one
+            workflow_stopped = _wait_for_workflow_completion_sync(conversation_id, project_id)
+            if not workflow_stopped:
+                logger.warning(
+                    f"Previous workflow did not stop within timeout for {conversation_id}, proceeding anyway"
+                )
+            
+            # Clear stale stop signal AFTER previous workflow has stopped
+            _clear_stop_signal_sync(conversation_id)
 
-        # Clear stale stop signal AFTER previous workflow has stopped
-        _clear_stop_signal_sync(conversation_id)
+            # Post the initial status now that the previous workflow is done
+            _post_node_status_sync(
+                conversation_id,
+                "processing",
+                {
+                    "step": "initialized",
+                    "message": "Workflow queued for processing",
+                },
+            )
 
         _post_node_status_sync(conversation_id, "processing", {"step": "load_conversation"})
 
@@ -979,29 +991,36 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
             request.project_id,
         )
 
-        # Create workflow status node immediately before starting background task
-        # This ensures the frontend can poll for status right away
-        response = await _post_node_status(
-            request.conversation_id,
-            "processing",
-            {
-                "step": "initialized",
-                "message": "Workflow queued for processing",
-            },
-        )
-        if not response:
+        # Check if previous workflow is running
+        previous_status = await _get_workflow_status(request.conversation_id, request.project_id)
+        is_previous_running = previous_status == "processing"
 
-            return {
-                "success": False,
-                "data": {
-                    "success": False,
-                    "conversation_id": request.conversation_id,
-                    "status": "error",
-                    "message": "Failed to update node status",
+        if not is_previous_running:
+            # Clear any stale stop signal if it's not running
+            await _clear_stop_signal(request.conversation_id)
+
+            # Create workflow status node immediately
+            response = await _post_node_status(
+                request.conversation_id,
+                "processing",
+                {
+                    "step": "initialized",
+                    "message": "Workflow queued for processing",
                 },
-            }
-
-        logger.info(f"Node status updated successfully: {response}")
+            )
+            if not response:
+                return {
+                    "success": False,
+                    "data": {
+                        "success": False,
+                        "conversation_id": request.conversation_id,
+                        "status": "error",
+                        "message": "Failed to update node status",
+                    },
+                }
+            logger.info(f"Node status updated successfully: {response}")
+        else:
+            logger.info(f"Previous workflow is still running for {request.conversation_id}, delegating wait to background task")
 
         background_tasks.add_task(
             _process_conversation_background,
@@ -1010,6 +1029,7 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
             request.conversation_backup_uri,
             request.project_id,
             request.user_id,
+            is_previous_running,
         )
 
         return {
@@ -1018,7 +1038,7 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
                 "success": True,
                 "conversation_id": request.conversation_id,
                 "status": "accepted",
-                "message": "Workflow started in background",
+                "message": "Workflow queued for background processing",
             },
         }
 

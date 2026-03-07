@@ -435,6 +435,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         }
 
+        if (assetContentsList.length === 0 && activeFileAttachment) {
+          assetContentsList.push({
+            type: 'mention',
+            data: {
+              asset_id: 'all-assets', // Dummy ID for persistence
+              filename: activeFileAttachment.name,
+              kind: activeFileAttachment.kind,
+            }
+          });
+        }
+
         if (assetContentsList.length > 0) {
           assetContents = assetContentsList;
         }
@@ -704,6 +715,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
             });
           }
         }
+      }
+
+      if (assetContentsList.length === 0 && activeFileAttachment) {
+        assetContentsList.push({
+          type: 'mention',
+          data: {
+            asset_id: 'all-assets', // Dummy ID for persistence
+            filename: activeFileAttachment.name,
+            kind: activeFileAttachment.kind,
+          }
+        });
       }
 
       const assetContents = assetContentsList.length > 0 ? assetContentsList : undefined;

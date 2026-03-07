@@ -285,6 +285,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     return () => window.removeEventListener('nyx:open-file-picker', handler as EventListener);
   }, []);
 
+  // Eagerly fetch project assets so the "all assets" badge can display the file count
+  useEffect(() => {
+    if (projectId) {
+      fetchProjectAssets(projectId).then(setProjectAssets);
+    }
+  }, [projectId]);
+
   // Connectors array for data source dropdown
   // Shared connectors list imported above
 
@@ -373,9 +380,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       });
 
       // Compute attachment badge info from active files only
-      const activeFileAttachment = activeFiles.length > 0
-        ? { kind: 'csv' as const, name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` }
-        : undefined;
+      let activeFileAttachment: { kind: 'csv' | 'file'; name: string } | undefined;
+      if (activeFiles.length > 0) {
+        activeFileAttachment = { kind: 'csv', name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` };
+      } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
+        // No explicit files selected — treat as "all assets" and show badge with count
+        activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
+      }
 
       await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
       clearFiles();
@@ -396,9 +407,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           finalMentionedIds.push(file.fileID);
         }
       });
-      const activeFileAttachment = activeFiles.length > 0
-        ? { kind: 'csv' as const, name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` }
-        : undefined;
+      let activeFileAttachment: { kind: 'csv' | 'file'; name: string } | undefined;
+      if (activeFiles.length > 0) {
+        activeFileAttachment = { kind: 'csv', name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` };
+      } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
+        activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
+      }
 
       await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
     } finally {

@@ -578,6 +578,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         }
       } catch (_err) { }
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
+      fetchProjectAssets(projectId).then(setProjectAssets);
     } catch (_e) {
       removeFile('pending');
       addFiles([{
@@ -727,6 +728,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     if (file && !file.isFromMention) {
       try {
         await fileService.deleteFile(fileID);
+        fetchProjectAssets(projectId).then(setProjectAssets);
       } catch (_e) {
         // best-effort; ignore
       }
@@ -1161,7 +1163,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                   </Button>
                 ) : (
                   <Button
-                    onClick={() => handleSend()}
+                    onClick={() => {
+                      if (uploadedFiles.length === 0 || !uploadedFiles.some(f => f.status === 'uploaded')) {
+                        toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
+                      } else {
+                        handleSend()
+                      }
+                    }}
                     disabled={!inputValue.trim() || isTyping}
                     className="button-gradient p-3 disabled:opacity-50"
                   >

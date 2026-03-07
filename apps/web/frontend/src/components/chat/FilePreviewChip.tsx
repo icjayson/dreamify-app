@@ -33,7 +33,7 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
       {/* Remove Button - visible on hover */}
       <button
         onClick={onRemove}
-        className="absolute -right-1 -top-1 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
         aria-label="Remove file"
       >
         <X className="w-3 h-3 text-white" />

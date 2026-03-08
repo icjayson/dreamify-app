@@ -403,7 +403,7 @@ export default function ProjectPage() {
         </div>
       </div>
       {/* Publish Modal */}
-      {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} />}
+      {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} />}
     </div>
   );
 }

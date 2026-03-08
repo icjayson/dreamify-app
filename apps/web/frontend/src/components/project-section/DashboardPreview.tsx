@@ -28,6 +28,8 @@ interface DashboardPreviewProps {
   style?: React.CSSProperties;
   processedData?: any;
   staticConfig?: DashboardConfiguration | null;
+  isExporting?: boolean;
+  onExportLayoutChange?: (didSplit: boolean) => void;
 }
 
 const DashboardPreview = ({
@@ -36,7 +38,9 @@ const DashboardPreview = ({
   className = "",
   style = {},
   processedData,
-  staticConfig
+  staticConfig,
+  isExporting = false,
+  onExportLayoutChange
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -736,7 +740,6 @@ const DashboardPreview = ({
     });
   };
 
-  // Scale a layout from one column system to another while preserving proportions
   const scaleLayoutForCols = (layout: Layout[], fromCols: number, toCols: number): Layout[] => {
     return layout.map((item) => {
       const scaledW = Math.max(1, Math.round((item.w * toCols) / fromCols));
@@ -750,15 +753,86 @@ const DashboardPreview = ({
     });
   };
 
-  const buildLayoutsFromComponents = (components: any[] | undefined | null): Layouts => {
-    const baseLg = components ? componentsToBaseLayout(components) : [];
+  const reformatLayoutForExport = (layout: Layout[]): { reformatted: Layout[], didSplit: boolean } => {
+    if (!layout || layout.length === 0) return { reformatted: layout, didSplit: false };
+
+    // 1. Sort by top-to-bottom, left-to-right to maintain natural flow
+    const sortedLayout = [...layout].sort((a, b) => {
+      if (a.y === b.y) return a.x - b.x;
+      return a.y - b.y;
+    });
+
+    // 2. Calculate the exact total height sum and width of the grid (max Y + H, max X + W)
+    let totalElementHeight = 0;
+    let totalElementWidth = 0;
+    sortedLayout.forEach(item => {
+      if (item.y + item.h > totalElementHeight) {
+        totalElementHeight = item.y + item.h;
+      }
+      if (item.x + item.w > totalElementWidth) {
+        totalElementWidth = item.x + item.w;
+      }
+    });
+    console.log("totalElementHeight", totalElementHeight);
+    console.log("totalElementWidth", totalElementWidth);
+
+    // 3. Find our weight distribution midpoint. 
+    // Only split into two columns if the height is exceptionally long relative to the width.
+    let midPointHeight = totalElementHeight + 1; // Default to no split
+    if (totalElementHeight >= totalElementWidth * 2) {
+      midPointHeight = totalElementHeight / 2;
+    }
+
+    console.log("midPointHeight", midPointHeight);
+    let reachedMidpoint = false;
+    let rightColumnStartY = 0;
+
+    const mappedLayout = sortedLayout.map((item) => {
+      // If we haven't crossed the halfway mark of element heights, keep adding to left column
+      if (!reachedMidpoint) {
+        if (item.y >= midPointHeight) {
+          reachedMidpoint = true;
+          // Capture the Y position of the next item so we can pull the right column up to baseline 0
+        } else {
+          return item;
+        }
+      }
+
+      // We are now in the right column
+      if (rightColumnStartY === 0) {
+        rightColumnStartY = item.y; // Pin the top of the right column to locally parsed Y=0
+      }
+
+      return {
+        ...item,
+        x: item.x + 24, // Shift to the right column block
+        y: Math.max(0, item.y - rightColumnStartY) // Pull it up so the column starts near the top
+      };
+    });
+
+    return { reformatted: mappedLayout, didSplit: reachedMidpoint };
+  };
+
+  const buildLayoutsFromComponents = (components: any[] | undefined | null, isExportingMode: boolean): { layouts: Layouts, didSplit: boolean } => {
+    let baseLg = components ? componentsToBaseLayout(components) : [];
+    let didSplit = false;
+
+    if (isExportingMode) {
+      const result = reformatLayoutForExport(baseLg);
+      baseLg = result.reformatted;
+      didSplit = result.didSplit;
+    }
+
     return {
-      lg: baseLg,
-      md: scaleLayoutForCols(baseLg, 24, 12),
-      sm: scaleLayoutForCols(baseLg, 24, 8),
-      xs: scaleLayoutForCols(baseLg, 24, 4),
-      xxs: scaleLayoutForCols(baseLg, 24, 2)
-    } as Layouts;
+      layouts: {
+        lg: baseLg,
+        md: scaleLayoutForCols(baseLg, isExportingMode ? 48 : 24, 12),
+        sm: scaleLayoutForCols(baseLg, isExportingMode ? 48 : 24, 8),
+        xs: scaleLayoutForCols(baseLg, isExportingMode ? 48 : 24, 4),
+        xxs: scaleLayoutForCols(baseLg, isExportingMode ? 48 : 24, 2)
+      } as Layouts,
+      didSplit
+    };
   };
 
   const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v3`, [activeDashboard?.id]);
@@ -774,7 +848,17 @@ const DashboardPreview = ({
       return;
     }
 
-    const initial = buildLayoutsFromComponents(activeDashboard.components);
+    const initialResult = buildLayoutsFromComponents(activeDashboard.components, isExporting);
+
+    // Skip local storage layouts entirely if exporting to force our reflow layout
+    if (isExporting) {
+      setLayouts(initialResult.layouts);
+      if (onExportLayoutChange) {
+        onExportLayoutChange(initialResult.didSplit);
+      }
+      setIsLayoutReady(true);
+      return;
+    }
 
     // Try to restore saved layouts for persisted dashboards (even processed ones with a legitimate ID)
     try {
@@ -808,9 +892,9 @@ const DashboardPreview = ({
     }
 
     // Default to the backend's generated layout if storage fails or layout is deemed invalidated.
-    setLayouts(initial);
+    setLayouts(initialResult.layouts);
     setIsLayoutReady(true);
-  }, [activeDashboard, storageKey]);
+  }, [activeDashboard, storageKey, isExporting]);
 
   const handleLayoutChange = (current: Layout[], all: Layouts) => {
     if (!isLayoutReady) return;
@@ -894,7 +978,7 @@ const DashboardPreview = ({
   return (
     <div
       ref={containerRef}
-      id="dashboard-preview-root"
+      id={isExporting ? "dashboard-export-inner-root" : "dashboard-preview-root"}
       data-dashboard-root
       className={`h-full overflow-y-auto ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
       style={{
@@ -926,52 +1010,54 @@ const DashboardPreview = ({
                 )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Date Picker */}
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="flex items-center gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity"
-                      style={{
-                        color: 'var(--highlight-color)',
-                        backgroundColor: 'var(--bg-card-color)',
-                        borderColor: 'var(--border-card-color)'
-                      }}
-                    >
-                      <CalendarIcon className="w-4 h-4" />
-                      <span>
-                        {dateRange?.from ? (
-                          dateRange.to ? (
-                            <>
-                              {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
-                            </>
+                {/* Date Picker - Hide when exporting */}
+                {!isExporting && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="flex items-center gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity"
+                        style={{
+                          color: 'var(--highlight-color)',
+                          backgroundColor: 'var(--bg-card-color)',
+                          borderColor: 'var(--border-card-color)'
+                        }}
+                      >
+                        <CalendarIcon className="w-4 h-4" />
+                        <span>
+                          {dateRange?.from ? (
+                            dateRange.to ? (
+                              <>
+                                {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
+                              </>
+                            ) : (
+                              format(dateRange.from, "MMM dd, yyyy")
+                            )
                           ) : (
-                            format(dateRange.from, "MMM dd, yyyy")
-                          )
-                        ) : (
-                          "Select Dates"
-                        )}
-                      </span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className={`w-auto p-0 [&]:!bg-[var(--bg-card-color)] ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)}`}
-                    align="end"
-                    style={getDashboardThemeStyles(dashboardStylingForContainer)}
-                  >
-                    <Calendar
-                      initialFocus
-                      mode="range"
-                      defaultMonth={dateRange?.from}
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      numberOfMonths={2}
-                      themeStyles={getDashboardThemeStyles(dashboardStylingForContainer)}
-                    />
-                  </PopoverContent>
-                </Popover>
-                {/* Key Insights Button */}
-                {dashboardMetadata.insights && dashboardMetadata.insights.length > 0 && (
+                            "Select Dates"
+                          )}
+                        </span>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className={`w-auto p-0 [&]:!bg-[var(--bg-card-color)] ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)}`}
+                      align="end"
+                      style={getDashboardThemeStyles(dashboardStylingForContainer)}
+                    >
+                      <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={dateRange?.from}
+                        selected={dateRange}
+                        onSelect={setDateRange}
+                        numberOfMonths={2}
+                        themeStyles={getDashboardThemeStyles(dashboardStylingForContainer)}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
+                {/* Key Insights Button - Hide when exporting */}
+                {!isExporting && dashboardMetadata.insights && dashboardMetadata.insights.length > 0 && (
                   <button
                     onClick={() => setExpandedInsights(!expandedInsights)}
                     className="flex items-center justify-start gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity flex-shrink-0"
@@ -991,8 +1077,8 @@ const DashboardPreview = ({
                 )}
               </div>
             </div>
-            {/* Expanded Insights List */}
-            {dashboardMetadata?.insights && dashboardMetadata.insights.length > 0 && expandedInsights && (
+            {/* Expanded Insights List - Always show when exporting */}
+            {dashboardMetadata?.insights && dashboardMetadata.insights.length > 0 && (expandedInsights || isExporting) && (
               <div className="w-full mt-2">
                 <h2
                   className="text-lg font-medium mb-2"
@@ -1051,31 +1137,58 @@ const DashboardPreview = ({
         {/* Responsive Drag & Resize Grid */}
         {activeDashboard && isLayoutReady && (
           <div className="space-y-6">
-            <ResponsiveGridLayout
-              className="layout"
-              layouts={layouts}
-              breakpoints={breakpoints}
-              cols={cols}
-              margin={margin}
-              containerPadding={containerPadding}
-              rowHeight={rowHeight}
-              isDraggable
-              isResizable
-              preventCollision
-              isBounded
-              compactType={null}
-              resizeHandles={['se', 'e', 's', 'w', 'n']}
-              onLayoutChange={handleLayoutChange}
-            >
-              {activeDashboard.components.map((component: any) => (
-                <div key={String(component.id)} className="animate-fade-in">
-                  <ChartRenderer
-                    component={component}
-                    onError={handleComponentError}
-                  />
-                </div>
-              ))}
-            </ResponsiveGridLayout>
+            {isExporting ? (
+              <Responsive
+                className="layout"
+                layouts={layouts}
+                breakpoints={breakpoints}
+                cols={{ lg: 48, md: 48, sm: 48, xs: 48, xxs: 48 }} // Force a 48-column grid to hold two 24-col columns side-by-side
+                margin={margin}
+                containerPadding={containerPadding}
+                rowHeight={rowHeight}
+                width={typeof window !== 'undefined' ? Math.max(window.innerWidth * 2, 2400) : 2400} // Double screen width
+                isDraggable={false}
+                isResizable={false}
+                preventCollision
+                isBounded
+                compactType={null}
+              >
+                {activeDashboard.components.map((component: any) => (
+                  <div key={String(component.id)} className="animate-fade-in">
+                    <ChartRenderer
+                      component={component}
+                      onError={handleComponentError}
+                    />
+                  </div>
+                ))}
+              </Responsive>
+            ) : (
+              <ResponsiveGridLayout
+                className="layout"
+                layouts={layouts}
+                breakpoints={breakpoints}
+                cols={cols}
+                margin={margin}
+                containerPadding={containerPadding}
+                rowHeight={rowHeight}
+                isDraggable
+                isResizable
+                preventCollision
+                isBounded
+                compactType={null}
+                resizeHandles={['se', 'e', 's', 'w', 'n']}
+                onLayoutChange={handleLayoutChange}
+              >
+                {activeDashboard.components.map((component: any) => (
+                  <div key={String(component.id)} className="animate-fade-in">
+                    <ChartRenderer
+                      component={component}
+                      onError={handleComponentError}
+                    />
+                  </div>
+                ))}
+              </ResponsiveGridLayout>
+            )}
           </div>
         )}
 

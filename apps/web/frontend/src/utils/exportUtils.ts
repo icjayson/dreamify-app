@@ -1,7 +1,21 @@
 
 // Simple PDF export function that captures the original dashboard directly
 export async function exportDashboardAsPdf() {
-  const dashboardEl = document.getElementById('dashboard-preview-root');
+  // Wait for the hidden container to appear in the DOM
+  let dashboardEl = document.getElementById('dashboard-export-root');
+  let retries = 0;
+  while (!dashboardEl && retries < 20) {
+    await new Promise(r => setTimeout(r, 100));
+    dashboardEl = document.getElementById('dashboard-export-root');
+    retries++;
+  }
+
+  // Fallback if the export wrapper absolutely failed to mount
+  if (!dashboardEl) {
+    console.warn('Export root not found, falling back to live preview');
+    dashboardEl = document.getElementById('dashboard-preview-root');
+  }
+
   if (!dashboardEl) {
     console.error('Dashboard preview root not found');
     return;
@@ -15,26 +29,57 @@ export async function exportDashboardAsPdf() {
     offsetHeight: dashboardEl.offsetHeight
   });
 
-  // Wait for any pending renders
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  const scrollWidth = dashboardEl.scrollWidth;
+  const scrollHeight = dashboardEl.scrollHeight;
+
+  // Wait for React-Grid-Layout and Recharts to settle animation
+  // Force a window resize event to trigger ResponsiveContainer to measure the new DOM
+  window.dispatchEvent(new Event('resize'));
+
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Dispatch a second time just in case layout shifted
+  window.dispatchEvent(new Event('resize'));
+
+  await new Promise(resolve => setTimeout(resolve, 1500));
 
   // Use html2canvas directly with the original dashboard
   const html2canvas = (await import('html2canvas')).default;
   const jsPDF = (await import('jspdf')).default;
-  
+
   console.log('Starting html2canvas capture...');
-  
+
+  const bgColor = window.getComputedStyle(dashboardEl).backgroundColor;
+  const finalBgColor = bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent' ? '#ffffff' : bgColor;
+
   const canvas = await html2canvas(dashboardEl, {
-    scale: 1.5,
-    backgroundColor: '#ffffff',
+    scale: 2, // slightly higher scale for better quality
+    backgroundColor: finalBgColor,
     useCORS: true,
-    logging: true,
+    logging: false, // turn off logging for production
     allowTaint: true,
     foreignObjectRendering: true,
-    scrollX: -475,
-    scrollY: -60,
-    width: dashboardEl.scrollWidth,
-    height: dashboardEl.scrollHeight
+    width: scrollWidth,
+    height: scrollHeight,
+    windowWidth: scrollWidth,
+    windowHeight: scrollHeight,
+    x: 0,
+    y: 0,
+    scrollX: 0,
+    scrollY: 0,
+    onclone: (clonedDoc) => {
+      const el = clonedDoc.getElementById('dashboard-export-root') || clonedDoc.getElementById('dashboard-preview-root');
+      if (el) {
+        el.style.position = 'fixed';
+        el.style.top = '0';
+        el.style.left = '0';
+        el.style.width = scrollWidth + 'px';
+        el.style.height = scrollHeight + 'px';
+        el.style.overflow = 'visible';
+        el.style.maxHeight = 'none';
+        el.style.transform = 'none';
+      }
+    }
   });
 
   console.log('Canvas created:', {
@@ -48,9 +93,9 @@ export async function exportDashboardAsPdf() {
   }
 
   // Create PDF
-  const pdf = new jsPDF({ 
-    orientation: 'portrait', 
-    unit: 'mm', 
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
   });
 
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -78,12 +123,12 @@ export async function exportDashboardAsPdf() {
     const scaledHeight = usableHeight;
     const scaledWidth = (canvas.width * scaledHeight) / canvas.height;
     const xOffset = (pageWidth - scaledWidth) / 2;
-    
+
     pdf.addImage(canvas.toDataURL('image/png'), 'PNG', xOffset, margin, scaledWidth, scaledHeight);
   }
 
   console.log('Saving PDF...');
-  pdf.save(`dashboard-${new Date().toISOString().slice(0,10)}.pdf`);
+  pdf.save(`dashboard-${new Date().toISOString().slice(0, 10)}.pdf`);
   console.log('PDF saved successfully');
 }
 
@@ -98,4 +143,88 @@ export function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+export async function exportDashboardAsPng() {
+  // Wait for the hidden container to appear in the DOM
+  let dashboardEl = document.getElementById('dashboard-export-root');
+  let retries = 0;
+  while (!dashboardEl && retries < 20) {
+    await new Promise(r => setTimeout(r, 100));
+    dashboardEl = document.getElementById('dashboard-export-root');
+    retries++;
+  }
 
+  // Fallback if the export wrapper absolutely failed to mount
+  if (!dashboardEl) {
+    console.warn('Export root not found, falling back to live preview');
+    dashboardEl = document.getElementById('dashboard-preview-root');
+  }
+
+  if (!dashboardEl) {
+    console.error('Dashboard preview root not found');
+    return;
+  }
+
+  console.log('Dashboard element found:', dashboardEl);
+
+  const scrollWidth = dashboardEl.scrollWidth;
+  const scrollHeight = dashboardEl.scrollHeight;
+
+  // Wait for React-Grid-Layout and Recharts to settle animation
+  // Force a window resize event to trigger ResponsiveContainer to measure the new DOM
+  window.dispatchEvent(new Event('resize'));
+
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  window.dispatchEvent(new Event('resize'));
+
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  const html2canvas = (await import('html2canvas')).default;
+
+  console.log('Starting html2canvas capture for PNG...');
+
+  const bgColor = window.getComputedStyle(dashboardEl).backgroundColor;
+  const finalBgColor = bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent' ? '#ffffff' : bgColor;
+
+  const canvas = await html2canvas(dashboardEl, {
+    scale: 2,
+    backgroundColor: finalBgColor,
+    useCORS: true,
+    logging: false,
+    allowTaint: true,
+    foreignObjectRendering: true,
+    width: scrollWidth,
+    height: scrollHeight,
+    windowWidth: scrollWidth,
+    windowHeight: scrollHeight,
+    x: 0,
+    y: 0,
+    scrollX: 0,
+    scrollY: 0,
+    onclone: (clonedDoc) => {
+      const el = clonedDoc.getElementById('dashboard-export-root') || clonedDoc.getElementById('dashboard-preview-root');
+      if (el) {
+        el.style.position = 'fixed';
+        el.style.top = '0';
+        el.style.left = '0';
+        el.style.width = scrollWidth + 'px';
+        el.style.height = scrollHeight + 'px';
+        el.style.overflow = 'visible';
+        el.style.maxHeight = 'none';
+        el.style.transform = 'none';
+      }
+    }
+  });
+
+  if (canvas.width === 0 || canvas.height === 0) {
+    console.error('Canvas is empty - no content captured');
+    return;
+  }
+
+  console.log('Saving PNG...');
+  const link = document.createElement('a');
+  link.download = `dashboard-${new Date().toISOString().slice(0, 10)}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  console.log('PNG saved successfully');
+}

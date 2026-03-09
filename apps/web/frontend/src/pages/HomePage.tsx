@@ -850,7 +850,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       <ProjectsSidebar
         open={projectsOpen}
         onClose={closeProjects}
-        onNewProject={() => { closeProjects(); navigate('/workspace/project'); }}
+        onNewProject={() => createNewProject()}
         recents={projects}
         onOpenProject={openProject}
         onRenameProject={renameProject}

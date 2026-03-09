@@ -69,10 +69,10 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
   const hasRecents = Array.isArray(computedRecents) && computedRecents.length > 0;
 
   // Safe no-op handlers used when not provided
-  const safeNewProject = onNewProject ?? (() => {});
-  const safeOpenProject = onOpenProject ?? ((id: string) => {});
-  const safeRenameProject = onRenameProject ?? ((id: string, newTitle: string) => {});
-  const safeDeleteProject = onDeleteProject ?? ((id: string) => {});
+  const safeNewProject = onNewProject ?? (() => { });
+  const safeOpenProject = onOpenProject ?? ((id: string) => { });
+  const safeRenameProject = onRenameProject ?? ((id: string, newTitle: string) => { });
+  const safeDeleteProject = onDeleteProject ?? ((id: string) => { });
 
   return (
     <div className="fixed inset-0 z-[150]" role="dialog" aria-modal="true">
@@ -95,7 +95,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
           <span>New project</span>
         </button>
         <div className="flex-1 overflow-y-auto space-y-2">
-        <div className="text-white/50 text-xs mt-10 mb-4">Recents</div>
+          <div className="text-white/50 text-xs mt-10 mb-4">Recents</div>
           {hasRecents ? (
             computedRecents.map((item) => (
               <div
@@ -177,7 +177,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
                     </button>
                   </div>
                 )}
-                
+
               </div>
             ))
           ) : (
@@ -241,6 +241,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
                     onClick={() => {
                       if (dialog.itemId) {
                         safeDeleteProject(dialog.itemId);
+                        window.dispatchEvent(new Event('projectUpdated'));
                         toast({
                           title: "Project deleted",
                           description: `"${dialog.itemTitle}" was removed`,

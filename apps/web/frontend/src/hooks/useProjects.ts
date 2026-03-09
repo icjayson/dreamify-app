@@ -86,11 +86,19 @@ export const useProjects = () => {
             }
         };
 
+        const handleProjectUpdated = () => {
+            if (isSignedIn) {
+                refreshProjects();
+            }
+        };
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('focus', handleFocus);
+        window.addEventListener('projectUpdated', handleProjectUpdated);
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('projectUpdated', handleProjectUpdated);
         };
     }, [isSignedIn, refreshProjects]);
 

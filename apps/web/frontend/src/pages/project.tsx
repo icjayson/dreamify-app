@@ -15,6 +15,9 @@ import { conversationNodesToMessages } from "@/chat/conversationToMessages";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackProjectButton } from "@/components/ui/feedback-button";
 
+// Track mounted projects to prevent React Strict Mode from deleting them on its instant unmount/remount
+const mountedProjects = new Set<string>();
+
 export default function ProjectPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -162,7 +165,9 @@ export default function ProjectPage() {
   // Reset and hydrate when project changes
   useEffect(() => {
     if (!projectId) return;
+    mountedProjects.add(projectId);
     let cancelled = false;
+    let hasConversation = false;
 
     const loadProject = async () => {
       setIsProjectLoading(true);
@@ -176,6 +181,7 @@ export default function ProjectPage() {
             setProjectTitle(displayTitle);
             const latestConversationId = response.project.latest_conversation_id;
             if (latestConversationId) {
+              hasConversation = true;
               await hydrateConversation(response.project.id, latestConversationId);
             }
 
@@ -222,6 +228,37 @@ export default function ProjectPage() {
     loadProject();
     return () => {
       cancelled = true;
+      mountedProjects.delete(projectId);
+
+      // Option A: Frontend Cleanup
+      // We use a small timeout to bypass React Strict Mode's instant double unmount/remount.
+      setTimeout(async () => {
+        if (!mountedProjects.has(projectId)) {
+          // If the page loaded as an empty project, verify if it's still empty
+          // by querying the backend directly (bypassing local chatStore state issues).
+          if (!hasConversation) {
+            try {
+              const projResponse = await projectService.getProject(projectId);
+              const latestConvId = projResponse.project?.latest_conversation_id;
+
+              if (latestConvId) {
+                // Explicitly verify via API if the conversation JSON actually exists
+                await conversationService.loadConversation(latestConvId, projectId);
+                console.log("Conversation data exists, keeping project:", projectId);
+              } else {
+                console.log("Cleaning up empty project (no conversation started):", projectId);
+                await projectService.deleteProject(projectId);
+                window.dispatchEvent(new Event('projectUpdated'));
+              }
+            } catch (err) {
+              console.log("Cleaning up empty project (invalid/no conversation JSON):", projectId);
+              projectService.deleteProject(projectId)
+                .then(() => window.dispatchEvent(new Event('projectUpdated')))
+                .catch(console.error);
+            }
+          }
+        }
+      }, 500);
     };
   }, [projectId, hydrateConversation, toast]);
 

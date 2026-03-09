@@ -476,15 +476,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             setCurrentConversationId(conversationId);
           }
 
-          // If the backend auto-created a project (or we just used one), make sure the URL reflects it
-          if (projectId) {
-            const url = new URL(window.location.href);
-            if (!url.searchParams.has('projectId')) {
-              url.searchParams.set('projectId', projectId);
-              window.history.replaceState({}, '', url.toString());
-            }
-          }
-
           // Poll for completion
           const finalResult = await processingService.pollProcessingStatus(
             '',  // No assetId for Q&A
@@ -760,15 +751,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (conversationId) {
           set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, conversationId })), currentConversationId: conversationId }));
           setCurrentConversationId(conversationId);
-        }
-
-        // If the backend auto-created a project (or we just used one), make sure the URL reflects it
-        if (projectId) {
-          const url = new URL(window.location.href);
-          if (!url.searchParams.has('projectId')) {
-            url.searchParams.set('projectId', projectId);
-            window.history.replaceState({}, '', url.toString());
-          }
         }
 
         console.log('Processing started, beginning polling...');

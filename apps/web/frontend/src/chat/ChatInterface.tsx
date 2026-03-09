@@ -351,7 +351,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
     if (isSendingRef.current) return;
-    if (uploadedFiles.length === 0 || !uploadedFiles.some(f => f.status === 'uploaded')) {
+    if (uploadedFiles.length === 0 || !uploadedFiles.some(f => f.status === 'uploaded') || projectAssets.length === 0) {
       toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
       return;
     }

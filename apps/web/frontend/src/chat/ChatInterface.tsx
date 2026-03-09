@@ -351,7 +351,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
     if (isSendingRef.current) return;
-
+    if (uploadedFiles.length === 0 || !uploadedFiles.some(f => f.status === 'uploaded')) {
+      toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
+      return;
+    }
     isSendingRef.current = true;
     const messageContent = inputValue.trim();
 
@@ -577,6 +580,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           useChatStore.getState().setOriginalFile(null);
         }
       } catch (_err) { }
+
+      // If the backend auto-created a project (or we just used one), make sure the URL reflects it
+      if (res.asset?.project_id) {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has('projectId')) {
+          url.searchParams.set('projectId', res.asset.project_id);
+          window.history.replaceState({}, '', url.toString());
+        }
+      }
+
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
       fetchProjectAssets(projectId).then(setProjectAssets);
     } catch (_e) {
@@ -1163,13 +1176,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                   </Button>
                 ) : (
                   <Button
-                    onClick={() => {
-                      if (uploadedFiles.length === 0 || !uploadedFiles.some(f => f.status === 'uploaded')) {
-                        toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
-                      } else {
-                        handleSend()
-                      }
-                    }}
+                    onClick={() => handleSend()}
                     disabled={!inputValue.trim() || isTyping}
                     className="button-gradient p-3 disabled:opacity-50"
                   >

@@ -38,7 +38,7 @@ const AppWithRouter = () => {
       <ClerkProvider
         publishableKey={PUBLISHABLE_KEY}
         afterSignOutUrl="/"
-        afterSignInUrl="/workspace"
+        afterSignInUrl="/"
       >
         <AdminAuthProvider>
           <TokenBridge />

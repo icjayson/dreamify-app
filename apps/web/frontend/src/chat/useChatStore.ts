@@ -435,6 +435,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         }
 
+        if (assetContentsList.length === 0 && activeFileAttachment) {
+          assetContentsList.push({
+            type: 'mention',
+            data: {
+              asset_id: 'all-assets', // Dummy ID for persistence
+              filename: activeFileAttachment.name,
+              kind: activeFileAttachment.kind,
+            }
+          });
+        }
+
         if (assetContentsList.length > 0) {
           assetContents = assetContentsList;
         }
@@ -706,6 +717,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
+      if (assetContentsList.length === 0 && activeFileAttachment) {
+        assetContentsList.push({
+          type: 'mention',
+          data: {
+            asset_id: 'all-assets', // Dummy ID for persistence
+            filename: activeFileAttachment.name,
+            kind: activeFileAttachment.kind,
+          }
+        });
+      }
+
       const assetContents = assetContentsList.length > 0 ? assetContentsList : undefined;
       const allFileIdsForMeta = get().uploadedFiles.map(f => f.fileID).filter(Boolean);
       const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
@@ -730,6 +752,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, conversationId })), currentConversationId: conversationId }));
           setCurrentConversationId(conversationId);
         }
+
         console.log('Processing started, beginning polling...');
         const finalResult = await processingService.pollProcessingStatus(
           firstUploadedFile.fileID,

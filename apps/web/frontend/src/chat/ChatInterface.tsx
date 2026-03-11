@@ -167,6 +167,7 @@ interface ChatInterfaceProps {
 }
 
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }: ChatInterfaceProps) => {
+
   // Template state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -285,6 +286,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     return () => window.removeEventListener('nyx:open-file-picker', handler as EventListener);
   }, []);
 
+  // Eagerly fetch project assets so the "all assets" badge can display the file count
+  useEffect(() => {
+    if (projectId) {
+      fetchProjectAssets(projectId).then(setProjectAssets);
+    }
+  }, [projectId]);
+
   // Connectors array for data source dropdown
   // Shared connectors list imported above
 
@@ -344,7 +352,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
     if (isSendingRef.current) return;
-
+    if (projectAssets.length === 0) {
+      toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
+      return;
+    }
     isSendingRef.current = true;
     const messageContent = inputValue.trim();
 
@@ -373,9 +384,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       });
 
       // Compute attachment badge info from active files only
-      const activeFileAttachment = activeFiles.length > 0
-        ? { kind: 'csv' as const, name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` }
-        : undefined;
+      let activeFileAttachment: { kind: 'csv' | 'file'; name: string } | undefined;
+      if (activeFiles.length > 0) {
+        activeFileAttachment = { kind: 'csv', name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` };
+      } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
+        // No explicit files selected — treat as "all assets" and show badge with count
+        activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
+      }
 
       await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
       clearFiles();
@@ -396,9 +411,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           finalMentionedIds.push(file.fileID);
         }
       });
-      const activeFileAttachment = activeFiles.length > 0
-        ? { kind: 'csv' as const, name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` }
-        : undefined;
+      let activeFileAttachment: { kind: 'csv' | 'file'; name: string } | undefined;
+      if (activeFiles.length > 0) {
+        activeFileAttachment = { kind: 'csv', name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` };
+      } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
+        activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
+      }
 
       await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
     } finally {
@@ -563,7 +581,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           useChatStore.getState().setOriginalFile(null);
         }
       } catch (_err) { }
+
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
+      fetchProjectAssets(projectId).then(setProjectAssets);
     } catch (_e) {
       removeFile('pending');
       addFiles([{
@@ -713,6 +733,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     if (file && !file.isFromMention) {
       try {
         await fileService.deleteFile(fileID);
+        fetchProjectAssets(projectId).then(setProjectAssets);
       } catch (_e) {
         // best-effort; ignore
       }

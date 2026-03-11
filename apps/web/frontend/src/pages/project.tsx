@@ -163,6 +163,7 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
+    let hasConversation = false;
 
     const loadProject = async () => {
       setIsProjectLoading(true);
@@ -176,6 +177,7 @@ export default function ProjectPage() {
             setProjectTitle(displayTitle);
             const latestConversationId = response.project.latest_conversation_id;
             if (latestConversationId) {
+              hasConversation = true;
               await hydrateConversation(response.project.id, latestConversationId);
             }
 
@@ -222,6 +224,33 @@ export default function ProjectPage() {
     loadProject();
     return () => {
       cancelled = true;
+
+      // Option A: Frontend Cleanup
+      // If the page loaded as an empty project, verify if it's still empty
+      // by querying the backend directly (bypassing local chatStore state issues).
+      if (!hasConversation) {
+        (async () => {
+          try {
+            const projResponse = await projectService.getProject(projectId);
+            const latestConvId = projResponse.project?.latest_conversation_id;
+
+            if (latestConvId) {
+              // Explicitly verify via API if the conversation JSON actually exists
+              await conversationService.loadConversation(latestConvId, projectId);
+              console.log("Conversation data exists, keeping project:", projectId);
+            } else {
+              console.log("Cleaning up empty project (no conversation started):", projectId);
+              await projectService.deleteProject(projectId);
+              window.dispatchEvent(new Event('projectUpdated'));
+            }
+          } catch (err) {
+            console.log("Cleaning up empty project (invalid/no conversation JSON):", projectId);
+            projectService.deleteProject(projectId)
+              .then(() => window.dispatchEvent(new Event('projectUpdated')))
+              .catch(console.error);
+          }
+        })();
+      }
     };
   }, [projectId, hydrateConversation, toast]);
 
@@ -403,7 +432,7 @@ export default function ProjectPage() {
         </div>
       </div>
       {/* Publish Modal */}
-      {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} />}
+      {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} />}
     </div>
   );
 }

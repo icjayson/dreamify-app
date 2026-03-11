@@ -11,6 +11,8 @@ import { useEffect } from "react";
 import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
 import FinancePage from "./pages/Finance";
+import PrivacyPage from "./pages/Privacy";
+import TermsPage from "./pages/Terms";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login.tsx";
@@ -46,15 +48,19 @@ const AppContent = () => {
   const isHomePath = location.pathname === "/";
   const isAboutPath = location.pathname === "/about";
   const isFinancePath = location.pathname === "/finance";
+  const isPrivacyPath = location.pathname === "/privacy";
+  const isTermsPath = location.pathname === "/terms";
   const isPreviewPath = location.pathname.startsWith("/preview/");
 
   return (
     <>
-      {(isHomePath || isAboutPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath)) && <Header />}
+      {(isHomePath || isAboutPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/finance" element={<FinancePage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/waitlist" element={<WaitlistPage />} />

@@ -1,4 +1,5 @@
 import { Mail } from "lucide-react";
+import { Link } from "react-router-dom";
 
 // X (Twitter) Icon Component
 const XIcon = ({ className }: { className?: string }) => (
@@ -94,10 +95,9 @@ export const FooterSection = () => {
 
         {/* Bottom bar */}
         <div className="pt-4 border-t border-border">
-          <div className="flex justify-between items-center">
-            <div className="text-muted-foreground text-sm">
-              © 2025 Dreamify. All rights reserved. Made with ✨ for data storytellers.
-            </div>
+          <div className="flex gap-4 text-sm text-muted-foreground">
+            <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
           </div>
         </div>
       </div>

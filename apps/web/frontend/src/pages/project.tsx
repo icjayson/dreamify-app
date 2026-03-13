@@ -27,6 +27,14 @@ export default function ProjectPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
+
+  useEffect(() => {
+    document.title = projectTitle ? `${projectTitle}` : "Dreamify";
+    return () => {
+      document.title = "Dreamify";
+    };
+  }, [projectTitle]);
+
   const startEditingTitle = () => {
     setRenameValue(projectTitle);
     setIsEditingTitle(true);

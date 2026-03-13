@@ -75,6 +75,8 @@ export interface UploadedFile {
   columnCount?: number;
   /** True if file was selected from @mention dropdown (already exists in conversation) */
   isFromMention?: boolean;
+  /** Integration source type if the file came from an API sync */
+  sourceType?: string;
 }
 
 interface ChatState {

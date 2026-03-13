@@ -13,6 +13,7 @@ import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
+import GA4IntegrationModal from "../components/chat/GA4IntegrationModal";
 
 // Friendly AI persona step mapping for Fluid Morph loading
 const STEP_FRIENDLY_MAP: Record<string, string> = {
@@ -137,6 +138,7 @@ const fetchProjectAssets = async (projectId: string): Promise<Array<{
   name: string;
   ext: string;
   projectId: string;
+  sourceType?: string;
   asset: AssetRecord;
 }>> => {
   try {
@@ -145,13 +147,21 @@ const fetchProjectAssets = async (projectId: string): Promise<Array<{
       // Filter by projectId
       return response.files
         .filter(file => file.asset?.project_id === projectId)
-        .map(file => ({
-          id: file.fileID,
-          name: file.filename,
-          ext: file.ext.toUpperCase(),
-          projectId: file.asset?.project_id || projectId,
-          asset: file.asset!,
-        }));
+        .map(file => {
+          let derivedSourceType: string | undefined;
+          if (file.filename.toLowerCase().includes('google_analytics')) {
+            derivedSourceType = 'GA4';
+          }
+          
+          return {
+            id: file.fileID,
+            name: file.filename,
+            ext: file.ext.toUpperCase(),
+            projectId: file.asset?.project_id || projectId,
+            sourceType: derivedSourceType,
+            asset: file.asset!,
+          };
+        });
     }
     return [];
   } catch (error) {
@@ -172,6 +182,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isGA4ModalOpen, setIsGA4ModalOpen] = useState(false);
 
   // @Mention state
   // @Mention / Context Picker state
@@ -676,6 +687,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   };
 
   const handleIntegrationClick = (connector: ConnectorItem) => {
+    if (connector.name === 'GA4') {
+      setIsGA4ModalOpen(true);
+      return;
+    }
     if (connector.isActive) {
       handleDataSourceSelect(connector.name);
     } else {
@@ -683,6 +698,39 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         title: `${connector.name}`,
         description: "Integration is coming soon!",
       });
+    }
+  };
+
+  const handleGA4SyncComplete = (asset: any) => {
+    const newFile = {
+      fileID: asset.asset_id,
+      filename: asset.filename,
+      size: asset.size_bytes,
+      ext: asset.extension.toLowerCase(),
+      status: 'uploaded' as const,
+      projectId: asset.project_id,
+      rowCount: asset.row_count,
+      columnCount: asset.column_count,
+      sourceType: 'GA4',
+    };
+    
+    if (uploadedFiles.length >= 5) {
+      toast({
+        title: "Maximum files reached",
+        description: "Please remove some files before adding new ones.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    addFiles([newFile]);
+    toast({
+      title: "GA4 Data Synced",
+      description: "Successfully fetched and added GA4 data.",
+    });
+    
+    if (projectId) {
+      fetchProjectAssets(projectId).then(setProjectAssets);
     }
   };
 
@@ -769,6 +817,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     <div className="flex flex-col h-full min-h-0 bg-muted">
 
       {/* Messages Area */}
+      <GA4IntegrationModal 
+        isOpen={isGA4ModalOpen} 
+        onClose={() => setIsGA4ModalOpen(false)} 
+        projectId={projectId} 
+        onSyncComplete={handleGA4SyncComplete} 
+      />
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 space-y-4">
         {messages.map((message, index) => {
           const isUser = message.role === "user";

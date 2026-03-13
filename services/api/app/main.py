@@ -115,6 +115,13 @@ def create_app():
         logger.info("Public router registered successfully")
     except ImportError as e:
         logger.error(f"Failed to import Public router: {e}")
+        
+    try:
+        from app.api.route_modules.integration import router as integration_router
+        app.include_router(integration_router, prefix="/api/v1")
+        logger.info("Integration router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Integration router: {e}")
     
     # Root endpoint
     @app.get("/", tags=["root"])

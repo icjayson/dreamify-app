@@ -2,9 +2,12 @@
 Admin authentication dependencies for FastAPI routes.
 """
 import base64
+import logging
 from fastapi import Request, HTTPException, status
 from utils.config import config
 from utils.admin_auth import verify_password
+
+logger = logging.getLogger(__name__)
 
 
 def require_admin(request: Request) -> bool:
@@ -28,9 +31,8 @@ def require_admin(request: Request) -> bool:
     # Extract Authorization header
     authorization = request.headers.get("Authorization")
     
-    # DEBUG: write to a file to inspect exactly what the browser is sending
-    with open("auth_debug.txt", "a") as f:
-        f.write(f"URL: {request.url} | Header: {authorization}\n")
+    # DEBUG: logging for inspection
+    logger.debug(f"URL: {request.url} | Header: {authorization}")
 
     if not authorization:
         raise HTTPException(
@@ -47,8 +49,7 @@ def require_admin(request: Request) -> bool:
         # Decode base64 credentials
         decoded = base64.b64decode(encoded).decode("utf-8")
         username, password = decoded.split(":", 1)
-        with open("auth_debug.txt", "a") as f:
-            f.write(f"Parsed: user='{username}', pass='{password}'\n")
+        logger.debug(f"Parsed: user='{username}', pass='{password}'")
     except (ValueError, UnicodeDecodeError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

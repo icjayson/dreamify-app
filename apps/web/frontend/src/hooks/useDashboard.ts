@@ -86,11 +86,19 @@ export const useDashboard = (initialDashboardId?: string): DashboardHook => {
     setDashboardState(prev => {
       if (!prev.configuration) return prev;
 
-      const updatedComponents = prev.configuration.components.map(component => 
-        component.id === componentId 
-          ? { ...component, component_config: { ...component.component_config, ...config } }
-          : component
-      );
+      const updatedComponents = prev.configuration.components.map(component => {
+        if (component.id === componentId) {
+          // If the config contains layout/position data, we should update the root component position as well
+          const positionUpdate = config.position ? { position: { ...component.position, ...config.position } } : {};
+          
+          return { 
+            ...component, 
+            ...positionUpdate,
+            component_config: { ...component.component_config, ...config } 
+          };
+        }
+        return component;
+      });
 
       return {
         ...prev,

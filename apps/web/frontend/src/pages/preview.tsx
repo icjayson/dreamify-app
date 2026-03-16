@@ -22,9 +22,19 @@ export default function PreviewPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const state = location.state as { processedData?: any } | null;
   const [processedData, setProcessedData] = useState<any>(state?.processedData);
+  const [dashboardIdFromSession, setDashboardIdFromSession] = useState<string | undefined>(undefined);
 
   // Fallback: read from sessionStorage when opened in a new tab
   useEffect(() => {
+    try {
+      const cachedId = sessionStorage.getItem('project_preview_dashboard_id');
+      if (cachedId) {
+        setDashboardIdFromSession(cachedId);
+      }
+    } catch (_e) {
+      // ignore
+    }
+
     if (!processedData) {
       try {
         const cached = sessionStorage.getItem('project_preview_data');
@@ -167,9 +177,9 @@ export default function PreviewPage() {
         ) : isThemeChanging ? (
           <DashboardLoading />
         ) : dashboardTheme === 'dark' ? (
-          <DashboardPreview processedData={processedData}/>
+          <DashboardPreview dashboardId={dashboardIdFromSession || projectId || undefined} processedData={processedData}/>
         ) : (
-          <DashboardPreview processedData={processedData}/>
+          <DashboardPreview dashboardId={dashboardIdFromSession || projectId || undefined} processedData={processedData}/>
         )}
       </div>
     </div>

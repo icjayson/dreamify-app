@@ -896,6 +896,8 @@ const DashboardPreview = ({
     setIsLayoutReady(true);
   }, [activeDashboard, storageKey, isExporting]);
 
+  const [currentBreakpoint, setCurrentBreakpoint] = useState<string>('lg');
+
   const handleLayoutChange = (current: Layout[], all: Layouts) => {
     if (!isLayoutReady) return;
     setLayouts(all);
@@ -914,6 +916,27 @@ const DashboardPreview = ({
         }
       });
     }
+  };
+
+  const handleDragResizeStop = (current: Layout[], oldItem: any, newItem: any) => {
+    if (!isLayoutReady) return;
+    const currentCols = cols[currentBreakpoint as keyof typeof cols] || 24;
+    const scaledAll = { ...layouts };
+    
+    scaledAll.lg = currentBreakpoint === 'lg' ? current : scaleLayoutForCols(current, currentCols, cols.lg);
+    scaledAll.md = currentBreakpoint === 'md' ? current : scaleLayoutForCols(current, currentCols, cols.md);
+    scaledAll.sm = currentBreakpoint === 'sm' ? current : scaleLayoutForCols(current, currentCols, cols.sm);
+    scaledAll.xs = currentBreakpoint === 'xs' ? current : scaleLayoutForCols(current, currentCols, cols.xs);
+    scaledAll.xxs = currentBreakpoint === 'xxs' ? current : scaleLayoutForCols(current, currentCols, cols.xxs);
+
+    setLayouts(scaledAll);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(scaledAll));
+    } catch (_e) { /* ignore */ }
+  };
+
+  const handleBreakpointChange = (newBreakpoint: string) => {
+    setCurrentBreakpoint(newBreakpoint);
   };
 
   // Handle refresh
@@ -1173,11 +1196,11 @@ const DashboardPreview = ({
                 rowHeight={rowHeight}
                 isDraggable
                 isResizable
-                preventCollision
-                isBounded
-                compactType={null}
                 resizeHandles={['se', 'e', 's', 'w', 'n']}
                 onLayoutChange={handleLayoutChange}
+                onBreakpointChange={handleBreakpointChange}
+                onDragStop={handleDragResizeStop}
+                onResizeStop={handleDragResizeStop}
               >
                 {activeDashboard.components.map((component: any) => (
                   <div key={String(component.id)} className="animate-fade-in">

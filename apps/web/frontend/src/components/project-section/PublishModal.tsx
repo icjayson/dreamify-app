@@ -165,6 +165,10 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
       if (processedFile?.processedData) {
         sessionStorage.setItem('project_preview_data', JSON.stringify(processedFile.processedData));
       }
+      const dashboardIdToSave = dashboardState.configuration?.id || projectId;
+      if (dashboardIdToSave) {
+        sessionStorage.setItem('project_preview_dashboard_id', dashboardIdToSave);
+      }
     } catch (_e) {
       // ignore errors
     }

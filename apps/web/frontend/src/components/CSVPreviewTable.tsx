@@ -19,6 +19,7 @@ export interface CSVPreviewTableProps {
   displayedRows: number;
   isLoading?: boolean;
   error?: string | null;
+  sourceType?: string;
 }
 
 const PAGE_SIZE = 100;
@@ -31,6 +32,7 @@ export default function CSVPreviewTable({
   displayedRows,
   isLoading = false,
   error = null,
+  sourceType,
 }: CSVPreviewTableProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const [sortConfig, setSortConfig] = useState<{
@@ -221,7 +223,9 @@ export default function CSVPreviewTable({
       <div className="w-full max-w-[95vw] lg:max-w-[1400px] h-full max-h-[95vh] flex flex-col bg-card border border-border rounded-lg shadow-sm overflow-hidden">
         {/* Header */}
         <div className="border-b bg-muted/50 p-4 flex-shrink-0">
-        <h1 className="text-xl font-semibold mb-1">{filename}</h1>
+        <h1 className="text-xl font-semibold mb-1">
+          {sourceType ? `${sourceType} Data` : filename}
+        </h1>
         <div className="flex items-center gap-4 md:text-sm text-xs text-muted-foreground">
           <span>{totalRows.toLocaleString()} total rows</span>
           {displayedRows < totalRows && (

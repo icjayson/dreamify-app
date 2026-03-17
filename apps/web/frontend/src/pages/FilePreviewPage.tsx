@@ -52,6 +52,7 @@ export default function FilePreviewPage() {
           filename: data.filename,
           totalRows: data.total_rows,
           displayedRows: data.displayed_rows,
+          sourceType: data.sourceType,
           isLoading: false,
           error: null,
         });

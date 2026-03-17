@@ -27,6 +27,8 @@ import SuccessPage from "./pages/SuccessPage";
 import AdminPage from "./pages/admin";
 import AdminConversationPage from "./pages/admin/conversation";
 import { useChatStore } from "./chat/useChatStore";
+import GA4IntegrationModal from "./components/chat/GA4IntegrationModal";
+import GoogleSheetsIntegrationModal from "./components/chat/GoogleSheetsIntegrationModal";
 
 const queryClient = new QueryClient();
 
@@ -83,6 +85,8 @@ const AppContent = () => {
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
+      <GA4IntegrationModal />
+      <GoogleSheetsIntegrationModal />
     </>
   );
 };

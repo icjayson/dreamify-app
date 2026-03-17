@@ -93,7 +93,8 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     setSelectedTemplate,
     sendMessage,
     addMessage,
-    processFileWithMessage
+    processFileWithMessage,
+    resetChat,
   } = useChatStore();
 
   const {
@@ -170,6 +171,12 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   }, []);
 
   useEffect(() => {
+    // Reset chat state when landing on home to ensure isolation between sessions.
+    // This prevents files from previous projects from persisting.
+    resetChat();
+  }, [resetChat]);
+
+  useEffect(() => {
     // Load Lottie animation data
     fetch('/bg-test-5.json')
       .then(response => response.json())
@@ -197,12 +204,12 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       return;
     }
     if (!inputValue.trim()) return;
-    if (uploadedFiles.length === 0 || !uploadedFiles.some(f => f.status === 'uploaded')) {
+    if (uploadedFiles.length === 0 || !uploadedFiles.some(f => ['uploaded', 'processed', 'accepted'].includes(f.status))) {
       toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
       return;
     }
 
-    const firstUploadedFile = uploadedFiles.find(f => f.status === 'uploaded');
+    const firstUploadedFile = uploadedFiles.find(f => ['uploaded', 'processed', 'accepted'].includes(f.status));
 
     if (!firstUploadedFile?.projectId) {
       toast({
@@ -440,6 +447,22 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   };
 
   const handleIntegrationClick = (connector: ConnectorItem) => {
+    if (!isSignedIn) {
+      setWaitlistOpen(true);
+      return;
+    }
+
+    if (connector.name === 'GA4') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setGA4ModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Google Sheets') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setGoogleSheetsModalOpen(true), 0);
+      return;
+    }
+
     if (connector.isActive) {
       handleDataSourceSelect(connector.name);
     } else {
@@ -745,7 +768,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                             <button
                               key={connector.name}
                               onClick={() => handleIntegrationClick(connector)}
-                              className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10 transition-colors duration-200 flex items-center gap-2 cursor-pointer"
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 rounded-md transition-colors duration-200 flex items-center gap-2 cursor-pointer"
                             >
                               <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
                               {connector.name}

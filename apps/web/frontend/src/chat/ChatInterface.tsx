@@ -13,7 +13,7 @@ import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
-import GA4IntegrationModal from "../components/chat/GA4IntegrationModal";
+
 
 // Friendly AI persona step mapping for Fluid Morph loading
 const STEP_FRIENDLY_MAP: Record<string, string> = {
@@ -149,10 +149,12 @@ const fetchProjectAssets = async (projectId: string): Promise<Array<{
         .filter(file => file.asset?.project_id === projectId)
         .map(file => {
           let derivedSourceType: string | undefined;
-          if (file.filename.toLowerCase().includes('google_analytics')) {
+          if (file.filename.toLowerCase().includes('google_analytics') || file.filename.toLowerCase().includes('ga4')) {
             derivedSourceType = 'GA4';
+          } else if (file.filename.toLowerCase().includes('google_sheet') || file.filename.toLowerCase().includes('gsheet')) {
+            derivedSourceType = 'Google Sheets';
           }
-          
+
           return {
             id: file.fileID,
             name: file.filename,
@@ -182,7 +184,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isGA4ModalOpen, setIsGA4ModalOpen] = useState(false);
 
   // @Mention state
   // @Mention / Context Picker state
@@ -229,7 +230,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     sendMessage,
     clearInput,
     processFileWithMessage,
-    stopGeneration
+    stopGeneration,
+    setGoogleSheetsModalOpen,
+    setGA4ModalOpen,
   } = useChatStore();
 
   const {
@@ -249,6 +252,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const stagedFiles = uploadedFiles.filter(f => f.status !== 'processed' && f.status !== 'error');
   const isSendingRef = useRef<boolean>(false);
   const { toast } = useToast();
 
@@ -363,7 +368,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
     if (isSendingRef.current) return;
-    if (projectAssets.length === 0) {
+    const hasValidUploadedFiles = uploadedFiles.some(f => ['uploaded', 'processed', 'accepted'].includes(f.status));
+    if (projectAssets.length === 0 && !hasValidUploadedFiles) {
       toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
       return;
     }
@@ -395,16 +401,27 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       });
 
       // Compute attachment badge info from active files only
-      let activeFileAttachment: { kind: 'csv' | 'file'; name: string } | undefined;
+      let activeFileAttachment: any = undefined;
       if (activeFiles.length > 0) {
-        activeFileAttachment = { kind: 'csv', name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` };
+        let displayName = activeFiles[0].filename;
+        if (activeFiles.length === 1 && activeFiles[0].sourceType && activeFiles[0].sourceType.includes('GA4')) {
+          displayName = `${activeFiles[0].sourceType} Data`;
+        } else if (activeFiles.length > 1) {
+          displayName = `${activeFiles.length} files`;
+        }
+        activeFileAttachment = {
+          kind: 'csv',
+          name: displayName,
+          sourceType: activeFiles.length === 1 ? activeFiles[0].sourceType : (activeFiles.length > 1 ? 'Multiple' : undefined),
+          accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
+          propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined
+        };
       } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
         // No explicit files selected — treat as "all assets" and show badge with count
         activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
       }
 
       await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
-      clearFiles();
       setMentionedAssetIds([]);
     } finally {
       isSendingRef.current = false;
@@ -422,9 +439,21 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           finalMentionedIds.push(file.fileID);
         }
       });
-      let activeFileAttachment: { kind: 'csv' | 'file'; name: string } | undefined;
+      let activeFileAttachment: any = undefined;
       if (activeFiles.length > 0) {
-        activeFileAttachment = { kind: 'csv', name: activeFiles.length === 1 ? activeFiles[0].filename : `${activeFiles.length} files` };
+        let displayName = activeFiles[0].filename;
+        if (activeFiles.length === 1 && activeFiles[0].sourceType) {
+          displayName = `${activeFiles[0].sourceType} Data`;
+        } else if (activeFiles.length > 1) {
+          displayName = `${activeFiles.length} files`;
+        }
+        activeFileAttachment = {
+          kind: 'csv',
+          name: displayName,
+          sourceType: activeFiles.length === 1 ? activeFiles[0].sourceType : (activeFiles.length > 1 ? 'Multiple' : undefined),
+          accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
+          propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined
+        };
       } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
         activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
       }
@@ -450,6 +479,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       // Convert to UploadedFile format
       // Status is 'uploaded' because file exists in project and is ready for processing
       // isFromMention: true indicates this file was selected from @mention dropdown (already exists in conversation)
+      // Derive sourceType from asset_type or filename pattern
+      let sourceType: string | undefined;
+      const assetType = assetData.type;
+      if (assetType === 'integration_ga4' || assetType === 'GA4') sourceType = 'GA4';
+      else if (assetType === 'integration_gsheets' || assetType === 'Google Sheets') sourceType = 'Google Sheets';
+      else if (assetData.filename.startsWith('google_analytics')) sourceType = 'GA4';
+      else if (assetData.filename.startsWith('google_sheet')) sourceType = 'Google Sheets';
+
       const newFile = {
         fileID: assetData.asset_id,
         filename: assetData.filename,
@@ -460,6 +497,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         rowCount: assetData.row_count,
         columnCount: assetData.column_count,
         isFromMention: true,
+        sourceType,
+        // Since it's from project assets, we might not have account/property name in metadata,
+        // but sourceType alone will fix "CSV" label showing as "GA4 Data".
       };
 
       if (uploadedFiles.length >= 5) {
@@ -535,12 +575,18 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     }
     try {
       // Create new file object for upload
+      // Detect sourceType based on filename pattern
+      let sourceType: string | undefined;
+      if (file.name.startsWith('google_analytics')) sourceType = 'GA4';
+      else if (file.name.startsWith('google_sheet')) sourceType = 'Google Sheets';
+
       const newFile = {
         fileID: 'pending',
         filename: file.name,
         size: file.size,
         ext: (file.name.split('.').pop() || '').toLowerCase(),
-        status: 'uploading' as const
+        status: 'uploading' as const,
+        sourceType
       };
 
       if (uploadedFiles.length >= 5) {
@@ -578,7 +624,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         status: 'uploaded',
         projectId: res.asset?.project_id,
         rowCount: res.rowCount,
-        columnCount: res.columnCount
+        columnCount: res.columnCount,
+        sourceType
       }]);
       try {
         // Persist original file for CSV export if it's CSV
@@ -688,7 +735,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
   const handleIntegrationClick = (connector: ConnectorItem) => {
     if (connector.name === 'GA4') {
-      setIsGA4ModalOpen(true);
+      setDropdownOpen(false);
+      setTimeout(() => setGA4ModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Google Sheets') {
+      setDropdownOpen(false);
+      setTimeout(() => setGoogleSheetsModalOpen(true), 0);
       return;
     }
     if (connector.isActive) {
@@ -699,39 +752,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         description: "Integration is coming soon!",
       });
     }
-  };
-
-  const handleGA4SyncComplete = (asset: any) => {
-    const newFile = {
-      fileID: asset.asset_id,
-      filename: asset.filename,
-      size: asset.size_bytes,
-      ext: asset.extension.toLowerCase(),
-      status: 'uploaded' as const,
-      projectId: asset.project_id,
-      rowCount: asset.row_count,
-      columnCount: asset.column_count,
-      sourceType: 'GA4',
-    };
-    
-    if (uploadedFiles.length >= 5) {
-      toast({
-        title: "Maximum files reached",
-        description: "Please remove some files before adding new ones.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    addFiles([newFile]);
-    toast({
-      title: "GA4 Data Synced",
-      description: "Successfully fetched and added GA4 data.",
-    });
-    
-    if (projectId) {
-      fetchProjectAssets(projectId).then(setProjectAssets);
-    }
+    setDropdownOpen(false);
   };
 
   const handleCloneTemplateClick = () => {
@@ -817,12 +838,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     <div className="flex flex-col h-full min-h-0 bg-muted">
 
       {/* Messages Area */}
-      <GA4IntegrationModal 
-        isOpen={isGA4ModalOpen} 
-        onClose={() => setIsGA4ModalOpen(false)} 
-        projectId={projectId} 
-        onSyncComplete={handleGA4SyncComplete} 
-      />
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 space-y-4">
         {messages.map((message, index) => {
           const isUser = message.role === "user";
@@ -859,17 +874,61 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                   <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words ${bubbleBgClass}`}>
                     {message.attachment && (
                       <div className="mb-2">
-                        <span
-                          className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
-                          title={message.attachment.name}
-                          aria-label="Attached file"
-                        >
-                          <span className="inline-flex items-center gap-1 text-white/70">
-                            <FileText className="w-3 h-3 text-white/80" />
-                            Attached file
-                          </span>
-                          <span className="truncate w-full">{message.attachment.name}</span>
-                        </span>
+                        {(() => {
+                          const sType = message.attachment.sourceType || '';
+                          const isMultiple = sType === 'Multiple';
+                          const isGA4 = !isMultiple && (sType.includes('GA4') || sType.includes('Google Analytics') || sType.includes('integration_ga4') || sType.toLowerCase().includes('google_analytics'));
+                          const isSheets = !isMultiple && (sType.includes('Google Sheets') || sType.includes('gsheets') || sType.includes('integration_gsheets') || sType.toLowerCase().includes('google_sheet'));
+
+                          const displayName = isMultiple ? "Multiple Data Sources" : isGA4 ? "Google Analytics 4" : isSheets ? "Google Sheets" : "Attached Data";
+                          const logoBg = isMultiple ? "bg-indigo-500/10" : isGA4 ? "bg-orange-500/10" : isSheets ? "bg-green-500/10" : "bg-white/10";
+
+                          // Correctly find icon from CONNECTORS constant
+                          const connector = isMultiple ? undefined : CONNECTORS.find(c => {
+                            if (isGA4 && c.name === 'GA4') return true;
+                            if (isSheets && c.name === 'Google Sheets') return true;
+                            return false;
+                          });
+                          const icon = connector?.icon;
+
+                          // Format secondary text
+                          let secondaryText = "";
+                          if (isMultiple) {
+                            secondaryText = message.attachment.name;
+                          } else if (isGA4) {
+                            secondaryText = [message.attachment.accountName, message.attachment.propertyName].filter(Boolean).join(' / ');
+                          } else if (isSheets) {
+                            secondaryText = (message.attachment.propertyName || message.attachment.name).replace(/\.[^/.]+$/, "");
+                          } else {
+                            // Generic file: remove extension
+                            secondaryText = message.attachment.name.replace(/\.[^/.]+$/, "");
+                          }
+
+                          return (
+                            <div
+                              className="inline-flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md text-white/90 min-w-[240px] max-w-full group transition-all hover:bg-white/10"
+                              title={message.attachment.name}
+                            >
+                              <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center p-2 ${logoBg}`}>
+                                {icon ? (
+                                  <img src={icon} className="w-full h-full object-contain" alt="" />
+                                ) : (
+                                  <Database className="w-5 h-5 text-emerald-400" />
+                                )}
+                              </div>
+                              <div className="flex flex-col min-w-0 flex-1 leading-tight">
+                                <span className="text-sm font-medium text-white truncate">
+                                  {displayName}
+                                </span>
+                                {secondaryText && (
+                                  <span className="text-xs text-gray-400 truncate mt-0.5">
+                                    {secondaryText}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                     {message.template && (
@@ -929,7 +988,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                           <div className="text-sm font-medium text-white truncate" title={message.dashboardCard.dashboardTitle || "Dashboard"}>
                             {message.dashboardCard.dashboardTitle || "Dashboard"}
                           </div>
-                          <div className="text-xs text-white/70 mt-0.5 truncate">Source: {message.dashboardCard.sourceFileName}</div>
+                          <div className="text-xs text-white/70 mt-0.5 truncate">
+                            Source: {
+                              (() => {
+                                const source = message.dashboardCard.sourceFileName || '';
+                                if (source.toLowerCase().includes('google_analytics') || source.toLowerCase().includes('ga4')) {
+                                  return 'GA4 Data';
+                                }
+                                if (source.toLowerCase().includes('google_sheet') || source.toLowerCase().includes('gsheet')) {
+                                  return 'Google Sheets Data';
+                                }
+                                return source.replace(/\.[^/.]+$/, "");
+                              })()
+                            }
+                          </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-white/60 flex-shrink-0 ml-2 group-hover:translate-x-1 transition-transform duration-200" />
                       </div>
@@ -1011,17 +1083,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
               />
             )}
 
-            {/* File Context Chips - horizontal scroll when files are attached */}
-            {/* Filter out 'processed' files — they're restored from previous conversations and shouldn't show as input chips */}
-            {uploadedFiles.filter(f => f.status !== 'processed').length > 0 && (
+            {/* Active File Correlations */}
+            {stagedFiles.length > 0 && (
               <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                {uploadedFiles.filter(f => f.status !== 'processed').map((file) => (
-                  <div key={file.fileID} className="flex-shrink-0">
-                    <FilePreviewChip
-                      file={file}
-                      onRemove={() => removeUploadedFile(file.fileID)}
-                    />
-                  </div>
+                {stagedFiles.map((file, i) => (
+                  <FilePreviewChip
+                    key={file.fileID || i}
+                    file={file}
+                    onRemove={() => removeFile(file.fileID)}
+                  />
                 ))}
               </div>
             )}
@@ -1187,7 +1257,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                           <button
                             key={connector.name}
                             onClick={() => handleIntegrationClick(connector)}
-                            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-primary/10 transition-colors duration-200 cursor-pointer"
+                            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors duration-200 cursor-pointer"
                           >
                             <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
                             {connector.name}

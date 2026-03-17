@@ -6,6 +6,9 @@ export interface ConversationNodesToMessagesOptions {
     kind: 'file' | 'csv';
     name: string;
     mime?: string;
+    sourceType?: string;
+    accountName?: string;
+    propertyName?: string;
   };
 }
 
@@ -20,24 +23,8 @@ export function conversationNodesToMessages(
   const nodes = conversation?.nodes ?? [];
   const dashboards = conversation?.dashboards ?? [];
 
-  // Derive asset name from first asset in nodes, unless overridden
-  let assetName = options?.sourceFileName;
-  if (assetName === undefined) {
-    for (const node of nodes) {
-      const contents = node?.contents || [];
-      for (const content of contents) {
-        if (content?.type === 'asset' || content?.type === 'attachment') {
-          const assetData = content?.data || {};
-          if (assetData.asset_id) {
-            assetName = assetData.filename || 'dashboard';
-            break;
-          }
-        }
-      }
-      if (assetName !== undefined) break;
-    }
-    assetName = assetName ?? 'dashboard';
-  }
+  // Asset name will track the most recent asset encountered in the flow
+  let currentAssetName = options?.sourceFileName ?? 'dashboard';
 
   const restoredMessages: Message[] = nodes
     .filter((node: any) => {
@@ -80,6 +67,11 @@ export function conversationNodesToMessages(
           c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file' || c?.type === 'mention'
       ) ?? [];
       const assetContent = assetContents[0];
+
+      // Update the current asset name if this node brings a new asset
+      if (assetContent?.data?.filename) {
+        currentAssetName = assetContent.data.filename;
+      }
       const normalized: Message = {
         id: node?.node_id || crypto.randomUUID(),
         role: node?.role === 'user' ? 'user' : 'assistant',
@@ -92,7 +84,7 @@ export function conversationNodesToMessages(
           (d: any) => d.dashboard_id === dashboardId
         );
         normalized.dashboardCard = {
-          sourceFileName: assetName,
+          sourceFileName: currentAssetName,
           dashboardId: dashboardId,
           dashboardTitle: dashboardMetadata?.title || undefined,
         };
@@ -104,11 +96,32 @@ export function conversationNodesToMessages(
         const firstName =
           assetContent?.data?.filename ||
           assetContent?.data?.name ||
-          assetName;
+          currentAssetName;
+
+        // Derive sourceType from asset_type stored in the conversation node
+        const assetType: string = assetContent?.data?.asset_type || assetContent?.data?.source_type || '';
+        const fileName: string = firstName || '';
+        let sourceType: string | undefined;
+        const lowerAssetType = assetType.toLowerCase();
+        const lowerFileName = fileName.toLowerCase();
+
+        if (assetContents.length > 1) {
+          sourceType = 'Multiple';
+        } else if (lowerAssetType.includes('ga4') || lowerAssetType.includes('google_analytics') || lowerAssetType.includes('google analytics')) {
+          sourceType = 'GA4';
+        } else if (lowerAssetType.includes('sheet') || lowerAssetType.includes('google sheets')) {
+          sourceType = 'Google Sheets';
+        } else if (lowerFileName.includes('ga4') || lowerFileName.includes('google_analytics')) {
+          sourceType = 'GA4';
+        } else if (lowerFileName.includes('sheet') || lowerFileName.includes('google sheets')) {
+          sourceType = 'Google Sheets';
+        }
+
         normalized.attachment = {
           kind: assetContent?.data?.kind === 'file' ? 'file' : 'csv',
           name: assetContents.length > 1 ? `${assetContents.length} files` : firstName,
           mime: assetContent?.data?.mime,
+          sourceType,
         };
       } else if (isLastUser && options?.lastUserMessageAttachment) {
         normalized.attachment = options.lastUserMessageAttachment;

@@ -20,7 +20,7 @@ export interface GA4PropertiesResponse {
 
 export interface GA4SyncRequest {
   property_id: string;
-  project_id: string;
+  project_id?: string;
   start_date?: string;
   end_date?: string;
 }
@@ -49,16 +49,46 @@ class IntegrationService {
     }
   }
 
+  async getGoogleOAuthToken(): Promise<{ success: boolean; token?: string; error?: string }> {
+    try {
+      const res = await api.get<{ success: boolean; token?: string; error?: string }>(`${this.baseUrl}/google/token`);
+      if (res.success && res.data) {
+        return res.data;
+      }
+      return { success: false, error: res.error || 'Failed to fetch Google token' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncGoogleSheetData(fileId: string, projectId?: string): Promise<GA4SyncResponse> {
+    try {
+      const payload: { file_id: string; project_id?: string } = {
+        file_id: fileId
+      };
+      if (projectId) {
+        payload.project_id = projectId;
+      }
+      const res = await api.post<GA4SyncResponse>(`${this.baseUrl}/google-sheets/sync`, payload);
+      if (res.success && res.data) {
+        return res.data;
+      }
+      return { success: false, error: res.error || 'Failed to sync Google Sheet data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
   async syncGoogleAnalyticsData(
-    projectId: string, 
     propertyId: string, 
+    projectId?: string,
     startDate?: string, 
     endDate?: string
   ): Promise<GA4SyncResponse> {
     try {
       const payload: GA4SyncRequest = {
-        project_id: projectId,
         property_id: propertyId,
+        ...(projectId && { project_id: projectId }),
         ...(startDate && { start_date: startDate }),
         ...(endDate && { end_date: endDate })
       };

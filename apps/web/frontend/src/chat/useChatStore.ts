@@ -77,6 +77,10 @@ export interface UploadedFile {
   isFromMention?: boolean;
   /** Integration source type if the file came from an API sync */
   sourceType?: string;
+  /** GA4 account display name */
+  accountName?: string;
+  /** GA4 property display name */
+  propertyName?: string;
 }
 
 interface ChatState {
@@ -124,6 +128,15 @@ interface ChatState {
   // Abort controller for stopping generation
   abortController: AbortController | null;
 
+  // Integration states
+  isGoogleSheetsModalOpen: boolean;
+  isGA4ModalOpen: boolean;
+  googleSheetsFileId: string | null;
+  googleSheetsFileName: string | null;
+
+  // Pending action state for cross-page navigation
+  pendingAction: PendingAction | null;
+
   // Actions
   setInputValue: (value: string) => void;
   setIsTyping: (typing: boolean) => void;
@@ -149,18 +162,26 @@ interface ChatState {
   setSelectedDashboardId: (dashboardId: string | null) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
   setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
+  setCurrentProjectId: (id: string | null) => void;
+  setPendingAction: (action: PendingAction | null) => void;
+  
+  // Integration setters
+  setGoogleSheetsModalOpen: (open: boolean) => void;
+  setGA4ModalOpen: (open: boolean) => void;
+  setGoogleSheetsFileId: (id: string | null) => void;
+  setGoogleSheetsFileName: (name: string | null) => void;
 
   // Complex actions
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: () => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string }) => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }) => Promise<void>;
   stopGeneration: () => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<void>;
 
-  // Pending action state for cross-page navigation
-  pendingAction: PendingAction | null;
-  setPendingAction: (action: PendingAction | null) => void;
+  // Sync actions
+  syncGoogleSheets: (projectId?: string) => Promise<void>;
+  syncGA4: (propertyId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string, propertyName?: string) => Promise<void>;
 }
 
 export interface PendingAction {
@@ -204,6 +225,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   selectedTemplate: null,
   abortController: null,
   pendingAction: null,
+  isGoogleSheetsModalOpen: false,
+  isGA4ModalOpen: false,
+  googleSheetsFileId: null,
+  googleSheetsFileName: null,
 
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -249,6 +274,89 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
   setPendingAction: (action) => set({ pendingAction: action }),
+  setGoogleSheetsModalOpen: (open) => set({ isGoogleSheetsModalOpen: open }),
+  setGA4ModalOpen: (open) => set({ isGA4ModalOpen: open }),
+  setGoogleSheetsFileId: (id) => {
+    console.log('Store: setting googleSheetsFileId:', id);
+    set({ googleSheetsFileId: id });
+  },
+  setGoogleSheetsFileName: (name) => {
+    console.log('Store: setting googleSheetsFileName:', name);
+    set({ googleSheetsFileName: name });
+  },
+  setCurrentProjectId: (id) => set({ currentProjectId: id }),
+
+  // Sync actions implementation
+  syncGoogleSheets: async (projectId) => {
+    const { googleSheetsFileId, googleSheetsFileName, addFiles, setGoogleSheetsFileId, setGoogleSheetsFileName, setGoogleSheetsModalOpen } = get();
+    if (!googleSheetsFileId) return;
+
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncGoogleSheetData(googleSheetsFileId, projectId);
+      
+      if (response.success && response.asset) {
+        const newFile = {
+          fileID: response.asset.asset_id,
+          filename: response.asset.filename,
+          size: response.asset.size_bytes || 0,
+          ext: response.asset.extension || 'csv',
+          status: 'uploaded' as const,
+          projectId: response.asset.project_id || undefined,
+          sourceType: 'Google Sheets',
+          accountName: 'Google Sheets',
+          propertyName: googleSheetsFileName || response.asset.filename,
+          rowCount: response.asset.row_count,
+          columnCount: response.asset.column_count,
+        };
+        
+        addFiles([newFile]);
+        setGoogleSheetsFileId(null);
+        setGoogleSheetsFileName(null);
+        setGoogleSheetsModalOpen(false);
+      } else {
+        throw new Error(response.error || 'Failed to sync Google Sheets');
+      }
+    } catch (err) {
+      console.error('Sync Google Sheets error:', err);
+      throw err;
+    }
+  },
+
+  syncGA4: async (propertyId, projectId, startDate, endDate, accountName, propertyName) => {
+    const { addFiles, setGA4ModalOpen } = get();
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncGoogleAnalyticsData(
+        propertyId,
+        projectId,
+        startDate || '30daysAgo',
+        endDate || 'today'
+      );
+
+      if (response.success && response.asset) {
+        const newFile = {
+          fileID: response.asset.asset_id,
+          filename: response.asset.filename,
+          size: response.asset.size_bytes || 0,
+          ext: response.asset.extension || 'csv',
+          status: 'uploaded' as const,
+          projectId: response.asset.project_id || undefined,
+          sourceType: 'GA4',
+          accountName: accountName || (response.asset as any).accountName || 'GA4',
+          propertyName: propertyName || (response.asset as any).propertyName || response.asset.filename,
+        };
+        
+        addFiles([newFile]);
+        setGA4ModalOpen(false);
+      } else {
+        throw new Error(response.error || 'Failed to sync GA4');
+      }
+    } catch (err) {
+      console.error('Sync GA4 error:', err);
+      throw err;
+    }
+  },
 
   // Complex actions
   sendMessage: (content) => {
@@ -261,7 +369,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         kind: "csv",
         name: get().uploadedFiles.length === 1
           ? get().uploadedFiles[0].filename
-          : `${get().uploadedFiles.length} files`
+          : `${get().uploadedFiles.length} files`,
+        sourceType: get().uploadedFiles[0].sourceType,
+        accountName: get().uploadedFiles[0].accountName,
+        propertyName: get().uploadedFiles[0].propertyName,
       } : undefined,
       template: get().selectedTemplate || undefined,
     };
@@ -274,7 +385,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string }) => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }) => {
     const state = get();
     const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
 
@@ -288,6 +399,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Text-only message path: allow theme change after initial dashboard shown, only if currently light
     // @mentioned files should use Q&A path (they're already in conversation)
     const hasUploadedFiles = uploadedFiles.some(f => f.status === 'uploaded' && !f.isFromMention);
+    
+    // Clear uploaded files immediately so they disappear from the input chips area 
+    // once the message start process is initiated.
+    get().clearFiles();
+    
     const isTextOnly = !hasUploadedFiles;
     const detectedTheme = detectThemeChange(content);
     if (isTextOnly && hasShownInitialDashboard && dashboardTheme === 'light' && detectedTheme) {
@@ -365,7 +481,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           role: "user",
           content: content.trim(),
           timestamp: new Date(),
-          attachment: activeFileAttachment || undefined,
+          attachment: activeFileAttachment || (uploadedFiles.length > 0 ? {
+            kind: "csv",
+            name: uploadedFiles.length === 1 ? uploadedFiles[0].filename : `${uploadedFiles.length} files`,
+            sourceType: uploadedFiles.length === 1 ? uploadedFiles[0].sourceType : 'Multiple',
+            accountName: uploadedFiles.length === 1 ? uploadedFiles[0].accountName : undefined,
+            propertyName: uploadedFiles.length === 1 ? uploadedFiles[0].propertyName : undefined,
+          } : undefined),
           template: get().selectedTemplate || undefined,
         };
         addMessage(userMessage);
@@ -535,6 +657,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   if (firstFile) {
                     updateFile(firstFile.fileID, { status: 'processed', processedData: finalResult.data.dashboard_data });
                   }
+                  
+                  // Signal completion to UI for automatic rendering
+                  if (onProcessedDataChange) {
+                    onProcessedDataChange(finalResult.data.dashboard_data);
+                  }
                 }
 
                 const firstFile = get().uploadedFiles[0];
@@ -543,7 +670,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   lastUserMessageAttachment: firstFile ? {
                     kind: 'csv',
                     name: firstFile.filename,
-                    mime: 'text/csv' // we can infer or pass real mime if available
+                    mime: 'text/csv',
+                    sourceType: firstFile.sourceType,
+                    accountName: firstFile.accountName,
+                    propertyName: firstFile.propertyName
                   } : undefined
                 });
                 if (restoredMessages.length) {
@@ -654,7 +784,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: "user",
         content: content.trim(),
         timestamp: new Date(),
-        attachment: activeFileAttachment || (uploadedFiles.length > 0 ? { kind: "csv", name: uploadedFiles.length === 1 ? firstUploadedFile.filename : `${uploadedFiles.length} files` } : undefined),
+        attachment: activeFileAttachment || (uploadedFiles.length > 0 ? {
+          kind: "csv",
+          name: uploadedFiles.length === 1 ? firstUploadedFile.filename : `${uploadedFiles.length} files`,
+          sourceType: uploadedFiles.length === 1 ? firstUploadedFile.sourceType : 'Multiple',
+          accountName: uploadedFiles.length === 1 ? firstUploadedFile.accountName : undefined,
+          propertyName: uploadedFiles.length === 1 ? firstUploadedFile.propertyName : undefined,
+        } : undefined),
         template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
@@ -995,6 +1131,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     transcript: "",
     detectedLanguage: null,
     selectedDashboardId: null,
+    // We explicitly DO NOT clear integration modal states here
+    // to preserve them across navigation/reloads during picking.
   }),
 
   selectDashboard: async (dashboardId: string, projectId: string) => {

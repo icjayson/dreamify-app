@@ -7,6 +7,7 @@ export interface FilePreviewData {
   rows: string[][];
   total_rows: number;
   displayed_rows: number;
+  sourceType?: string;
 }
 
 export async function getFilePreview(

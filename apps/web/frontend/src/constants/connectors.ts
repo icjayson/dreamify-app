@@ -5,7 +5,7 @@ export interface ConnectorItem {
 }
 
 export const CONNECTORS: ConnectorItem[] = [
-  { name: "Google Sheets", icon: "/google-sheet.png" },
+  { name: "Google Sheets", icon: "/google-sheet.png", isActive: true },
   { name: "GA4", icon: "/GA4.png" },
   { name: "Meta", icon: "/meta.png" },
   { name: "Airtable", icon: "/airtable.png" },

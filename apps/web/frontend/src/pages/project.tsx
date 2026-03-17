@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Download, Pencil, SquareArrowOutUpRight } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
@@ -128,8 +128,25 @@ export default function ProjectPage() {
       const primaryAsset = assets[0];
       const assetName = primaryAsset?.filename || "dashboard";
 
+      let assetSourceType: string | undefined;
+      const assetType = primaryAsset?.asset_type || primaryAsset?.source_type || '';
+      const fName = primaryAsset?.filename || '';
+      if (assetType.toLowerCase().includes('ga4') || fName.toLowerCase().includes('google_analytics')) {
+        assetSourceType = 'GA4';
+      } else if (assetType.toLowerCase().includes('sheet') || fName.toLowerCase().includes('google_sheet') || fName.toLowerCase().includes('gsheet')) {
+        assetSourceType = 'Google Sheets';
+      }
+
       const restoredMessages = conversationNodesToMessages(conversation, {
         sourceFileName: assetName,
+        lastUserMessageAttachment: primaryAsset ? {
+          kind: 'csv',
+          name: primaryAsset.filename || 'data.csv',
+          mime: 'text/csv',
+          sourceType: assetSourceType,
+          accountName: primaryAsset.account_name,
+          propertyName: primaryAsset.property_name || primaryAsset.filename
+        } : undefined
       });
       if (restoredMessages.length) {
         setMessages(restoredMessages);
@@ -138,6 +155,15 @@ export default function ProjectPage() {
 
       const dashboardResponse = await conversationService.getDashboardData(conversationId, projId);
       if (dashboardResponse?.dashboard_data && primaryAsset) {
+        let sourceType: string | undefined;
+        const assetType = primaryAsset.asset_type || primaryAsset.source_type || '';
+        const fName = primaryAsset.filename || '';
+        if (assetType === 'integration_ga4' || assetType === 'GA4' || fName.startsWith('google_analytics')) {
+          sourceType = 'GA4';
+        } else if (assetType === 'integration_gsheets' || assetType === 'Google Sheets' || fName.startsWith('google_sheet')) {
+          sourceType = 'Google Sheets';
+        }
+
         const restoredFile = {
           fileID: primaryAsset.file_id || primaryAsset.asset_id || 'restored',
           filename: primaryAsset.filename || 'data.csv',
@@ -147,6 +173,7 @@ export default function ProjectPage() {
           projectId: projId,
           conversationId,
           processedData: dashboardResponse.dashboard_data,
+          sourceType: sourceType,
         };
         useChatStore.getState().clearFiles();
         useChatStore.getState().addFiles([restoredFile]);
@@ -167,16 +194,26 @@ export default function ProjectPage() {
     }
   }, [setMessages, setCurrentConversationId, toast, setHasShownInitialDashboard]);
 
+  const projectRef = useRef<string | null>(null);
+
   // Reset and hydrate when project changes
   useEffect(() => {
     if (!projectId) return;
+    
+    // Only reset if it's a DIFFERENT project
+    if (projectRef.current !== projectId) {
+      console.log('Project ID changed, resetting chat state:', projectId);
+      useChatStore.getState().resetChat();
+      useFileStore.getState().resetFileState();
+      useChatStore.getState().setCurrentProjectId(projectId);
+      projectRef.current = projectId;
+    }
+
     let cancelled = false;
     let hasConversation = false;
 
     const loadProject = async () => {
       setIsProjectLoading(true);
-      useChatStore.getState().resetChat();
-      useFileStore.getState().resetFileState();
       try {
         const response = await projectService.getProject(projectId);
         if (!cancelled) {
@@ -193,6 +230,7 @@ export default function ProjectPage() {
             const pendingAction = useChatStore.getState().pendingAction;
             if (pendingAction && pendingAction.projectId === projectId) {
               console.log('Found pending action, executing...', pendingAction);
+              hasConversation = true;  // Treat as active project to prevent cleanup
               useChatStore.getState().addFiles(pendingAction.files);
 
               // Execute processing
@@ -366,6 +404,14 @@ export default function ProjectPage() {
               <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
                 <ChatInterface
                   projectId={projectId ?? undefined}
+                  onProcessedDataChange={(data) => {
+                    // This is called when processing and dashboard generation is complete
+                    if (data) {
+                      setProcessedData(data);
+                      setHasShownInitialDashboard(true);
+                      setActiveTab('dashboard');
+                    }
+                  }}
                   onSwitchToDashboard={(dashboardId) => {
                     if (dashboardId && projectId) {
                       selectDashboard(dashboardId, projectId);

@@ -8,6 +8,9 @@ export interface Message {
     kind: "csv" | "file";
     name: string;
     mime?: string;
+    sourceType?: string;
+    accountName?: string;
+    propertyName?: string;
   };
   template?: {
     id: string;

@@ -145,7 +145,12 @@ class IntegrationService:
         logger.info(f"[Perf] _get_google_access_token (Clerk) took {time.time() - t0:.2f}s")
 
         if not access_token:
-            raise ValueError("Google OAuth token not found for user. Please connect your Google account.")
+            logger.warning(f"No Google OAuth token available for user {user_id} - user needs to reconnect Google account")
+            return {
+                "success": False,
+                "accounts": [],
+                "error": "Your Google account connection has expired or was not found. Please reconnect your Google account in your profile settings and ensure you grant Google Analytics access."
+            }
 
         try:
             from google.oauth2.credentials import Credentials
@@ -198,19 +203,31 @@ class IntegrationService:
             }
             
         except Exception as e:
-            logger.error(f"Failed to fetch Google Analytics properties: {e}")
-            raise Exception(f"Failed to fetch Google Analytics properties: {str(e)}")
+            error_str = str(e)
+            logger.error(f"Failed to fetch Google Analytics properties: {error_str}")
+            
+            # Detect insufficient scope errors from Google
+            if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in error_str or "insufficient authentication scopes" in error_str.lower():
+                return {
+                    "success": False,
+                    "accounts": [],
+                    "error": "Your Google account does not have Google Analytics access. Please reconnect your Google account and grant Analytics permissions when prompted."
+                }
+            
+            return {
+                "success": False,
+                "accounts": [],
+                "error": f"Failed to load Google Analytics properties. Please try again later."
+            }
 
-    def _save_analytics_asset(self, user_id: str, project_id: str, csv_content: bytes) -> Dict[str, Any]:
-        """Save the generated CSV content as a user asset in S3 and DynamoDB."""
+    def _save_integration_asset(self, user_id: str, project_id: str, file_content: bytes, filename: str, asset_type: str, extension: str) -> Dict[str, Any]:
+        """Save generic integration asset content as a user asset in S3 and DynamoDB."""
         asset_id = str(uuid.uuid4())
         file_id = str(uuid.uuid4())
-        extension = "csv"
-        filename = f"google_analytics_30d_{asset_id[:8]}.csv"
         
-        file_size = len(csv_content)
-        checksum = compute_sha256_checksum(csv_content)
-        content_type = "text/csv"
+        file_size = len(file_content)
+        checksum = compute_sha256_checksum(file_content)
+        content_type = "text/csv" if extension == "csv" else "application/octet-stream"
         
         bucket = config.aws.s3.USER_ASSETS_BUCKET
         s3_key = build_asset_key(
@@ -225,7 +242,7 @@ class IntegrationService:
         upload_bytes(
             bucket=bucket,
             key=s3_key,
-            data=csv_content,
+            data=file_content,
             content_type=content_type,
         )
         
@@ -235,7 +252,7 @@ class IntegrationService:
             project_id=project_id,
             s3_bucket=bucket,
             s3_key=s3_key,
-            asset_type="integration_ga",
+            asset_type=asset_type,
             size_bytes=file_size,
             checksum_sha256=checksum,
             version=config.aws.s3.USER_ASSETS_BUCKET_VERSION,
@@ -247,5 +264,75 @@ class IntegrationService:
         )
         
         return asset
+
+    def _save_analytics_asset(self, user_id: str, project_id: str, csv_content: bytes) -> Dict[str, Any]:
+        """Save the generated CSV content as a user asset in S3 and DynamoDB."""
+        asset_id = str(uuid.uuid4())
+        return self._save_integration_asset(
+            user_id=user_id,
+            project_id=project_id,
+            file_content=csv_content,
+            filename=f"google_analytics_30d_{asset_id[:8]}.csv",
+            asset_type="integration_ga4",
+            extension="csv"
+        )
+
+    async def fetch_google_sheet_data(self, user_id: str, file_id: str, project_id: str) -> Dict[str, Any]:
+        """Fetch Google Sheet data by exporting it to CSV and save it as an asset."""
+        access_token = await self._get_google_access_token(user_id)
+        if not access_token:
+            raise ValueError("Google OAuth token not found for user. Please connect your Google account.")
+
+        try:
+            from google.oauth2.credentials import Credentials
+            from googleapiclient.discovery import build
+            import io
+            import csv
+            
+            credentials = Credentials(token=access_token)
+            drive_service = build('drive', 'v3', credentials=credentials)
+            
+            # Get the file metadata to get the name
+            file_metadata = drive_service.files().get(fileId=file_id, fields='name').execute()
+            filename = file_metadata.get('name', 'google_sheet')
+            if not filename.endswith('.csv'):
+                filename += '.csv'
+            
+            # Export as CSV
+            request = drive_service.files().export_media(fileId=file_id, mimeType='text/csv')
+            csv_content = request.execute()
+            
+            if not csv_content:
+                raise Exception("Empty content returned from Google Drive")
+                
+            # Process rows/columns counting from CSV
+            csv_file = io.StringIO(csv_content.decode('utf-8'))
+            reader = csv.reader(csv_file)
+            try:
+                headers = next(reader, [])
+            except StopIteration:
+                headers = []
+                
+            row_count = sum(1 for _ in reader)
+                
+            asset_info = self._save_integration_asset(
+                user_id=user_id,
+                project_id=project_id,
+                file_content=csv_content,
+                filename=filename,
+                asset_type="integration_gsheets",
+                extension="csv"
+            )
+            
+            return {
+                "success": True,
+                "message": "Google Sheet data synced successfully",
+                "asset": asset_info,
+                "row_count": row_count,
+                "column_count": len(headers)
+            }
+        except Exception as e:
+            logger.error(f"Failed to fetch Google Sheet data: {e}")
+            raise Exception(f"Failed to fetch Google Sheet data: {str(e)}")
 
 integration_service = IntegrationService()

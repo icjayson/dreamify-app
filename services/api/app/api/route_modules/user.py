@@ -93,6 +93,7 @@ class FilePreviewResponse(BaseModel):
     rows: List[List[str]]
     total_rows: int
     displayed_rows: int
+    sourceType: Optional[str] = None
 
 
 def _map_project(item: dict) -> ProjectResponse:
@@ -507,13 +508,22 @@ async def preview_file_endpoint(
             
             filename = asset.get("filename", "file.csv")
             
+            # Map asset type to display name
+            asset_type = asset.get("type", "")
+            source_type = None
+            if asset_type == "integration_ga4":
+                source_type = "GA4"
+            elif asset_type == "integration_gsheets":
+                source_type = "Google Sheets"
+            
             return FilePreviewResponse(
                 success=True,
                 filename=filename,
                 columns=columns,
                 rows=data_rows,
                 total_rows=max(0, total_rows - 1),  # Exclude header
-                displayed_rows=len(data_rows)
+                displayed_rows=len(data_rows),
+                sourceType=source_type
             )
             
         except csv.Error as e:

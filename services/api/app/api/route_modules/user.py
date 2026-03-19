@@ -58,7 +58,7 @@ class AssetResponse(BaseModel):
     project_id: str
     filename: str
     extension: str
-    type: str
+    asset_type: str
     status: str
     s3_bucket: str
     s3_key: str
@@ -134,7 +134,7 @@ def _map_asset(item: dict, row_count: Optional[int] = None, column_count: Option
         project_id=item["project_id"],
         filename=item.get("filename", ""),
         extension=item.get("extension", ""),
-        type=item.get("type", ""),
+        asset_type=item.get("asset_type", ""),
         status=item.get("status", ""),
         s3_bucket=item.get("s3_bucket", ""),
         s3_key=item.get("s3_key", ""),
@@ -509,7 +509,7 @@ async def preview_file_endpoint(
             filename = asset.get("filename", "file.csv")
             
             # Map asset type to display name
-            asset_type = asset.get("type", "")
+            asset_type = asset.get("asset_type", "")
             source_type = None
             if asset_type == "integration_ga4":
                 source_type = "GA4"

@@ -49,7 +49,7 @@ class IntegrationService:
             logger.error(f"Failed to fetch Google OAuth token from Clerk for user {user_id}: {e}")
             return None
 
-    async def fetch_google_analytics_data(self, user_id: str, property_id: str, project_id: str, start_date: str = "30daysAgo", end_date: str = "today") -> Dict[str, Any]:
+    async def fetch_google_analytics_data(self, user_id: str, property_id: str, project_id: str, start_date: str = "30daysAgo", end_date: str = "today", account_name: str = "", property_name: str = "") -> Dict[str, Any]:
         """Fetch Google Analytics data and save it as an asset."""
         access_token = await self._get_google_access_token(user_id)
         if not access_token:
@@ -124,7 +124,7 @@ class IntegrationService:
             csv_content = output.getvalue().encode('utf-8')
             
             # Save the CSV as an asset using existing infrastructure
-            asset_info = self._save_analytics_asset(user_id, project_id, csv_content)
+            asset_info = self._save_analytics_asset(user_id, project_id, csv_content, account_name, property_name)
             
             return {
                 "success": True,
@@ -265,20 +265,20 @@ class IntegrationService:
         
         return asset
 
-    def _save_analytics_asset(self, user_id: str, project_id: str, csv_content: bytes) -> Dict[str, Any]:
+    def _save_analytics_asset(self, user_id: str, project_id: str, csv_content: bytes, account_name: str, property_name: str) -> Dict[str, Any]:
         """Save the generated CSV content as a user asset in S3 and DynamoDB."""
         asset_id = str(uuid.uuid4())
         return self._save_integration_asset(
             user_id=user_id,
             project_id=project_id,
             file_content=csv_content,
-            filename=f"google_analytics_30d_{asset_id[:8]}.csv",
+            filename=f"{account_name}/{property_name}.csv",
             asset_type="integration_ga4",
             extension="csv"
         )
 
     async def fetch_google_sheet_data(self, user_id: str, file_id: str, project_id: str) -> Dict[str, Any]:
-        """Fetch Google Sheet data by exporting it to CSV and save it as an asset."""
+        """Fetch Google Sheet data via the Sheets API and save it as a CSV asset."""
         access_token = await self._get_google_access_token(user_id)
         if not access_token:
             raise ValueError("Google OAuth token not found for user. Please connect your Google account.")
@@ -290,30 +290,56 @@ class IntegrationService:
             import csv
             
             credentials = Credentials(token=access_token)
-            drive_service = build('drive', 'v3', credentials=credentials)
             
-            # Get the file metadata to get the name
-            file_metadata = drive_service.files().get(fileId=file_id, fields='name').execute()
-            filename = file_metadata.get('name', 'google_sheet')
+            # Use Sheets API (works with spreadsheets.readonly scope)
+            # instead of Drive API (which requires drive or drive.file scope)
+            sheets_service = build('sheets', 'v4', credentials=credentials)
+            
+            # Get spreadsheet metadata (title) and all values from the first sheet
+            spreadsheet = sheets_service.spreadsheets().get(
+                spreadsheetId=file_id,
+                fields='properties.title,sheets.properties.title'
+            ).execute()
+            
+            filename = spreadsheet.get('properties', {}).get('title', 'google_sheet')
             if not filename.endswith('.csv'):
                 filename += '.csv'
             
-            # Export as CSV
-            request = drive_service.files().export_media(fileId=file_id, mimeType='text/csv')
-            csv_content = request.execute()
+            # Read data from all sheets
+            sheets = spreadsheet.get('sheets', [])
+            sheet_titles = [s['properties']['title'] for s in sheets] if sheets else ['Sheet1']
             
-            if not csv_content:
-                raise Exception("Empty content returned from Google Drive")
+            all_rows = []
+            headers = []
+            
+            for sheet_title in sheet_titles:
+                result = sheets_service.spreadsheets().values().get(
+                    spreadsheetId=file_id,
+                    range=sheet_title
+                ).execute()
                 
-            # Process rows/columns counting from CSV
-            csv_file = io.StringIO(csv_content.decode('utf-8'))
-            reader = csv.reader(csv_file)
-            try:
-                headers = next(reader, [])
-            except StopIteration:
-                headers = []
+                values = result.get('values', [])
+                if not values:
+                    continue
                 
-            row_count = sum(1 for _ in reader)
+                if not headers:
+                    # Use the first sheet's header row as the CSV header
+                    headers = values[0]
+                    all_rows.append(values[0])
+                
+                # Add data rows (skip header row of each sheet)
+                all_rows.extend(values[1:])
+            
+            if not all_rows:
+                raise Exception("The Google Sheet is empty")
+            
+            # Convert to CSV bytes
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerows(all_rows)
+            csv_content = output.getvalue().encode('utf-8')
+            
+            row_count = len(all_rows) - 1  # exclude header row
                 
             asset_info = self._save_integration_asset(
                 user_id=user_id,

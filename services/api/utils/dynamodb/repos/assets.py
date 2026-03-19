@@ -42,7 +42,7 @@ def create_asset(
         "project_id": project_id,
         "s3_bucket": s3_bucket,
         "s3_key": s3_key,
-        "type": asset_type,
+        "asset_type": asset_type,
         "filename": original_filename or "",
         "extension": extension or "",
         "size_bytes": size_bytes,

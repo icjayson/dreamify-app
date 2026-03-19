@@ -18,6 +18,8 @@ class GoogleAnalyticsSyncRequest(BaseModel):
     project_id: Optional[str] = None
     start_date: str = "30daysAgo"
     end_date: str = "today"
+    account_name: str = ""
+    property_name: str = ""
 
 
 class GoogleAnalyticsSyncResponse(BaseModel):
@@ -104,7 +106,9 @@ async def sync_google_analytics_data(
             property_id=request.property_id,
             project_id=project["project_id"],
             start_date=request.start_date,
-            end_date=request.end_date
+            end_date=request.end_date,
+            account_name=request.account_name,
+            property_name=request.property_name
         )
         
         # Map the created asset to the standard AssetResponse

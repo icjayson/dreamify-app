@@ -164,7 +164,7 @@ interface ChatState {
   setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
   setCurrentProjectId: (id: string | null) => void;
   setPendingAction: (action: PendingAction | null) => void;
-  
+
   // Integration setters
   setGoogleSheetsModalOpen: (open: boolean) => void;
   setGA4ModalOpen: (open: boolean) => void;
@@ -294,7 +294,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const { integrationService } = await import('@/services/integrationService');
       const response = await integrationService.syncGoogleSheetData(googleSheetsFileId, projectId);
-      
+
       if (response.success && response.asset) {
         const newFile = {
           fileID: response.asset.asset_id,
@@ -309,7 +309,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           rowCount: response.asset.row_count,
           columnCount: response.asset.column_count,
         };
-        
+
         addFiles([newFile]);
         setGoogleSheetsFileId(null);
         setGoogleSheetsFileName(null);
@@ -331,7 +331,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         propertyId,
         projectId,
         startDate || '30daysAgo',
-        endDate || 'today'
+        endDate || 'today',
+        accountName || 'GA4',
+        propertyName || 'GA4',
       );
 
       if (response.success && response.asset) {
@@ -346,7 +348,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           accountName: accountName || (response.asset as any).accountName || 'GA4',
           propertyName: propertyName || (response.asset as any).propertyName || response.asset.filename,
         };
-        
         addFiles([newFile]);
         setGA4ModalOpen(false);
       } else {
@@ -399,11 +400,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Text-only message path: allow theme change after initial dashboard shown, only if currently light
     // @mentioned files should use Q&A path (they're already in conversation)
     const hasUploadedFiles = uploadedFiles.some(f => f.status === 'uploaded' && !f.isFromMention);
-    
+
     // Clear uploaded files immediately so they disappear from the input chips area 
     // once the message start process is initiated.
     get().clearFiles();
-    
+
     const isTextOnly = !hasUploadedFiles;
     const detectedTheme = detectThemeChange(content);
     if (isTextOnly && hasShownInitialDashboard && dashboardTheme === 'light' && detectedTheme) {
@@ -532,6 +533,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   s3_key: assetData.s3_key,
                   extension: assetData.extension,
                   filename: assetData.filename,
+                  sourceType: assetData?.asset_type || '',
                 }
               });
             }
@@ -553,6 +555,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   asset_id: mentionedId,
                   filename: mentionedFile.filename,
                   kind: mentionedFile.ext === 'csv' ? 'csv' : 'file',
+                  sourceType: mentionedFile?.sourceType || '',
                 }
               });
             }
@@ -657,7 +660,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   if (firstFile) {
                     updateFile(firstFile.fileID, { status: 'processed', processedData: finalResult.data.dashboard_data });
                   }
-                  
+
                   // Signal completion to UI for automatic rendering
                   if (onProcessedDataChange) {
                     onProcessedDataChange(finalResult.data.dashboard_data);
@@ -829,6 +832,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 s3_key: assetData.s3_key,
                 extension: assetData.extension,
                 filename: assetData.filename,
+                sourceType: assetData?.asset_type || '',
               }
             });
           }
@@ -849,6 +853,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 asset_id: mentionedId,
                 filename: mentionedFile.filename,
                 kind: mentionedFile.ext === 'csv' ? 'csv' : 'file',
+                sourceType: mentionedFile?.sourceType || '',
               }
             });
           }

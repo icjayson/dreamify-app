@@ -129,7 +129,7 @@ export default function ProjectPage() {
       const assetName = primaryAsset?.filename || "dashboard";
 
       let assetSourceType: string | undefined;
-      const assetType = primaryAsset?.asset_type || primaryAsset?.source_type || '';
+      const assetType = primaryAsset?.sourceType || '';
       const fName = primaryAsset?.filename || '';
       if (assetType.toLowerCase().includes('ga4') || fName.toLowerCase().includes('google_analytics')) {
         assetSourceType = 'GA4';
@@ -156,7 +156,7 @@ export default function ProjectPage() {
       const dashboardResponse = await conversationService.getDashboardData(conversationId, projId);
       if (dashboardResponse?.dashboard_data && primaryAsset) {
         let sourceType: string | undefined;
-        const assetType = primaryAsset.asset_type || primaryAsset.source_type || '';
+        const assetType = primaryAsset.sourceType || '';
         const fName = primaryAsset.filename || '';
         if (assetType === 'integration_ga4' || assetType === 'GA4' || fName.startsWith('google_analytics')) {
           sourceType = 'GA4';
@@ -199,7 +199,7 @@ export default function ProjectPage() {
   // Reset and hydrate when project changes
   useEffect(() => {
     if (!projectId) return;
-    
+
     // Only reset if it's a DIFFERENT project
     if (projectRef.current !== projectId) {
       console.log('Project ID changed, resetting chat state:', projectId);

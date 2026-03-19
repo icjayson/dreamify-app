@@ -149,9 +149,9 @@ const fetchProjectAssets = async (projectId: string): Promise<Array<{
         .filter(file => file.asset?.project_id === projectId)
         .map(file => {
           let derivedSourceType: string | undefined;
-          if (file.filename.toLowerCase().includes('google_analytics') || file.filename.toLowerCase().includes('ga4')) {
+          if (file.asset?.asset_type.toLowerCase().includes('integration_ga4') || file.asset?.asset_type.toLowerCase().includes('ga4')) {
             derivedSourceType = 'GA4';
-          } else if (file.filename.toLowerCase().includes('google_sheet') || file.filename.toLowerCase().includes('gsheet')) {
+          } else if (file.asset?.asset_type.toLowerCase().includes('integration_gsheets') || file.asset?.asset_type.toLowerCase().includes('google sheets')) {
             derivedSourceType = 'Google Sheets';
           }
 
@@ -309,6 +309,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     }
   }, [projectId]);
 
+  // Auto-refresh project assets when uploadedFiles changes (e.g. after GA4/Sheets sync)
+  useEffect(() => {
+    if (projectId && stagedFiles.length > 0) {
+      fetchProjectAssets(projectId).then(setProjectAssets);
+    }
+  }, [stagedFiles.length, projectId]);
+
   // Connectors array for data source dropdown
   // Shared connectors list imported above
 
@@ -404,9 +411,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       let activeFileAttachment: any = undefined;
       if (activeFiles.length > 0) {
         let displayName = activeFiles[0].filename;
-        if (activeFiles.length === 1 && activeFiles[0].sourceType && activeFiles[0].sourceType.includes('GA4')) {
-          displayName = `${activeFiles[0].sourceType} Data`;
-        } else if (activeFiles.length > 1) {
+        if (activeFiles.length > 1) {
           displayName = `${activeFiles.length} files`;
         }
         activeFileAttachment = {
@@ -481,11 +486,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       // isFromMention: true indicates this file was selected from @mention dropdown (already exists in conversation)
       // Derive sourceType from asset_type or filename pattern
       let sourceType: string | undefined;
-      const assetType = assetData.type;
+      const assetType = assetData?.asset_type || '';
       if (assetType === 'integration_ga4' || assetType === 'GA4') sourceType = 'GA4';
       else if (assetType === 'integration_gsheets' || assetType === 'Google Sheets') sourceType = 'Google Sheets';
-      else if (assetData.filename.startsWith('google_analytics')) sourceType = 'GA4';
-      else if (assetData.filename.startsWith('google_sheet')) sourceType = 'Google Sheets';
 
       const newFile = {
         fileID: assetData.asset_id,
@@ -521,7 +524,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       }
 
       addFiles([newFile]);
-
       // Track this asset as @mentioned for selective processing
       setMentionedAssetIds(prev =>
         prev.includes(assetData.asset_id) ? prev : [...prev, assetData.asset_id]
@@ -641,7 +643,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
       } catch (_err) { }
 
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
-      fetchProjectAssets(projectId).then(setProjectAssets);
+
     } catch (_e) {
       removeFile('pending');
       addFiles([{
@@ -895,15 +897,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                           let secondaryText = "";
                           if (isMultiple) {
                             secondaryText = message.attachment.name;
-                          } else if (isGA4) {
-                            secondaryText = [message.attachment.accountName, message.attachment.propertyName].filter(Boolean).join(' / ');
-                          } else if (isSheets) {
-                            secondaryText = (message.attachment.propertyName || message.attachment.name).replace(/\.[^/.]+$/, "");
                           } else {
-                            // Generic file: remove extension
-                            secondaryText = message.attachment.name.replace(/\.[^/.]+$/, "");
+                            secondaryText = (message.attachment.name).replace(/\.[^/.]+$/, "");
                           }
-
                           return (
                             <div
                               className="inline-flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md text-white/90 min-w-[240px] max-w-full group transition-all hover:bg-white/10"
@@ -1090,7 +1086,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                   <FilePreviewChip
                     key={file.fileID || i}
                     file={file}
-                    onRemove={() => removeFile(file.fileID)}
+                    onRemove={() => removeUploadedFile(file.fileID)}
                   />
                 ))}
               </div>

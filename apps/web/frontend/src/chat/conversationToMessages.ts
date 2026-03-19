@@ -99,21 +99,16 @@ export function conversationNodesToMessages(
           currentAssetName;
 
         // Derive sourceType from asset_type stored in the conversation node
-        const assetType: string = assetContent?.data?.asset_type || assetContent?.data?.source_type || '';
+        const assetType: string = assetContent?.data?.sourceType || '';
         const fileName: string = firstName || '';
         let sourceType: string | undefined;
         const lowerAssetType = assetType.toLowerCase();
-        const lowerFileName = fileName.toLowerCase();
 
         if (assetContents.length > 1) {
           sourceType = 'Multiple';
         } else if (lowerAssetType.includes('ga4') || lowerAssetType.includes('google_analytics') || lowerAssetType.includes('google analytics')) {
           sourceType = 'GA4';
         } else if (lowerAssetType.includes('sheet') || lowerAssetType.includes('google sheets')) {
-          sourceType = 'Google Sheets';
-        } else if (lowerFileName.includes('ga4') || lowerFileName.includes('google_analytics')) {
-          sourceType = 'GA4';
-        } else if (lowerFileName.includes('sheet') || lowerFileName.includes('google sheets')) {
           sourceType = 'Google Sheets';
         }
 

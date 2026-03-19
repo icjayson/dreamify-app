@@ -69,8 +69,8 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
             <span className="text-white/30 font-light mr-0.5">•</span>
           </>
         )}
-        <span 
-          className="text-gray-400 truncate max-w-[150px]" 
+        <span
+          className="text-gray-400 truncate max-w-[150px]"
           title={isGA4 ? `${file.accountName} / ${file.propertyName}` : file.filename}
         >
           {getContextText()}

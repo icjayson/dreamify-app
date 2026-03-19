@@ -23,6 +23,8 @@ export interface GA4SyncRequest {
   project_id?: string;
   start_date?: string;
   end_date?: string;
+  account_name?: string;
+  property_name?: string;
 }
 
 export interface GA4SyncResponse {
@@ -80,17 +82,21 @@ class IntegrationService {
   }
 
   async syncGoogleAnalyticsData(
-    propertyId: string, 
+    propertyId: string,
     projectId?: string,
-    startDate?: string, 
-    endDate?: string
+    startDate?: string,
+    endDate?: string,
+    accountName?: string,
+    propertyName?: string
   ): Promise<GA4SyncResponse> {
     try {
       const payload: GA4SyncRequest = {
         property_id: propertyId,
         ...(projectId && { project_id: projectId }),
         ...(startDate && { start_date: startDate }),
-        ...(endDate && { end_date: endDate })
+        ...(endDate && { end_date: endDate }),
+        ...(accountName && { account_name: accountName }),
+        ...(propertyName && { property_name: propertyName }),
       };
       const res = await api.post<GA4SyncResponse>(`${this.baseUrl}/google/sync`, payload);
       if (res.success && res.data) {

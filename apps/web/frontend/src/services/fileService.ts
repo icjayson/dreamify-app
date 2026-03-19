@@ -6,7 +6,6 @@ export interface AssetRecord {
   project_id: string;
   filename: string;
   extension: string;
-  type: string;
   status: string;
   s3_bucket: string;
   s3_key: string;
@@ -15,6 +14,7 @@ export interface AssetRecord {
   created_at?: string;
   row_count?: number;
   column_count?: number;
+  asset_type?: string;
 }
 
 export interface UploadResponse {

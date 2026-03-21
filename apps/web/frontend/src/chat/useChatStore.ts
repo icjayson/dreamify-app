@@ -177,7 +177,7 @@ interface ChatState {
   resetChat: () => void;
   processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }) => Promise<void>;
   stopGeneration: () => Promise<void>;
-  selectDashboard: (dashboardId: string, projectId: string) => Promise<void>;
+  selectDashboard: (dashboardId: string, projectId: string) => Promise<any>;
 
   // Sync actions
   syncGoogleSheets: (projectId?: string) => Promise<void>;
@@ -661,7 +661,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     updateFile(firstFile.fileID, { status: 'processed', processedData: finalResult.data.dashboard_data });
                   }
 
-                  // Signal completion to UI for automatic rendering
+                  // Signal completion to UI for automatic rendering (unconditional)
                   if (onProcessedDataChange) {
                     onProcessedDataChange(finalResult.data.dashboard_data);
                   }
@@ -958,6 +958,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 if (files.length > 0) {
                   updateFile(files[0].fileID, { processedData: finalResult.data.dashboard_data });
                 }
+                // Signal completion to UI for automatic rendering
+                if (onProcessedDataChange) {
+                  onProcessedDataChange(finalResult.data.dashboard_data);
+                }
               }
 
               const currentFiles = get().uploadedFiles;
@@ -1140,9 +1144,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // to preserve them across navigation/reloads during picking.
   }),
 
-  selectDashboard: async (dashboardId: string, projectId: string) => {
-    const { currentConversationId, updateFile, uploadedFiles } = get();
-    if (!currentConversationId) return;
+  selectDashboard: async (dashboardId: string, projectId: string): Promise<any> => {
+    const { currentConversationId, updateFile } = get();
+    if (!currentConversationId) return null;
 
     try {
       const { conversationService } = await import('@/services/conversationService');
@@ -1152,12 +1156,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         dashboardId
       );
 
-      if (response?.dashboard_data && uploadedFiles.length > 0) {
+      if (response?.dashboard_data) {
         set({ selectedDashboardId: dashboardId });
-        updateFile(uploadedFiles[0].fileID, { processedData: response.dashboard_data });
+        // Update file only if one exists in store
+        const files = get().uploadedFiles;
+        if (files.length > 0) {
+          updateFile(files[0].fileID, { processedData: response.dashboard_data });
+        }
+        return response.dashboard_data;
       }
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     }
+    return null;
   },
 }));

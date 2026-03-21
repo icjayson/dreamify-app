@@ -414,7 +414,11 @@ export default function ProjectPage() {
                   }}
                   onSwitchToDashboard={(dashboardId) => {
                     if (dashboardId && projectId) {
-                      selectDashboard(dashboardId, projectId);
+                      selectDashboard(dashboardId, projectId).then((data) => {
+                        if (data) {
+                          setProcessedData(data);
+                        }
+                      });
                     }
                     setActiveTab('dashboard');
                   }}

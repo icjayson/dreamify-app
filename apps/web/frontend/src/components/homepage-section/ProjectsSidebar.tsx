@@ -10,10 +10,11 @@ interface ProjectsSidebarProps {
   onOpenProject?: (id: string) => void;
   onRenameProject?: (id: string, newTitle: string) => void;
   onDeleteProject?: (id: string) => void;
+  className?: string;
 }
 
 
-const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewProject, recents, onOpenProject, onRenameProject, onDeleteProject }) => {
+const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewProject, recents, onOpenProject, onRenameProject, onDeleteProject, className }) => {
   const [sidebarShown, setSidebarShown] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -80,7 +81,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
         className={`absolute inset-0 bg-black/10 transition-opacity duration-300 ${sidebarShown ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
       />
-      <div className={`absolute left-0 top-0 h-full w-[280px] max-w-[80vw] bg-muted/80 border-r border-border p-4 flex flex-col transform transition-transform duration-300 ease-out ${sidebarShown ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`absolute left-0 top-0 h-full w-[280px] max-w-[80vw] ${className || 'bg-muted/80'} border-r border-border p-4 flex flex-col transform transition-transform duration-300 ease-out ${sidebarShown ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between mb-4">
           <div className="text-white/90 font-medium">My projects</div>
           <button onClick={onClose} className="text-white/70 hover:text-white text-sm" aria-label="Close projects">

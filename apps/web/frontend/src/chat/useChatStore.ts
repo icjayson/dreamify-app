@@ -115,6 +115,9 @@ interface ChatState {
   hasShownInitialDashboard: boolean;
   isInitialLoading: boolean;
 
+  // Layout state
+  isDashboardOpen: boolean;
+
   // Dashboard selection state
   selectedDashboardId: string | null;
 
@@ -159,6 +162,7 @@ interface ChatState {
   setIsThemeChanging: (changing: boolean) => void;
   setHasShownInitialDashboard: (flag: boolean) => void;
   setIsInitialLoading: (flag: boolean) => void;
+  setIsDashboardOpen: (open: boolean) => void;
   setSelectedDashboardId: (dashboardId: string | null) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
   setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
@@ -219,6 +223,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isThemeChanging: false,
   hasShownInitialDashboard: false,
   isInitialLoading: false,
+  isDashboardOpen: false,
   selectedDashboardId: null,
   originalFileBlob: null,
   originalFileName: null,
@@ -270,6 +275,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
   setHasShownInitialDashboard: (flag) => set({ hasShownInitialDashboard: flag }),
   setIsInitialLoading: (flag) => set({ isInitialLoading: flag }),
+  setIsDashboardOpen: (open) => set({ isDashboardOpen: open }),
   setSelectedDashboardId: (dashboardId) => set({ selectedDashboardId: dashboardId }),
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
@@ -654,7 +660,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
                 // Set the latest dashboard as selected and update processedData
                 if (dashboardId) {
-                  set({ selectedDashboardId: dashboardId });
+                  set({ selectedDashboardId: dashboardId, isDashboardOpen: true });
                   // Update processedData with the new dashboard data (first file for display)
                   const firstFile = get().uploadedFiles[0];
                   if (firstFile) {

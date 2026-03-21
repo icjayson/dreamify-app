@@ -652,7 +652,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder={isListening ? 'Listening...' : placeholders[placeholderIndex]}
-                  className="w-full bg-transparent border-none outline-none resize-none text-lg placeholder:text-muted-foreground/60"
+                  className="w-full bg-transparent border-none outline-none resize-none text-md placeholder:text-muted-foreground/60"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();

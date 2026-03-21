@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle, FileStack, AlertCircle } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy } from "lucide-react";
 import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -183,7 +183,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   // Template state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
 
   // @Mention state
   // @Mention / Context Picker state
@@ -233,6 +235,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     stopGeneration,
     setGoogleSheetsModalOpen,
     setGA4ModalOpen,
+    isDashboardOpen,
   } = useChatStore();
 
   const {
@@ -873,7 +876,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                     )}
                   </div>
 
-                  <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words ${bubbleBgClass}`}>
+                  <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words overflow-hidden ${bubbleBgClass}`}>
                     {message.attachment && (
                       <div className="mb-2">
                         {(() => {
@@ -902,7 +905,23 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                           }
                           return (
                             <div
-                              className="inline-flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md text-white/90 min-w-[240px] max-w-full group transition-all hover:bg-white/10"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
+                                if (matchedAsset) {
+                                  window.open(`/preview/${matchedAsset.id}`, '_blank');
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
+                                  if (matchedAsset) {
+                                    window.open(`/preview/${matchedAsset.id}`, '_blank');
+                                  }
+                                }
+                              }}
+                              className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-white/10 bg-white/5 backdrop-blur-md text-white/90 max-w-full group transition-all hover:bg-white/10 cursor-pointer"
                               title={message.attachment.name}
                             >
                               <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center p-2 ${logoBg}`}>
@@ -943,12 +962,22 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                       </div>
                     )}
                     {/* Render text content if present */}
-                    {message.content && !message.isError && (
-                      <div
-                        className="leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere]"
-                        dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
-                      />
-                    )}
+                    {message.content && !message.isError && (() => {
+                      const lineCount = message.content.split('\n').length;
+                      const isLong = lineCount > 10 || message.content.length > 600;
+                      const isExpanded = expandedMessageIds.has(message.id);
+                      return (
+                        <div className="relative">
+                          <div
+                            className={`leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere] transition-all duration-300 ${isLong && !isExpanded ? 'max-h-[15em] overflow-hidden' : ''}`}
+                            dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
+                          />
+                          {isLong && !isExpanded && (
+                            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/100 to-transparent pointer-events-none" />
+                          )}
+                        </div>
+                      );
+                    })()}
                     {message.isError && (
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2 text-red-500">
@@ -978,33 +1007,86 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                         aria-label="Open dashboard"
                         onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
-                        className={`group w-full max-w-full rounded-xl border border-white/20 bg-white/5 p-3 hover:bg-white/10 transition-colors cursor-pointer select-none flex items-center justify-between ${message.content ? 'mt-2' : ''}`}
+                        className={`group w-full max-w-full rounded-xl border border-white/10 bg-white/3 p-4 hover:bg-white/5 transition-colors cursor-pointer select-none flex items-center justify-between shadow-sm ${message.content ? 'mt-3' : ''}`}
                       >
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-white truncate" title={message.dashboardCard.dashboardTitle || "Dashboard"}>
-                            {message.dashboardCard.dashboardTitle || "Dashboard"}
+                        <div className="flex-1 min-w-0 flex items-center gap-4">
+                          <div className="p-2.5 bg-primary/10 rounded-xl">
+                            <BarChart3 className="w-5 h-5 text-primary" />
                           </div>
-                          <div className="text-xs text-white/70 mt-0.5 truncate">
-                            Source: {
-                              (() => {
-                                const source = message.dashboardCard.sourceFileName || '';
-                                if (source.toLowerCase().includes('google_analytics') || source.toLowerCase().includes('ga4')) {
-                                  return 'GA4 Data';
+                          <div className="flex-1 min-w-0">
+                            <div className="text-md font-medium text-white truncate" title={message.dashboardCard.dashboardTitle || "Dashboard"}>
+                              {message.dashboardCard.dashboardTitle || "Dashboard"}
+                            </div>
+                            <div className="text-sm text-white/50 mt-0.5 flex flex-wrap gap-x-2 truncate">
+                              <span className="truncate">
+                                Source: {
+                                  (() => {
+                                    const source = message.dashboardCard.sourceFileName || '';
+                                    if (source.toLowerCase().includes('google_analytics') || source.toLowerCase().includes('ga4')) {
+                                      return 'GA4 Data';
+                                    }
+                                    if (source.toLowerCase().includes('google_sheet') || source.toLowerCase().includes('gsheet')) {
+                                      return 'Google Sheets Data';
+                                    }
+                                    return source.replace(/\.[^/.]+$/, "");
+                                  })()
                                 }
-                                if (source.toLowerCase().includes('google_sheet') || source.toLowerCase().includes('gsheet')) {
-                                  return 'Google Sheets Data';
-                                }
-                                return source.replace(/\.[^/.]+$/, "");
-                              })()
-                            }
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-white/60 flex-shrink-0 ml-2 group-hover:translate-x-1 transition-transform duration-200" />
+                        {!isDashboardOpen && (
+                          <button className="ml-4 px-5 py-2 button-gradient text-white text-sm font-medium rounded-full transition-colors flex items-center gap-1.5 pointer-events-none">
+                            Open
+                          </button>
+                        )}
                       </div>
                     )}
-                    <span className="text-xs text-muted-foreground mt-1 block">
-                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {message.content && (() => {
+                          const lineCount = message.content.split('\n').length;
+                          const isLong = lineCount > 10 || message.content.length > 600;
+                          const isExpanded = expandedMessageIds.has(message.id);
+                          if (!isLong) return null;
+                          return (
+                            <button
+                              onClick={() => {
+                                setExpandedMessageIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(message.id)) {
+                                    next.delete(message.id);
+                                  } else {
+                                    next.add(message.id);
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="rounded-md text-white/40 hover:text-white transition-colors"
+                              title={isExpanded ? 'Collapse' : 'Expand'}
+                              type="button"
+                            >
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                          );
+                        })()}
+                        {message.content && !message.isError && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(message.content);
+                              toast({ title: "Copied", description: "Message copied to clipboard" });
+                            }}
+                            className="px-2 rounded-md text-white/40 hover:text-white transition-colors"
+                            title="Copy message"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1094,9 +1176,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
 
             {/* Textarea Row */}
             <div className="relative mb-3">
+              {/* Expand/Collapse button */}
+              {inputValue.length > 100 && (
+                <button
+                  onClick={() => setIsInputExpanded(!isInputExpanded)}
+                  className="absolute top-0 right-0 p-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all z-10"
+                  title={isInputExpanded ? 'Collapse input' : 'Expand input'}
+                  type="button"
+                >
+                  {isInputExpanded ? <ChevronsDownUp className="w-3.5 h-3.5" /> : <ChevronsUpDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
               <TextareaAutosize
                 minRows={2}
-                maxRows={6}
+                maxRows={isInputExpanded ? 20 : 6}
                 value={inputValue}
                 onChange={(e) => {
                   const value = e.target.value;
@@ -1137,7 +1230,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                   }
                 }}
                 placeholder={isListening ? 'Listening...' : "Use @ to select the data file to analyze"}
-                className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60"
+                className={`w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60 ${inputValue.length > 100 ? 'pr-6' : ''}`}
                 data-chat-input
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {

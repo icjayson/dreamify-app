@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Download, Pencil, SquareArrowOutUpRight } from "lucide-react";
+import { ArrowLeft, Download, Pencil, SquareArrowOutUpRight, X } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
@@ -14,6 +14,9 @@ import { conversationService } from "@/services/conversationService";
 import { conversationNodesToMessages } from "@/chat/conversationToMessages";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackProjectButton } from "@/components/ui/feedback-button";
+import { useProjects } from "@/hooks/useProjects";
+import ProjectsSidebar from "@/components/homepage-section/ProjectsSidebar";
+import { PanelRightClose } from "lucide-react";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -27,6 +30,15 @@ export default function ProjectPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const {
+    projects,
+    createNewProject,
+    renameProject,
+    deleteProject,
+    openProject
+  } = useProjects();
 
   useEffect(() => {
     document.title = projectTitle ? `${projectTitle}` : "Dreamify";
@@ -103,6 +115,8 @@ export default function ProjectPage() {
   const setHasShownInitialDashboard = useChatStore((s) => s.setHasShownInitialDashboard);
   const selectDashboard = useChatStore((s) => s.selectDashboard);
   const selectedDashboardId = useChatStore((s) => s.selectedDashboardId);
+  const isDashboardOpen = useChatStore((s) => s.isDashboardOpen);
+  const setIsDashboardOpen = useChatStore((s) => s.setIsDashboardOpen);
 
   const hydrateConversation = useCallback(async (projId: string, conversationId: string) => {
     try {
@@ -182,6 +196,7 @@ export default function ProjectPage() {
         }
         setProcessedData(dashboardResponse.dashboard_data);
         setHasShownInitialDashboard(true);
+        setIsDashboardOpen(true);
         setActiveTab('dashboard');
       }
     } catch (error) {
@@ -314,6 +329,13 @@ export default function ProjectPage() {
       <div className="px-4 py-2">
         <div className="flex items-center justify-between h-10">
           <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="button-outline h-8 w-8 rounded-md flex items-center justify-center text-white/70 hover:text-white"
+              aria-label="Toggle project sidebar"
+            >
+              <PanelRightClose className="w-4 h-4" />
+            </button>
             <button aria-label="Go back" onClick={() => navigate('/')} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
               <ArrowLeft className="w-4 h-4" />
               Back
@@ -369,9 +391,11 @@ export default function ProjectPage() {
           </div>
           <div className="flex items-center">
             <FeedbackProjectButton />
-            <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center"><span>Publish</span>
-              <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
-            </button>
+            {isDashboardOpen && (
+              <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center ml-2"><span>Publish</span>
+                <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -396,9 +420,8 @@ export default function ProjectPage() {
       </div>
 
       {/* Content */}
-      {/* chatinterface */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
-        <div className={`${activeTab === 'chat' ? 'block' : 'hidden'} lg:col-span-1 lg:block`}>
+      <div className={`grid grid-cols-1 ${shouldShowDashboard && isDashboardOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0`}>
+        <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300`}>
           <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
             <div>
               <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
@@ -409,6 +432,7 @@ export default function ProjectPage() {
                     if (data) {
                       setProcessedData(data);
                       setHasShownInitialDashboard(true);
+                      setIsDashboardOpen(true);
                       setActiveTab('dashboard');
                     }
                   }}
@@ -420,6 +444,7 @@ export default function ProjectPage() {
                         }
                       });
                     }
+                    setIsDashboardOpen(true);
                     setActiveTab('dashboard');
                   }}
                 />
@@ -428,9 +453,18 @@ export default function ProjectPage() {
           </div>
         </div>
 
-        {/* blank placeholder */}
-        <div className={`${activeTab === 'dashboard' ? 'block' : 'hidden'} lg:col-span-3 lg:block`}>
-          <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]">
+        {/* dashboard columns */}
+        <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative`}>
+          {shouldShowDashboard && isDashboardOpen && (
+            <button
+              onClick={() => { setIsDashboardOpen(false); setActiveTab('chat'); }}
+              className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/60 shadow-lg border border-white/10 hover:bg-black/90 text-white/80 hover:text-white transition-all lg:block hidden backdrop-blur-md group"
+              title="Close Dashboard"
+            >
+              <X className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            </button>
+          )}
+          <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative">
             {!shouldShowDashboard ? (
               <BlankState
                 subtexts={[
@@ -491,6 +525,32 @@ export default function ProjectPage() {
       </div>
       {/* Publish Modal */}
       {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} />}
+
+      {/* Projects Sidebar */}
+      <ProjectsSidebar
+        className="bg-muted/98 backdrop-blur-lg"
+        open={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onNewProject={() => {
+          setIsSidebarOpen(false);
+          createNewProject();
+        }}
+        recents={projects.map(p => ({ id: p.id, title: p.title || 'Untitled Project' }))}
+        onOpenProject={(id) => {
+          setIsSidebarOpen(false);
+          if (id === projectId) return;
+          openProject(id);
+        }}
+        onRenameProject={(id, title) => {
+          renameProject(id, title);
+        }}
+        onDeleteProject={(id) => {
+          deleteProject(id);
+          if (id === projectId) {
+            navigate('/');
+          }
+        }}
+      />
     </div>
   );
 }

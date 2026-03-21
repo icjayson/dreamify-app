@@ -922,7 +922,7 @@ const DashboardPreview = ({
     if (!isLayoutReady) return;
     const currentCols = cols[currentBreakpoint as keyof typeof cols] || 24;
     const scaledAll = { ...layouts };
-    
+
     scaledAll.lg = currentBreakpoint === 'lg' ? current : scaleLayoutForCols(current, currentCols, cols.lg);
     scaledAll.md = currentBreakpoint === 'md' ? current : scaleLayoutForCols(current, currentCols, cols.md);
     scaledAll.sm = currentBreakpoint === 'sm' ? current : scaleLayoutForCols(current, currentCols, cols.sm);

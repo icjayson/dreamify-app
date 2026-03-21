@@ -83,7 +83,7 @@ You MUST use tools BEFORE generating any JSON output. Follow this workflow:
 
 1. ALWAYS start by calling Python_REPL to load and inspect the CSV file
    - Use the file path provided in the user's message
-   - Load: df = pd.read_csv(file_path)
+   - Load: df = pd.read_csv(file_path) (for CSV); df = pd.read_excel(file_path) (for Excel/xlsx)
    - Inspect: df.head(), df.info(), df.columns.tolist()
    - Analyze data types, missing values, distributions
 

@@ -30,8 +30,9 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
   useEffect(() => {
     if (open) {
       setShouldRender(true);
-      const id = requestAnimationFrame(() => setSidebarShown(true));
-      return () => cancelAnimationFrame(id);
+      // Use setTimeout to allow DOM to render before adding the visible class
+      const timeoutId = setTimeout(() => setSidebarShown(true), 10);
+      return () => clearTimeout(timeoutId);
     } else {
       setSidebarShown(false);
       const timeout = setTimeout(() => setShouldRender(false), 300);

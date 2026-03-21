@@ -965,9 +965,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   updateFile(files[0].fileID, { processedData: finalResult.data.dashboard_data });
                 }
                 // Signal completion to UI for automatic rendering
+                // Signal completion to UI for automatic rendering
                 if (onProcessedDataChange) {
                   onProcessedDataChange(finalResult.data.dashboard_data);
                 }
+                
+                // Auto open the dashboard
+                set({ 
+                  isDashboardOpen: true,
+                  hasShownInitialDashboard: true 
+                });
               }
 
               const currentFiles = get().uploadedFiles;

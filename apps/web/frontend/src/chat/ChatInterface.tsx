@@ -572,6 +572,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
     fileInputRef.current?.click();
   };
 
+  const handlePaste = async (e: any) => {
+    const files = Array.from(e.clipboardData.files) as File[];
+    if (files.length > 0) {
+      e.preventDefault();
+      for (const file of files) {
+        await processFileUpload(file);
+      }
+    }
+  };
+
   const processFileUpload = async (file: File) => {
     const validationError = validateClientFile(file);
     if (validationError) {
@@ -1036,7 +1046,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                           </div>
                         </div>
                         {!isDashboardOpen && (
-                          <button className="ml-4 px-5 py-2 button-gradient text-white text-sm font-medium rounded-full transition-colors flex items-center gap-1.5 pointer-events-none">
+                          <button className="ml-4 px-5 py-2 button-gradient text-white text-sm font-medium rounded-full transition-all flex items-center gap-1.5 ">
                             Open
                           </button>
                         )}
@@ -1232,6 +1242,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                 placeholder={isListening ? 'Listening...' : "Use @ to select the data file to analyze"}
                 className={`w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60 ${inputValue.length > 100 ? 'pr-6' : ''}`}
                 data-chat-input
+                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();

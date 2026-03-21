@@ -336,6 +336,16 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     setInputValue('');
   };
 
+  const handlePaste = async (e: any) => {
+    const files = Array.from(e.clipboardData.files) as File[];
+    if (files.length > 0) {
+      e.preventDefault();
+      for (const file of files) {
+        await processFileUpload(file);
+      }
+    }
+  };
+
   const processFileUpload = async (file: File) => {
     if (!isSignedIn) {
       toast({
@@ -659,6 +669,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                       handleChatSubmit();
                     }
                   }}
+                  onPaste={handlePaste}
                   autoFocus
                 />
               </div>

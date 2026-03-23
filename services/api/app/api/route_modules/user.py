@@ -1,16 +1,21 @@
 """
 User-scoped project and asset APIs.
 """
+import logging
+import os
 import uuid
-import csv
 import io
-from typing import Dict, List, Optional
-
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Request
-from pydantic import BaseModel
+import csv
 import pandas as pd
+from datetime import datetime
+from typing import Dict, List, Optional, Any
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Request, status
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_user
+from app.core.analytics import CSVProcessor
 from app.utils.file_handler import FileHandler
 from utils.config import config
 from utils.logger import logger
@@ -90,10 +95,10 @@ class FilePreviewResponse(BaseModel):
     success: bool
     filename: str
     columns: List[str]
-    rows: List[List[str]]
+    rows: List[List[Any]]
     total_rows: int
     displayed_rows: int
-    sourceType: Optional[str] = None
+    source_type: Optional[str] = None
 
 
 def _map_project(item: dict) -> ProjectResponse:
@@ -445,6 +450,8 @@ def _get_user_from_token(request: Request, token: Optional[str] = None) -> str:
                 raise
             raise HTTPException(status_code=401, detail="Authentication required")
 
+# Initialize processors
+csv_processor = CSVProcessor()
 
 @router.get("/files/preview/{asset_id}", response_model=FilePreviewResponse)
 async def preview_file_endpoint(
@@ -452,62 +459,56 @@ async def preview_file_endpoint(
     request: Request,
     token: Optional[str] = Query(None, description="Authentication token"),
 ):
-    """Preview CSV file data as JSON."""
+    """
+    Generate a data preview for a specific asset.
+    Supports smart encoding detection and various file types (CSV, Excel, JSON).
+    """
     try:
-        # Authenticate user
+        # Get user from token or header
         user_id = _get_user_from_token(request, token)
         
-        # Get asset
+        # Get asset metadata
         asset = assets_repo.get_asset(user_id, asset_id)
         if not asset:
+            logger.warning(f"Preview requested for non-existent asset: {asset_id} for user {user_id}")
             raise HTTPException(status_code=404, detail="Asset not found")
-        
-        # Check if file is CSV
-        extension = asset.get("extension", "").lower()
-        if extension != "csv":
-            raise HTTPException(status_code=400, detail="Preview only supported for CSV files")
-        
-        # Download file from S3
+            
+        # Download file data
         try:
             file_data = download_bytes(asset["s3_bucket"], asset["s3_key"])
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="File not found in storage")
-        
-        # Parse CSV
+        except Exception as e:
+            logger.error(f"Failed to download asset {asset_id} from S3: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve file from storage: {str(e)}")
+            
+        # Use CSVProcessor for robust reading
         try:
-            # Try different encodings
-            encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
-            content_str = None
-            for encoding in encodings:
-                try:
-                    content_str = file_data.decode(encoding)
-                    break
-                except UnicodeDecodeError:
-                    continue
+            filename = asset.get("filename", "unknown_file")
+            # _smart_read_file handles encoding, separators, and multiple file types
+            df = csv_processor._smart_read_file(file_data, filename)
             
-            if content_str is None:
-                raise HTTPException(status_code=500, detail="Could not decode file with any encoding")
+            if df.empty:
+                return FilePreviewResponse(
+                    success=True,
+                    filename=filename,
+                    columns=[],
+                    rows=[],
+                    total_rows=0,
+                    displayed_rows=0
+                )
             
-            # Parse CSV with proper handling of quoted fields
-            csv_reader = csv.reader(io.StringIO(content_str))
+            # Prepare preview (limit to first 1000 rows for performance)
+            total_rows = len(df)
+            df_preview = df.head(1000)
+            
+            # Explicitly convert all values to basic types for JSON serialization
+            from app.core.analytics import convert_numpy_types
+            columns = [str(col) for col in df_preview.columns.tolist()]
+            
+            # Efficiently convert rows to list of lists
             rows = []
-            total_rows = 0
-            max_display_rows = 1000
-            
-            for row in csv_reader:
-                total_rows += 1
-                if total_rows <= max_display_rows:
-                    rows.append(row)
-            
-            if len(rows) == 0:
-                raise HTTPException(status_code=400, detail="CSV file is empty")
-            
-            # First row is headers
-            columns = rows[0] if rows else []
-            data_rows = rows[1:] if len(rows) > 1 else []
-            
-            filename = asset.get("filename", "file.csv")
-            
+            for row in df_preview.values.tolist():
+                rows.append([convert_numpy_types(val) for val in row])
+                
             # Map asset type to display name
             asset_type = asset.get("asset_type", "")
             source_type = None
@@ -515,25 +516,45 @@ async def preview_file_endpoint(
                 source_type = "GA4"
             elif asset_type == "integration_gsheets":
                 source_type = "Google Sheets"
-            
+            elif asset_type == "raw":
+                source_type = "File Upload"
+
             return FilePreviewResponse(
                 success=True,
                 filename=filename,
                 columns=columns,
-                rows=data_rows,
-                total_rows=max(0, total_rows - 1),  # Exclude header
-                displayed_rows=len(data_rows),
-                sourceType=source_type
+                rows=rows,
+                total_rows=total_rows,
+                displayed_rows=len(rows),
+                source_type=source_type
             )
             
-        except csv.Error as e:
-            raise HTTPException(status_code=500, detail=f"CSV parsing error: {str(e)}")
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+            logger.error(f"Failed to process file preview for {asset_id}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to parse file: {str(e)}")
             
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.error(f"Unexpected error in preview_file_endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/files/{asset_id}")
+async def compatibility_preview_redirect(
+    asset_id: str,
+    request: Request,
+    token: Optional[str] = Query(None),
+):
+    """
+    Compatibility route for malformed preview requests (missing /preview/ segment).
+    Redirects to the correct preview endpoint.
+    """
+    query_params = str(request.query_params)
+    redirect_url = f"/api/v1/files/preview/{asset_id}"
+    if query_params:
+        redirect_url += f"?{query_params}"
+    
+    return RedirectResponse(url=redirect_url)
 
 

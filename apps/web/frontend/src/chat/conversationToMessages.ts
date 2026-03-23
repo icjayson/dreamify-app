@@ -154,5 +154,58 @@ export function conversationNodesToMessages(
       return normalized;
     });
 
-  return restoredMessages;
+  // Post-processing: find user messages whose assistant responses were filtered out
+  // (e.g., chart edit responses with no text/dashboard content) and synthesize responses.
+  // Walk through the original nodes to detect (user → assistant) pairs where the assistant was dropped.
+  const restoredNodeIds = new Set(restoredMessages.map(m => m.id));
+  const finalMessages: Message[] = [];
+
+  for (let i = 0; i < restoredMessages.length; i++) {
+    const msg = restoredMessages[i];
+    finalMessages.push(msg);
+
+    // After each user message, check if there should be an assistant response
+    if (msg.role === 'user') {
+      const nextRestored = restoredMessages[i + 1];
+      // If next restored message is already an assistant, skip — response exists
+      if (nextRestored?.role === 'assistant') continue;
+
+      // Find this user's node in the original nodes array
+      const userNodeIndex = nodes.findIndex((n: any) => n.node_id === msg.id);
+      if (userNodeIndex < 0) continue;
+
+      // Check if there's an assistant node after this user node in the original array
+      const subsequentAssistant = nodes.slice(userNodeIndex + 1).find((n: any) => n.role === 'assistant');
+      if (!subsequentAssistant) continue;
+
+      // The assistant node exists but was filtered out — synthesize a response
+      const chartMentions = msg.chartMentions;
+      let responseContent = 'Your dashboard has been updated with the requested changes.';
+      if (chartMentions?.length) {
+        const chartNames = chartMentions.map(c => c.title).filter(Boolean).join(', ');
+        responseContent = `Done! I've updated ${chartNames || 'the chart'}. The dashboard has been refreshed with your changes.`;
+      }
+
+      // Find the relevant dashboard
+      const dashboardContentInAssistant = subsequentAssistant?.contents?.find?.((c: any) => c?.type === 'dashboard');
+      const dashboardId = dashboardContentInAssistant?.data?.dashboard_id || '';
+      const dashboardMeta = dashboards.find((d: any) => d.dashboard_id === dashboardId) || dashboards[dashboards.length - 1];
+
+      finalMessages.push({
+        id: subsequentAssistant.node_id || crypto.randomUUID(),
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date(subsequentAssistant.created_at || Date.now()),
+        ...(dashboardMeta ? {
+          dashboardCard: {
+            sourceFileName: currentAssetName,
+            dashboardId: dashboardMeta.dashboard_id || '',
+            dashboardTitle: dashboardMeta.title || undefined,
+          }
+        } : {}),
+      });
+    }
+  }
+
+  return finalMessages;
 }

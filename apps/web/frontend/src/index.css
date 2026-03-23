@@ -18,6 +18,10 @@
 /* Vibe Analytics Studio Design System - Motion-First Analytics Platform */
 
 @layer base {
+  html {
+    font-size: 14px;
+  }
+
   :root {
     /* Primary Brand Colors - Deep tech vibes */
     --background: 0 0% 7%;

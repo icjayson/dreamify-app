@@ -118,6 +118,12 @@ interface ChatState {
   // Layout state
   isDashboardOpen: boolean;
 
+  // Dashboard update feedback state
+  isUpdatingDashboard: boolean;
+  previousDashboardData: any | null;
+  changedComponentIds: Set<string>;
+  dashboardThumbnails: Record<string, string>;
+
   // Dashboard selection state
   selectedDashboardId: string | null;
 
@@ -163,6 +169,10 @@ interface ChatState {
   setHasShownInitialDashboard: (flag: boolean) => void;
   setIsInitialLoading: (flag: boolean) => void;
   setIsDashboardOpen: (open: boolean) => void;
+  setIsUpdatingDashboard: (updating: boolean) => void;
+  setPreviousDashboardData: (data: any | null) => void;
+  setChangedComponentIds: (ids: Set<string>) => void;
+  setDashboardThumbnail: (dashboardId: string, thumbnailUrl: string) => void;
   setSelectedDashboardId: (dashboardId: string | null) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
   setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
@@ -179,7 +189,7 @@ interface ChatState {
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: () => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }) => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>) => Promise<void>;
   stopGeneration: () => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<any>;
 
@@ -224,6 +234,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hasShownInitialDashboard: false,
   isInitialLoading: false,
   isDashboardOpen: false,
+  isUpdatingDashboard: false,
+  previousDashboardData: null,
+  changedComponentIds: new Set<string>(),
+  dashboardThumbnails: {},
   selectedDashboardId: null,
   originalFileBlob: null,
   originalFileName: null,
@@ -276,6 +290,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setHasShownInitialDashboard: (flag) => set({ hasShownInitialDashboard: flag }),
   setIsInitialLoading: (flag) => set({ isInitialLoading: flag }),
   setIsDashboardOpen: (open) => set({ isDashboardOpen: open }),
+  setIsUpdatingDashboard: (updating) => set({ isUpdatingDashboard: updating }),
+  setPreviousDashboardData: (data) => set({ previousDashboardData: data }),
+  setChangedComponentIds: (ids) => set({ changedComponentIds: ids }),
+  setDashboardThumbnail: (dashboardId, thumbnailUrl) => set((state) => ({
+    dashboardThumbnails: { ...state.dashboardThumbnails, [dashboardId]: thumbnailUrl }
+  })),
   setSelectedDashboardId: (dashboardId) => set({ selectedDashboardId: dashboardId }),
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
@@ -392,7 +412,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }) => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>) => {
     const state = get();
     const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
 
@@ -495,6 +515,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             accountName: uploadedFiles.length === 1 ? uploadedFiles[0].accountName : undefined,
             propertyName: uploadedFiles.length === 1 ? uploadedFiles[0].propertyName : undefined,
           } : undefined),
+          chartMentions: mentionedCharts && mentionedCharts.length > 0
+            ? mentionedCharts.map(c => ({ title: c.title, type: c.type, componentId: c.componentId || c.id }))
+            : undefined,
           template: get().selectedTemplate || undefined,
         };
         addMessage(userMessage);
@@ -502,6 +525,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       setIsTyping(true);
       setIsProcessing(true);
+
+      // If dashboard is already open, mark as updating for edit feedback loop
+      if (get().isDashboardOpen) {
+        set({ isUpdatingDashboard: true });
+      }
 
       // Update file status to processing to show loading indicator in chip
       // Skip files already 'processed' from previous conversation (restored on reload)
@@ -579,6 +607,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
         }
 
+        // Add chart mention entries
+        if (mentionedCharts && mentionedCharts.length > 0) {
+          for (const chart of mentionedCharts) {
+            assetContentsList.push({
+              type: 'chart_mention',
+              data: {
+                component_id: chart.componentId,
+                chart_id: chart.id,
+                title: chart.title,
+                chart_type: chart.type,
+                config: chart.config,
+              }
+            });
+          }
+        }
+
         if (assetContentsList.length > 0) {
           assetContents = assetContentsList;
         }
@@ -586,10 +630,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Exclude restored files (already processed from previous conversation)
         const allFileIds = uploadedFiles.filter(f => !(f.status === 'processed' && f.conversationId)).map(f => f.fileID).filter(Boolean);
         const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
-          ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds }
+          ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) }
           : allFileIds.length > 0
-            ? { asset_selection: 'explicit' as const, selected_asset_ids: allFileIds }
-            : { asset_selection: 'all' as const };
+            ? { asset_selection: 'explicit' as const, selected_asset_ids: allFileIds, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) }
+            : { asset_selection: 'all' as const, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) };
 
         // Call processing service with file attachment if available
         const startResult = await processingService.runProcessing(
@@ -686,6 +730,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   } : undefined
                 });
                 if (restoredMessages.length) {
+                  const lastRestored = restoredMessages[restoredMessages.length - 1];
+
+                  // Case 1: Last message is assistant with dashboardCard but empty content
+                  if (lastRestored?.role === 'assistant' && lastRestored.dashboardCard && !lastRestored.content) {
+                    const prevUserMsg = [...restoredMessages].reverse().find(m => m.role === 'user' && m.chartMentions?.length);
+                    if (prevUserMsg?.chartMentions?.length) {
+                      const chartNames = prevUserMsg.chartMentions.map(c => c.title).filter(Boolean).join(', ');
+                      lastRestored.content = `Done! I've updated ${chartNames || 'the chart'}. The dashboard has been refreshed with your changes.`;
+                    } else {
+                      lastRestored.content = 'Your dashboard has been updated with the requested changes.';
+                    }
+                  }
+
+                  // Case 2: Last message is a user message — backend's assistant node was filtered out
+                  // (no text, no dashboard content). Synthesize a response.
+                  if (lastRestored?.role === 'user') {
+                    const chartMentions = lastRestored.chartMentions;
+                    let responseContent = 'Your dashboard has been updated with the requested changes.';
+                    if (chartMentions?.length) {
+                      const chartNames = chartMentions.map(c => c.title).filter(Boolean).join(', ');
+                      responseContent = `Done! I've updated ${chartNames || 'the chart'}. The dashboard has been refreshed with your changes.`;
+                    }
+                    restoredMessages.push({
+                      id: (Date.now() + 1).toString(),
+                      role: 'assistant',
+                      content: responseContent,
+                      dashboardCard: {
+                        sourceFileName: get().uploadedFiles[0]?.filename || 'dashboard',
+                        dashboardId: dashboardId,
+                        dashboardTitle: latestDashboard?.title || undefined,
+                      },
+                      timestamp: new Date(),
+                    });
+                  }
+
                   get().setMessages(restoredMessages);
                 }
               } catch (error) {
@@ -779,6 +858,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } finally {
         setIsTyping(false);
         setIsProcessing(false);
+        set({ isUpdatingDashboard: false });
       }
       return;
     }
@@ -800,6 +880,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           accountName: uploadedFiles.length === 1 ? firstUploadedFile.accountName : undefined,
           propertyName: uploadedFiles.length === 1 ? firstUploadedFile.propertyName : undefined,
         } : undefined),
+        chartMentions: mentionedCharts && mentionedCharts.length > 0
+          ? mentionedCharts.map(c => ({ title: c.title, type: c.type, componentId: c.componentId || c.id }))
+          : undefined,
         template: get().selectedTemplate || undefined,
       };
       addMessage(userMessage);
@@ -877,13 +960,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
       }
 
+      // Add chart mention entries (second code path)
+      if (mentionedCharts && mentionedCharts.length > 0) {
+        for (const chart of mentionedCharts) {
+          assetContentsList.push({
+            type: 'chart_mention',
+            data: {
+              component_id: chart.componentId,
+              chart_id: chart.id,
+              title: chart.title,
+              chart_type: chart.type,
+              config: chart.config,
+            }
+          });
+        }
+      }
+
       const assetContents = assetContentsList.length > 0 ? assetContentsList : undefined;
       const allFileIdsForMeta = get().uploadedFiles.map(f => f.fileID).filter(Boolean);
       const userNodeMetadata = mentionedAssetIds && mentionedAssetIds.length > 0
-        ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds }
+        ? { asset_selection: 'explicit' as const, selected_asset_ids: mentionedAssetIds, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) }
         : allFileIdsForMeta.length > 0
-          ? { asset_selection: 'explicit' as const, selected_asset_ids: allFileIdsForMeta }
-          : { asset_selection: 'all' as const };
+          ? { asset_selection: 'explicit' as const, selected_asset_ids: allFileIdsForMeta, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) }
+          : { asset_selection: 'all' as const, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) };
 
       const startResult = await processingService.runProcessing(
         projectId,
@@ -938,14 +1037,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             if (files.length > 0) {
               updateFile(files[0].fileID, { status: 'processed', processedData: finalResult.data?.dashboard_data });
             }
-            // First successful generation: show initial loading for 10s, then mark shown
-            if (!get().hasShownInitialDashboard) {
-              set({ isInitialLoading: true });
-              setTimeout(() => {
-                set({ isInitialLoading: false, hasShownInitialDashboard: true });
-              }, 10000);
-            }
-
             // Load conversation to get LLM's actual response text and dashboard_id
             try {
               const { conversationService } = await import('@/services/conversationService');
@@ -959,22 +1050,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
               // Set the latest dashboard as selected and update processedData
               if (dashboardId) {
-                set({ selectedDashboardId: dashboardId });
+                // Auto open the dashboard FIRST, before signaling data
+                set({
+                  selectedDashboardId: dashboardId,
+                  isDashboardOpen: true,
+                  hasShownInitialDashboard: true,
+                  isInitialLoading: false,
+                });
                 const files = get().uploadedFiles;
                 if (files.length > 0) {
                   updateFile(files[0].fileID, { processedData: finalResult.data.dashboard_data });
                 }
                 // Signal completion to UI for automatic rendering
-                // Signal completion to UI for automatic rendering
                 if (onProcessedDataChange) {
                   onProcessedDataChange(finalResult.data.dashboard_data);
                 }
-                
-                // Auto open the dashboard
-                set({ 
-                  isDashboardOpen: true,
-                  hasShownInitialDashboard: true 
-                });
               }
 
               const currentFiles = get().uploadedFiles;
@@ -1105,8 +1195,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } finally {
       setIsTyping(false);
       setIsProcessing(false);
-      // Clear abort controller when processing completes
-      set({ abortController: null });
+      set({ isUpdatingDashboard: false, abortController: null });
     }
   },
 

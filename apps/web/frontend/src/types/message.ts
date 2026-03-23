@@ -12,6 +12,12 @@ export interface Message {
     accountName?: string;
     propertyName?: string;
   };
+  /** Charts referenced via @chart mention */
+  chartMentions?: Array<{
+    title: string;
+    type: string;
+    componentId: string;
+  }>;
   template?: {
     id: string;
     title: string;

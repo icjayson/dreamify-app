@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil } from "lucide-react";
 import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -12,7 +12,10 @@ import { useChatStore, type UploadedFile } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
+import ChartPreviewChip from "../components/chat/ChartPreviewChip";
+import type { ChartChipData } from "../components/chat/ChartPreviewChip";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
+import type { DashboardComponent } from "@/types/dashboard";
 
 
 // Friendly AI persona step mapping for Fluid Morph loading
@@ -176,9 +179,10 @@ interface ChatInterfaceProps {
   projectId?: string;
   onProcessedDataChange?: (data: any) => void;
   onSwitchToDashboard?: (dashboardId?: string) => void;
+  dashboardComponents?: DashboardComponent[];
 }
 
-const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }: ChatInterfaceProps) => {
+const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, dashboardComponents }: ChatInterfaceProps) => {
 
   // Template state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
@@ -202,6 +206,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const [mentionCursorPos, setMentionCursorPos] = useState(0);
   // Track @mentioned asset IDs for selective processing
   const [mentionedAssetIds, setMentionedAssetIds] = useState<string[]>([]);
+  // Track @mentioned charts for chart editing
+  const [mentionedCharts, setMentionedCharts] = useState<ChartChipData[]>([]);
 
   // Zustand stores
   const {
@@ -259,6 +265,19 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
   const stagedFiles = uploadedFiles.filter(f => f.status !== 'processed' && f.status !== 'error');
   const isSendingRef = useRef<boolean>(false);
   const { toast } = useToast();
+
+  // Derive available charts from active dashboard components
+  const availableCharts = useMemo(() => {
+    if (!dashboardComponents) return [];
+    return dashboardComponents
+      .filter(c => c.type === 'chart' || c.type === 'metric' || c.type === 'table')
+      .map(c => ({
+        id: (c.component_config as any).id || c.id,
+        componentId: c.id,
+        title: (c.component_config as any).title || 'Untitled',
+        type: (c.component_config as any).type || c.type,
+      }));
+  }, [dashboardComponents]);
 
   // Speech recognition hook
   const {
@@ -410,7 +429,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         }
       });
 
+      // Build chart mentions with full config for backend context
+      const chartsWithConfig = mentionedCharts.map(chart => ({
+        ...chart,
+        config: dashboardComponents?.find(c => c.id === chart.componentId)?.component_config,
+      }));
+      const hasChartMentions = chartsWithConfig.length > 0;
+
       // Compute attachment badge info from active files only
+      // When only charts are mentioned (no files), skip the fallback "all assets" attachment
       let activeFileAttachment: any = undefined;
       if (activeFiles.length > 0) {
         let displayName = activeFiles[0].filename;
@@ -424,13 +451,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
           accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
           propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined
         };
-      } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
-        // No explicit files selected — treat as "all assets" and show badge with count
+      } else if (projectAssets.length > 0 && finalMentionedIds.length === 0 && !hasChartMentions) {
+        // No explicit files selected and no chart mentions — treat as "all assets" and show badge with count
         activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
       }
 
-      await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
+      await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, hasChartMentions ? chartsWithConfig : undefined);
       setMentionedAssetIds([]);
+      setMentionedCharts([]);
     } finally {
       isSendingRef.current = false;
     }
@@ -559,6 +587,39 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
         variant: "destructive",
       });
     }
+  };
+
+  const handleChartSelect = (chart: ChartChipData) => {
+    // Prevent duplicates
+    if (mentionedCharts.some(c => c.componentId === chart.componentId)) {
+      toast({
+        title: "Chart already referenced",
+        description: `${chart.title} is already in context.`,
+      });
+      setIsContextPickerOpen(false);
+      return;
+    }
+
+    setMentionedCharts(prev => [...prev, chart]);
+
+    // Remove @mention text from input (same logic as handleAssetSelect)
+    if (pickerTriggerMode === 'mention') {
+      const textBeforeCursor = inputValue.slice(0, mentionCursorPos);
+      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+      if (lastAtIndex !== -1) {
+        const textAfterMention = inputValue.slice(mentionCursorPos);
+        const newText = inputValue.slice(0, lastAtIndex) + textAfterMention;
+        setInputValue(newText);
+      }
+    }
+
+    setIsContextPickerOpen(false);
+    setMentionQuery('');
+
+    toast({
+      title: "Chart referenced",
+      description: `${chart.title} added to context`,
+    });
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -887,7 +948,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                   </div>
 
                   <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words overflow-hidden ${bubbleBgClass}`}>
-                    {message.attachment && (
+                    {/* Attachment badge (file) — hide full badge when chart mentions are present (compact version shown below instead) */}
+                    {message.attachment && !message.chartMentions?.length && (
                       <div className="mb-2">
                         {(() => {
                           const sType = message.attachment.sourceType || '';
@@ -898,7 +960,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                           const displayName = isMultiple ? "Multiple Data Sources" : isGA4 ? "Google Analytics 4" : isSheets ? "Google Sheets" : "Attached Data";
                           const logoBg = isMultiple ? "bg-indigo-500/10" : isGA4 ? "bg-orange-500/10" : isSheets ? "bg-green-500/10" : "bg-white/10";
 
-                          // Correctly find icon from CONNECTORS constant
                           const connector = isMultiple ? undefined : CONNECTORS.find(c => {
                             if (isGA4 && c.name === 'GA4') return true;
                             if (isSheets && c.name === 'Google Sheets') return true;
@@ -906,7 +967,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                           });
                           const icon = connector?.icon;
 
-                          // Format secondary text
                           let secondaryText = "";
                           if (isMultiple) {
                             secondaryText = message.attachment.name;
@@ -954,6 +1014,46 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                             </div>
                           );
                         })()}
+                      </div>
+                    )}
+                    {/* Chart mention badges — shown when user referenced charts via @chart */}
+                    {message.chartMentions && message.chartMentions.length > 0 && (
+                      <div className="mb-2 flex flex-col gap-1.5">
+                        {/* Chart mention badges */}
+                        {message.chartMentions.map((chart, idx) => {
+                          const chartTypeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+                            bar: BarChart3, line: TrendingUp, pie: PieChart, donut: PieChart,
+                            area: AreaChart, metric: Hash, table: Table2, composed: BarChart3,
+                          };
+                          const ChartIcon = chartTypeIcons[chart.type] || BarChart3;
+                          const typeLabel = chart.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                          // Determine if this edit is completed by checking if an assistant message follows
+                          const msgIndex = messages.findIndex(m => m.id === message.id);
+                          const nextMsg = msgIndex >= 0 ? messages[msgIndex + 1] : undefined;
+                          const isEditDone = nextMsg?.role === 'assistant';
+                          return (
+                            <div
+                              key={`${chart.componentId}-${idx}`}
+                              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border backdrop-blur-md text-white/90 max-w-full transition-all ${isEditDone ? 'border-emerald-500/20 bg-emerald-500/[0.06]' : 'border-purple-500/20 bg-purple-500/[0.06]'}`}
+                            >
+                              <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${isEditDone ? 'bg-emerald-500/10' : 'bg-purple-500/10'}`}>
+                                <ChartIcon className={`w-5 h-5 ${isEditDone ? 'text-emerald-400' : 'text-purple-400'}`} />
+                              </div>
+                              <div className="flex flex-col min-w-0 flex-1 leading-tight">
+                                <span className={`text-xs font-medium flex items-center gap-1.5 ${isEditDone ? 'text-emerald-300' : 'text-purple-300'}`}>
+                                  {isEditDone ? (
+                                    <><Check className="w-3 h-3" /> Edited {typeLabel} Chart</>
+                                  ) : (
+                                    <><Pencil className="w-3 h-3" /> Editing {typeLabel} Chart</>
+                                  )}
+                                </span>
+                                <span className="text-sm text-white truncate mt-0.5" title={chart.title}>
+                                  {chart.title}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     {message.template && (
@@ -1010,48 +1110,56 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                       </div>
                     )}
                     {/* Render dashboard card if present */}
-                    {message.role === 'assistant' && message.dashboardCard && (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Open dashboard"
-                        onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
-                        className={`group w-full max-w-full rounded-xl border border-white/10 bg-white/3 p-4 hover:bg-white/5 transition-colors cursor-pointer select-none flex items-center justify-between shadow-sm ${message.content ? 'mt-3' : ''}`}
-                      >
-                        <div className="flex-1 min-w-0 flex items-center gap-4">
-                          <div className="p-2.5 bg-primary/10 rounded-xl">
-                            <BarChart3 className="w-5 h-5 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-md font-medium text-white truncate" title={message.dashboardCard.dashboardTitle || "Dashboard"}>
-                              {message.dashboardCard.dashboardTitle || "Dashboard"}
+                    {message.role === 'assistant' && message.dashboardCard && (() => {
+                      const sourceLabel = (() => {
+                        const source = message.dashboardCard.sourceFileName || '';
+                        if (source.toLowerCase().includes('google_analytics') || source.toLowerCase().includes('ga4')) return 'GA4 Data';
+                        if (source.toLowerCase().includes('google_sheet') || source.toLowerCase().includes('gsheet')) return 'Google Sheets Data';
+                        return source.replace(/\.[^/.]+$/, "");
+                      })();
+
+                      return (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Open dashboard"
+                          onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
+                          className={`group w-full max-w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 hover:bg-white/[0.06] hover:border-white/20 transition-all cursor-pointer select-none shadow-sm flex items-center justify-between ${message.content ? 'mt-3' : ''}`}
+                        >
+                          <div className="flex-1 min-w-0 flex items-center gap-3.5">
+                            {/* Abstract mini dashboard visualization */}
+                            <div className="relative w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-primary/25 via-blue-500/15 to-indigo-500/20 group-hover:from-primary/35 group-hover:via-blue-500/25 group-hover:to-indigo-500/30 transition-all duration-300">
+                              <svg viewBox="0 0 40 40" className="w-full h-full" aria-hidden="true">
+                                {/* Sparkline */}
+                                <path d="M5 14 L11 10 L17 16 L23 8 L29 12 L35 6" stroke="hsl(142 76% 56%)" fill="none" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                                {/* Mini bars */}
+                                <rect x="5" y="24" width="4.5" height="12" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.5" />
+                                <rect x="11.5" y="20" width="4.5" height="16" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.7" />
+                                <rect x="18" y="26" width="4.5" height="10" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.45" />
+                                <rect x="24.5" y="22" width="4.5" height="14" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.85" />
+                                <rect x="31" y="28" width="4.5" height="8" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.55" />
+                                {/* Accent dot */}
+                                <circle cx="23" cy="8" r="1.8" fill="hsl(142 76% 56%)" opacity="0.8" />
+                              </svg>
                             </div>
-                            <div className="text-sm text-white/50 mt-0.5 flex flex-wrap gap-x-2 truncate">
-                              <span className="truncate">
-                                Source: {
-                                  (() => {
-                                    const source = message.dashboardCard.sourceFileName || '';
-                                    if (source.toLowerCase().includes('google_analytics') || source.toLowerCase().includes('ga4')) {
-                                      return 'GA4 Data';
-                                    }
-                                    if (source.toLowerCase().includes('google_sheet') || source.toLowerCase().includes('gsheet')) {
-                                      return 'Google Sheets Data';
-                                    }
-                                    return source.replace(/\.[^/.]+$/, "");
-                                  })()
-                                }
-                              </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-md font-medium text-white truncate" title={message.dashboardCard.dashboardTitle || "Dashboard"}>
+                                {message.dashboardCard.dashboardTitle || "Dashboard"}
+                              </div>
+                              <div className="text-sm text-white/50 mt-0.5 flex flex-wrap gap-x-2 truncate">
+                                <span className="truncate">Source: {sourceLabel}</span>
+                              </div>
                             </div>
                           </div>
+                          {!isDashboardOpen && (
+                            <button className="ml-4 px-5 py-2 button-gradient text-white text-sm font-medium rounded-full transition-all flex items-center gap-1.5">
+                              Open
+                            </button>
+                          )}
                         </div>
-                        {!isDashboardOpen && (
-                          <button className="ml-4 px-5 py-2 button-gradient text-white text-sm font-medium rounded-full transition-all flex items-center gap-1.5 ">
-                            Open
-                          </button>
-                        )}
-                      </div>
-                    )}
+                      );
+                    })()}
                     <div className="flex items-center justify-between mt-1">
                       <span className="text-xs text-muted-foreground">
                         {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1165,15 +1273,25 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard }
                     ? projectAssets.filter(asset => asset.name.toLowerCase().includes(mentionQuery.toLowerCase()))
                     : projectAssets
                 }
+                charts={isDashboardOpen ? availableCharts : []}
                 onSelect={handleAssetSelect}
+                onChartSelect={handleChartSelect}
                 onPreview={(fileId) => window.open(`/preview/${fileId}`, '_blank')}
+                query={mentionQuery}
                 className={`project-context-picker-container ${pickerTriggerMode === 'button' ? 'bottom-full left-0 mb-2' : ''}`}
               />
             )}
 
-            {/* Active File Correlations */}
-            {stagedFiles.length > 0 && (
+            {/* Active File & Chart Correlations */}
+            {(stagedFiles.length > 0 || mentionedCharts.length > 0) && (
               <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                {mentionedCharts.map(chart => (
+                  <ChartPreviewChip
+                    key={`chart-${chart.componentId}`}
+                    chart={chart}
+                    onRemove={() => setMentionedCharts(prev => prev.filter(c => c.componentId !== chart.componentId))}
+                  />
+                ))}
                 {stagedFiles.map((file, i) => (
                   <FilePreviewChip
                     key={file.fileID || i}

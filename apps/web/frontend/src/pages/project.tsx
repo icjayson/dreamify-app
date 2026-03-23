@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Download, Pencil, SquareArrowOutUpRight, X } from "lucide-react";
+import { ArrowLeft, Download, Pencil, Sparkles, SquareArrowOutUpRight, X } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
 import { useChatStore } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
+import { diffDashboardComponents } from "@/utils/dashboardDiff";
 import BlankState from "@/components/project-section/BlankState";
 import { useUser } from "@clerk/clerk-react";
 import PublishModal from "@/components/project-section/PublishModal";
@@ -107,6 +108,38 @@ export default function ProjectPage() {
   // even when a new file is uploaded (status='uploaded'). 
   // Only hide dashboard when explicitly starting new processing.
   const shouldShowDashboard = processedData || hasPolledStatus;
+
+  // Extract dashboard components for @chart mention in chat
+  const dashboardComponents = useMemo(() => {
+    if (!processedData) return undefined;
+    // processedData may have raw charts/metrics/tables arrays or a nested dashboard_config
+    const config = processedData?.dashboard_config || processedData;
+    // If already normalized with components array, use directly
+    if (config?.components) return config.components;
+    // Otherwise build from raw arrays
+    const components: any[] = [];
+    let id = 1;
+    if (Array.isArray(config?.metrics)) {
+      config.metrics.forEach((m: any) => {
+        components.push({ id: String(m.id || `metric-${id}`), type: 'metric', component_config: { id: String(m.id || `metric-${id}`), title: m.title || m.name || 'Metric', type: 'metric', ...m }, position: m.layout || { x: 0, y: 0, width: 4, height: 2 } });
+        id++;
+      });
+    }
+    if (Array.isArray(config?.charts)) {
+      config.charts.forEach((c: any) => {
+        components.push({ id: String(c.id || `chart-${id}`), type: 'chart', component_config: { id: String(c.id || `chart-${id}`), title: c.title || 'Chart', type: c.type || c.chart_type || 'bar', ...c }, position: c.layout || { x: 0, y: 0, width: 6, height: 4 } });
+        id++;
+      });
+    }
+    if (Array.isArray(config?.tables)) {
+      config.tables.forEach((t: any) => {
+        components.push({ id: String(t.id || `table-${id}`), type: 'table', component_config: { id: String(t.id || `table-${id}`), title: t.title || 'Table', type: 'table', ...t }, position: t.layout || { x: 0, y: 0, width: 12, height: 6 } });
+        id++;
+      });
+    }
+    return components.length > 0 ? components : undefined;
+  }, [processedData]);
+
   const { user } = useUser();
   const { toast } = useToast();
   const displayName = user?.username || user?.fullName || user?.firstName || "you";
@@ -117,6 +150,23 @@ export default function ProjectPage() {
   const selectedDashboardId = useChatStore((s) => s.selectedDashboardId);
   const isDashboardOpen = useChatStore((s) => s.isDashboardOpen);
   const setIsDashboardOpen = useChatStore((s) => s.setIsDashboardOpen);
+  const isUpdatingDashboard = useChatStore((s) => s.isUpdatingDashboard);
+  const currentWorkflowStep = useChatStore((s) => s.currentWorkflowStep);
+
+  // Friendly step labels for the update overlay
+  const UPDATING_STEP_MAP: Record<string, string> = {
+    'start': 'Starting update...',
+    'load_conversation': 'Loading context...',
+    'download_asset': 'Analyzing data...',
+    'run_workflow': 'Processing changes...',
+    'routing': 'Understanding your request...',
+    'reasoning': 'Planning changes...',
+    'execution': 'Applying updates...',
+    'synthesis': 'Rebuilding dashboard...',
+    'validation': 'Verifying results...',
+    'finish': 'Almost done...',
+  };
+  const updatingStepText = currentWorkflowStep ? (UPDATING_STEP_MAP[currentWorkflowStep] || 'Updating...') : 'Updating dashboard...';
 
   const hydrateConversation = useCallback(async (projId: string, conversationId: string) => {
     try {
@@ -430,6 +480,13 @@ export default function ProjectPage() {
                   onProcessedDataChange={(data) => {
                     // This is called when processing and dashboard generation is complete
                     if (data) {
+                      // Diff detection: compare old vs new dashboard data for edit feedback
+                      if (processedData) {
+                        const changed = diffDashboardComponents(processedData, data);
+                        if (changed.size > 0) {
+                          useChatStore.getState().setChangedComponentIds(changed);
+                        }
+                      }
                       setProcessedData(data);
                       setHasShownInitialDashboard(true);
                       setIsDashboardOpen(true);
@@ -447,6 +504,7 @@ export default function ProjectPage() {
                     setIsDashboardOpen(true);
                     setActiveTab('dashboard');
                   }}
+                  dashboardComponents={dashboardComponents}
                 />
               </div>
             </div>
@@ -519,6 +577,25 @@ export default function ProjectPage() {
               ) : (
                 <DashboardLoading title="Preparing Dashboard" description="Please wait..." durationSec={10} />
               )
+            )}
+            {/* Edit feedback overlay — fixed within the dashboard container */}
+            {isUpdatingDashboard && (
+              <div className="absolute inset-0 z-40 pointer-events-none">
+                <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
+                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/70 border border-white/15 shadow-lg backdrop-blur-md">
+                    <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
+                    <span className="text-sm text-white/90 font-medium whitespace-nowrap">
+                      {updatingStepText}
+                    </span>
+                    <div className="flex gap-0.5">
+                      <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:0ms]" />
+                      <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:150ms]" />
+                      <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:300ms]" />
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>

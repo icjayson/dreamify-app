@@ -67,6 +67,9 @@ export function conversationNodesToMessages(
           c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file' || c?.type === 'mention'
       ) ?? [];
       const assetContent = assetContents[0];
+      const chartMentionContents = node?.contents?.filter?.(
+        (c: any) => c?.type === 'chart_mention'
+      ) ?? [];
 
       // Update the current asset name if this node brings a new asset
       if (assetContent?.data?.filename) {
@@ -121,6 +124,33 @@ export function conversationNodesToMessages(
       } else if (isLastUser && options?.lastUserMessageAttachment) {
         normalized.attachment = options.lastUserMessageAttachment;
       }
+      // Restore chart mentions from conversation nodes
+      if (chartMentionContents.length > 0) {
+        normalized.chartMentions = chartMentionContents.map((c: any) => ({
+          title: c.data?.title || '',
+          type: c.data?.chart_type || 'bar',
+          componentId: c.data?.component_id || c.data?.chart_id || '',
+        }));
+      }
+
+      // If assistant message has a dashboard card but no text content,
+      // check the preceding user message for chart mentions and generate a meaningful response
+      if (normalized.role === 'assistant' && normalized.dashboardCard && !normalized.content) {
+        // Look backward for the most recent user message with chart mentions
+        const prevUserNodes = nodes
+          .slice(0, nodes.indexOf(node))
+          .filter((n: any) => n.role === 'user')
+          .reverse();
+        const prevUser = prevUserNodes[0];
+        const prevChartMentions = prevUser?.contents?.filter?.(
+          (c: any) => c?.type === 'chart_mention'
+        ) ?? [];
+        if (prevChartMentions.length > 0) {
+          const chartNames = prevChartMentions.map((c: any) => c.data?.title || 'chart').join(', ');
+          normalized.content = `Done! I've updated ${chartNames}. The dashboard has been refreshed with the changes.`;
+        }
+      }
+
       return normalized;
     });
 

@@ -9,6 +9,7 @@ import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
+import { useChatStore } from "@/chat/useChatStore";
 import { DashboardGenerationRequest, LayoutType, ChartType, DashboardConfiguration } from "@/types/dashboard";
 import {
   convertLLMStylingToChartStyling,
@@ -48,6 +49,22 @@ const DashboardPreview = ({
   // Pass undefined to useDashboard if staticConfig or processedData exists so it doesn't try to fetch
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(staticConfig || processedData ? undefined : dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Edit feedback loop state from store
+  const changedComponentIds = useChatStore((s) => s.changedComponentIds);
+
+  // Track highlight fade-out timer
+  const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (changedComponentIds.size > 0) {
+      setHighlightedIds(new Set(changedComponentIds));
+      const timer = setTimeout(() => {
+        setHighlightedIds(new Set());
+        useChatStore.getState().setChangedComponentIds(new Set());
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [changedComponentIds]);
 
   // Determine which configuration to use (static from parent vs fetched from state)
   const configuration = staticConfig || dashboardState.configuration;
@@ -1003,7 +1020,7 @@ const DashboardPreview = ({
       ref={containerRef}
       id={isExporting ? "dashboard-export-inner-root" : "dashboard-preview-root"}
       data-dashboard-root
-      className={`h-full overflow-y-auto ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
+      className={`h-full overflow-y-auto relative ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
       style={{
         ...style,
         ...getDashboardBackgroundStyle(dashboardStylingForContainer || getDefaultChartStyling())
@@ -1202,14 +1219,18 @@ const DashboardPreview = ({
                 onDragStop={handleDragResizeStop}
                 onResizeStop={handleDragResizeStop}
               >
-                {activeDashboard.components.map((component: any) => (
-                  <div key={String(component.id)} className="animate-fade-in">
-                    <ChartRenderer
-                      component={component}
-                      onError={handleComponentError}
-                    />
-                  </div>
-                ))}
+                {activeDashboard.components.map((component: any) => {
+                  const compId = component.component_config?.id || component.id;
+                  const isHighlighted = highlightedIds.has(String(compId)) || highlightedIds.has(String(component.id));
+                  return (
+                    <div key={String(component.id)} className={`animate-fade-in ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
+                      <ChartRenderer
+                        component={component}
+                        onError={handleComponentError}
+                      />
+                    </div>
+                  );
+                })}
               </ResponsiveGridLayout>
             )}
           </div>

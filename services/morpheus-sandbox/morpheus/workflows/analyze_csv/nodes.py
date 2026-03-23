@@ -665,20 +665,32 @@ Ensure the format is clear and actionable for the next reasoning agent."""
 def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
     """
     ROUTING Node: Decide workflow type (dashboard or qa).
-    
+
     Uses Router Agent to analyze user intent and conversation context
     to determine whether to run dashboard generation or Q&A workflow.
-    
+    If chart_mentions are present, short-circuit to chart modification mode.
+
     Args:
         state: Current agent state
         model: LLM model for routing (optional, will create if not provided)
         **kwargs: Additional arguments
-        
+
     Returns:
         Updated agent state with routing decision in working_memory
     """
     logger.info("Running ROUTING node")
-    
+
+    # Short-circuit: If user @mentioned a chart, force chart modification mode
+    if state.chart_mentions:
+        chart_titles = [cm.get("title", "Unknown") for cm in state.chart_mentions]
+        logger.info(f"Chart modification requested via @chart mention: {chart_titles}")
+        state.working_memory.tool_outputs["route_decision"] = {
+            "next_step": "dashboard",
+            "reasoning": f"Chart modification requested via @chart mention for: {', '.join(chart_titles)}",
+            "is_chart_modification": True,
+        }
+        return state
+
     # Get or create model
     if model is None:
         model = get_model_for_agent()
@@ -832,12 +844,98 @@ Based on the above context, decide your next action."""
 Load ALL files and combine/analyze as needed for the user's request. You can use pandas to merge, concatenate, or analyze files together."""
 
             file_info += "\n\nCRITICAL: When writing Python code, load the files using the paths pre-loaded in the `file_paths` dictionary object in your environment (e.g. `file_paths['users.csv']`)."
-            
-            if mode == "dashboard":
+
+            # Check if this is a chart modification request
+            is_chart_mod = route_decision.get("is_chart_modification", False)
+
+            if is_chart_mod and state.chart_mentions:
+                # Chart modification mode — inject target chart context
+                chart_info = state.chart_mentions[0]
+                existing_config = chart_info.get("config", {})
+                existing_config_json = json.dumps(existing_config, ensure_ascii=False, indent=2)
+                chart_id = chart_info.get('chart_id', 'chart_modified')
+
+                # Try to identify which dataset columns the chart uses
+                chart_columns_hint = ""
+                if existing_config.get("axisConfig"):
+                    ax = existing_config["axisConfig"]
+                    cols = []
+                    if ax.get("x_axis", {}).get("column"): cols.append(ax["x_axis"]["column"])
+                    if ax.get("y_axis", {}).get("column"): cols.append(ax["y_axis"]["column"])
+                    if cols:
+                        chart_columns_hint = f"\nThis chart uses columns: {', '.join(cols)}"
+                elif existing_config.get("datasets"):
+                    # Extract labels from existing datasets
+                    ds_labels = [ds.get("label", "") for ds in existing_config.get("datasets", [])]
+                    if ds_labels:
+                        chart_columns_hint = f"\nThis chart uses datasets: {', '.join(ds_labels)}"
+
+                instruction = f"""User wants to MODIFY an existing chart in their dashboard.
+
+TARGET CHART TO MODIFY:
+- Chart ID: {chart_id}
+- Title: {chart_info.get('title', 'Untitled')}
+- Current Type: {chart_info.get('chart_type', 'unknown')}{chart_columns_hint}
+- Current Config:
+```json
+{existing_config_json}
+```
+
+User's modification request: {state.input_prompt}
+
+{file_info}
+
+IMPORTANT SCOPE RULE: You are modifying ONLY this one chart. If multiple files are available,
+use ONLY the file that contains the data relevant to this chart (check column names from the chart config above).
+Do NOT combine data from unrelated files.
+
+WORKFLOW:
+1. First, use Python REPL to load the relevant CSV file and analyze the data for this chart.
+2. Then output a dashboard JSON with ONLY the modified chart.
+
+You MUST output a valid JSON code block in this EXACT format:
+
+```json
+{{
+  "dashboard": {{
+    "title": "Chart Modification",
+    "description": "Modified chart per user request"
+  }},
+  "metrics": [],
+  "charts": [
+    {{
+      "id": "{chart_id}",
+      "chart_type": "<new_or_same_type>",
+      "title": "<chart_title>",
+      "description": "<chart_description>",
+      "layout": {{"x": 0, "y": 0, "w": 24, "h": 12, "minW": 12, "minH": 10}},
+      "datasets": [
+        {{
+          "label": "<dataset_label>",
+          "data": [
+            {{"label": "<data_label>", "value": <computed_value>}}
+          ]
+        }}
+      ],
+      "config": {{"animation": true, "showGrid": true, "showLegend": true}},
+      "styling": {{"theme": "monochrome", "title": "title-color", "description": "description-color", "cartesianGrid": "element-color/75", "xAxis": "element-color", "yAxis": "element-color", "legend": "highlight-color", "dataElements": "highlight-color", "tile": {{"background": "bg-card-color", "borderColor": "border-card-color", "borderWidth": 1, "borderRadius": 12}}}}
+    }}
+  ],
+  "tables": [],
+  "insights": ["<insight about the modification>"]
+}}
+```
+
+CRITICAL RULES:
+- Keep chart ID as "{chart_id}"
+- Populate datasets with REAL computed data from Python analysis (never empty arrays)
+- Output ONLY the modified chart in "charts" array. Other dashboard components will be preserved automatically.
+- You MUST output the JSON code block — do NOT just describe the changes in text."""
+            elif mode == "dashboard":
                 instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
             else:
                 instruction = f"User question: {state.input_prompt}\n\n{file_info}"
-            
+
             messages.append(HumanMessage(content=instruction))
     
     # 🔥 FIX: Build conversation history from previous tool executions
@@ -903,7 +1001,28 @@ REMINDER: When you generate your dashboard JSON:
             if mode == "dashboard":
                 # Extract JSON from content
                 json_data = _extract_json_from_content(response.content)
-                
+
+                # Fallback for chart modification: if LLM returned a chart object
+                # without the "dashboard" wrapper, wrap it into a valid dashboard JSON
+                is_chart_mod = route_decision.get("is_chart_modification", False)
+                if json_data and is_chart_mod and "dashboard" not in json_data:
+                    # LLM returned chart object directly — wrap it
+                    if "chart_type" in json_data or "datasets" in json_data:
+                        logger.info("Chart modification: wrapping raw chart object into dashboard JSON")
+                        json_data = {
+                            "dashboard": {"title": "Chart Modification", "description": "Modified chart"},
+                            "metrics": [],
+                            "charts": [json_data],
+                            "tables": [],
+                            "insights": [],
+                        }
+                    elif "charts" in json_data and "dashboard" not in json_data:
+                        logger.info("Chart modification: adding missing dashboard wrapper")
+                        json_data["dashboard"] = {"title": "Chart Modification", "description": "Modified chart"}
+                        json_data.setdefault("metrics", [])
+                        json_data.setdefault("tables", [])
+                        json_data.setdefault("insights", [])
+
                 if json_data:
                     # Store JSON for validation in node_validation
                     state.working_memory.dashboard_json = json_data
@@ -1186,10 +1305,45 @@ def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
     route_decision = state.working_memory.tool_outputs.get("route_decision", {})
     mode = route_decision.get("next_step", "dashboard")
     
-    if mode == "dashboard":
-        # Extract dashboard JSON
+    is_chart_mod = route_decision.get("is_chart_modification", False)
+
+    if mode == "dashboard" and is_chart_mod and state.chart_mentions:
+        # Chart modification mode — output only the modified chart with metadata
+        # Frontend will handle merging into the existing dashboard
         dashboard_json = state.working_memory.dashboard_json
-        
+        chart_mention = state.chart_mentions[0]
+        logger.info(f"Chart modification synthesis for chart: {chart_mention.get('title')}")
+
+        if dashboard_json:
+            # Tag output so frontend knows to merge instead of replace
+            state.output = {
+                "type": "chart_modification",
+                "data": dashboard_json,
+                "chart_modification_context": {
+                    "component_id": chart_mention.get("component_id"),
+                    "chart_id": chart_mention.get("chart_id"),
+                    "title": chart_mention.get("title"),
+                    "chart_type": chart_mention.get("chart_type"),
+                },
+            }
+            logger.info("Chart modification synthesis complete — frontend will merge")
+        elif state.working_memory.qa_response:
+            state.output = {
+                "type": "message",
+                "content": state.working_memory.qa_response,
+            }
+        else:
+            state.working_memory.errors.append({
+                "node": "SYNTHESIS",
+                "error": "Failed to extract modified chart JSON",
+                "timestamp": datetime.now().isoformat(),
+            })
+            logger.error("Failed to synthesize chart modification output")
+
+    elif mode == "dashboard":
+        # Full dashboard generation mode (original path)
+        dashboard_json = state.working_memory.dashboard_json
+
         if dashboard_json:
             state.output = {
                 "type": "dashboard_config",
@@ -1259,7 +1413,14 @@ def node_validation(state: AgentState, **kwargs) -> AgentState:
         return state
     
     output_type = state.output.get("type")
-    
+
+    # Chart modification mode: skip strict validation since SYNTHESIS already merged into existing dashboard
+    route_decision = state.working_memory.tool_outputs.get("route_decision", {})
+    if route_decision.get("is_chart_modification") and output_type == "dashboard_config":
+        logger.info("Chart modification mode — skipping strict validation (merged dashboard)")
+        state.working_memory.tool_outputs["validation"] = {"valid": True, "note": "chart_modification_skip"}
+        return state
+
     if output_type == "dashboard_config":
         # Step 1: Validate dashboard JSON schema
         validation_result = _validate_dashboard_json(state.output.get("data"))
@@ -1427,6 +1588,10 @@ def _render_node_contents(node: Dict[str, Any], dashboards: Dict[str, Any]) -> s
                 dash_payload = dashboards[dash_id]
                 dash_block = json.dumps(dash_payload, ensure_ascii=False, indent=2)
                 chunks.append(f"Attached dashboard ({dash_id}):\n{dash_block}")
+        elif content_type == "chart_mention":
+            title = data.get("title", "Unknown Chart")
+            chart_type = data.get("chart_type", "chart")
+            chunks.append(f"[Referenced chart for modification: {title} ({chart_type})]")
     return "\n\n".join(chunk for chunk in chunks if chunk).strip()
 
 

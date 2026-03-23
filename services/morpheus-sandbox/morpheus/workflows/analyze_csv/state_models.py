@@ -124,6 +124,9 @@ class AgentState(BaseModel):
     assets_dict: Dict[str, str] = Field(default_factory=dict, description="Dictionary mapping filenames to their local temp paths")
     data_profile: Optional[str] = Field(default=None, description="Output of the exploration step")
     output: Optional[Dict[str, Any]] = Field(default=None, description="Final workflow output")
+
+    # Chart modification context (from @chart mentions)
+    chart_mentions: List[Dict[str, Any]] = Field(default_factory=list, description="Charts referenced by user for targeted modification")
     
     @property
     def file_path(self) -> Optional[str]:

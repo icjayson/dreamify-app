@@ -647,24 +647,30 @@ def _process_conversation_background(
         workflow = StatefulAnalyzeCSVWorkflow()
         _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
         
-        # Extract user prompt from latest user node
+        # Extract user prompt and chart_mention context from latest user node
         user_prompt = None
+        chart_mentions = []
         nodes = conversation.get("nodes", [])
         for node in reversed(nodes):
             if node.get("role") == "user":
                 contents = node.get("contents", [])
                 for content in contents:
                     if content.get("type") == "text":
-                        user_prompt = content.get("data", {}).get("text")
-                        break
-                if user_prompt:
-                    break
-        
+                        if not user_prompt:
+                            user_prompt = content.get("data", {}).get("text")
+                    elif content.get("type") == "chart_mention":
+                        chart_mentions.append(content.get("data", {}))
+                break  # only from latest user node
+
+        if chart_mentions:
+            logger.info(f"Found {len(chart_mentions)} chart mention(s) for modification: {[cm.get('title') for cm in chart_mentions]}")
+
         result = workflow.execute(
             file_paths=temp_file_paths,  # Pass all file paths for multi-file analysis
             conversation=conversation,
             dashboards=dashboards_cache,
             user_prompt=user_prompt,
+            chart_mentions=chart_mentions,  # Pass chart modification context
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
             post_status_fn=_post_node_status_sync,
@@ -686,6 +692,66 @@ def _process_conversation_background(
         if workflow_output:
             postprocessed_nodes = _postprocess_workflow_to_conversation_nodes(workflow_output)
             conversation.setdefault("nodes", []).extend(postprocessed_nodes)
+
+        # Handle chart modification responses — merge modified chart into existing dashboard
+        if response_type == "chart_modification":
+            logger.info("Processing chart modification response — merging into existing dashboard")
+            chart_mod_context = result.get("chart_modification_context", {})
+            target_chart_id = chart_mod_context.get("chart_id")
+            modified_data = result.get("data", {})
+
+            # Load the existing dashboard to merge into
+            existing_dashboard = None
+            for _dash_id, dash_data in dashboards_cache.items():
+                existing_dashboard = dash_data
+                # Use the last one (most recent)
+
+            if existing_dashboard and modified_data:
+                import copy
+                merged = copy.deepcopy(existing_dashboard)
+
+                # Replace the target chart
+                modified_charts = modified_data.get("charts", [])
+                if modified_charts:
+                    existing_charts = merged.get("charts", [])
+                    replaced = False
+                    for i, chart in enumerate(existing_charts):
+                        if chart.get("id") == target_chart_id:
+                            existing_charts[i] = modified_charts[0]
+                            replaced = True
+                            logger.info(f"Merged: replaced chart '{target_chart_id}'")
+                            break
+                    if not replaced:
+                        existing_charts.append(modified_charts[0])
+                        logger.info(f"Merged: appended chart (target '{target_chart_id}' not found)")
+                    merged["charts"] = existing_charts
+
+                # Replace metrics/tables if LLM converted types
+                for key in ("metrics", "tables"):
+                    new_items = modified_data.get(key, [])
+                    if new_items:
+                        existing_items = merged.get(key, [])
+                        for new_item in new_items:
+                            found = False
+                            for j, item in enumerate(existing_items):
+                                if item.get("id") == new_item.get("id"):
+                                    existing_items[j] = new_item
+                                    found = True
+                                    break
+                            if not found:
+                                existing_items.append(new_item)
+                        merged[key] = existing_items
+
+                # Use merged dashboard as the result data going forward
+                result["data"] = merged
+                result["type"] = "dashboard_config"
+                response_type = "dashboard_config"
+                logger.info("Chart modification merged successfully into existing dashboard")
+            else:
+                # No existing dashboard — treat the chart-only output as a regular dashboard
+                logger.warning("No existing dashboard for merge, using chart-only output as dashboard")
+                result["type"] = "dashboard_config"
+                response_type = "dashboard_config"
 
         # Handle Q&A responses (type == "message")
         if response_type == "message":

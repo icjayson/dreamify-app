@@ -39,7 +39,7 @@ export function conversationNodesToMessages(
             const text = c?.data?.text;
             return typeof text === 'string' && text.trim().length > 0;
           }
-          return c?.type === 'dashboard';
+          return c?.type === 'dashboard' || c?.type === 'todo_tasks';
         });
         return !!hasRenderableContent;
       }
@@ -62,6 +62,7 @@ export function conversationNodesToMessages(
 
       const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
       const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
+      const todoTasksContent = node?.contents?.find?.((c: any) => c?.type === 'todo_tasks');
       const assetContents = node?.contents?.filter?.(
         (c: any) =>
           c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file' || c?.type === 'mention'
@@ -91,6 +92,9 @@ export function conversationNodesToMessages(
           dashboardId: dashboardId,
           dashboardTitle: dashboardMetadata?.title || undefined,
         };
+      }
+      if (todoTasksContent?.data?.tasks && Array.isArray(todoTasksContent.data.tasks)) {
+        normalized.todoTasks = todoTasksContent.data.tasks;
       }
       // Include attachment field for messages with asset content
       // This shows "Attached file" badge for @mentioned files in QnA mode

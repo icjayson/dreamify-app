@@ -18,6 +18,7 @@ const FinancePage = () => {
   const { isSignedIn } = useAuth();
   const {
     projects,
+    isLoading: projectsLoading,
     createNewProject,
     openProject,
     renameProject,
@@ -85,6 +86,7 @@ const FinancePage = () => {
       <ProjectsSidebar
         open={projectsOpen}
         onClose={closeProjects}
+        isLoading={projectsLoading}
         onNewProject={() => createNewProject()}
         recents={projects}
         onOpenProject={openProject}

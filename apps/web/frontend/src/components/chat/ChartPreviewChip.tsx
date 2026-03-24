@@ -1,4 +1,5 @@
 import { BarChart3, TrendingUp, PieChart, AreaChart, ScatterChart, Hash, Table2, Radar, GitBranch, X } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface ChartChipData {
     id: string;
@@ -34,33 +35,42 @@ const ChartPreviewChip = ({ chart, onRemove }: ChartPreviewChipProps) => {
     const typeLabel = chart.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     return (
-        <div className="group relative flex items-center gap-2.5 px-3 py-2 bg-[#1e1e1e] border border-purple-500/20 rounded-full overflow-hidden transition-all hover:border-purple-500/40">
-            {/* Chart Type Icon */}
-            <IconComponent className="w-4 h-4 text-purple-400 flex-shrink-0" />
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-purple-500/20 bg-[#1e1e1e] px-3 py-2 transition-all hover:border-purple-500/40 outline-none">
+                    <IconComponent className="h-4 w-4 flex-shrink-0 text-purple-400" />
 
-            {/* Chart Info */}
-            <div className="flex items-center gap-1.5 text-xs">
-                <span className="text-purple-300 font-semibold flex-shrink-0">
-                    {typeLabel}
-                </span>
-                <span className="text-white/30 font-light mr-0.5">&bull;</span>
-                <span
-                    className="text-gray-400 truncate max-w-[150px]"
-                    title={chart.title}
-                >
-                    {chart.title}
-                </span>
-            </div>
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
+                        <span className="flex-shrink-0 font-semibold text-purple-300">
+                            {typeLabel}
+                        </span>
+                        <span className="flex-shrink-0 font-light text-white/30">&bull;</span>
+                        <span className="min-w-0 flex-1 truncate text-gray-400" title={chart.title}>
+                            {chart.title}
+                        </span>
+                    </div>
 
-            {/* Remove Button */}
-            <button
-                onClick={onRemove}
-                className="ml-1 w-4 h-4 flex items-center justify-center text-gray-500 hover:text-white transition-colors"
-                aria-label="Remove chart reference"
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove();
+                        }}
+                        className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-gray-500 transition-colors hover:text-white"
+                        aria-label="Remove chart reference"
+                    >
+                        <X className="h-3 w-3" />
+                    </button>
+                </div>
+            </TooltipTrigger>
+            <TooltipContent
+                side="top"
+                sideOffset={8}
+                className="max-w-[260px] bg-black/90 text-xs text-white shadow-lg break-words"
             >
-                <X className="w-3 h-3" />
-            </button>
-        </div>
+                {chart.title}
+            </TooltipContent>
+        </Tooltip>
     );
 };
 

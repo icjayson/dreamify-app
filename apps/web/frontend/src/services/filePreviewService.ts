@@ -12,12 +12,15 @@ export interface FilePreviewData {
 
 export async function getFilePreview(
   assetId: string,
-  token?: string
+  token?: string,
+  options?: { limit?: number }
 ): Promise<FilePreviewData> {
   const baseUrl = import.meta.env.VITE_API_URL || '';
-  const path = token
-    ? `/api/v1/files/preview/${assetId}?token=${encodeURIComponent(token)}`
-    : `/api/v1/files/preview/${assetId}`;
+  const params = new URLSearchParams();
+  if (token) params.set('token', token);
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  const qs = params.toString();
+  const path = `/api/v1/files/preview/${assetId}${qs ? `?${qs}` : ''}`;
   const url = `${baseUrl}${path}`;
 
   const headers: HeadersInit = {

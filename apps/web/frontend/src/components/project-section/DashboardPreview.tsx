@@ -1,10 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon } from "lucide-react";
+import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon, Menu, MessageSquare, ImageDown } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
@@ -21,6 +27,28 @@ import {
   CHART_THEME_COLORS,
   ChartPresetTheme
 } from "@/utils/chartStyling";
+import type { ChartChipData } from "@/components/chat/ChartPreviewChip";
+
+const SELECT_CHART_CONTEXT_EVENT = "dreamify:select-chart-context";
+
+function dashboardComponentToChartChip(component: any): ChartChipData {
+  const cfg = component.component_config ?? {};
+  const componentId = String(component.id);
+  const displayType =
+    component.type === "chart"
+      ? String(cfg.type ?? "bar")
+      : component.type === "metric"
+        ? "metric"
+        : component.type === "table"
+          ? "table"
+          : String(cfg.type ?? "bar");
+  return {
+    id: String(cfg.id ?? component.id),
+    componentId,
+    title: String(cfg.title ?? "Untitled"),
+    type: displayType,
+  };
+}
 
 interface DashboardPreviewProps {
   dataSource?: string;
@@ -31,6 +59,8 @@ interface DashboardPreviewProps {
   staticConfig?: DashboardConfiguration | null;
   isExporting?: boolean;
   onExportLayoutChange?: (didSplit: boolean) => void;
+  /** Card ⋮ menu (Fix in chat, …). Only enabled on project workspace; keep false for public preview & exports. */
+  showCardActionsMenu?: boolean;
 }
 
 const DashboardPreview = ({
@@ -41,7 +71,8 @@ const DashboardPreview = ({
   processedData,
   staticConfig,
   isExporting = false,
-  onExportLayoutChange
+  onExportLayoutChange,
+  showCardActionsMenu = false,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -1020,7 +1051,7 @@ const DashboardPreview = ({
       ref={containerRef}
       id={isExporting ? "dashboard-export-inner-root" : "dashboard-preview-root"}
       data-dashboard-root
-      className={`h-full overflow-y-auto relative ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
+      className={`h-full overflow-y-auto relative chat-scrollbar-hide ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
       style={{
         ...style,
         ...getDashboardBackgroundStyle(dashboardStylingForContainer || getDefaultChartStyling())
@@ -1214,6 +1245,7 @@ const DashboardPreview = ({
                 isDraggable
                 isResizable
                 resizeHandles={['se', 'e', 's', 'w', 'n']}
+                {...(showCardActionsMenu ? { draggableCancel: ".dashboard-card-menu-trigger" } : {})}
                 onLayoutChange={handleLayoutChange}
                 onBreakpointChange={handleBreakpointChange}
                 onDragStop={handleDragResizeStop}
@@ -1222,12 +1254,63 @@ const DashboardPreview = ({
                 {activeDashboard.components.map((component: any) => {
                   const compId = component.component_config?.id || component.id;
                   const isHighlighted = highlightedIds.has(String(compId)) || highlightedIds.has(String(component.id));
+                  const cellKey = String(component.id);
                   return (
-                    <div key={String(component.id)} className={`animate-fade-in ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
-                      <ChartRenderer
-                        component={component}
-                        onError={handleComponentError}
-                      />
+                    <div key={cellKey} className={`animate-fade-in h-full min-h-0 ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
+                      <div className="relative h-full min-h-0 rounded-md">
+                        {showCardActionsMenu && (
+                          <div
+                            className="dashboard-card-menu-trigger absolute right-2 top-2 z-20"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                          >
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label="Card actions"
+                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/90 shadow-sm backdrop-blur-sm outline-none transition-colors hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white/30"
+                                >
+                                  <Menu className="h-4 w-4" strokeWidth={2} />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                sideOffset={6}
+                                className="min-w-[11rem] border-white/15 bg-[#1a1a1a] text-white shadow-lg"
+                              >
+                                <DropdownMenuItem
+                                  className="cursor-pointer gap-2 focus:bg-white/10 focus:text-white"
+                                  onSelect={() => {
+                                    window.dispatchEvent(
+                                      new CustomEvent(SELECT_CHART_CONTEXT_EVENT, {
+                                        detail: dashboardComponentToChartChip(component),
+                                      })
+                                    );
+                                  }}
+                                >
+                                  <MessageSquare className="h-4 w-4 shrink-0 text-purple-400" />
+                                  Fix in chat
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled
+                                  className="gap-2 opacity-50"
+                                >
+                                  <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />
+                                  <span className="flex flex-1 items-center justify-between gap-2">
+                                    Export to PNG
+                                    <span className="text-[10px] font-medium uppercase tracking-wide text-white/35">Soon</span>
+                                  </span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        )}
+                        <ChartRenderer
+                          component={component}
+                          onError={handleComponentError}
+                        />
+                      </div>
                     </div>
                   );
                 })}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
@@ -10,6 +10,13 @@ import {
   PaginationPrevious,
   PaginationNext,
 } from '@/components/ui/pagination';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export interface CSVPreviewTableProps {
   columns: string[];
@@ -20,9 +27,11 @@ export interface CSVPreviewTableProps {
   isLoading?: boolean;
   error?: string | null;
   sourceType?: string;
+  /** Client-side pagination: how many rows to show per page (slices loaded `rows`). */
+  pageSize?: number;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
 }
-
-const PAGE_SIZE = 100;
 
 export default function CSVPreviewTable({
   columns,
@@ -33,8 +42,16 @@ export default function CSVPreviewTable({
   isLoading = false,
   error = null,
   sourceType,
+  pageSize: pageSizeProp,
+  onPageSizeChange,
+  pageSizeOptions = [100, 1000, 2000],
 }: CSVPreviewTableProps) {
+  const effectivePageSize = pageSizeProp ?? 100;
   const [currentPage, setCurrentPage] = useState(0);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [effectivePageSize, rows]);
   const [sortConfig, setSortConfig] = useState<{
     column: number | null;
     direction: 'asc' | 'desc';
@@ -76,11 +93,11 @@ export default function CSVPreviewTable({
 
   // Paginate sorted rows
   const paginatedRows = useMemo(() => {
-    const startIndex = currentPage * PAGE_SIZE;
-    return sortedRows.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [sortedRows, currentPage]);
+    const startIndex = currentPage * effectivePageSize;
+    return sortedRows.slice(startIndex, startIndex + effectivePageSize);
+  }, [sortedRows, currentPage, effectivePageSize]);
 
-  const totalPages = Math.ceil(sortedRows.length / PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / effectivePageSize));
 
   const handleSort = (columnIndex: number) => {
     setSortConfig((prev) => {
@@ -215,8 +232,8 @@ export default function CSVPreviewTable({
     );
   }
 
-  const startRow = currentPage * PAGE_SIZE + 1;
-  const endRow = Math.min((currentPage + 1) * PAGE_SIZE, sortedRows.length);
+  const startRow = sortedRows.length === 0 ? 0 : currentPage * effectivePageSize + 1;
+  const endRow = Math.min((currentPage + 1) * effectivePageSize, sortedRows.length);
 
   return (
     <div className="w-full h-full flex items-center justify-center p-4 md:p-6 lg:p-8">
@@ -295,51 +312,80 @@ export default function CSVPreviewTable({
         </div>
       </div>
 
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="border-t bg-muted/50 px-4 py-3 flex flex-col lg:flex-row items-center lg:justify-between gap-3 lg:gap-0 flex-shrink-0">
-            <div className="text-sm text-muted-foreground text-right lg:text-left w-full lg:w-auto">
+        {/* Footer — same pagination layout as before; optional rows-per-page on the right */}
+        {sortedRows.length > 0 && (
+          <div className="flex flex-shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-0">
+            <div className="w-full text-sm text-muted-foreground text-right lg:w-auto lg:text-left">
               Showing {startRow} to {endRow} of {sortedRows.length} entries
+              {totalRows > sortedRows.length && (
+                <span className="ml-2 text-amber-600 dark:text-amber-500">
+                  ({totalRows.toLocaleString()} total in file)
+                </span>
+              )}
             </div>
-            <Pagination className="w-full lg:w-auto overflow-x-auto">
-              <PaginationContent className="justify-center lg:justify-start flex-wrap">
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={handlePreviousPage}
-                    className={currentPage === 0 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                  />
-                </PaginationItem>
-                {getPageNumbers().map((page, idx) => {
-                  if (page === 'ellipsis') {
+
+            <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-end lg:w-auto lg:flex-row lg:items-center lg:gap-4">
+              <Pagination className="w-full overflow-x-auto lg:w-auto">
+                <PaginationContent className="justify-center lg:justify-start flex-wrap">
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={handlePreviousPage}
+                      className={currentPage === 0 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                  {getPageNumbers().map((page, idx) => {
+                    if (page === 'ellipsis') {
+                      return (
+                        <PaginationItem key={`ellipsis-${idx}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      );
+                    }
                     return (
-                      <PaginationItem key={`ellipsis-${idx}`}>
-                        <PaginationEllipsis />
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handlePageClick(page);
+                          }}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page + 1}
+                        </PaginationLink>
                       </PaginationItem>
                     );
-                  }
-                  return (
-                    <PaginationItem key={page}>
-                      <PaginationLink
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handlePageClick(page);
-                        }}
-                        isActive={currentPage === page}
-                        className="cursor-pointer"
-                      >
-                        {page + 1}
-                      </PaginationLink>
-                    </PaginationItem>
-                  );
-                })}
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={handleNextPage}
-                    className={currentPage >= totalPages - 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+                  })}
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={handleNextPage}
+                      className={currentPage >= totalPages - 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+
+              {onPageSizeChange && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="whitespace-nowrap text-sm text-muted-foreground">Rows per page:</span>
+                  <Select
+                    value={String(effectivePageSize)}
+                    onValueChange={(v) => onPageSizeChange(Number(v))}
+                  >
+                    <SelectTrigger className="h-9 w-[100px] bg-background" aria-label="Rows per page">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pageSizeOptions.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n.toLocaleString()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

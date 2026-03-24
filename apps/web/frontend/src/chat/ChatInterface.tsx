@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState, useMemo } from "react";
+import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo } from "lucide-react";
 import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -16,6 +16,8 @@ import ChartPreviewChip from "../components/chat/ChartPreviewChip";
 import type { ChartChipData } from "../components/chat/ChartPreviewChip";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
 import type { DashboardComponent } from "@/types/dashboard";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 
 
 // Friendly AI persona step mapping for Fluid Morph loading
@@ -70,6 +72,138 @@ const formatAssetStatus = (status: string | null | undefined): string => {
   };
 
   return statusMap[status] || status.charAt(0).toUpperCase() + status.slice(1);
+};
+
+// Deep Thinking Tasks component — supports both live (during processing) and static (from saved data) modes
+interface DeepThinkingTasksProps {
+  prompt?: string;
+  isActive: boolean;
+  currentStep?: string | null;
+  savedTasks?: Array<{ id: string; text: string }>;
+  inline?: boolean;
+}
+
+const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, inline }: DeepThinkingTasksProps) => {
+  const [isExpanded, setIsExpanded] = useState(!savedTasks);
+
+  // Parse tasks from /run prompt (live mode only)
+  const promptTasks = useMemo(() => {
+    if (savedTasks) return [];
+    if (!prompt) return [];
+    let textToParse = prompt.trim();
+    if (!textToParse.startsWith('/run')) return [];
+
+    textToParse = textToParse.substring(4).trim();
+    const lines = textToParse.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+    return lines.map(line => line.replace(/^([-\*o]|\d+\.)\s*/, '').trim());
+  }, [prompt, savedTasks]);
+
+  const [workflowTasks, setWorkflowTasks] = useState<{ id: string, text: string }[]>([]);
+  const prevStepRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (savedTasks) return;
+    if (!isActive) {
+      if (workflowTasks.length > 0) {
+        setIsExpanded(false);
+      }
+      return;
+    }
+
+    setIsExpanded(true);
+
+    if (workflowTasks.length === 0) {
+      setWorkflowTasks([{ id: 'start', text: mapStepToDisplayText('start') }]);
+    }
+
+    if (currentStep && currentStep !== prevStepRef.current) {
+      const displayText = mapStepToDisplayText(currentStep);
+      setWorkflowTasks(prev => {
+        if (prev.find(t => t.text === displayText) || currentStep === 'start') return prev;
+        return [...prev, { id: currentStep, text: displayText }];
+      });
+      prevStepRef.current = currentStep;
+    }
+  }, [currentStep, isActive, workflowTasks.length, savedTasks]);
+
+  const displayTasks = savedTasks
+    ? savedTasks
+    : promptTasks.length > 0
+      ? promptTasks.map((t, i) => ({ id: `prompt-${i}`, text: t }))
+      : workflowTasks;
+  const isUsingWorkflow = !savedTasks && promptTasks.length === 0;
+
+  if (displayTasks.length === 0) {
+    return null;
+  }
+
+  const wrapperClass = inline
+    ? "w-full mt-3 bg-[#1E1E1E] border border-white/10 rounded-xl overflow-hidden shadow-sm"
+    : "w-full max-w-[85%] mt-3 ml-[38px] bg-[#1E1E1E] border border-white/10 rounded-xl overflow-hidden shadow-sm";
+
+  return (
+    <div className={wrapperClass}>
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-2 bg-[#18181B] border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs tracking-wider text-white/50">
+          <ListTodo className="w-5 h-5" />
+          <span>Thinking Process <span className="text-white/20 mx-1">|</span> {isActive ? 'Executing' : 'Executed'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="text-[10px] sm:text-xs text-white/40">
+            Total: {displayTasks.length} {displayTasks.length === 1 ? 'Task' : 'Tasks'}
+          </div>
+          <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+        </div>
+      </div>
+
+      {/* Body */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 py-3.5 border-t border-white/5">
+              <div className="text-xs font-medium text-white/80 mb-3.5">
+                {isUsingWorkflow ? "Processing Steps" : `${displayTasks.length} Tasks Remaining`}
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {displayTasks.map((task, idx) => {
+                  const isTaskActive = isUsingWorkflow ? (isActive && idx === displayTasks.length - 1) : (isActive && idx === 0);
+                  const isCompleted = savedTasks ? true : isUsingWorkflow ? (idx < displayTasks.length - 1 || !isActive) : !isActive;
+
+                  return (
+                    <div key={task.id} className={`flex items-start gap-3 text-sm ${isTaskActive ? 'text-white' : 'text-white/50'}`}>
+                      <div className="mt-[2px] flex-shrink-0">
+                        {isCompleted ? (
+                          <CheckCircle className="w-4 h-4 text-emerald-400" />
+                        ) : isTaskActive ? (
+                          <CircleDashed className="w-4 h-4 text-white/80 animate-[spin_3s_linear_infinite]" />
+                        ) : (
+                          <Circle className="w-4 h-4 text-white/20" />
+                        )}
+                      </div>
+                      <span className="leading-snug break-words flex-1">{task.text}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 };
 
 // Fluid Morph single-line loading indicator
@@ -324,6 +458,50 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     return () => window.removeEventListener('nyx:open-file-picker', handler as EventListener);
   }, []);
 
+  const addChartToContext = useCallback((chart: ChartChipData): boolean => {
+    const normalized: ChartChipData = {
+      ...chart,
+      id: String(chart.id),
+      componentId: String(chart.componentId),
+    };
+    let added = false;
+    setMentionedCharts((prev) => {
+      if (prev.some((c) => String(c.componentId) === normalized.componentId)) {
+        return prev;
+      }
+      added = true;
+      return [...prev, normalized];
+    });
+    if (!added) {
+      toast({
+        title: "Chart already referenced",
+        description: `${chart.title} is already in context.`,
+      });
+    } else {
+      toast({
+        title: "Chart referenced",
+        description: `${chart.title} added to context`,
+      });
+    }
+    setIsContextPickerOpen(false);
+    setMentionQuery("");
+    return added;
+  }, [toast]);
+
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      const chart = (ev as CustomEvent<ChartChipData>).detail;
+      if (!chart?.componentId) return;
+      addChartToContext(chart);
+      requestAnimationFrame(() => {
+        document.querySelector("[data-chat-root]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        (document.querySelector("textarea[data-chat-input]") as HTMLTextAreaElement | null)?.focus();
+      });
+    };
+    window.addEventListener("dreamify:select-chart-context", handler as EventListener);
+    return () => window.removeEventListener("dreamify:select-chart-context", handler as EventListener);
+  }, [addChartToContext]);
+
   // Eagerly fetch project assets so the "all assets" badge can display the file count
   useEffect(() => {
     if (projectId) {
@@ -397,6 +575,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
     if (isSendingRef.current) return;
+    if (uploadedFiles.some(f => f.status === 'uploading')) {
+      toast({ title: "Upload in progress", description: "Please wait for the file to finish uploading.", variant: "destructive" });
+      return;
+    }
     const hasValidUploadedFiles = uploadedFiles.some(f => ['uploaded', 'processed', 'accepted'].includes(f.status));
     if (projectAssets.length === 0 && !hasValidUploadedFiles) {
       toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
@@ -432,7 +614,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       // Build chart mentions with full config for backend context
       const chartsWithConfig = mentionedCharts.map(chart => ({
         ...chart,
-        config: dashboardComponents?.find(c => c.id === chart.componentId)?.component_config,
+        config: dashboardComponents?.find(c => String(c.id) === String(chart.componentId))?.component_config,
       }));
       const hasChartMentions = chartsWithConfig.length > 0;
 
@@ -590,36 +772,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   };
 
   const handleChartSelect = (chart: ChartChipData) => {
-    // Prevent duplicates
-    if (mentionedCharts.some(c => c.componentId === chart.componentId)) {
-      toast({
-        title: "Chart already referenced",
-        description: `${chart.title} is already in context.`,
-      });
-      setIsContextPickerOpen(false);
-      return;
-    }
-
-    setMentionedCharts(prev => [...prev, chart]);
-
-    // Remove @mention text from input (same logic as handleAssetSelect)
-    if (pickerTriggerMode === 'mention') {
+    const added = addChartToContext(chart);
+    if (added && pickerTriggerMode === "mention") {
       const textBeforeCursor = inputValue.slice(0, mentionCursorPos);
-      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+      const lastAtIndex = textBeforeCursor.lastIndexOf("@");
       if (lastAtIndex !== -1) {
         const textAfterMention = inputValue.slice(mentionCursorPos);
         const newText = inputValue.slice(0, lastAtIndex) + textAfterMention;
         setInputValue(newText);
       }
     }
-
-    setIsContextPickerOpen(false);
-    setMentionQuery('');
-
-    toast({
-      title: "Chart referenced",
-      description: `${chart.title} added to context`,
-    });
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -633,13 +795,21 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     fileInputRef.current?.click();
   };
 
-  const handlePaste = async (e: any) => {
-    const files = Array.from(e.clipboardData.files) as File[];
-    if (files.length > 0) {
-      e.preventDefault();
-      for (const file of files) {
-        await processFileUpload(file);
-      }
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const files = getFilesFromClipboardData(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (uploadedFiles.length + files.length > 5) {
+      toast({
+        title: "Too many files",
+        description: `Maximum 5 files allowed. You can add ${5 - uploadedFiles.length} more file(s).`,
+        variant: "destructive"
+      });
+      return;
+    }
+    for (const file of files) {
+      await processFileUpload(file);
     }
   };
 
@@ -914,7 +1084,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     <div className="flex flex-col h-full min-h-0 bg-muted">
 
       {/* Messages Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 space-y-4 chat-scrollbar-hide">
         {messages.map((message, index) => {
           const isUser = message.role === "user";
           const isSystem = message.role === "system";
@@ -974,44 +1144,54 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                             secondaryText = (message.attachment.name).replace(/\.[^/.]+$/, "");
                           }
                           return (
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => {
-                                const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
-                                if (matchedAsset) {
-                                  window.open(`/preview/${matchedAsset.id}`, '_blank');
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
-                                  if (matchedAsset) {
-                                    window.open(`/preview/${matchedAsset.id}`, '_blank');
-                                  }
-                                }
-                              }}
-                              className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-white/10 bg-white/5 backdrop-blur-md text-white/90 max-w-full group transition-all hover:bg-white/10 cursor-pointer"
-                              title={message.attachment.name}
-                            >
-                              <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center p-2 ${logoBg}`}>
-                                {icon ? (
-                                  <img src={icon} className="w-full h-full object-contain" alt="" />
-                                ) : (
-                                  <Database className="w-5 h-5 text-emerald-400" />
-                                )}
-                              </div>
-                              <div className="flex flex-col min-w-0 flex-1 leading-tight">
-                                <span className="text-sm font-medium text-white truncate">
-                                  {displayName}
-                                </span>
-                                {secondaryText && (
-                                  <span className="text-xs text-gray-400 truncate mt-0.5">
-                                    {secondaryText}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => {
+                                    const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
+                                    if (matchedAsset) {
+                                      window.open(`/preview/${matchedAsset.id}`, '_blank');
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
+                                      if (matchedAsset) {
+                                        window.open(`/preview/${matchedAsset.id}`, '_blank');
+                                      }
+                                    }
+                                  }}
+                                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-white/90 backdrop-blur-md transition-all hover:bg-white/10 max-w-full outline-none"
+                                >
+                                  <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md p-2 ${logoBg}`}>
+                                    {icon ? (
+                                      <img src={icon} className="h-full w-full object-contain" alt="" />
+                                    ) : (
+                                      <Database className="h-5 w-5 text-emerald-400" />
+                                    )}
+                                  </div>
+                                  <div className="flex min-w-0 flex-1 flex-col leading-tight">
+                                    <span className="truncate text-sm font-medium text-white">
+                                      {displayName}
+                                    </span>
+                                    {secondaryText && (
+                                      <span className="mt-0.5 truncate text-xs text-gray-400">
+                                        {secondaryText}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                sideOffset={8}
+                                className="z-[300] max-w-[min(90vw,260px)] !bg-black/90 !text-white text-xs shadow-lg break-words"
+                              >
+                                {message.attachment.name}
+                              </TooltipContent>
+                            </Tooltip>
                           );
                         })()}
                       </div>
@@ -1032,26 +1212,36 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           const nextMsg = msgIndex >= 0 ? messages[msgIndex + 1] : undefined;
                           const isEditDone = nextMsg?.role === 'assistant';
                           return (
-                            <div
-                              key={`${chart.componentId}-${idx}`}
-                              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border backdrop-blur-md text-white/90 max-w-full transition-all ${isEditDone ? 'border-emerald-500/20 bg-emerald-500/[0.06]' : 'border-purple-500/20 bg-purple-500/[0.06]'}`}
-                            >
-                              <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${isEditDone ? 'bg-emerald-500/10' : 'bg-purple-500/10'}`}>
-                                <ChartIcon className={`w-5 h-5 ${isEditDone ? 'text-emerald-400' : 'text-purple-400'}`} />
-                              </div>
-                              <div className="flex flex-col min-w-0 flex-1 leading-tight">
-                                <span className={`text-xs font-medium flex items-center gap-1.5 ${isEditDone ? 'text-emerald-300' : 'text-purple-300'}`}>
-                                  {isEditDone ? (
-                                    <><Check className="w-3 h-3" /> Edited {typeLabel} Chart</>
-                                  ) : (
-                                    <><Pencil className="w-3 h-3" /> Editing {typeLabel} Chart</>
-                                  )}
-                                </span>
-                                <span className="text-sm text-white truncate mt-0.5" title={chart.title}>
-                                  {chart.title}
-                                </span>
-                              </div>
-                            </div>
+                            <Tooltip key={`${chart.componentId}-${idx}`}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className={`flex max-w-full cursor-default items-center gap-3 rounded-lg border px-3 py-2.5 text-white/90 backdrop-blur-md outline-none transition-all ${isEditDone ? 'border-emerald-500/20 bg-emerald-500/[0.06]' : 'border-purple-500/20 bg-purple-500/[0.06]'}`}
+                                >
+                                  <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md ${isEditDone ? 'bg-emerald-500/10' : 'bg-purple-500/10'}`}>
+                                    <ChartIcon className={`h-5 w-5 ${isEditDone ? 'text-emerald-400' : 'text-purple-400'}`} />
+                                  </div>
+                                  <div className="flex min-w-0 flex-1 flex-col leading-tight">
+                                    <span className={`flex items-center gap-1.5 text-xs font-medium ${isEditDone ? 'text-emerald-300' : 'text-purple-300'}`}>
+                                      {isEditDone ? (
+                                        <><Check className="h-3 w-3" /> Edited {typeLabel} Chart</>
+                                      ) : (
+                                        <><Pencil className="h-3 w-3" /> Editing {typeLabel} Chart</>
+                                      )}
+                                    </span>
+                                    <span className="mt-0.5 truncate text-sm text-white">
+                                      {chart.title}
+                                    </span>
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                sideOffset={8}
+                                className="z-[300] max-w-[min(90vw,260px)] !bg-black/90 !text-white text-xs shadow-lg break-words"
+                              >
+                                {chart.title}
+                              </TooltipContent>
+                            </Tooltip>
                           );
                         })}
                       </div>
@@ -1083,7 +1273,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                             dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
                           />
                           {isLong && !isExpanded && (
-                            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/100 to-transparent pointer-events-none" />
+                            <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${message.role === 'assistant' ? 'from-[#18181A] via-[#18181A]/80' : 'from-black/100'} to-transparent pointer-events-none`} />
                           )}
                         </div>
                       );
@@ -1109,6 +1299,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         </Button>
                       </div>
                     )}
+                    {/* Render saved todo tasks (between text and dashboard card) */}
+                    {message.role === 'assistant' && message.todoTasks && message.todoTasks.length > 0 && (
+                      <DeepThinkingTasks
+                        savedTasks={message.todoTasks}
+                        isActive={false}
+                        inline
+                      />
+                    )}
                     {/* Render dashboard card if present */}
                     {message.role === 'assistant' && message.dashboardCard && (() => {
                       const sourceLabel = (() => {
@@ -1119,45 +1317,52 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       })();
 
                       return (
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          aria-label="Open dashboard"
-                          onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
-                          className={`group w-full max-w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 hover:bg-white/[0.06] hover:border-white/20 transition-all cursor-pointer select-none shadow-sm flex items-center justify-between ${message.content ? 'mt-3' : ''}`}
-                        >
-                          <div className="flex-1 min-w-0 flex items-center gap-3.5">
-                            {/* Abstract mini dashboard visualization */}
-                            <div className="relative w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-primary/25 via-blue-500/15 to-indigo-500/20 group-hover:from-primary/35 group-hover:via-blue-500/25 group-hover:to-indigo-500/30 transition-all duration-300">
-                              <svg viewBox="0 0 40 40" className="w-full h-full" aria-hidden="true">
-                                {/* Sparkline */}
-                                <path d="M5 14 L11 10 L17 16 L23 8 L29 12 L35 6" stroke="hsl(142 76% 56%)" fill="none" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-                                {/* Mini bars */}
-                                <rect x="5" y="24" width="4.5" height="12" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.5" />
-                                <rect x="11.5" y="20" width="4.5" height="16" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.7" />
-                                <rect x="18" y="26" width="4.5" height="10" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.45" />
-                                <rect x="24.5" y="22" width="4.5" height="14" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.85" />
-                                <rect x="31" y="28" width="4.5" height="8" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.55" />
-                                {/* Accent dot */}
-                                <circle cx="23" cy="8" r="1.8" fill="hsl(142 76% 56%)" opacity="0.8" />
-                              </svg>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-md font-medium text-white truncate" title={message.dashboardCard.dashboardTitle || "Dashboard"}>
-                                {message.dashboardCard.dashboardTitle || "Dashboard"}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              aria-label="Open dashboard"
+                              onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
+                              className={`group relative flex w-full max-w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-sm outline-none transition-all select-none hover:border-white/20 hover:bg-white/[0.06] ${message.content ? 'mt-3' : ''}`}
+                            >
+                              <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                                <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-primary/25 via-blue-500/15 to-indigo-500/20 transition-all duration-300 group-hover:from-primary/35 group-hover:via-blue-500/25 group-hover:to-indigo-500/30">
+                                  <svg viewBox="0 0 40 40" className="h-full w-full" aria-hidden="true">
+                                    <path d="M5 14 L11 10 L17 16 L23 8 L29 12 L35 6" stroke="hsl(142 76% 56%)" fill="none" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                                    <rect x="5" y="24" width="4.5" height="12" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.5" />
+                                    <rect x="11.5" y="20" width="4.5" height="16" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.7" />
+                                    <rect x="18" y="26" width="4.5" height="10" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.45" />
+                                    <rect x="24.5" y="22" width="4.5" height="14" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.85" />
+                                    <rect x="31" y="28" width="4.5" height="8" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.55" />
+                                    <circle cx="23" cy="8" r="1.8" fill="hsl(142 76% 56%)" opacity="0.8" />
+                                  </svg>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-md truncate font-medium text-white">
+                                    {message.dashboardCard.dashboardTitle || "Dashboard"}
+                                  </div>
+                                  <div className="mt-0.5 flex flex-wrap gap-x-2 truncate text-sm text-white/50">
+                                    <span className="truncate">Source: {sourceLabel}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-sm text-white/50 mt-0.5 flex flex-wrap gap-x-2 truncate">
-                                <span className="truncate">Source: {sourceLabel}</span>
-                              </div>
+                              {!isDashboardOpen && (
+                                <button type="button" className="button-gradient ml-4 flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-medium text-white transition-all">
+                                  Open
+                                </button>
+                              )}
                             </div>
-                          </div>
-                          {!isDashboardOpen && (
-                            <button className="ml-4 px-5 py-2 button-gradient text-white text-sm font-medium rounded-full transition-all flex items-center gap-1.5">
-                              Open
-                            </button>
-                          )}
-                        </div>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="top"
+                            sideOffset={8}
+                            className="z-[300] max-w-[min(90vw,300px)] bg-black/90 text-xs text-white shadow-lg break-words"
+                          >
+                            {message.dashboardCard.dashboardTitle || "Dashboard"}{sourceLabel ? ` — ${sourceLabel}` : ''}
+                          </TooltipContent>
+                        </Tooltip>
                       );
                     })()}
                     <div className="flex items-center justify-between mt-1">
@@ -1183,10 +1388,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                                   return next;
                                 });
                               }}
-                              className="rounded-md text-white/40 hover:text-white transition-colors"
+                              className="flex items-center gap-1 rounded-md text-white/40 hover:text-white transition-colors"
                               title={isExpanded ? 'Collapse' : 'Expand'}
                               type="button"
                             >
+                              <span className="text-xs">{isExpanded ? 'Show less' : 'Show more'}</span>
                               <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
                           );
@@ -1208,19 +1414,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   </div>
                 </div>
               </div>
-              {/* Inline Rolling Text under the last user message that started analysis */}
-              {message.role === 'user'
-                && index === messages.length - 1
-                && isProcessing && (
-                  <div className="flex justify-start">
-                    <RollingText
-                      isActive={isProcessing}
-                      stopSignal={!isProcessing && !isTyping}
-                      successText=""
-                      currentStep={currentWorkflowStep}
-                    />
-                  </div>
-                )}
+              {/* Live Deep Thinking Tasks under the user message during active processing */}
+              {message.role === 'user' && isProcessing && index === messages.length - 1 && (
+                <div className="flex justify-start">
+                  <DeepThinkingTasks
+                    prompt={message.content}
+                    isActive={true}
+                    currentStep={currentWorkflowStep}
+                  />
+                </div>
+              )}
             </div>
           )
         })}
@@ -1256,6 +1459,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            onPasteCapture={handlePaste}
           >
             {/* Drag Overlay */}
             {isDragging && (
@@ -1358,9 +1562,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   }
                 }}
                 placeholder={isListening ? 'Listening...' : "Use @ to select the data file to analyze"}
-                className={`w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60 ${inputValue.length > 100 ? 'pr-6' : ''}`}
+                className={`w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60 chat-scrollbar-hide ${inputValue.length > 100 ? 'pr-6' : ''}`}
                 data-chat-input
-                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -1469,16 +1672,17 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   </button>
 
                   {dropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
+                    <div className="absolute bottom-full left-0 mb-1 w-56 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
                       <div className="py-1">
                         {CONNECTORS.map((connector) => (
                           <button
                             key={connector.name}
                             onClick={() => handleIntegrationClick(connector)}
-                            className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors duration-200 cursor-pointer"
+                            className="w-full px-3 py-2 text-left text-sm flex items-center hover:bg-white/10 rounded-md transition-colors duration-200 cursor-pointer"
                           >
                             <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
-                            {connector.name}
+                            {connector.name && <span className="pl-2">{connector.name}</span>}
+                            {!connector.isActive && <span className="text-xs text-white/30 pl-1">(coming soon)</span>}
                           </button>
                         ))}
                       </div>
@@ -1511,7 +1715,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 ) : (
                   <Button
                     onClick={() => handleSend()}
-                    disabled={!inputValue.trim() || isTyping}
+                    disabled={!inputValue.trim() || isTyping || uploadedFiles.some(f => f.status === 'uploading')}
                     className="button-gradient p-3 disabled:opacity-50"
                   >
                     <CornerRightUp className="w-4 h-4" />

@@ -19,7 +19,7 @@ export default function DashboardLoading({ className = "", style = {} as React.C
   ];
 
   const [currentFeature, setCurrentFeature] = React.useState(features[0]);
-  
+
   React.useEffect(() => {
     const intervalId = window.setInterval(() => {
       const randomIndex = Math.floor(Math.random() * features.length);
@@ -30,7 +30,7 @@ export default function DashboardLoading({ className = "", style = {} as React.C
 
   return (
     <div className={`flex items-center justify-center h-full ${className}`} style={style}>
-      <motion.div 
+      <motion.div
         className="flex flex-col items-center gap-4 p-8 shadow-sm w-80"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -41,11 +41,14 @@ export default function DashboardLoading({ className = "", style = {} as React.C
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
+          className="relative flex items-center justify-center"
         >
-          <img 
-            src="/logo-watermark.png" 
-            alt="Logo" 
-            className="w-16 h-16 object-contain"
+          {/* Spinning ring */}
+          <div className="absolute w-20 h-20 rounded-full border-2 border-white/10 border-t-primary animate-spin" />
+          <img
+            src="/logo-watermark.png"
+            alt="Logo"
+            className="w-16 h-16 object-contain p-2"
           />
         </motion.div>
 
@@ -55,8 +58,8 @@ export default function DashboardLoading({ className = "", style = {} as React.C
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
 
-         {/* Random feature display */}
-         <div className="w-full mt-2">
+        {/* Random feature display */}
+        {/* <div className="w-full mt-2">
            <motion.div
              key={currentFeature.text}
              initial={{ opacity: 0, y: 8 }}
@@ -67,7 +70,7 @@ export default function DashboardLoading({ className = "", style = {} as React.C
              <currentFeature.icon className="w-4 h-4 text-primary flex-shrink-0" />
              <span className="text-sm text-foreground truncate">{currentFeature.text}</span>
            </motion.div>
-         </div>
+         </div> */}
       </motion.div>
     </div>
   );

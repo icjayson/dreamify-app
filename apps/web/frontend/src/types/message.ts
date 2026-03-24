@@ -30,4 +30,8 @@ export interface Message {
     dashboardId: string;
     dashboardTitle?: string;
   };
+  todoTasks?: Array<{
+    id: string;
+    text: string;
+  }>;
 }

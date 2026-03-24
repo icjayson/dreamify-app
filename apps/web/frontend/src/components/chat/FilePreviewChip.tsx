@@ -1,5 +1,6 @@
 import { Loader2, FileText, X, Sparkles } from "lucide-react";
 import { type UploadedFile } from "@/chat/useChatStore";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface FilePreviewChipProps {
   file: UploadedFile;
@@ -54,38 +55,49 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
     return file.filename;
   };
 
+  const tooltipText = isGA4 ? `${file.accountName} / ${file.propertyName}` : file.filename;
+
   return (
-    <div className="group relative flex items-center gap-2.5 px-3 py-2 bg-[#1e1e1e] border border-white/10 rounded-full overflow-hidden transition-all hover:border-white/20">
-      {/* Live Status Icon Group */}
-      {renderLiveStatus()}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-white/10 bg-[#1e1e1e] px-3 py-2 transition-all hover:border-white/20 outline-none">
+          {renderLiveStatus()}
 
-      {/* Structured Text */}
-      <div className="flex items-center gap-1.5 text-xs">
-        {isIntegration && (
-          <>
-            <span className="text-white font-semibold flex-shrink-0">
-              {getAppShortName()}
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
+            {isIntegration && (
+              <>
+                <span className="flex-shrink-0 font-semibold text-white">
+                  {getAppShortName()}
+                </span>
+                <span className="flex-shrink-0 font-light text-white/30">•</span>
+              </>
+            )}
+            <span className="min-w-0 flex-1 truncate text-gray-400" title={getContextText()}>
+              {getContextText()}
             </span>
-            <span className="text-white/30 font-light mr-0.5">•</span>
-          </>
-        )}
-        <span
-          className="text-gray-400 truncate max-w-[150px]"
-          title={isGA4 ? `${file.accountName} / ${file.propertyName}` : file.filename}
-        >
-          {getContextText()}
-        </span>
-      </div>
+          </div>
 
-      {/* Remove Button - visible on hover */}
-      <button
-        onClick={onRemove}
-        className="ml-1 w-4 h-4 flex items-center justify-center text-gray-500 hover:text-white transition-colors"
-        aria-label="Remove correlation"
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-gray-500 transition-colors hover:text-white"
+            aria-label="Remove correlation"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={8}
+        className="max-w-[260px] bg-black/90 text-xs text-white shadow-lg break-words"
       >
-        <X className="w-3 h-3" />
-      </button>
-    </div>
+        {tooltipText}
+      </TooltipContent>
+    </Tooltip>
   );
 };
 

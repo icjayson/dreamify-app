@@ -4,11 +4,18 @@ import { useAuth } from '@clerk/clerk-react';
 import CSVPreviewTable, { CSVPreviewTableProps } from '@/components/CSVPreviewTable';
 import { getFilePreview } from '@/services/filePreviewService';
 
+const PREVIEW_ROW_OPTIONS = [100, 1000, 2000] as const;
+
+/** Max rows fetched in one preview request — must match backend `limit` cap (2000). */
+const PREVIEW_FETCH_MAX = 2000;
+
 export default function FilePreviewPage() {
   const { assetId } = useParams<{ assetId: string }>();
   const [searchParams] = useSearchParams();
   const { getToken } = useAuth();
   const urlToken = searchParams.get('token');
+  /** Rows per page in the table only; does not change API fetch size. */
+  const [rowsPerPage, setRowsPerPage] = useState<number>(100);
 
   const [previewData, setPreviewData] = useState<CSVPreviewTableProps>({
     columns: [],
@@ -45,7 +52,7 @@ export default function FilePreviewPage() {
           }
         }
         
-        const data = await getFilePreview(assetId, token);
+        const data = await getFilePreview(assetId, token, { limit: PREVIEW_FETCH_MAX });
         setPreviewData({
           columns: data.columns,
           rows: data.rows,
@@ -71,7 +78,12 @@ export default function FilePreviewPage() {
   return (
     <div className="min-h-screen bg-background w-full overflow-hidden">
       <div className="h-screen flex flex-col max-w-full">
-        <CSVPreviewTable {...previewData} />
+        <CSVPreviewTable
+          {...previewData}
+          pageSize={rowsPerPage}
+          onPageSizeChange={setRowsPerPage}
+          pageSizeOptions={[...PREVIEW_ROW_OPTIONS]}
+        />
       </div>
     </div>
   );

@@ -35,6 +35,7 @@ export default function ProjectPage() {
 
   const {
     projects,
+    isLoading: projectsLoading,
     createNewProject,
     renameProject,
     deleteProject,
@@ -374,260 +375,275 @@ export default function ProjectPage() {
   }, [uploadedFiles]);
 
   return (
-    <div className="min-h-screen bg-muted">
-      {/* Header */}
-      <div className="px-4 py-2">
-        <div className="flex items-center justify-between h-10">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="button-outline h-8 w-8 rounded-md flex items-center justify-center text-white/70 hover:text-white"
-              aria-label="Toggle project sidebar"
-            >
-              <PanelRightClose className="w-4 h-4" />
-            </button>
-            <button aria-label="Go back" onClick={() => navigate('/')} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </button>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm text-white/70 truncate" title={displayName}>{displayName}</span>
-              <span className="text-sm text-white/50">›</span>
-              {isEditingTitle ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <input
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleRenameSave();
-                      } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        cancelEditingTitle();
-                      }
-                    }}
-                    className="text-sm text-white bg-transparent border-b border-white/40 focus:outline-none focus:border-white/80 leading-none w-40 sm:w-56"
-                    autoFocus
-                  />
-                  <button
-                    className="px-2 py-1 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
-                    onClick={cancelEditingTitle}
-                    disabled={isRenaming}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="px-2 py-1 text-xs rounded-md button-gradient disabled:opacity-70 disabled:pointer-events-none"
-                    onClick={handleRenameSave}
-                    disabled={isRenaming}
-                  >
-                    {isRenaming ? "Saving..." : "Save"}
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span className="font-regular text-sm truncate" title={projectTitle}>{projectTitle}</span>
-                  <button
-                    aria-label="Rename project"
-                    onClick={startEditingTitle}
-                    className="text-white/60 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                </>
+    <>
+      {/* Loading overlay — renders on top of the page so components are visible behind */}
+      {isProjectLoading && (
+        <div className="fixed inset-0 z-[100] bg-black/20 backdrop-blur-sm flex items-center justify-center">
+          <DashboardLoading title="Restoring your project..." description="Wait a few seconds" durationSec={5} />
+        </div>
+      )}
+
+      <div className="min-h-screen bg-muted">
+        {/* Header */}
+        <div className="px-4 py-2 relative z-[200]">
+          <div className="flex items-center justify-between h-10">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="button-outline h-8 w-8 rounded-md flex items-center justify-center text-white/70 hover:text-white"
+                aria-label="Toggle project sidebar"
+              >
+                <PanelRightClose className="w-4 h-4" />
+              </button>
+              <button aria-label="Go back" onClick={() => navigate('/')} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm text-white/70 truncate" title={displayName}>{displayName}</span>
+                <span className="text-sm text-white/50">›</span>
+                {isEditingTitle ? (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <input
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleRenameSave();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelEditingTitle();
+                        }
+                      }}
+                      className="text-sm text-white bg-transparent border-b border-white/40 focus:outline-none focus:border-white/80 leading-none w-40 sm:w-56"
+                      autoFocus
+                    />
+                    <button
+                      className="px-2 py-1 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
+                      onClick={cancelEditingTitle}
+                      disabled={isRenaming}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="px-2 py-1 text-xs rounded-md button-gradient disabled:opacity-70 disabled:pointer-events-none"
+                      onClick={handleRenameSave}
+                      disabled={isRenaming}
+                    >
+                      {isRenaming ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="font-regular text-sm truncate" title={projectTitle}>{projectTitle}</span>
+                    <button
+                      aria-label="Rename project"
+                      onClick={startEditingTitle}
+                      className="text-white/60 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center">
+              <FeedbackProjectButton />
+              {isDashboardOpen && (
+                <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center ml-2"><span>Publish</span>
+                  <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
+                </button>
               )}
             </div>
           </div>
-          <div className="flex items-center">
-            <FeedbackProjectButton />
-            {isDashboardOpen && (
-              <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center ml-2"><span>Publish</span>
-                <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
-              </button>
-            )}
+        </div>
+        {/* Top Tabs (sm only) */}
+        <div className="lg:hidden px-4 pb-2">
+          <div className="w-full rounded-xl border border-white/15 bg-background/70 backdrop-blur p-1 flex">
+            <button
+              onClick={() => setActiveTab('chat')}
+              aria-pressed={activeTab === 'chat'}
+              className={`flex-1 py-0 rounded-lg text-sm transition-all ${activeTab === 'chat' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              aria-pressed={activeTab === 'dashboard'}
+              className={`flex-1 py-0 rounded-lg text-sm transition-all ${activeTab === 'dashboard' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+            >
+              Dashboard
+            </button>
           </div>
         </div>
-      </div>
-      {/* Top Tabs (sm only) */}
-      <div className="lg:hidden px-4 pb-2">
-        <div className="w-full rounded-xl border border-white/15 bg-background/70 backdrop-blur p-1 flex">
-          <button
-            onClick={() => setActiveTab('chat')}
-            aria-pressed={activeTab === 'chat'}
-            className={`flex-1 py-0 rounded-lg text-sm transition-all ${activeTab === 'chat' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
-          >
-            Chat
-          </button>
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            aria-pressed={activeTab === 'dashboard'}
-            className={`flex-1 py-0 rounded-lg text-sm transition-all ${activeTab === 'dashboard' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
-          >
-            Dashboard
-          </button>
-        </div>
-      </div>
 
-      {/* Content */}
-      <div className={`grid grid-cols-1 ${shouldShowDashboard && isDashboardOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0`}>
-        <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300`}>
-          <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
-            <div>
-              <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
-                <ChatInterface
-                  projectId={projectId ?? undefined}
-                  onProcessedDataChange={(data) => {
-                    // This is called when processing and dashboard generation is complete
-                    if (data) {
-                      // Diff detection: compare old vs new dashboard data for edit feedback
-                      if (processedData) {
-                        const changed = diffDashboardComponents(processedData, data);
-                        if (changed.size > 0) {
-                          useChatStore.getState().setChangedComponentIds(changed);
+        {/* Content */}
+        <div className={`grid grid-cols-1 ${shouldShowDashboard && isDashboardOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0`}>
+          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300`}>
+            <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
+              <div>
+                <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
+                  <ChatInterface
+                    projectId={projectId ?? undefined}
+                    onProcessedDataChange={(data) => {
+                      // This is called when processing and dashboard generation is complete
+                      if (data) {
+                        // Diff detection: compare old vs new dashboard data for edit feedback
+                        if (processedData) {
+                          const changed = diffDashboardComponents(processedData, data);
+                          if (changed.size > 0) {
+                            useChatStore.getState().setChangedComponentIds(changed);
+                          }
                         }
+                        setProcessedData(data);
+                        setHasShownInitialDashboard(true);
+                        setIsDashboardOpen(true);
+                        setActiveTab('dashboard');
                       }
-                      setProcessedData(data);
-                      setHasShownInitialDashboard(true);
+                    }}
+                    onSwitchToDashboard={(dashboardId) => {
+                      if (dashboardId && projectId) {
+                        selectDashboard(dashboardId, projectId).then((data) => {
+                          if (data) {
+                            setProcessedData(data);
+                          }
+                        });
+                      }
                       setIsDashboardOpen(true);
                       setActiveTab('dashboard');
-                    }
-                  }}
-                  onSwitchToDashboard={(dashboardId) => {
-                    if (dashboardId && projectId) {
-                      selectDashboard(dashboardId, projectId).then((data) => {
-                        if (data) {
-                          setProcessedData(data);
-                        }
-                      });
-                    }
-                    setIsDashboardOpen(true);
-                    setActiveTab('dashboard');
-                  }}
-                  dashboardComponents={dashboardComponents}
-                />
+                    }}
+                    dashboardComponents={dashboardComponents}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* dashboard columns */}
-        <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative`}>
-          {shouldShowDashboard && isDashboardOpen && (
-            <button
-              onClick={() => { setIsDashboardOpen(false); setActiveTab('chat'); }}
-              className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/60 shadow-lg border border-white/10 hover:bg-black/90 text-white/80 hover:text-white transition-all lg:block hidden backdrop-blur-md group"
-              title="Close Dashboard"
-            >
-              <X className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            </button>
-          )}
-          <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative">
-            {!shouldShowDashboard ? (
-              <BlankState
-                subtexts={[
-                  "Upload a CSV file and let Dreamify build your dashboard",
-                  "Connect Google Sheets, GA4, Meta, Stripe, and more",
-                  "Describe your dashboard — Dreamify designs it instantly",
-                  "Cinematic motion and clear storytelling for your data",
-                  "Try now to experience Dreamify's capabilities",
-                ]}
-                intervalMs={1000}
-                onWatchTutorial={() => window.open('/tutorial', '_blank')}
-                handleFileUpload={() => {
-                  try {
-                    window.dispatchEvent(new Event('nyx:open-file-picker'));
-                    const el = document.querySelector('[data-chat-root]');
-                    if (el && 'scrollIntoView' in el) {
-                      (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                  } catch (_e) { }
-                }}
-                onConnectDataSource={() => {
-                  try {
-                    useChatStore.getState().setDropdownOpen(true);
-                    const el = document.querySelector('[data-chat-root]');
-                    if (el && 'scrollIntoView' in el) {
-                      (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                  } catch (_e) { }
-                }}
-                onUseSample={() => {
-                  try {
-                    useChatStore.getState().setInputValue('Use sample data and create a demo dashboard');
-                    const el = document.querySelector('[data-chat-root]');
-                    if (el && 'scrollIntoView' in el) {
-                      (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                  } catch (_e) { }
-                }}
-              />
-            ) : (
-              isProjectLoading ? (
-                <DashboardLoading title="Loading Project" description="Restoring your dashboard..." durationSec={5} />
-              ) : processedData ? (
-                // Prioritize showing dashboard if it exists, even during Q&A processing
-                // This preserves the view during Q&A mode while only new dashboard generation shows loading
-                <DashboardPreview dashboardId={selectedDashboardId || undefined} processedData={processedData} className="h-full overflow-y-auto" />
-              ) : uploadedFiles.some(f => f.status === 'processing') ? (
-                // Only show loading if no existing dashboard (fresh upload generating first dashboard)
-                <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
-              ) : isInitialLoading ? (
-                <DashboardLoading title="Generating Dashboard" description="Please wait while we build your dashboard..." durationSec={10} />
-              ) : (
-                <DashboardLoading title="Preparing Dashboard" description="Please wait..." durationSec={10} />
-              )
+          {/* dashboard columns */}
+          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative`}>
+            {shouldShowDashboard && isDashboardOpen && (
+              <button
+                onClick={() => { setIsDashboardOpen(false); setActiveTab('chat'); }}
+                className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/60 shadow-lg border border-white/10 hover:bg-black/90 text-white/80 hover:text-white transition-all lg:block hidden backdrop-blur-md group"
+                title="Close Dashboard"
+              >
+                <X className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              </button>
             )}
-            {/* Edit feedback overlay — fixed within the dashboard container */}
-            {isUpdatingDashboard && (
-              <div className="absolute inset-0 z-40 pointer-events-none">
-                <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
-                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/70 border border-white/15 shadow-lg backdrop-blur-md">
-                    <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
-                    <span className="text-sm text-white/90 font-medium whitespace-nowrap">
-                      {updatingStepText}
-                    </span>
-                    <div className="flex gap-0.5">
-                      <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:0ms]" />
-                      <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:150ms]" />
-                      <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:300ms]" />
+            <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative">
+              {!shouldShowDashboard ? (
+                <BlankState
+                  subtexts={[
+                    "Upload a CSV file and let Dreamify build your dashboard",
+                    "Connect Google Sheets, GA4, Meta, Stripe, and more",
+                    "Describe your dashboard — Dreamify designs it instantly",
+                    "Cinematic motion and clear storytelling for your data",
+                    "Try now to experience Dreamify's capabilities",
+                  ]}
+                  intervalMs={1000}
+                  onWatchTutorial={() => window.open('/tutorial', '_blank')}
+                  handleFileUpload={() => {
+                    try {
+                      window.dispatchEvent(new Event('nyx:open-file-picker'));
+                      const el = document.querySelector('[data-chat-root]');
+                      if (el && 'scrollIntoView' in el) {
+                        (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
+                    } catch (_e) { }
+                  }}
+                  onConnectDataSource={() => {
+                    try {
+                      useChatStore.getState().setDropdownOpen(true);
+                      const el = document.querySelector('[data-chat-root]');
+                      if (el && 'scrollIntoView' in el) {
+                        (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
+                    } catch (_e) { }
+                  }}
+                  onUseSample={() => {
+                    try {
+                      useChatStore.getState().setInputValue('Use sample data and create a demo dashboard');
+                      const el = document.querySelector('[data-chat-root]');
+                      if (el && 'scrollIntoView' in el) {
+                        (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
+                    } catch (_e) { }
+                  }}
+                />
+              ) : (
+                isProjectLoading ? (
+                  <DashboardLoading title="Restoring your dashboard..." description="Wait a few seconds" durationSec={5} />
+                ) : processedData ? (
+                  <DashboardPreview dashboardId={selectedDashboardId || undefined} processedData={processedData} className="h-full overflow-y-auto" showCardActionsMenu />
+                ) : (
+                  <div className="flex items-center justify-center h-full bg-black/5">
+                    <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/70 border border-white/15 shadow-lg backdrop-blur-md">
+                      <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
+                      <span className="text-sm text-white/90 font-medium whitespace-nowrap">
+                        Loading your dashboard...
+                      </span>
+                      <div className="flex gap-0.5">
+                        <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:300ms]" />
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+              {/* Edit feedback overlay — fixed within the dashboard container */}
+              {isUpdatingDashboard && (
+                <div className="absolute inset-0 z-40 pointer-events-none">
+                  <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
+                    <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/70 border border-white/15 shadow-lg backdrop-blur-md">
+                      <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
+                      <span className="text-sm text-white/90 font-medium whitespace-nowrap">
+                        {updatingStepText}
+                      </span>
+                      <div className="flex gap-0.5">
+                        <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1 h-1 rounded-full bg-white/60 animate-bounce [animation-delay:300ms]" />
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
-      {/* Publish Modal */}
-      {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} />}
+        {/* Publish Modal */}
+        {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} />}
 
-      {/* Projects Sidebar */}
-      <ProjectsSidebar
-        className="bg-muted/98 backdrop-blur-lg"
-        open={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        onNewProject={() => {
-          setIsSidebarOpen(false);
-          createNewProject();
-        }}
-        recents={projects.map(p => ({ id: p.id, title: p.title || 'Untitled Project' }))}
-        onOpenProject={(id) => {
-          setIsSidebarOpen(false);
-          if (id === projectId) return;
-          openProject(id);
-        }}
-        onRenameProject={(id, title) => {
-          renameProject(id, title);
-        }}
-        onDeleteProject={(id) => {
-          deleteProject(id);
-          if (id === projectId) {
-            navigate('/');
-          }
-        }}
-      />
-    </div>
+        {/* Projects Sidebar */}
+        <ProjectsSidebar
+          className="bg-muted/98 backdrop-blur-lg"
+          open={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          isLoading={projectsLoading}
+          onNewProject={() => {
+            setIsSidebarOpen(false);
+            createNewProject();
+          }}
+          recents={projects.map(p => ({ id: p.id, title: p.title || 'Untitled Project' }))}
+          onOpenProject={(id) => {
+            setIsSidebarOpen(false);
+            if (id === projectId) return;
+            openProject(id);
+          }}
+          onRenameProject={(id, title) => {
+            renameProject(id, title);
+          }}
+          onDeleteProject={(id) => {
+            deleteProject(id);
+            if (id === projectId) {
+              navigate('/');
+            }
+          }}
+        />
+      </div>
+    </>
   );
 }

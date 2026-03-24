@@ -16,6 +16,7 @@ const AboutPage = () => {
   const { isSignedIn } = useAuth();
   const {
     projects,
+    isLoading: projectsLoading,
     createNewProject,
     openProject,
     renameProject,
@@ -81,6 +82,7 @@ const AboutPage = () => {
       <ProjectsSidebar
         open={projectsOpen}
         onClose={closeProjects}
+        isLoading={projectsLoading}
         onNewProject={() => createNewProject()}
         recents={projects}
         onOpenProject={openProject}

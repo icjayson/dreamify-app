@@ -1,5 +1,6 @@
 import { FileText, Eye, BarChart3, TrendingUp, PieChart, AreaChart, ScatterChart, Hash, Table2, Radar, GitBranch } from "lucide-react";
 import { type AssetRecord } from "@/services/fileService";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface ChartPickerItem {
     id: string;
@@ -97,19 +98,31 @@ const ProjectContextPicker = ({
                         {filteredCharts.map(chart => {
                             const IconComponent = getChartIcon(chart.type);
                             return (
-                                <button
-                                    key={`chart-${chart.componentId}`}
-                                    onClick={() => onChartSelect?.(chart)}
-                                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left"
-                                >
-                                    <IconComponent className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                                    <span className="text-sm text-white truncate flex-1">
+                                <Tooltip key={`chart-${chart.componentId}`}>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={() => onChartSelect?.(chart)}
+                                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left outline-none"
+                                        >
+                                            <IconComponent className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                                            <span className="text-sm text-white truncate flex-1">
+                                                {chart.title}
+                                            </span>
+                                            <span className="text-[10px] text-purple-400/70 bg-purple-400/10 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
+                                                {formatChartType(chart.type)}
+                                            </span>
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent
+                                        side="right"
+                                        align="start"
+                                        sideOffset={8}
+                                        className="max-w-[260px] bg-black/90 text-xs text-white shadow-lg break-words z-[300]"
+                                    >
                                         {chart.title}
-                                    </span>
-                                    <span className="text-[10px] text-purple-400/70 bg-purple-400/10 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
-                                        {formatChartType(chart.type)}
-                                    </span>
-                                </button>
+                                    </TooltipContent>
+                                </Tooltip>
                             );
                         })}
                     </>
@@ -128,41 +141,60 @@ const ProjectContextPicker = ({
                             Datasets
                         </p>
                         {filteredFiles.map(asset => (
-                            <button
-                                key={asset.id}
-                                onClick={() => onSelect(asset)}
-                                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left"
-                            >
-                                {asset.sourceType === 'GA4' ? (
-                                    <img src="/GA4.png" alt="GA4 Logo" className="flex-shrink-0 w-4 h-4 object-contain" />
-                                ) : (
-                                    <FileText className="w-4 h-4 text-white/70 flex-shrink-0" />
-                                )}
-                                <span className="text-sm text-white truncate flex-1">
-                                    {asset.sourceType ? `${asset.sourceType} Data` : asset.name}
-                                </span>
-                                {asset.sourceType ? (
-                                    <div className="flex-shrink-0 flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                                        <span className="text-xs text-green-500/90 font-medium tracking-wide">Connected</span>
-                                    </div>
-                                ) : (
-                                    <span className="text-xs text-white/50">{asset.ext}</span>
-                                )}
-                                {onPreview && (
-                                    <div
-                                        role="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onPreview(asset.id);
-                                        }}
-                                        className="p-1 hover:bg-white/20 rounded-md transition-colors text-white/50 hover:text-white"
-                                        title="Preview dataset"
+                            <Tooltip key={asset.id}>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        onClick={() => onSelect(asset)}
+                                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left outline-none"
                                     >
-                                        <Eye className="w-4 h-4" />
-                                    </div>
-                                )}
-                            </button>
+                                        {asset.sourceType === 'GA4' ? (
+                                            <img src="/GA4.png" alt="GA4 Logo" className="flex-shrink-0 w-4 h-4 object-contain" />
+                                        ) : (
+                                            <FileText className="w-4 h-4 text-white/70 flex-shrink-0" />
+                                        )}
+                                        <span className="text-sm text-white truncate flex-1">
+                                            {asset.sourceType ? `${asset.sourceType} Data` : asset.name}
+                                        </span>
+                                        {asset.sourceType ? (
+                                            <div className="flex-shrink-0 flex items-center gap-1">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                                <span className="text-xs text-green-500/90 font-medium tracking-wide">Connected</span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-white/50">{asset.ext}</span>
+                                        )}
+                                        {onPreview && (
+                                            <div
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onPreview(asset.id);
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.stopPropagation();
+                                                        onPreview(asset.id);
+                                                    }
+                                                }}
+                                                className="p-1 hover:bg-white/20 rounded-md transition-colors text-white/50 hover:text-white"
+                                                title="Preview dataset"
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                            </div>
+                                        )}
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    side="right"
+                                    align="start"
+                                    sideOffset={8}
+                                    className="max-w-[260px] bg-black/90 text-xs text-white shadow-lg break-words z-[300]"
+                                >
+                                    {asset.name}
+                                </TooltipContent>
+                            </Tooltip>
                         ))}
                     </>
                 )}

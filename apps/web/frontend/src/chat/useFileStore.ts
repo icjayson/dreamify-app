@@ -236,7 +236,7 @@ export const useFileStore = create<FileState>((set, get) => ({
   validateClientFile: (file: File): string | null => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     const allowed = ["csv","xlsx","xls","json"];
-    if (!ext || !allowed.includes(ext)) return "Invalid file type. Supported: CSV, XLSX, XLS, JSON";
+    if (!ext || !allowed.includes(ext)) return "Invalid file type. Supported: CSV, XLSX, XLS";
     return null;
   },
   

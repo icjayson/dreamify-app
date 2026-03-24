@@ -7,6 +7,7 @@ interface ProjectsSidebarProps {
   onClose: () => void;
   onNewProject?: () => void;
   recents?: Array<{ id: string; title: string }>;
+  isLoading?: boolean;
   onOpenProject?: (id: string) => void;
   onRenameProject?: (id: string, newTitle: string) => void;
   onDeleteProject?: (id: string) => void;
@@ -14,7 +15,7 @@ interface ProjectsSidebarProps {
 }
 
 
-const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewProject, recents, onOpenProject, onRenameProject, onDeleteProject, className }) => {
+const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewProject, recents, isLoading, onOpenProject, onRenameProject, onDeleteProject, className }) => {
   const [sidebarShown, setSidebarShown] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -98,7 +99,12 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
         </button>
         <div className="flex-1 overflow-y-auto space-y-2">
           <div className="text-white/50 text-xs mt-10 mb-4">Recents</div>
-          {hasRecents ? (
+          {isLoading ? (
+            <div className="text-white/50 text-xs mt-4 text-center flex items-center justify-center gap-2">
+              <div className="w-3 h-3 border-2 border-white/20 border-t-white/80 rounded-full animate-spin"></div>
+              Loading your projects
+            </div>
+          ) : hasRecents ? (
             computedRecents.map((item) => (
               <div
                 key={item.id}

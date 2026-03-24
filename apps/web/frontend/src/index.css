@@ -601,6 +601,29 @@
   background-color: hsl(var(--primary) / 0.3);
 }
 
+/* Chat and Dashboard specific scrollbar that hides when not hovered */
+.chat-scrollbar-hide,
+.chat-scrollbar-hide * {
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s;
+}
+.chat-scrollbar-hide:hover,
+.chat-scrollbar-hide *:hover {
+  scrollbar-color: hsl(var(--primary) / 0.2) transparent;
+}
+.chat-scrollbar-hide::-webkit-scrollbar-thumb,
+.chat-scrollbar-hide *::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+.chat-scrollbar-hide:hover::-webkit-scrollbar-thumb,
+.chat-scrollbar-hide *:hover::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.2);
+}
+.chat-scrollbar-hide:hover::-webkit-scrollbar-thumb:hover,
+.chat-scrollbar-hide *:hover::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.3);
+}
+
 /* Ensure document (homepage) scrollbar picks styles explicitly */
 html {
   scrollbar-width: thin;

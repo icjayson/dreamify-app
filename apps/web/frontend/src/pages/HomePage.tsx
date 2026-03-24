@@ -24,8 +24,13 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { ToastAction } from "@/components/ui/toast";
 import { CONNECTORS, type ConnectorItem } from '@/constants/connectors';
 import FilePreviewChip from '@/components/chat/FilePreviewChip';
+import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import ReactGA from 'react-ga4';
 import { FeedbackFloatingButton } from "@/components/ui/feedback-button";
+import { MissionSection } from "@/components/homepage-section/mission";
+import { ProblemSection } from "@/components/homepage-section/problem";
+import { FeaturesSection } from "@/components/homepage-section/features";
+import { CTAContainerSection } from "@/components/homepage-section/cta";
 
 interface HomePageProps {
   onGetStarted: () => void;
@@ -68,6 +73,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
   const {
     projects,
+    isLoading: projectsLoading,
     createNewProject,
     renameProject,
     deleteProject,
@@ -336,13 +342,22 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     setInputValue('');
   };
 
-  const handlePaste = async (e: any) => {
-    const files = Array.from(e.clipboardData.files) as File[];
-    if (files.length > 0) {
-      e.preventDefault();
-      for (const file of files) {
-        await processFileUpload(file);
-      }
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const files = getFilesFromClipboardData(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const remainingSlots = 5 - uploadedFiles.length;
+    if (files.length > remainingSlots) {
+      toast({
+        title: "Too many files",
+        description: `Maximum 5 files allowed. You can add ${remainingSlots} more file(s).`,
+        variant: "destructive"
+      });
+      return;
+    }
+    for (const file of files) {
+      await processFileUpload(file);
     }
   };
 
@@ -584,6 +599,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   };
 
   // Allow page to scroll even when sidebar is open (no body lock)
+  const guestCtaText = "Log in";
+  const handleGuestCtaClick = () => {
+    navigate("/login");
+  };
 
   return (
     <div className="min-h-screen overflow-y-auto homepage-scrollbar">
@@ -631,6 +650,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
+              onPasteCapture={handlePaste}
             >
               {/* Drag Overlay */}
               {isDragging && (
@@ -669,7 +689,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                       handleChatSubmit();
                     }
                   }}
-                  onPaste={handlePaste}
                   autoFocus
                 />
               </div>
@@ -773,16 +792,17 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     </Button>
 
                     {dropdownOpen && (
-                      <div className="absolute top-full left-0 mt-1 w-48 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
+                      <div className="absolute top-full left-0 mt-1 w-56 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
                         <div className="py-1">
                           {CONNECTORS.map((connector) => (
                             <button
                               key={connector.name}
                               onClick={() => handleIntegrationClick(connector)}
-                              className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 rounded-md transition-colors duration-200 flex items-center gap-2 cursor-pointer"
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 rounded-md transition-colors duration-200 flex items-center cursor-pointer"
                             >
                               <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
-                              {connector.name}
+                              {connector.name && <span className="pl-2">{connector.name}</span>}
+                              {!connector.isActive && <span className="text-xs text-white/30 pl-1">(coming soon)</span>}
                             </button>
                           ))}
                         </div>
@@ -878,12 +898,34 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         <div id="hero-sentinel" aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-px pointer-events-none" />
       </section>
 
+      {!isSignedIn && (
+        <main className="relative z-10">
+          <div className="relative z-10">
+            <MissionSection
+              ctaText={guestCtaText}
+              ctaLink="/login"
+              className="min-h-[50vh]"
+            />
+          </div>
+          <div className="relative z-10">
+            <ProblemSection />
+          </div>
+          <div className="relative z-10">
+            <FeaturesSection />
+          </div>
+          <div className="relative z-10">
+            <CTAContainerSection ctaText={guestCtaText} onCtaClick={handleGuestCtaClick} />
+          </div>
+        </main>
+      )}
+
       {/* Removed floating button here; header provides the button when signed in */}
 
       {/* Projects sidebar */}
       <ProjectsSidebar
         open={projectsOpen}
         onClose={closeProjects}
+        isLoading={projectsLoading}
         onNewProject={() => createNewProject()}
         recents={projects}
         onOpenProject={openProject}

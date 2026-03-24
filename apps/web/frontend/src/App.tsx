@@ -94,7 +94,7 @@ const AppContent = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <Elements stripe={stripePromise}>
-      <TooltipProvider>
+      <TooltipProvider delayDuration={0}>
         <Toaster />
         <Sonner />
         <AppContent />

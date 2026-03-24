@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
-export function MissionSection({ ctaText = "Log in", ctaLink = "/login" }: { ctaText?: string; ctaLink?: string }) {
+export function MissionSection({
+  ctaText = "Log in",
+  ctaLink = "/login",
+  className,
+}: {
+  ctaText?: string;
+  ctaLink?: string;
+  className?: string;
+}) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -26,7 +35,7 @@ export function MissionSection({ ctaText = "Log in", ctaLink = "/login" }: { cta
   }, []);
 
   return (
-    <section className="relative min-h-screen w-full flex items-center justify-center">
+    <section className={cn("relative min-h-screen w-full flex items-center justify-center", className)}>
       <div ref={rootRef} className="max-w-6xl mx-auto px-6 text-center">
         <h1
           className={`text-2xl md:text-4xl font-medium tracking-tight transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"

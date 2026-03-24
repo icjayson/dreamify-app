@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import os
+import re as _re
 import tempfile
 import time
 import uuid
@@ -48,6 +49,37 @@ class StatusRequest(BaseModel):
 # Backend API URL for updating file records
 BACKEND_API_URL = config.app.backend_url.rstrip("/")
 MORPHEUS_API_KEY = config.app.morpheus_api_key
+
+STEP_FRIENDLY_MAP: Dict[str, str] = {
+    "start": "Waking up...",
+    "load_conversation": "Reading conversation context...",
+    "download_asset": "Analyzing file structure...",
+    "run_workflow": "Booting up data engine...",
+    "routing": "Understanding your goal...",
+    "reasoning": "Planning the best visualization...",
+    "execution": "Crunching the numbers...",
+    "synthesis": "Designing your dashboard...",
+    "validation": "Double-checking results...",
+    "finish": "Finalizing...",
+    "error": "I ran into a hiccup.",
+}
+
+# Only persist meaningful AI processing steps (exclude infrastructure/setup steps)
+SAVEABLE_WORKFLOW_STEPS = {"load_conversation",  "download_asset", "routing","execution", "synthesis", "validation"}
+
+
+def _parse_run_tasks(prompt: str) -> List[Dict[str, str]]:
+    """Parse user-defined tasks from a /run prompt."""
+    if not prompt or not prompt.strip().startswith("/run"):
+        return []
+    text = prompt.strip()[4:].strip()
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    tasks: List[Dict[str, str]] = []
+    for i, line in enumerate(lines):
+        cleaned = _re.sub(r"^(?:[-*o]|\d+\.)\s*", "", line).strip()
+        if cleaned:
+            tasks.append({"id": f"prompt-{i}", "text": cleaned})
+    return tasks
 
 logger.info(
     "Config AWS credentials present: %s", "yes" if getattr(config, "aws", None) else "no"
@@ -524,6 +556,16 @@ def _process_conversation_background(
     processed_json_s3_key = None
     conversation: Optional[Dict[str, Any]] = None
     conversation_bucket: Optional[str] = None
+    collected_steps: List[Dict[str, str]] = []
+
+    def _collecting_post_status(conv_id, status, metadata=None):
+        """Wrapper that collects meaningful workflow steps for todo_tasks persistence."""
+        if metadata and isinstance(metadata, dict):
+            step = metadata.get("step")
+            if step and step in SAVEABLE_WORKFLOW_STEPS and step not in {s["id"] for s in collected_steps}:
+                display_text = STEP_FRIENDLY_MAP.get(step, "Processing...")
+                collected_steps.append({"id": step, "text": display_text})
+        return _post_node_status_sync(conv_id, status, metadata)
 
     try:
         logger.info(f"Starting workflow for conversation {conversation_id}")
@@ -540,7 +582,7 @@ def _process_conversation_background(
             _clear_stop_signal_sync(conversation_id)
 
             # Post the initial status now that the previous workflow is done
-            _post_node_status_sync(
+            _collecting_post_status(
                 conversation_id,
                 "processing",
                 {
@@ -549,14 +591,14 @@ def _process_conversation_background(
                 },
             )
 
-        _post_node_status_sync(conversation_id, "processing", {"step": "load_conversation"})
+        _collecting_post_status(conversation_id, "processing", {"step": "load_conversation"})
 
         try:
             conversation = _load_json_from_s3_uri(conversation_uri)
         except FileNotFoundError as e:
             error_msg = f"Conversation not found in S3: {conversation_uri}. The conversation may not have been saved yet or there was an S3 consistency delay."
             logger.error(error_msg)
-            _post_node_status_sync(
+            _collecting_post_status(
                 conversation_id,
                 "error",
                 {
@@ -587,7 +629,7 @@ def _process_conversation_background(
             temp_file_paths.append(temp_file_path)
             logger.info(f"Created placeholder file for Q&A: {temp_file_path}")
         else:
-            _post_node_status_sync(conversation_id, "processing", {"step": "download_asset"})
+            _collecting_post_status(conversation_id, "processing", {"step": "download_asset"})
             for idx, asset_info in enumerate(assets):
                 asset_bucket = asset_info.get("s3_bucket")
                 asset_key = asset_info.get("s3_key")
@@ -617,7 +659,7 @@ def _process_conversation_background(
                     logger.info(f"Saved file to {temp_file_path} ({os.path.getsize(temp_file_path)} bytes)")
                 except Exception as e:
                     logger.error(f"Failed to download asset {asset_info.get('asset_id')}: {e}")
-                    _post_node_status_sync(
+                    _collecting_post_status(
                         conversation_id,
                         "error",
                         {
@@ -631,7 +673,7 @@ def _process_conversation_background(
             
             if not temp_file_paths:
                 logger.error("No assets were successfully downloaded")
-                _post_node_status_sync(
+                _collecting_post_status(
                     conversation_id,
                     "error",
                     {
@@ -645,7 +687,7 @@ def _process_conversation_background(
         primary_asset = assets[0] if assets else None
 
         workflow = StatefulAnalyzeCSVWorkflow()
-        _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
+        _collecting_post_status(conversation_id, "processing", {"step": "run_workflow"})
         
         # Extract user prompt from latest user node
         user_prompt = None
@@ -667,7 +709,7 @@ def _process_conversation_background(
             user_prompt=user_prompt,
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
-            post_status_fn=_post_node_status_sync,
+            post_status_fn=_collecting_post_status,
             assets=assets,
         )
         
@@ -675,7 +717,7 @@ def _process_conversation_background(
         if result is None:
             error_msg = "Workflow returned None result"
             logger.error(error_msg)
-            _post_node_status_sync(conversation_id, "error", {"error": error_msg})
+            _collecting_post_status(conversation_id, "error", {"error": error_msg})
             return
         
         # Check response type to route handling
@@ -704,7 +746,7 @@ def _process_conversation_background(
             
             # Post completion status with Q&A content in metadata
             file_identifier = assets[0].get("file_id") or assets[0].get("asset_id") if assets else conversation_id
-            _post_node_status_sync(
+            _collecting_post_status(
                 conversation_id,
                 "completed",
                 {
@@ -829,7 +871,14 @@ def _process_conversation_background(
 
         # If we have a saved dashboard record, attach it to the conversation structure
         if new_dashboard_record:
-            # Add dashboard reference to the last assistant node (or create one if needed)
+            # Determine todo tasks to persist alongside the dashboard
+            todo_tasks_to_save: List[Dict[str, str]] = []
+            if user_prompt and user_prompt.strip().startswith("/run"):
+                todo_tasks_to_save = _parse_run_tasks(user_prompt)
+            elif collected_steps:
+                todo_tasks_to_save = list(collected_steps)
+
+            # Add todo_tasks + dashboard reference to the last assistant node (or create one)
             if conversation.get("nodes"):
                 last_assistant_node = None
                 for node in reversed(conversation["nodes"]):
@@ -838,6 +887,13 @@ def _process_conversation_background(
                         break
 
                 if last_assistant_node:
+                    if todo_tasks_to_save:
+                        last_assistant_node["contents"].append(
+                            {
+                                "type": "todo_tasks",
+                                "data": {"tasks": todo_tasks_to_save},
+                            }
+                        )
                     last_assistant_node["contents"].append(
                         {
                             "type": "dashboard",
@@ -848,21 +904,29 @@ def _process_conversation_background(
                         }
                     )
                 else:
-                    # Create a new assistant node for dashboard if none exists
+                    contents: List[Dict[str, Any]] = []
+                    if todo_tasks_to_save:
+                        contents.append(
+                            {
+                                "type": "todo_tasks",
+                                "data": {"tasks": todo_tasks_to_save},
+                            }
+                        )
+                    contents.append(
+                        {
+                            "type": "dashboard",
+                            "data": {
+                                "dashboard_id": new_dashboard_record["dashboard_id"],
+                                "s3_uri": new_dashboard_record["s3_uri"],
+                            },
+                        }
+                    )
                     dashboard_node = {
                         "node_id": f"node_{uuid.uuid4().hex[:8]}",
                         "role": "assistant",
                         "status": "completed",
                         "created_at": datetime.now().isoformat(),
-                        "contents": [
-                            {
-                                "type": "dashboard",
-                                "data": {
-                                    "dashboard_id": new_dashboard_record["dashboard_id"],
-                                    "s3_uri": new_dashboard_record["s3_uri"],
-                                },
-                            }
-                        ],
+                        "contents": contents,
                     }
                     conversation.setdefault("nodes", []).append(dashboard_node)
 
@@ -880,12 +944,11 @@ def _process_conversation_background(
         _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
         
         completion_file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") if primary_asset else conversation_id
-        _post_node_status_sync(
+        _collecting_post_status(
             conversation_id,
             "completed",
             {
                 "fileID": completion_file_identifier,
-                # Explicitly mark this as a dashboard response for frontend routing
                 "response_type": "dashboard_config",
                 "dashboard_id": new_dashboard_record["dashboard_id"] if new_dashboard_record else None,
             },
@@ -963,7 +1026,7 @@ def _process_conversation_background(
             except Exception as upload_error:
                 logger.error(f"Failed to save error payload: {upload_error}")
 
-        _post_node_status_sync(conversation_id, "error", {"error": "Sorry, we encountered an error. Please try again."})
+        _collecting_post_status(conversation_id, "error", {"error": "Sorry, we encountered an error. Please try again."})
 
     finally:
         # Clean up all downloaded asset files

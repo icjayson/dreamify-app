@@ -139,23 +139,29 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, inline }
     return null;
   }
 
+  const isLiveMode = !inline;
+
   const wrapperClass = inline
     ? "w-full mt-3 bg-[#1E1E1E] border border-white/10 rounded-xl overflow-hidden shadow-sm"
     : "w-full max-w-[85%] mt-3 ml-[38px] bg-[#1E1E1E] border border-white/10 rounded-xl overflow-hidden shadow-sm";
+
+  const headerClass = isLiveMode
+    ? "grid grid-cols-[1fr_auto] items-center px-4 py-2 bg-[#18181B] border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors"
+    : "flex items-center justify-between px-4 py-2 bg-[#18181B] border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors";
 
   return (
     <div className={wrapperClass}>
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-2 bg-[#18181B] border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors"
+        className={headerClass}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-2 text-[10px] sm:text-xs tracking-wider text-white/50">
           <ListTodo className="w-5 h-5" />
           <span>Thinking Process <span className="text-white/20 mx-1">|</span> {isActive ? 'Executing' : 'Executed'}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="text-[10px] sm:text-xs text-white/40">
+        <div className={`flex items-center gap-2 ${isLiveMode ? 'flex-shrink-0' : ''}`}>
+          <div className={`text-[10px] sm:text-xs text-white/40 ${isLiveMode ? 'whitespace-nowrap text-right' : ''}`}>
             Total: {displayTasks.length} {displayTasks.length === 1 ? 'Task' : 'Tasks'}
           </div>
           <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />

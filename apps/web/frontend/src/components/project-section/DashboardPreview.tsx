@@ -883,10 +883,17 @@ const DashboardPreview = ({
     };
   };
 
-  const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v3`, [activeDashboard?.id]);
+  // Bump version when grid behavior changes (e.g. compactType) so we don't reuse
+  // layouts saved under older compaction logic.
+  const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v4`, [activeDashboard?.id]);
 
   const [layouts, setLayouts] = useState<Layouts>({ lg: [], md: [], sm: [], xs: [], xxs: [] });
   const [isLayoutReady, setIsLayoutReady] = useState(false);
+  // Compaction is what makes RGL "pack" tiles upward.
+  // We suppress compaction when applying a brand-new dashboard layout (e.g. chart edits coming from chat),
+  // because that can re-pack other tiles and break top KPI positions.
+  // Once the user manually drags/resizes, we restore compaction so drag/drop behaves normally.
+  const [compactTypeMode, setCompactTypeMode] = useState<"none" | "vertical">("vertical");
 
   // Initialize or update layouts when active dashboard changes
   useEffect(() => {
@@ -897,6 +904,8 @@ const DashboardPreview = ({
     }
 
     const initialResult = buildLayoutsFromComponents(activeDashboard.components, isExporting);
+    // New layout coming from backend/chat: suppress compaction during this render.
+    setCompactTypeMode("none");
 
     // Skip local storage layouts entirely if exporting to force our reflow layout
     if (isExporting) {
@@ -1244,10 +1253,13 @@ const DashboardPreview = ({
                 rowHeight={rowHeight}
                 isDraggable
                 isResizable
+                compactType={compactTypeMode === "none" ? null : "vertical"}
                 resizeHandles={['se', 'e', 's', 'w', 'n']}
                 {...(showCardActionsMenu ? { draggableCancel: ".dashboard-card-menu-trigger" } : {})}
                 onLayoutChange={handleLayoutChange}
                 onBreakpointChange={handleBreakpointChange}
+                onDragStart={() => setCompactTypeMode("vertical")}
+                onResizeStart={() => setCompactTypeMode("vertical")}
                 onDragStop={handleDragResizeStop}
                 onResizeStop={handleDragResizeStop}
               >

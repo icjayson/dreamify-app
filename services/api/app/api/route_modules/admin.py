@@ -290,6 +290,7 @@ async def list_conversations(
         if unique_user_ids:
             try:
                 clerk_users = clerk_client.users.list(request={"user_id": unique_user_ids})
+                found_ids = []
                 for u in clerk_users:
                     found_ids.append(u.id)
                     name_parts = filter(None, [u.first_name, u.last_name])

@@ -31,9 +31,15 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
   useEffect(() => {
     if (open) {
       setShouldRender(true);
-      // Use setTimeout to allow DOM to render before adding the visible class
-      const timeoutId = setTimeout(() => setSidebarShown(true), 10);
-      return () => clearTimeout(timeoutId);
+      // Double rAF ensures the browser has painted the initial hidden state
+      // before triggering the slide-in transition (setTimeout was too fast in prod)
+      let rafId: number;
+      rafId = requestAnimationFrame(() => {
+        rafId = requestAnimationFrame(() => {
+          setSidebarShown(true);
+        });
+      });
+      return () => cancelAnimationFrame(rafId);
     } else {
       setSidebarShown(false);
       const timeout = setTimeout(() => setShouldRender(false), 300);

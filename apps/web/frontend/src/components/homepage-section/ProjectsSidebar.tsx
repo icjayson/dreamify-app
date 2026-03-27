@@ -78,7 +78,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
   const safeDeleteProject = onDeleteProject ?? ((id: string) => { });
 
   return (
-    <div className="fixed inset-0 z-[150]" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[250]" role="dialog" aria-modal="true">
       <div
         className={`absolute inset-0 bg-black/10 transition-opacity duration-300 ${sidebarShown ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}

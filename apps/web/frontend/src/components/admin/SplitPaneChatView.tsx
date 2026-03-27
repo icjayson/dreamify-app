@@ -107,20 +107,27 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                                 >
                                     {/* Avatar Placeholder or Real Avatar */}
                                     <div className={cn(
-                                        "flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center bg-muted text-muted-foreground overflow-hidden",
-                                        selectedId === conv.conversation_id && !conv.user_avatar ? "bg-primary/20 text-primary" : ""
+                                        "flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center bg-muted text-muted-foreground overflow-hidden border",
+                                        selectedId === conv.conversation_id && !conv.user_avatar ? "bg-primary/20 text-primary border-primary/30" : ""
                                     )}>
                                         {conv.user_avatar ? (
                                             <img src={conv.user_avatar} alt={conv.user_name || "User"} className="h-full w-full object-cover" />
+                                        ) : conv.user_name ? (
+                                            <span className="text-xs font-bold leading-none">
+                                                {conv.user_name.charAt(0).toUpperCase()}
+                                            </span>
                                         ) : (
-                                            <MessageSquare className="h-5 w-5" />
+                                            <MessageSquare className="h-5 w-5 opacity-70" />
                                         )}
                                     </div>
 
                                     {/* Thread Info */}
                                     <div className="flex-1 min-w-0 overflow-hidden pr-2">
-                                        <div className="font-medium text-sm truncate">
-                                            {conv.user_name || conv.user_id.replace('user_', '') || 'Unknown User'}
+                                        <div className={cn(
+                                            "font-medium text-sm truncate",
+                                            !conv.user_name && "text-muted-foreground/80 font-mono text-[11px]"
+                                        )}>
+                                            {conv.user_name || (conv.user_id.startsWith('user_') ? conv.user_id.replace('user_', 'ID: ') : conv.user_id) || 'Unknown User'}
                                         </div>
                                         <div className="text-xs text-muted-foreground truncate flex items-center gap-1 mt-0.5">
                                             <LayoutTemplate className="h-3 w-3" />
@@ -240,8 +247,17 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                                         <div className="flex flex-col gap-4">
                                             <div>
                                                 <div className="text-xs font-medium text-muted-foreground mb-1">User</div>
-                                                <div className="font-mono text-xs bg-muted/50 p-2 rounded truncate" title={selectedConvMeta?.user_id}>
-                                                    {selectedConvMeta?.user_name ? `${selectedConvMeta.user_name} (${selectedConvMeta.user_id})` : selectedConvMeta?.user_id}
+                                                <div className="font-mono text-[11px] bg-muted/50 p-2 rounded truncate" title={selectedConvMeta?.user_id}>
+                                                    {selectedConvMeta?.user_name ? (
+                                                        <div className="flex items-center justify-between gap-2 overflow-hidden">
+                                                            <span className="font-medium text-primary truncate max-w-[150px]">{selectedConvMeta.user_name}</span>
+                                                            <span className="opacity-50 whitespace-nowrap text-[10px]">({selectedConvMeta.user_id.slice(0, 12)}...)</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 text-muted-foreground italic">
+                                                            <span className="truncate">{selectedConvMeta?.user_id}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div>

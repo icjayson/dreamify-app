@@ -286,18 +286,51 @@ async def list_conversations(
             try:
                 from clerk_backend_api import Clerk
                 from utils.config import config
+                
+                logger.info(f"Fetching Clerk metadata for {len(unique_user_ids)} unique users")
                 clerk = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
+                
+                # Try fetching from Primary instance
                 clerk_users = clerk.users.list(request={"user_id": unique_user_ids})
+                
+                found_ids = []
                 for u in clerk_users:
+                    found_ids.append(u.id)
                     name_parts = filter(None, [u.first_name, u.last_name])
                     full_name = " ".join(name_parts)
                     user_metadata_map[u.id] = {
-                        "name": full_name if full_name else u.username,
+                        "name": full_name if full_name else (u.username if u.username else u.id),
                         "avatar": u.image_url
                     }
+                
+                # Check for missing users and try fallback instance if available
+                missing_ids = list(set(unique_user_ids) - set(found_ids))
+                if missing_ids and config.clerk.CLERK_LIVE_SECRET_KEY:
+                    logger.info(f"Attempting fallback fetch for {len(missing_ids)} missing users from Live instance")
+                    try:
+                        clerk_live = Clerk(bearer_auth=config.clerk.CLERK_LIVE_SECRET_KEY)
+                        live_users = clerk_live.users.list(request={"user_id": missing_ids})
+                        for u in live_users:
+                            found_ids.append(u.id)
+                            name_parts = filter(None, [u.first_name, u.last_name])
+                            full_name = " ".join(name_parts)
+                            user_metadata_map[u.id] = {
+                                "name": full_name if full_name else (u.username if u.username else u.id),
+                                "avatar": u.image_url
+                            }
+                    except Exception as live_e:
+                        logger.warning(f"Fallback Clerk fetch failed: {live_e}")
+
+                # Final diagnostic log
+                final_missing = set(unique_user_ids) - set(found_ids)
+                if final_missing:
+                    logger.warning(f"Clerk metadata still missing for {len(final_missing)} users after fallback attempt: {list(final_missing)}")
+                else:
+                    logger.info(f"Successfully resolved all {len(unique_user_ids)} user IDs")
+                    
             except Exception as e:
                 # Log error but don't fail the request (metadata will just be empty)
-                print(f"Failed to fetch Clerk user metadata: {e}")
+                logger.error(f"Failed to fetch Clerk user metadata: {str(e)}", exc_info=True)
         
         conversations = [
             ConversationListItem(

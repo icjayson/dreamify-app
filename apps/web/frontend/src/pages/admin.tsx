@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
-import { Search, LayoutGrid, Table2, PanelLeft, ChevronLeft, ChevronRight, Activity, MessageSquare, LogOut } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Search, LayoutGrid, Table2, PanelLeft, ChevronLeft, ChevronRight, Activity, MessageSquare, LogOut, ShieldAlert, LogIn } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ConversationTable } from '@/components/admin/ConversationTable';
 import { ConversationCard } from '@/components/admin/ConversationCard';
 import { SplitPaneChatView } from '@/components/admin/SplitPaneChatView';
-import { AdminLoginModal } from '@/components/admin/AdminLoginModal';
 import { AdminMetricsPanel } from '@/components/admin/AdminMetricsPanel';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { adminService, type ConversationListItem } from '@/services/adminService';
@@ -27,33 +26,33 @@ type ViewMode = 'table' | 'card' | 'split';
 const PAGE_SIZE = 20;
 
 export default function AdminPage() {
-  const { isAuthenticated, credentials, login, logout } = useAdminAuth();
+  const { isSignedIn, isAdmin, userEmail, getToken, signOut } = useAdminAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('table');
-  const [showLoginModal, setShowLoginModal] = useState(!isAuthenticated);
   const [projectIdFilter, setProjectIdFilter] = useState(searchParams.get('project_id') || '');
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1', 10));
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-conversations', projectIdFilter, currentPage],
     queryFn: async () => {
-      if (!credentials) throw new Error('Not authenticated');
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
       return adminService.listConversations(
-        credentials.username,
-        credentials.password,
+        token,
         projectIdFilter || undefined,
         currentPage,
         PAGE_SIZE
       );
     },
-    enabled: isAuthenticated && !!credentials,
+    enabled: isAdmin,
   });
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
 
   const handleProjectIdSearch = (value: string) => {
     setProjectIdFilter(value);
-    setCurrentPage(1); // Reset to first page when filtering
+    setCurrentPage(1);
     if (value) {
       setSearchParams({ project_id: value, page: '1' });
     } else {
@@ -66,31 +65,44 @@ export default function AdminPage() {
     const newParams = new URLSearchParams(searchParams);
     newParams.set('page', page.toString());
     setSearchParams(newParams);
-    // Scroll to top when page changes
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  if (!isAuthenticated) {
+  // Not signed in at all
+  if (!isSignedIn) {
     return (
-      <>
-        <AdminLoginModal
-          open={showLoginModal}
-          onOpenChange={(open) => {
-            setShowLoginModal(open);
-            if (!open && !isAuthenticated) {
-              // Redirect to home if login cancelled
-              window.location.href = '/';
-            }
-          }}
-        />
-        <div className="min-h-screen flex items-center justify-center">
-          <Card>
-            <CardContent className="p-6">
-              <p>Please log in to access the admin panel.</p>
-            </CardContent>
-          </Card>
-        </div>
-      </>
+      <div className="min-h-screen flex items-center justify-center">
+        <Card>
+          <CardContent className="p-8 text-center space-y-4">
+            <LogIn className="h-12 w-12 mx-auto text-muted-foreground" />
+            <h2 className="text-xl font-semibold">Sign In Required</h2>
+            <p className="text-muted-foreground">Please sign in to access the admin panel.</p>
+            <Button onClick={() => navigate('/login')}>
+              Go to Sign In
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Signed in but not admin
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card>
+          <CardContent className="p-8 text-center space-y-4">
+            <ShieldAlert className="h-12 w-12 mx-auto text-destructive" />
+            <h2 className="text-xl font-semibold">Access Denied</h2>
+            <p className="text-muted-foreground">
+              You don't have admin permissions. Contact an administrator if you believe this is an error.
+            </p>
+            <Button variant="outline" onClick={() => navigate('/')}>
+              Go Home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -102,9 +114,9 @@ export default function AdminPage() {
           <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground mr-2">
-              Logged in as <span className="font-medium text-foreground">{credentials?.username}</span>
+              Logged in as <span className="font-medium text-foreground">{userEmail}</span>
             </span>
-            <Button variant="outline" size="sm" onClick={() => logout()} className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10">
+            <Button variant="outline" size="sm" onClick={() => signOut()} className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10">
               <LogOut className="h-4 w-4" />
               Log Out
             </Button>
@@ -231,14 +243,12 @@ export default function AdminPage() {
 
                         {/* Page numbers */}
                         {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                          // Show first page, last page, current page, and pages around current
                           const showPage =
                             pageNum === 1 ||
                             pageNum === totalPages ||
                             (pageNum >= currentPage - 1 && pageNum <= currentPage + 1);
 
                           if (!showPage) {
-                            // Show ellipsis
                             if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
                               return (
                                 <PaginationItem key={pageNum}>
@@ -291,4 +301,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

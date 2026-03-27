@@ -3,7 +3,7 @@ import App from './App.tsx'
 import './index.css'
 import { ClerkProvider, useAuth } from '@clerk/clerk-react'
 import { BrowserRouter } from 'react-router-dom'
-import { AdminAuthProvider } from '@/contexts/AdminAuthContext'
+
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import { apiClient } from '@/services/api'
@@ -40,10 +40,8 @@ const AppWithRouter = () => {
         afterSignOutUrl="/"
         afterSignInUrl="/"
       >
-        <AdminAuthProvider>
-          <TokenBridge />
+        <TokenBridge />
           <App />
-        </AdminAuthProvider>
       </ClerkProvider>
     </BrowserRouter>
   )

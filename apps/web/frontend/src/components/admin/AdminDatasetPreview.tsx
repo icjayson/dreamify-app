@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { adminService } from '@/services/adminService';
 import CSVPreviewTable, { CSVPreviewTableProps } from '@/components/CSVPreviewTable';
 import { Loader2, AlertCircle } from 'lucide-react';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
 
 interface AdminDatasetPreviewProps {
     conversationId: string;
@@ -10,6 +11,7 @@ interface AdminDatasetPreviewProps {
 }
 
 export function AdminDatasetPreview({ conversationId, projectId, assetId }: AdminDatasetPreviewProps) {
+    const { getToken } = useAdminAuth();
     const [previewData, setPreviewData] = useState<CSVPreviewTableProps>({
         columns: [],
         rows: [],
@@ -26,10 +28,10 @@ export function AdminDatasetPreview({ conversationId, projectId, assetId }: Admi
             try {
                 setPreviewData((prev) => ({ ...prev, isLoading: true, error: null }));
 
-                const adminUser = localStorage.getItem('adminUsername') || 'admin';
-                const adminPass = localStorage.getItem('adminPassword') || 'admin123';
+                const token = await getToken();
+                if (!token) throw new Error('Not authenticated');
 
-                const data = await adminService.getFilePreview(adminUser, adminPass, conversationId, projectId, assetId);
+                const data = await adminService.getFilePreview(token, conversationId, projectId, assetId);
 
                 if (isMounted) {
                     setPreviewData({
@@ -60,7 +62,7 @@ export function AdminDatasetPreview({ conversationId, projectId, assetId }: Admi
         return () => {
             isMounted = false;
         }
-    }, [assetId, conversationId, projectId]);
+    }, [assetId, conversationId, projectId, getToken]);
 
     if (previewData.isLoading) {
         return (

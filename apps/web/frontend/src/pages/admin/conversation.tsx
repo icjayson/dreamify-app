@@ -17,26 +17,30 @@ export default function AdminConversationPage() {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('project_id') || '';
   const navigate = useNavigate();
-  const { credentials } = useAdminAuth();
+  const { getToken, isAdmin } = useAdminAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { toast } = useToast();
 
   const { data: conversationData, isLoading: isLoadingConversation } = useQuery({
     queryKey: ['admin-conversation', conversationId, projectId],
     queryFn: async () => {
-      if (!credentials || !conversationId) throw new Error('Missing credentials or conversation ID');
-      return adminService.getConversation(credentials.username, credentials.password, conversationId, projectId);
+      if (!conversationId) throw new Error('Missing conversation ID');
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
+      return adminService.getConversation(token, conversationId, projectId);
     },
-    enabled: !!credentials && !!conversationId && !!projectId,
+    enabled: isAdmin && !!conversationId && !!projectId,
   });
 
   const { data: nodesData, isLoading: isLoadingNodes } = useQuery({
     queryKey: ['admin-conversation-nodes', conversationId, projectId],
     queryFn: async () => {
-      if (!credentials || !conversationId) throw new Error('Missing credentials or conversation ID');
-      return adminService.getConversationNodes(credentials.username, credentials.password, conversationId, projectId);
+      if (!conversationId) throw new Error('Missing conversation ID');
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
+      return adminService.getConversationNodes(token, conversationId, projectId);
     },
-    enabled: !!credentials && !!conversationId && !!projectId,
+    enabled: isAdmin && !!conversationId && !!projectId,
   });
 
   const conversation = conversationData?.conversation;

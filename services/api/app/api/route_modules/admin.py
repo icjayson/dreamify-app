@@ -9,7 +9,9 @@ from boto3.dynamodb.conditions import Attr
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.dependencies.admin_auth import require_admin
+from clerk_backend_api import Clerk
+from utils.config import config
+from app.dependencies.auth import require_admin
 from utils.dynamodb.client import get_table
 from utils.dynamodb.tables import tables
 from utils.dynamodb.repos import conversations as conversations_repo
@@ -24,6 +26,9 @@ import csv
 import io
 
 logger = logging.getLogger(__name__)
+
+# Initialize Clerk client independently
+clerk_client = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -48,7 +53,7 @@ metrics_cache = MetricsCache(ttl_seconds=300)
 
 @router.get("/metrics")
 async def get_admin_metrics(
-    _: bool = Depends(require_admin),
+    _: dict = Depends(require_admin),
 ):
     """
     Get high-level dashboard metrics directly from DynamoDB.
@@ -133,7 +138,7 @@ timeseries_cache = MetricsCache(ttl_seconds=300)
 @router.get("/metrics/timeseries")
 async def get_admin_metrics_timeseries(
     days: int = Query(30, ge=1, le=90),
-    _: bool = Depends(require_admin),
+    _: dict = Depends(require_admin),
 ):
     """
     Get time-series metrics for the last N days.
@@ -243,7 +248,7 @@ async def list_conversations(
     project_id: Optional[str] = Query(None, description="Filter by project ID"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of results per page"),
-    _: bool = Depends(require_admin),
+    _: dict = Depends(require_admin),
 ):
     """
     List all conversations or filter by project_id with pagination.
@@ -284,16 +289,7 @@ async def list_conversations(
         # Fetch user profiles from Clerk if there are any users
         if unique_user_ids:
             try:
-                from clerk_backend_api import Clerk
-                from utils.config import config
-                
-                logger.info(f"Fetching Clerk metadata for {len(unique_user_ids)} unique users")
-                clerk = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
-                
-                # Try fetching from Primary instance
-                clerk_users = clerk.users.list(request={"user_id": unique_user_ids})
-                
-                found_ids = []
+                clerk_users = clerk_client.users.list(request={"user_id": unique_user_ids})
                 for u in clerk_users:
                     found_ids.append(u.id)
                     name_parts = filter(None, [u.first_name, u.last_name])
@@ -361,7 +357,7 @@ async def list_conversations(
 async def get_conversation_by_id(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID (required to get conversation from DynamoDB)"),
-    _: bool = Depends(require_admin),
+    _: dict = Depends(require_admin),
 ):
     """
     Get full conversation JSON by conversation_id.
@@ -394,7 +390,7 @@ async def get_conversation_by_id(
 async def get_conversation_nodes(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID (required to get conversation from DynamoDB)"),
-    _: bool = Depends(require_admin),
+    _: dict = Depends(require_admin),
 ):
     """
     Get conversation nodes array.
@@ -431,7 +427,7 @@ async def get_conversation_dashboard(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID"),
     dashboard_id: Optional[str] = Query(None, description="Specific dashboard ID to fetch"),
-    _: bool = Depends(require_admin),
+    _: dict = Depends(require_admin),
 ):
     """Get dashboard data from a specific dashboard or the latest dashboard in conversation for Admin."""
     logger.info(
@@ -544,7 +540,7 @@ async def get_conversation_asset_preview(
     conversation_id: str,
     asset_id: str,
     project_id: str = Query(..., description="Project ID"),
-    _: bool = Depends(require_admin),
+    _: dict = Depends(require_admin),
 ):
     """Preview CSV file data as JSON for Admin."""
     try:

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["conversation"])
 
-MORPHEUS_SERVICE_URL = "http://127.0.0.1:8000"
+MORPHEUS_SERVICE_URL = "http://localhost:8000"
 
 
 def _conversation_keys(user_id: str, project_id: str, conversation_id: str) -> Dict[str, str]:
@@ -387,12 +387,7 @@ async def get_conversation_workflow_status(
         raise HTTPException(status_code=404, detail="Conversation not found")
     node = workflow_nodes_repo.get_node(conversation_id, "workflow")
     if not node:
-        return WorkflowStatusResponse(
-            conversation_id=conversation_id,
-            node_id="workflow",
-            status="starting",
-            metadata={"step": "initializing"}
-        )
+        raise HTTPException(status_code=404, detail="Workflow status not found")
     return _map_workflow_node(node)
 
 

@@ -1,8 +1,11 @@
 """
 Authentication dependencies for FastAPI routes.
 """
-from fastapi import Request, HTTPException, status, Depends
+import logging
+from fastapi import Request, HTTPException, status
 from utils.clerk_auth import clerk_auth_jwt
+
+logger = logging.getLogger(__name__)
 
 
 def require_user(request: Request) -> str:
@@ -30,3 +33,35 @@ def require_user(request: Request) -> str:
         )
     
     return user_id
+
+
+def require_admin(request: Request) -> dict:
+    """
+    FastAPI dependency to require admin authentication via Clerk SDK JWT claims.
+    
+    Reads user's public_metadata directly from the JWT payload.
+    Ensures zero extra latency by avoiding Clerk API calls.
+    """
+    payload = clerk_auth_jwt(request)
+    import json
+    logger.info(f"DEBUG PAYLOAD: {json.dumps(payload, indent=2)}")
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing user ID",
+        )
+
+    # 2. Check admin role
+    if payload.get("role") != "admin":
+        logger.warning(f"User {user_id} attempted admin access without admin role.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions. Admin role required.",
+        )
+        
+    # 3. Return user context (include email if mapped in JWT template)
+    return {
+        "user_id": user_id,
+        "role": "admin",
+    }

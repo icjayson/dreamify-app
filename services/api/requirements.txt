@@ -30,6 +30,7 @@ python-dateutil>=2.8.0
 regex>=2023.0.0
 
 # Payment Processing
+polar-sdk>=0.31.0
 stripe>=13.0.0
 
 # Security

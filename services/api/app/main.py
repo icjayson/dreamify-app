@@ -18,7 +18,7 @@ def create_app():
     """Create and configure the FastAPI application."""
     app = FastAPI(
         title="Dreamify Analytics API",
-        description="API for Dreamify Analytics Platform with Stripe integration",
+        description="API for Dreamify Analytics Platform with Polar.sh integration",
         version="1.0.0",
         docs_url="/api/v1/docs",
         redoc_url="/api/v1/redoc",
@@ -36,6 +36,13 @@ def create_app():
     
     # Import and register routers
     try:
+        from app.api.route_modules.polar import router as polar_router
+        app.include_router(polar_router, prefix="/api/v1/polar", tags=["polar"])
+        logger.info("Polar router registered successfully")
+    except Exception as e:
+        logger.error(f"Failed to import polar router: {e}")
+
+    try:
         from app.api.routes import router as main_router
         app.include_router(main_router, prefix="/api/v1")
         logger.info("Main API router registered successfully")
@@ -45,7 +52,7 @@ def create_app():
     try:
         from app.api.route_modules.stripe import router as stripe_router
         app.include_router(stripe_router, prefix="/api/v1/stripe", tags=["stripe"])
-        logger.info("Stripe router registered successfully")
+        logger.info("Stripe router registered successfully (DEPRECATED)")
     except ImportError as e:
         logger.error(f"Failed to import stripe router: {e}")
     

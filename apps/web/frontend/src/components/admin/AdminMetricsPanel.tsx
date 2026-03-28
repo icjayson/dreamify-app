@@ -33,17 +33,18 @@ function calcPercentChange(data: any[], key: string) {
 }
 
 export function AdminMetricsPanel() {
-    const { credentials } = useAdminAuth();
+    const { getToken, isAdmin } = useAdminAuth();
     const [days, setDays] = useState('30');
 
     // Fetch overarching metrics
     const { data: metrics, isLoading: metricsLoading } = useQuery({
         queryKey: ['admin-metrics'],
         queryFn: async () => {
-            if (!credentials) throw new Error('Not authenticated');
-            return adminService.getMetrics(credentials.username, credentials.password);
+            const token = await getToken();
+            if (!token) throw new Error('Not authenticated');
+            return adminService.getMetrics(token);
         },
-        enabled: !!credentials,
+        enabled: isAdmin,
         refetchInterval: 300000,
     });
 
@@ -51,10 +52,11 @@ export function AdminMetricsPanel() {
     const { data: timeseries, isLoading: timeseriesLoading } = useQuery({
         queryKey: ['admin-metrics-timeseries', days],
         queryFn: async () => {
-            if (!credentials) throw new Error('Not authenticated');
-            return adminService.getMetricsTimeSeries(credentials.username, credentials.password, parseInt(days));
+            const token = await getToken();
+            if (!token) throw new Error('Not authenticated');
+            return adminService.getMetricsTimeSeries(token, parseInt(days));
         },
-        enabled: !!credentials,
+        enabled: isAdmin,
     });
 
     const isLoading = metricsLoading || timeseriesLoading;

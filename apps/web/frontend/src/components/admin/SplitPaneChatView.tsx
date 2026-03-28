@@ -22,7 +22,7 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
     const [isLeftPaneOpen, setIsLeftPaneOpen] = useState(true);
     const [isRightPaneOpen, setIsRightPaneOpen] = useState(false);
 
-    const { credentials } = useAdminAuth();
+    const { getToken, isAdmin } = useAdminAuth();
     const { toast } = useToast();
 
     const selectedConvMeta = useMemo(() => {
@@ -32,33 +32,35 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
     const { data: conversationData, isLoading: isLoadingConversation } = useQuery({
         queryKey: ['admin-conversation', selectedId, selectedConvMeta?.project_id],
         queryFn: async () => {
-            if (!credentials || !selectedId || !selectedConvMeta?.project_id) {
-                throw new Error('Missing credentials or ids');
+            if (!selectedId || !selectedConvMeta?.project_id) {
+                throw new Error('Missing ids');
             }
+            const token = await getToken();
+            if (!token) throw new Error('Not authenticated');
             return adminService.getConversation(
-                credentials.username,
-                credentials.password,
+                token,
                 selectedId,
                 selectedConvMeta.project_id
             );
         },
-        enabled: !!credentials && !!selectedId && !!selectedConvMeta?.project_id,
+        enabled: isAdmin && !!selectedId && !!selectedConvMeta?.project_id,
     });
 
     const { data: nodesData, isLoading: isLoadingNodes } = useQuery({
         queryKey: ['admin-conversation-nodes', selectedId, selectedConvMeta?.project_id],
         queryFn: async () => {
-            if (!credentials || !selectedId || !selectedConvMeta?.project_id) {
-                throw new Error('Missing credentials or ids');
+            if (!selectedId || !selectedConvMeta?.project_id) {
+                throw new Error('Missing ids');
             }
+            const token = await getToken();
+            if (!token) throw new Error('Not authenticated');
             return adminService.getConversationNodes(
-                credentials.username,
-                credentials.password,
+                token,
                 selectedId,
                 selectedConvMeta.project_id
             );
         },
-        enabled: !!credentials && !!selectedId && !!selectedConvMeta?.project_id,
+        enabled: isAdmin && !!selectedId && !!selectedConvMeta?.project_id,
     });
 
     const conversationJsonString = useMemo(() => {

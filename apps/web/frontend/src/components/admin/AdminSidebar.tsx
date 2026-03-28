@@ -12,7 +12,7 @@ interface AdminSidebarProps {
 export function AdminSidebar({ collapsed = false, onCollapsedChange }: AdminSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, credentials } = useAdminAuth();
+  const { signOut, userEmail } = useAdminAuth();
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -54,9 +54,9 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: AdminSide
 
         {/* Footer */}
         <div className="border-t p-4 space-y-2">
-          {!collapsed && credentials && (
+          {!collapsed && userEmail && (
             <div className="px-2 py-1 text-sm text-muted-foreground">
-              Logged in as: <span className="font-medium">{credentials.username}</span>
+              Logged in as: <span className="font-medium">{userEmail}</span>
             </div>
           )}
           <Button
@@ -66,7 +66,7 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: AdminSide
               collapsed && 'justify-center px-0'
             )}
             onClick={() => {
-              logout();
+              signOut();
               navigate('/');
             }}
           >
@@ -88,4 +88,3 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: AdminSide
     </div>
   );
 }
-

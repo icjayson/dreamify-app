@@ -1,106 +1,43 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth, useUser, useClerk } from '@clerk/clerk-react';
 
-interface AdminCredentials {
-  username: string;
-  password: string;
+interface AdminAuthInfo {
+  isSignedIn: boolean;
+  isAdmin: boolean;
+  userEmail: string | null;
+  userId: string | null;
+  /** Returns a fresh Clerk JWT (Clerk caches internally, auto-refreshes on expiry) */
+  getToken: () => Promise<string | null>;
+  signOut: () => Promise<void>;
 }
 
-interface AdminAuthContextType {
-  isAuthenticated: boolean;
-  credentials: AdminCredentials | null;
-  login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  getAuthHeader: () => string | null;
-}
+/**
+ * Hook to check admin authentication via Clerk.
+ * Checks user.publicMetadata.role === "admin" for admin access.
+ *
+ * Exposes Clerk's `getToken()` directly — each API call should
+ * call it to get a valid token. Clerk handles short-lived token
+ * caching and automatic refresh internally.
+ */
+export function useAdminAuth(): AdminAuthInfo {
+  const { isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
+  const { signOut } = useClerk();
 
-const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
-
-const STORAGE_KEY = 'admin_credentials';
-
-export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const [credentials, setCredentials] = useState<AdminCredentials | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    // Check localStorage on mount
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const decoded = atob(stored);
-        const [username, password] = decoded.split(':');
-        if (username && password) {
-          setCredentials({ username, password });
-          setIsAuthenticated(true);
-        }
-      } catch (e) {
-        // Invalid stored credentials, clear them
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-  }, []);
-
-  const login = async (username: string, password: string): Promise<boolean> => {
-    try {
-      // Test authentication by making a simple request
-      const authHeader = `Basic ${btoa(`${username}:${password}`)}`;
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL || ''}/api/v1/admin/conversations?limit=1`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': authHeader,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (response.ok) {
-        // Store credentials (base64 encoded)
-        const encoded = btoa(`${username}:${password}`);
-        localStorage.setItem(STORAGE_KEY, encoded);
-        setCredentials({ username, password });
-        setIsAuthenticated(true);
-        return true;
-      } else {
-        return false;
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      return false;
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    setCredentials(null);
-    setIsAuthenticated(false);
-  };
-
-  const getAuthHeader = (): string | null => {
-    if (!credentials) return null;
-    return `Basic ${btoa(`${credentials.username}:${credentials.password}`)}`;
-  };
-
-  return (
-    <AdminAuthContext.Provider
-      value={{
-        isAuthenticated,
-        credentials,
-        login,
-        logout,
-        getAuthHeader,
-      }}
-    >
-      {children}
-    </AdminAuthContext.Provider>
+  const isAdmin = !!(
+    isSignedIn &&
+    user &&
+    (user.publicMetadata as Record<string, unknown>)?.role === 'admin'
   );
-}
 
-export function useAdminAuth() {
-  const context = useContext(AdminAuthContext);
-  if (context === undefined) {
-    throw new Error('useAdminAuth must be used within an AdminAuthProvider');
-  }
-  return context;
-}
+  const userEmail =
+    user?.emailAddresses?.[0]?.emailAddress ?? null;
 
+  return {
+    isSignedIn: !!isSignedIn,
+    isAdmin,
+    userEmail,
+    userId: user?.id ?? null,
+    getToken,
+    signOut: () => signOut(),
+  };
+}

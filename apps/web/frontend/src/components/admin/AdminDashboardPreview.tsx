@@ -3,6 +3,7 @@ import DashboardPreview from '@/components/project-section/DashboardPreview';
 import { adminService } from '@/services/adminService';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { DashboardConfiguration } from '@/types/dashboard';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
 
 interface AdminDashboardPreviewProps {
     conversationId: string;
@@ -14,6 +15,7 @@ export function AdminDashboardPreview({ conversationId, projectId, dashboardId }
     const [config, setConfig] = useState<DashboardConfiguration | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { getToken } = useAdminAuth();
 
     useEffect(() => {
         let isMounted = true;
@@ -21,17 +23,10 @@ export function AdminDashboardPreview({ conversationId, projectId, dashboardId }
             setLoading(true);
             setError(null);
             try {
-                // We use generic auth string here, assuming the user is already logged in as admin
-                // and adminService handles the token/basic auth internally via context or cookies.
-                // In this app, adminService requires username/pass for some direct calls,
-                // but we might need to retrieve them from local state if needed.
-                // Let's check how the rest of Admin Panel handles auth.
-                // Looking at admin.tsx, it passes user/pass to fetch functions.
-                // We need to get it from localStorage or Context.
-                const adminUser = localStorage.getItem('adminUsername') || 'admin';
-                const adminPass = localStorage.getItem('adminPassword') || 'admin123';
+                const token = await getToken();
+                if (!token) throw new Error('Not authenticated');
 
-                const data = await adminService.getConversationDashboard(adminUser, adminPass, conversationId, projectId, dashboardId);
+                const data = await adminService.getConversationDashboard(token, conversationId, projectId, dashboardId);
                 if (isMounted) {
                     if (data) {
                         setConfig(data);
@@ -53,7 +48,7 @@ export function AdminDashboardPreview({ conversationId, projectId, dashboardId }
         if (dashboardId && conversationId && projectId) {
             fetchDashboard();
         }
-    }, [dashboardId, conversationId, projectId]);
+    }, [dashboardId, conversationId, projectId, getToken]);
 
     if (loading) {
         return (

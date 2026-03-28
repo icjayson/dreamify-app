@@ -1,4 +1,3 @@
-import { api } from './api';
 import { API_ENDPOINTS } from '@/api/config';
 import type { DashboardConfiguration } from '@/types/dashboard';
 import type { FilePreviewData } from './filePreviewService';
@@ -46,24 +45,16 @@ export interface TimeSeriesDataPoint {
 }
 
 class AdminService {
-  private getBasicAuthHeader(username: string, password: string): string {
-    const credentials = btoa(`${username}:${password}`);
-    return `Basic ${credentials}`;
-  }
-
   private async requestWithAuth<T>(
     endpoint: string,
+    token: string,
     options: RequestInit = {},
-    username: string,
-    password: string
   ): Promise<{ success: boolean; data?: T; error?: string }> {
-    const authHeader = this.getBasicAuthHeader(username, password);
-
     const response = await fetch(`${import.meta.env.VITE_API_URL || ''}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authHeader,
+        'Authorization': `Bearer ${token}`,
         ...(options.headers as Record<string, string> || {}),
       },
     });
@@ -81,8 +72,7 @@ class AdminService {
   }
 
   async listConversations(
-    username: string,
-    password: string,
+    token: string,
     projectId?: string,
     page: number = 1,
     pageSize: number = 20
@@ -95,9 +85,8 @@ class AdminService {
     const endpoint = `${API_ENDPOINTS.ADMIN_CONVERSATIONS}?${params.toString()}`;
     const response = await this.requestWithAuth<ConversationListResponse>(
       endpoint,
+      token,
       { method: 'GET' },
-      username,
-      password
     );
 
     if (response.success && response.data) {
@@ -107,17 +96,15 @@ class AdminService {
   }
 
   async getConversation(
-    username: string,
-    password: string,
+    token: string,
     conversationId: string,
     projectId: string
   ): Promise<ConversationDetailResponse> {
     const endpoint = `${API_ENDPOINTS.ADMIN_CONVERSATION}/${conversationId}?project_id=${projectId}`;
     const response = await this.requestWithAuth<ConversationDetailResponse>(
       endpoint,
+      token,
       { method: 'GET' },
-      username,
-      password
     );
 
     if (response.success && response.data) {
@@ -127,17 +114,15 @@ class AdminService {
   }
 
   async getConversationNodes(
-    username: string,
-    password: string,
+    token: string,
     conversationId: string,
     projectId: string
   ): Promise<NodeListResponse> {
     const endpoint = `${API_ENDPOINTS.ADMIN_CONVERSATION_NODES}/${conversationId}/nodes?project_id=${projectId}`;
     const response = await this.requestWithAuth<NodeListResponse>(
       endpoint,
+      token,
       { method: 'GET' },
-      username,
-      password
     );
 
     if (response.success && response.data) {
@@ -147,8 +132,7 @@ class AdminService {
   }
 
   async getConversationDashboard(
-    username: string,
-    password: string,
+    token: string,
     conversationId: string,
     projectId: string,
     dashboardId: string
@@ -156,9 +140,8 @@ class AdminService {
     const endpoint = `/api/v1/admin/conversations/${conversationId}/dashboard?project_id=${projectId}&dashboard_id=${dashboardId}`;
     const response = await this.requestWithAuth<{ dashboard_id: string; dashboard_data: DashboardConfiguration }>(
       endpoint,
+      token,
       { method: 'GET' },
-      username,
-      password
     );
 
     if (response.success && response.data && response.data.dashboard_data) {
@@ -168,15 +151,13 @@ class AdminService {
   }
 
   async getMetrics(
-    username: string,
-    password: string
+    token: string,
   ): Promise<AdminMetricsResponse> {
     const endpoint = API_ENDPOINTS.ADMIN_METRICS;
     const response = await this.requestWithAuth<AdminMetricsResponse>(
       endpoint,
+      token,
       { method: 'GET' },
-      username,
-      password
     );
 
     if (response.success && response.data) {
@@ -186,16 +167,14 @@ class AdminService {
   }
 
   async getMetricsTimeSeries(
-    username: string,
-    password: string,
+    token: string,
     days: number = 30
   ): Promise<TimeSeriesDataPoint[]> {
     const endpoint = `${API_ENDPOINTS.ADMIN_TIMESERIES}?days=${days}`;
     const response = await this.requestWithAuth<TimeSeriesDataPoint[]>(
       endpoint,
+      token,
       { method: 'GET' },
-      username,
-      password
     );
 
     if (response.success && response.data) {
@@ -205,8 +184,7 @@ class AdminService {
   }
 
   async getFilePreview(
-    username: string,
-    password: string,
+    token: string,
     conversationId: string,
     projectId: string,
     assetId: string
@@ -214,9 +192,8 @@ class AdminService {
     const endpoint = `/api/v1/admin/conversations/${conversationId}/assets/${assetId}/preview?project_id=${projectId}`;
     const response = await this.requestWithAuth<FilePreviewData>(
       endpoint,
+      token,
       { method: 'GET' },
-      username,
-      password
     );
 
     if (response.success && response.data) {
@@ -227,4 +204,3 @@ class AdminService {
 }
 
 export const adminService = new AdminService();
-

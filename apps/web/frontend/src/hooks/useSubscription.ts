@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 
 interface SubscriptionInfo {
-  id: string;
+  subscription_id: string;
   status: 'active' | 'inactive' | 'cancelled' | 'past_due' | 'unpaid' | 'trialing';
   tier: 'sandbox' | 'pro' | 'enterprise';
-  current_period_start: string;
   current_period_end: string;
   cancel_at_period_end: boolean;
 }
@@ -43,8 +42,8 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setIsLoading(true);
       setError(null);
 
-      // TODO: Replace with actual API call
-      const response = await fetch(`/api/v1/stripe/subscriptions?user_id=${user.id}`, {
+      // Fetch subscription from Polar backend
+      const response = await fetch(`/api/v1/polar/subscriptions?user_id=${user.id}`, {
         headers: {
           'Authorization': `Bearer ${user.id}`,
         },
@@ -56,7 +55,6 @@ export const useSubscription = (): UseSubscriptionReturn => {
           const errorData = await response.json();
           errorMessage = errorData.detail || errorData.error || errorMessage;
         } catch {
-          // If response is not JSON, use status text
           errorMessage = response.statusText || errorMessage;
         }
         throw new Error(errorMessage);
@@ -65,14 +63,12 @@ export const useSubscription = (): UseSubscriptionReturn => {
       const data = await response.json();
       
       if (data.success) {
-        // Backend returns subscriptions array, get first one or null
-        const subscriptions = data.subscriptions || [];
-        setSubscription(subscriptions.length > 0 ? subscriptions[0] : null);
+        setSubscription(data.subscription || null);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch subscription';
-      setError(errorMessage);
-      console.error('Subscription fetch error:', err);
+      // Don't set error for 404/no subscription which is normal for new users
+      console.log('Subscription fetch info:', errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +78,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
     if (!user) return;
 
     try {
-      const response = await fetch(`/api/v1/stripe/credits/usage?user_id=${user.id}&subscription_tier=sandbox`);
+      const response = await fetch(`/api/v1/polar/credits/usage?user_id=${user.id}&subscription_tier=sandbox`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch credit usage');
@@ -109,18 +105,17 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setIsLoading(true);
       setError(null);
 
-      // Create checkout session for Pro plan
-      const response = await fetch(`/api/v1/stripe/checkout/sessions`, {
+      // Create checkout session for Polar Pro plan
+      const response = await fetch(`/api/v1/polar/checkout/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user.id}`,
         },
         body: JSON.stringify({
-          price_id: 'price_pro_monthly', // TODO: Get actual price ID
+          product_id: 'pro_product_id', // TODO: Get from backend or config
           user_id: user.id,
           success_url: `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${window.location.origin}/cancel`,
         }),
       });
 
@@ -130,8 +125,8 @@ export const useSubscription = (): UseSubscriptionReturn => {
         throw new Error(data.error || 'Failed to create checkout session');
       }
 
-      // Redirect to Stripe Checkout
-      window.location.href = data.session_url;
+      // Redirect to Polar Checkout
+      window.location.href = data.url;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to upgrade subscription';
       setError(errorMessage);
@@ -142,47 +137,16 @@ export const useSubscription = (): UseSubscriptionReturn => {
   };
 
   const openBillingPortal = async () => {
-    if (!user || !subscription) return;
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const response = await fetch(`/api/v1/stripe/customer-portal`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.id}`,
-        },
-        body: JSON.stringify({
-          customer_id: subscription.id, // TODO: Get actual customer ID
-          user_id: user.id,
-          return_url: window.location.href,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to create portal session');
-      }
-
-      // Redirect to Stripe Customer Portal
-      window.location.href = data.portal_url;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to open billing portal';
-      setError(errorMessage);
-      console.error('Billing portal error:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    // Polar handles this via their hosted account page or we can redirect to their customer portal
+    // For now, redirect to a generic Polar portal or use their API to get a specific link
+    window.location.href = "https://polar.sh/purchases"; 
   };
 
   const consumeCredits = async (action: string, credits: number): Promise<boolean> => {
     if (!user) return false;
 
     try {
-      const response = await fetch(`/api/v1/stripe/credits/consume`, {
+      const response = await fetch(`/api/v1/polar/credits/consume`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,7 +162,6 @@ export const useSubscription = (): UseSubscriptionReturn => {
       const data = await response.json();
 
       if (data.success) {
-        // Refresh credit usage
         await fetchCreditUsage();
         return true;
       } else {

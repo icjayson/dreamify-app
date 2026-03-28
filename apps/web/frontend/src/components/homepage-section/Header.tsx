@@ -175,12 +175,12 @@ const Header = () => {
             >
               Community
             </a>
-            {/* <a
-              onClick={(e) => { e.preventDefault(); setAccountCenterTab("pricing"); setAccountCenterOpen(true); }}
+            <button
+              onClick={() => navigate("/pricing")}
               className="text-sm font-medium text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
             >
               Pricing
-            </a> */}
+            </button>
           </nav>
         </div>
 
@@ -302,7 +302,7 @@ const Header = () => {
               Community
             </a>
             <button
-              onClick={() => { setMobileNavOpen(false); setAccountCenterTab('pricing'); setAccountCenterOpen(true); }}
+              onClick={() => { setMobileNavOpen(false); navigate("/pricing"); }}
               className="w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
             >
               Pricing

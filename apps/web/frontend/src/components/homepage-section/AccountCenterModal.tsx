@@ -193,7 +193,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
   useEffect(() => {
     if (open) {
       const isDesktopOrUp = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width: 640px)').matches;
-      setMobileActiveTab(isSignedIn ? activeTab : 'pricing');
+      setMobileActiveTab(isSignedIn ? 'account' : 'pricing');
       setDragY(0);
       // On mobile (< sm), open directly into the content sheet for the selected tab
       setIsShowingMobileContent(!isDesktopOrUp);
@@ -231,9 +231,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
   const avatarUrl = user?.imageUrl;
 
   const sidebarItems = useMemo(() => {
-    const items = [
-      /* { key: "pricing" as AccountCenterTab, label: "Pricing", icon: <Star className="w-4 h-4" /> }, */
-    ];
+    const items = [];
     if (isSignedIn) {
       items.push(
         { key: "account" as AccountCenterTab, label: "Manage Account", icon: <UserIcon className="w-4 h-4" /> },

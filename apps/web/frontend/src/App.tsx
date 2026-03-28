@@ -4,12 +4,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
-import { Elements } from "@stripe/react-stripe-js";
-import { loadStripe } from "@stripe/stripe-js";
+import { PolarProvider } from "./contexts/PolarContext";
 import ReactGA from "react-ga4";
 import { useEffect } from "react";
 import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
+import PricingPage from "./pages/Pricing";
 import FinancePage from "./pages/Finance";
 import PrivacyPage from "./pages/Privacy";
 import TermsPage from "./pages/Terms";
@@ -32,8 +32,7 @@ import GoogleSheetsIntegrationModal from "./components/chat/GoogleSheetsIntegrat
 
 const queryClient = new QueryClient();
 
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
+// Polar integration uses hosted checkout, no client-side initialization needed here
 
 const AppContent = () => {
   const { messages } = useChatStore();
@@ -49,6 +48,7 @@ const AppContent = () => {
   const isAdminPath = location.pathname.startsWith("/admin");
   const isHomePath = location.pathname === "/";
   const isAboutPath = location.pathname === "/about";
+  const isPricingPath = location.pathname === "/pricing";
   const isFinancePath = location.pathname === "/finance";
   const isPrivacyPath = location.pathname === "/privacy";
   const isTermsPath = location.pathname === "/terms";
@@ -56,10 +56,11 @@ const AppContent = () => {
 
   return (
     <>
-      {(isHomePath || isAboutPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath)) && <Header />}
+      {(isHomePath || isAboutPath || isPricingPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
         <Route path="/finance" element={<FinancePage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
@@ -93,13 +94,13 @@ const AppContent = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <Elements stripe={stripePromise}>
+    <PolarProvider>
       <TooltipProvider delayDuration={0}>
         <Toaster />
         <Sonner />
         <AppContent />
       </TooltipProvider>
-    </Elements>
+    </PolarProvider>
   </QueryClientProvider>
 );
 

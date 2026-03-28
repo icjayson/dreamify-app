@@ -1,6 +1,4 @@
-"""
-Subscription card component for displaying subscription information.
-"""
+// Subscription card component for displaying subscription information.
 
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,10 +15,9 @@ import {
 } from 'lucide-react';
 
 interface SubscriptionInfo {
-  id: string;
+  subscription_id: string;
   status: 'active' | 'inactive' | 'cancelled' | 'past_due' | 'unpaid' | 'trialing';
   tier: 'sandbox' | 'pro' | 'enterprise';
-  current_period_start: string;
   current_period_end: string;
   cancel_at_period_end: boolean;
 }
@@ -156,7 +153,7 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
         <div className="flex items-center gap-2 text-sm">
           <Calendar className="h-4 w-4" />
           <span>
-            Current period: {formatDate(subscription.current_period_start)} - {formatDate(subscription.current_period_end)}
+            Current period ends: {formatDate(subscription.current_period_end)}
           </span>
         </div>
 

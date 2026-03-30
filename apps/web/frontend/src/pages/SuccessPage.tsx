@@ -78,11 +78,11 @@ const SuccessPage: React.FC = () => {
                 <ul className="space-y-2 mb-4">
                   <li className="flex items-center gap-2 text-sm text-white/70">
                     <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
-                    <span>100 monthly credits</span>
+                    <span>100 monthly Sparkles</span>
                   </li>
                   <li className="flex items-center gap-2 text-sm text-white/70">
                     <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
-                    <span>5 daily credits (up to 150/month)</span>
+                    <span>5 daily Sparkles (up to 150/month)</span>
                   </li>
                   <li className="flex items-center gap-2 text-sm text-white/70">
                     <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>

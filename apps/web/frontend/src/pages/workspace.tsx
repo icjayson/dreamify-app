@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Plus, Search, Flame, Circle, Menu, PanelLeft } from "lucide-react";
+import { useUser } from "@clerk/clerk-react";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import WorkspaceSidebar from "@/components/project-section/WorkspaceSidebar";
 import ProjectCard from "@/components/project-section/ProjectCard";
 
@@ -24,7 +27,20 @@ export default function WorkspacePage() {
   const [activeTab, setActiveTab] = useState<string>("projects");
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const navigate = useNavigate();
-  
+  const { user } = useUser();
+  const storageKey = `dreamify_welcomed_${user?.id}`;
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    if (user?.id && !localStorage.getItem(storageKey)) {
+      setShowWelcome(true);
+    }
+  }, [user?.id, storageKey]);
+
+  const handleDismissWelcome = () => {
+    localStorage.setItem(storageKey, "true");
+    setShowWelcome(false);
+  };
 
   return (
     <div className="min-h-screen">
@@ -96,6 +112,25 @@ export default function WorkspacePage() {
         </div>
         </main>
       </div>
+
+      <Dialog open={showWelcome} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Welcome to Dreamify! 🎉</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              You're currently on the <strong>Pro plan</strong> — enjoy full access while we're in early access.
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              You have <strong>100 Sparkles per day</strong> to analyze data and generate dashboards.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleDismissWelcome} className="w-full">Start exploring</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

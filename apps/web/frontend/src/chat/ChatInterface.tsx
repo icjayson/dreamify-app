@@ -1,13 +1,14 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap } from "lucide-react";
 import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { fileService, type UploadResponse, type AssetRecord } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useChatStore, type UploadedFile } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
@@ -15,6 +16,8 @@ import FilePreviewChip from "../components/chat/FilePreviewChip";
 import ChartPreviewChip from "../components/chat/ChartPreviewChip";
 import type { ChartChipData } from "../components/chat/ChartPreviewChip";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
+import CreditIcon from "./CreditIcon";
+import ModelSelector from "./ModelSelector";
 import type { DashboardComponent } from "@/types/dashboard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
@@ -324,6 +327,12 @@ interface ChatInterfaceProps {
 
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, dashboardComponents }: ChatInterfaceProps) => {
 
+  // Model selector state
+  const [selectedModel, setSelectedModel] = useState<'pro' | 'fast'>('fast');
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const { creditsRemaining } = useSubscription();
+
   // Template state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -572,6 +581,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       if (isContextPickerOpen && !target.closest('.project-context-picker-container') && !target.closest('.project-context-trigger')) {
         setIsContextPickerOpen(false);
       }
+
+      // Close model dropdown if clicked outside
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(target)) {
+        setModelDropdownOpen(false);
+      }
     };
 
     document.addEventListener('click', handleClickOutside);
@@ -644,7 +658,25 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
       }
 
-      await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, hasChartMentions ? chartsWithConfig : undefined);
+      try {
+        await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, hasChartMentions ? chartsWithConfig : undefined, selectedModel);
+      } catch (err: unknown) {
+        const errObj = err as Record<string, unknown>;
+        const detail = (errObj?.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+        const isInsufficientCredits =
+          errObj?.status === 402 ||
+          (detail as Record<string, unknown> | undefined)?.error === 'insufficient_credits' ||
+          (errObj?.detail as Record<string, unknown> | undefined)?.error === 'insufficient_credits';
+        if (isInsufficientCredits) {
+          toast({
+            title: "Out of credits",
+            description: "You've used all your daily credits. They reset at midnight UTC.",
+            variant: "destructive",
+          });
+          return;
+        }
+        throw err;
+      }
       setMentionedAssetIds([]);
       setMentionedCharts([]);
     } finally {
@@ -1697,20 +1729,25 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 </div>
               </div>
 
-              {/* Right side - Mic and Send Buttons */}
-              <div className="flex gap-2">
-                {/* Voice button - commented out (not functionable)
-              <button
-                onClick={handleMicClick}
-                className={`p-2 flex items-center justify-center ${
-                  isListening ? 'text-red-500 animate-pulse' : 'text-white hover:text-primary'
-                }`}
-                aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
-                disabled={!speechSupported}
-              >
-                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
-              */}
+              {/* Right side - Model Selector + Send Button */}
+              <div className="flex items-center gap-2">
+                {/* Model Dropdown */}
+                {/* Model Selector Component */}
+                <ModelSelector
+                  selectedModel={selectedModel}
+                  onSelect={(model) => {
+                    setSelectedModel(model);
+                    setModelDropdownOpen(false);
+                  }}
+                  creditsRemaining={creditsRemaining}
+                  isOpen={modelDropdownOpen}
+                  onToggle={() => setModelDropdownOpen(prev => !prev)}
+                  anchor="right"
+                  placement="top"
+                  variant="compact"
+                />
+
+                {/* Send / Stop Button */}
                 {(isProcessing || uploadedFiles.some(f => f.status === 'processing')) ? (
                   <Button
                     onClick={() => stopGeneration()}

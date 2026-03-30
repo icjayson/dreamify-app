@@ -303,7 +303,11 @@ export default function ProjectPage() {
               void useChatStore.getState().processFileWithMessage(
                 pendingAction.content,
                 undefined,
-                projectId
+                projectId,
+                undefined,
+                undefined,
+                undefined,
+                pendingAction.model
               );
 
               // Clear pending action

@@ -13,6 +13,7 @@ export interface ConversationChatRequest {
     asset_selection: 'explicit' | 'all';
     selected_asset_ids?: string[];
   };
+  model?: 'pro' | 'fast';
 }
 
 export interface ConversationChatResponse {

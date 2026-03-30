@@ -23,7 +23,8 @@ class ProcessingService {
     prompt: string,
     conversationId?: string,
     additionalContents?: ConversationChatRequest['user_node_contents'],
-    userNodeMetadata?: ConversationChatRequest['user_node_metadata']
+    userNodeMetadata?: ConversationChatRequest['user_node_metadata'],
+    model?: 'pro' | 'fast'
   ): Promise<ProcessingResponse> {
     try {
       const textContent: ConversationChatRequest['user_node_contents'][number] = {
@@ -41,6 +42,7 @@ class ProcessingService {
           ...(additionalContents ?? []),
         ],
         user_node_metadata: userNodeMetadata,
+        ...(model ? { model } : {}),
       };
       const response = await conversationService.sendChatMessage(request);
       return {

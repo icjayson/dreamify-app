@@ -4,7 +4,7 @@ import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff,
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, useAuth, useUser } from "@clerk/clerk-react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ChevronDown } from "lucide-react";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +14,7 @@ import { useChatStore } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import { fileService, type UploadResponse } from "@/services/fileService";
 import { useProjects } from "@/hooks/useProjects";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Message } from "@/types/message";
 import { FooterSection } from '@/components/homepage-section/footer-section';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
@@ -24,6 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { ToastAction } from "@/components/ui/toast";
 import { CONNECTORS, type ConnectorItem } from '@/constants/connectors';
 import FilePreviewChip from '@/components/chat/FilePreviewChip';
+import ModelSelector from '@/chat/ModelSelector';
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import ReactGA from 'react-ga4';
 import { FeedbackFloatingButton } from "@/components/ui/feedback-button";
@@ -79,6 +81,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     deleteProject,
     openProject
   } = useProjects();
+  const { creditsRemaining } = useSubscription();
   // Zustand stores
   const {
     inputValue,
@@ -114,6 +117,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [lottieData, setLottieData] = useState(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
+
+  // Model selector state
+  const [selectedModel, setSelectedModel] = useState<'pro' | 'fast'>('fast');
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   // File upload integration
   const { uploadState: legacyUploadState, uploadCSVFile, uploadExcelFile } = useFileUpload();
@@ -197,6 +205,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       if (dropdownOpen && !target.closest('.data-source-dropdown')) {
         setDropdownOpen(false);
       }
+
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(target)) {
+        setModelDropdownOpen(false);
+      }
     };
 
     document.addEventListener('click', handleClickOutside);
@@ -231,7 +243,8 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       type: 'process_file',
       content: inputValue.trim(),
       files: uploadedFiles,
-      projectId: firstUploadedFile.projectId
+      projectId: firstUploadedFile.projectId,
+      model: selectedModel,
     });
 
     navigate(`/workspace/project?projectId=${firstUploadedFile.projectId}`);
@@ -836,19 +849,22 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                 </div>
 
                 {/* Right side buttons */}
-                <div className="flex gap-2">
-                  {/* Voice button - commented out (not functionable)
-                <Button
-                  onClick={handleMicClick}
-                  className={`button-gradient p-3 ${
-                    isListening ? 'bg-red-500 hover:bg-red-600 animate-pulse' : ''
-                  }`}
-                  aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
-                  disabled={!speechSupported}
-                >
-                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                </Button>
-                */}
+                <div className="flex items-center gap-2">
+                  {/* Model Selector Component */}
+                  <ModelSelector
+                    selectedModel={selectedModel}
+                    onSelect={(model) => {
+                      setSelectedModel(model);
+                      setModelDropdownOpen(false);
+                    }}
+                    creditsRemaining={creditsRemaining}
+                    isOpen={modelDropdownOpen}
+                    onToggle={() => setModelDropdownOpen(prev => !prev)}
+                    anchor="right"
+                    placement="bottom"
+                    variant="classic"
+                  />
+
                   <Button
                     onClick={handleChatSubmit}
                     disabled={!inputValue.trim() || isProcessing}

@@ -20,6 +20,7 @@ interface CreditUsage {
 interface UseSubscriptionReturn {
   subscription: SubscriptionInfo | null;
   creditUsage: CreditUsage | null;
+  creditsRemaining: number;
   isLoading: boolean;
   error: string | null;
   refreshSubscription: () => Promise<void>;
@@ -32,6 +33,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
   const { user } = useUser();
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [creditUsage, setCreditUsage] = useState<CreditUsage | null>(null);
+  const [creditsRemaining, setCreditsRemaining] = useState<number>(100);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,8 +96,23 @@ export const useSubscription = (): UseSubscriptionReturn => {
     }
   };
 
+  const fetchDailyCredits = async () => {
+    if (!user) return;
+
+    try {
+      const response = await fetch(`/api/v1/polar/credits/usage?user_id=${user.id}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.credits_remaining !== undefined) {
+        setCreditsRemaining(data.credits_remaining);
+      }
+    } catch (err) {
+      console.error('Daily credits fetch error:', err);
+    }
+  };
+
   const refreshSubscription = async () => {
-    await Promise.all([fetchSubscription(), fetchCreditUsage()]);
+    await Promise.all([fetchSubscription(), fetchCreditUsage(), fetchDailyCredits()]);
   };
 
   const upgradeToPro = async () => {
@@ -179,12 +196,14 @@ export const useSubscription = (): UseSubscriptionReturn => {
   useEffect(() => {
     if (user) {
       refreshSubscription();
+      fetchDailyCredits();
     }
-  }, [user]);
+  }, [user?.id]);
 
   return {
     subscription,
     creditUsage,
+    creditsRemaining,
     isLoading,
     error,
     refreshSubscription,

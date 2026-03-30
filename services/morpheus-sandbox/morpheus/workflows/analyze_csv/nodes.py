@@ -10,8 +10,10 @@ import os
 import time
 import json
 import re
+import concurrent.futures as _futures
 from datetime import datetime
-from typing import Dict, Any
+from typing import Callable, Any, Dict
+
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 
 from morpheus.workflows.analyze_csv.state_models import (
@@ -24,6 +26,30 @@ from morpheus.tools.charts_knowledge.tool import get_available_chart_types
 from morpheus.models.base import get_model_for_agent
 from utils.logger import logger
 from utils.postprocess import clean_json
+
+# ---------------------------------------------------------------------------
+# Thread-safe LLM timeout helper
+# ---------------------------------------------------------------------------
+# signal.SIGALRM only works in the main thread and crashes in FastAPI background
+# tasks. concurrent.futures gives us a real timeout for any thread.
+_LLM_EXECUTOR = _futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm_call")
+
+
+def _llm_invoke(model_fn: Callable, messages, timeout: int, label: str = "LLM"):
+    """
+    Call model_fn(messages) with a hard timeout that works in background threads.
+    Raises TimeoutError if the call exceeds `timeout` seconds.
+    """
+    logger.info(f"[LLM] {label} — calling model (timeout={timeout}s)")
+    future = _LLM_EXECUTOR.submit(model_fn, messages)
+    try:
+        result = future.result(timeout=timeout)
+        logger.info(f"[LLM] {label} — completed OK")
+        return result
+    except _futures.TimeoutError:
+        logger.error(f"[Timeout] {label} exceeded {timeout}s — aborting call")
+        raise TimeoutError(f"{label} timed out after {timeout}s")
+
 
 # Import system prompts from original workflow
 # These will be refactored into separate prompts module later if needed
@@ -602,7 +628,7 @@ Ensure the format is clear and actionable for the next reasoning agent."""
         max_turns = 18 if has_multiple_files else 15
         tool_executed = False
         for turn in range(max_turns):
-            response = model_with_tools.invoke(messages)
+            response = _llm_invoke(model_with_tools.invoke, messages, timeout=90, label=f"Data Profiler turn {turn + 1}")
             if isinstance(response.content, list):
                 response.content = "\n".join(
                     item.get("text", "") if isinstance(item, dict) else str(item)
@@ -629,8 +655,13 @@ Ensure the format is clear and actionable for the next reasoning agent."""
                         logger.info("[Data Profiler] Tool check: get_available_chart_types")
                         result = get_available_chart_types.invoke({})
                     else:
-                        logger.info(f"[Data Profiler] Tool error: Unknown tool {tool_name}")
-                        result = f"Error: Unknown tool {tool_name}"
+                        logger.warning(f"[Data Profiler] Tool error: Unknown tool '{tool_name}'. Redirecting model to Python_REPL.")
+                        result = (
+                            f"ERROR: Tool '{tool_name}' does not exist in this environment. "
+                            "You have ONLY TWO tools available: 'Python_REPL' (to run Python code) "
+                            "and 'get_available_chart_types'. "
+                            "STOP calling any other tool. Use 'Python_REPL' with a 'query' parameter to execute code."
+                        )
                         
                     tool_msg = ToolMessage(content=str(result), tool_call_id=tool_call_id)
                     messages.append(tool_msg)
@@ -730,13 +761,13 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
         # Try structured output first
         try:
             router_model = model.with_structured_output(RouteDecision)
-            route_decision = router_model.invoke(router_messages)
+            route_decision = _llm_invoke(router_model.invoke, router_messages, timeout=60, label="Router structured output")
             next_step = route_decision.next_step
             reasoning = route_decision.reasoning
         except Exception as e:
             logger.warning(f"Structured output failed, using fallback: {str(e)}")
             # Fallback: parse from response
-            response = model.invoke(router_messages)
+            response = _llm_invoke(model.invoke, router_messages, timeout=60, label="Router fallback")
             content = str(response.content) if response.content else ""
             
             # Try to extract decision from content
@@ -961,7 +992,7 @@ REMINDER: When you generate your dashboard JSON:
     
     # Call LLM
     try:
-        response = model_with_tools.invoke(messages)
+        response = _llm_invoke(model_with_tools.invoke, messages, timeout=120, label="Reasoning node")
         # Normalize response.content to string (Gemini returns a list)
         if isinstance(response.content, list):
             response.content = "\n".join(
@@ -1177,17 +1208,16 @@ def node_execution(state: AgentState, python_tool=None, **kwargs) -> AgentState:
                         success = True
                         error = None
                     else:
-                        # Check if this is a common tool name hallucination
-                        common_mistakes = ['run', 'execute', 'code', 'python', 'code_interpreter']
-                        base_error = f"Unknown tool: {tool_name}"
-                        
-                        if tool_name.lower() in common_mistakes:
-                            guidance = f"\n\n⚠️ CRITICAL ERROR: Tool '{tool_name}' does not exist. Did you mean to use 'Python_REPL' to execute your code? Please retry using 'Python_REPL' with the 'query' parameter containing your Python code."
-                            tool_result = base_error + guidance
-                            error = base_error + guidance
-                        else:
-                            tool_result = base_error
-                            error = base_error
+                        # Unknown tool — always redirect to Python_REPL
+                        logger.warning(f"[Execution] Unknown tool called: '{tool_name}'. Redirecting model.")
+                        guidance = (
+                            f"ERROR: Tool '{tool_name}' does not exist in this environment. "
+                            "ONLY TWO tools are available: 'Python_REPL' (run Python code via 'query' parameter) "
+                            "and 'get_available_chart_types'. "
+                            "Do NOT call any other tool. Use 'Python_REPL' to execute your code."
+                        )
+                        tool_result = guidance
+                        error = guidance
                         
                         success = False
                     
@@ -1650,7 +1680,7 @@ Dashboard contents:
 Write a conversational summary explaining what the dashboard shows and key insights. No labels or prefixes."""
 
     from langchain_core.messages import HumanMessage
-    response = model.invoke([HumanMessage(content=prompt)])
+    response = _llm_invoke(model.invoke, [HumanMessage(content=prompt)], timeout=60, label="Dashboard summary")
     
     if response and response.content:
         return str(response.content).strip()

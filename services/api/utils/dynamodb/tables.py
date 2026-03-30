@@ -1,6 +1,7 @@
 """
 Centralized DynamoDB table name helpers.
 """
+
 from dataclasses import dataclass
 
 from utils.config import config
@@ -13,8 +14,7 @@ class DynamoTables:
     conversations: str = config.aws.dynamodb.CONVERSATIONS_TABLE
     workflow_status: str = config.aws.dynamodb.WORKFLOW_STATUS_TABLE
     dashboards: str = config.aws.dynamodb.DASHBOARDS_TABLE
+    credits: str = config.aws.dynamodb.CREDITS_TABLE
 
 
 tables = DynamoTables()
-
-

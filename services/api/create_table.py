@@ -5,6 +5,7 @@ Usage:
     python -m utils.dynamodb.create_table            # create all tables
     python -m utils.dynamodb.create_table assets    # create single table by name
 """
+
 from __future__ import annotations
 
 import argparse
@@ -119,6 +120,16 @@ def get_table_specs() -> Dict[str, Dict]:
                 }
             ],
         },
+        tables.credits: {
+            "KeySchema": [
+                {"AttributeName": "user_id", "KeyType": "HASH"},
+                {"AttributeName": "date", "KeyType": "RANGE"},
+            ],
+            "AttributeDefinitions": [
+                {"AttributeName": "user_id", "AttributeType": "S"},
+                {"AttributeName": "date", "AttributeType": "S"},
+            ],
+        },
     }
 
 
@@ -130,7 +141,9 @@ def create_tables(target: Optional[str] = None) -> None:
         name_map = {n.split("/")[-1]: n for n in specs.keys()}
         resolved = name_map.get(target) or specs.get(target) and target
         if not resolved:
-            raise ValueError(f"Unknown table '{target}'. Available: {', '.join(name_map.keys())}")
+            raise ValueError(
+                f"Unknown table '{target}'. Available: {', '.join(name_map.keys())}"
+            )
         _create_table(resource, resolved, specs[resolved])
         return
 
@@ -139,7 +152,9 @@ def create_tables(target: Optional[str] = None) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Create DynamoDB tables for Dreamify backend")
+    parser = argparse.ArgumentParser(
+        description="Create DynamoDB tables for Dreamify backend"
+    )
     parser.add_argument(
         "table",
         nargs="?",
@@ -157,5 +172,3 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

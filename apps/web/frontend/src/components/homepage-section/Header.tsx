@@ -81,11 +81,29 @@ const Header = () => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-[100] mx-4">
+    <header className="fixed top-0 left-0 right-0 z-40">
+      <SignedOut>
+        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-white/5 py-2 px-4 shadow-2xl relative overflow-hidden group">
+          {/* Subtle animated shine effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none" />
+          
+          <p className="text-[11px] sm:text-xs font-medium text-white/70 text-center tracking-wide">
+            ✨ <span className="text-white">Limited Offer:</span> We're giving away <span className="text-accent font-bold">Free Pro Access</span> to all early members. 
+            <button 
+              onClick={() => navigate("/login")} 
+              className="ml-2 text-white border-b border-white/30 hover:border-white transition-all pb-0.5"
+            >
+              Log in to claim
+            </button>
+          </p>
+        </div>
+      </SignedOut>
+      
+      <div className="mx-4">
       {/* My projects floating button aligned with header but outside the glass panel */}
       <SignedIn>
         {showProjectsBtn && (
-          <div className="hidden lg:block fixed left-6 top-6 z-[110]">
+          <div className="hidden lg:block fixed left-6 top-6 z-40">
             <button
               onMouseEnter={(e) => e.currentTarget.classList.add('hovered')}
               onMouseLeave={(e) => e.currentTarget.classList.remove('hovered')}
@@ -408,6 +426,7 @@ const Header = () => {
         onChangeTab={(t) => setAccountCenterTab(t)}
         onClose={() => setAccountCenterOpen(false)}
       />
+      </div>
     </header>
   );
 };

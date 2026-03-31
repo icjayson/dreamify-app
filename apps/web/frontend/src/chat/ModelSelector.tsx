@@ -126,7 +126,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <CreditIcon className="w-3.5 h-3.5" glow={false} />
-                  <span className="text-xs text-white/60">Sparkle Balance</span>
+                  <span className="text-xs text-white/60">Credit Balance</span>
                 </div>
                 <span className="text-xs font-bold text-white">{creditsRemaining} <span className="text-white/30 font-normal">/ 100</span></span>
               </div>

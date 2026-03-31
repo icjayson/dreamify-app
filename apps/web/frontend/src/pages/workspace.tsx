@@ -28,19 +28,6 @@ export default function WorkspacePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const navigate = useNavigate();
   const { user } = useUser();
-  const storageKey = `dreamify_welcomed_${user?.id}`;
-  const [showWelcome, setShowWelcome] = useState(false);
-
-  useEffect(() => {
-    if (user?.id && !localStorage.getItem(storageKey)) {
-      setShowWelcome(true);
-    }
-  }, [user?.id, storageKey]);
-
-  const handleDismissWelcome = () => {
-    localStorage.setItem(storageKey, "true");
-    setShowWelcome(false);
-  };
 
   return (
     <div className="min-h-screen">
@@ -113,24 +100,7 @@ export default function WorkspacePage() {
         </main>
       </div>
 
-      <Dialog open={showWelcome} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>Welcome to Dreamify! 🎉</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              You're currently on the <strong>Pro plan</strong> — enjoy full access while we're in early access.
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              You have <strong>100 Sparkles per day</strong> to analyze data and generate dashboards.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleDismissWelcome} className="w-full">Start exploring</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Welcome Dialog removed from here and moved to HomePage */}
     </div>
   );
 }

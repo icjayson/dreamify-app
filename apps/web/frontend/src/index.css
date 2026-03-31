@@ -663,3 +663,12 @@ html::-webkit-scrollbar-thumb:hover {
 .homepage-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--primary) / 0.3);
 }
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 5s infinite linear;
+}

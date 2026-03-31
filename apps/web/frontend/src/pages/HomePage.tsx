@@ -21,7 +21,7 @@ import WaveBackground from '../../../src/ui/lightswind/wave-background';
 import ProjectsSection from '@/components/homepage-section/ProjectsSection';
 import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
 import TemplateModal from '@/components/homepage-section/TemplateModal';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader, DialogFooter } from '@/components/ui/dialog';
 import { ToastAction } from "@/components/ui/toast";
 import { CONNECTORS, type ConnectorItem } from '@/constants/connectors';
 import FilePreviewChip from '@/components/chat/FilePreviewChip';
@@ -248,6 +248,20 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     });
 
     navigate(`/workspace/project?projectId=${firstUploadedFile.projectId}`);
+  };
+
+  const storageKey = `dreamify_welcomed_${clerkUser?.id}`;
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    if (isSignedIn && clerkUser?.id && !localStorage.getItem(storageKey)) {
+      setShowWelcome(true);
+    }
+  }, [isSignedIn, clerkUser?.id, storageKey]);
+
+  const handleDismissWelcome = () => {
+    localStorage.setItem(storageKey, "true");
+    setShowWelcome(false);
   };
 
   const handleFileUpload = (files: FileList | null) => {
@@ -995,6 +1009,25 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showWelcome} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="text-xl sm:text-2xl font-bold text-white">Welcome to Dreamify! 🎉</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm sm:text-base text-white/70">
+              You're currently on the <strong className="text-white">Pro plan</strong> — enjoy full access while we're in early access.
+            </p>
+            <p className="text-sm sm:text-base text-white/70 mt-2">
+              You have <strong className="text-white">100 credits per day</strong> to analyze data and generate dashboards.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleDismissWelcome} className="w-full button-gradient py-2 rounded-xl h-auto text-sm sm:text-base">Start exploring</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

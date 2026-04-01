@@ -1,12 +1,12 @@
 pandas
 numpy
-fastapi==0.104.1
+fastapi==0.135.2
 uvicorn==0.24.0
-langchain==0.3.27
+langchain==1.0.0
 langchain-openai==0.3.34
-langchain-google-genai==2.1.12
-langchain-experimental==0.3.4
-langchain-core==0.3.78
+langchain-google-genai==4.2.1
+langchain-experimental==0.4.1
+langchain-core==1.2.5
 seaborn==0.13.0
 pyyaml==6.0.1
 python-multipart==0.0.6

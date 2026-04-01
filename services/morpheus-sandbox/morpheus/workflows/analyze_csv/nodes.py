@@ -35,21 +35,20 @@ from utils.postprocess import clean_json
 _LLM_EXECUTOR = _futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm_call")
 
 
-def _llm_invoke(model_fn: Callable, messages, timeout: int, label: str = "LLM"):
+def _llm_invoke(model_fn: Callable, messages, label: str = "LLM"):
     """
     Call model_fn(messages) with a hard timeout that works in background threads.
     Raises TimeoutError if the call exceeds `timeout` seconds.
     """
-    logger.info(f"[LLM] {label} — calling model (timeout={timeout}s)")
+    logger.info(f"[LLM] {label} — calling model")
     future = _LLM_EXECUTOR.submit(model_fn, messages)
     try:
-        result = future.result(timeout=timeout)
+        result = future.result()
         logger.info(f"[LLM] {label} — completed OK")
         return result
     except _futures.TimeoutError:
         logger.error(f"[Timeout] {label} exceeded {timeout}s — aborting call")
         raise TimeoutError(f"{label} timed out after {timeout}s")
-
 
 # Import system prompts from original workflow
 # These will be refactored into separate prompts module later if needed
@@ -138,6 +137,7 @@ CARDINALITY GUIDELINES:
 
 CHART RECOMMENDATIONS:
 ======================
+- Try to prioritize mixed chart types (e.g. line + bar, bar + pie, etc...) to provide comprehensive analysis
 - Produce charts sorted by priority (high, medium, low)
 - Include evidence: {n_rows, cardinality_x, correlation_xy (nullable), trend_detected (nullable)}
 - Consider adding filters: date range, category multi-select, top-N, comparison toggles
@@ -628,7 +628,7 @@ Ensure the format is clear and actionable for the next reasoning agent."""
         max_turns = 18 if has_multiple_files else 15
         tool_executed = False
         for turn in range(max_turns):
-            response = _llm_invoke(model_with_tools.invoke, messages, timeout=90, label=f"Data Profiler turn {turn + 1}")
+            response = _llm_invoke(model_with_tools.invoke, messages, label=f"Data Profiler turn {turn + 1}")
             if isinstance(response.content, list):
                 response.content = "\n".join(
                     item.get("text", "") if isinstance(item, dict) else str(item)
@@ -676,15 +676,15 @@ Ensure the format is clear and actionable for the next reasoning agent."""
                     ))
                     continue
                 
-                state.data_profile = str(response.content)
-                # Log merge strategy if present, otherwise brief summary
-                content_str = str(response.content)
-                if "=== MERGE STRATEGY ===" in content_str:
-                    merge_part = content_str[content_str.index("=== MERGE STRATEGY ==="):]
-                    logger.info(f"[Data Profiler] Data exploration complete.\nMerge Strategy:\n{merge_part}")
-                else:
-                    logger.info(f"[Data Profiler] Data exploration complete. (No merge strategy — single file or unrelated datasets)")
-                break
+            state.data_profile = str(response.content)
+            # Log merge strategy if present, otherwise brief summary
+            content_str = str(response.content)
+            if "=== MERGE STRATEGY ===" in content_str:
+                merge_part = content_str[content_str.index("=== MERGE STRATEGY ==="):]
+                logger.info(f"[Data Profiler] Data exploration complete.\nMerge Strategy:\n{merge_part}")
+            else:
+                logger.info(f"[Data Profiler] Data exploration complete. (No merge strategy — single file or unrelated datasets)")
+            break
                 
     except Exception as e:
         logger.error(f"Error exploring files: {str(e)}")
@@ -761,13 +761,13 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
         # Try structured output first
         try:
             router_model = model.with_structured_output(RouteDecision)
-            route_decision = _llm_invoke(router_model.invoke, router_messages, timeout=60, label="Router structured output")
+            route_decision = _llm_invoke(router_model.invoke, router_messages, label="Router structured output")
             next_step = route_decision.next_step
             reasoning = route_decision.reasoning
         except Exception as e:
             logger.warning(f"Structured output failed, using fallback: {str(e)}")
             # Fallback: parse from response
-            response = _llm_invoke(model.invoke, router_messages, timeout=60, label="Router fallback")
+            response = _llm_invoke(model.invoke, router_messages, label="Router fallback")
             content = str(response.content) if response.content else ""
             
             # Try to extract decision from content
@@ -992,7 +992,7 @@ REMINDER: When you generate your dashboard JSON:
     
     # Call LLM
     try:
-        response = _llm_invoke(model_with_tools.invoke, messages, timeout=120, label="Reasoning node")
+        response = _llm_invoke(model_with_tools.invoke, messages, label="Reasoning node")
         # Normalize response.content to string (Gemini returns a list)
         if isinstance(response.content, list):
             response.content = "\n".join(
@@ -1680,11 +1680,12 @@ Dashboard contents:
 Write a conversational summary explaining what the dashboard shows and key insights. No labels or prefixes."""
 
     from langchain_core.messages import HumanMessage
-    response = _llm_invoke(model.invoke, [HumanMessage(content=prompt)], timeout=60, label="Dashboard summary")
+    response = _llm_invoke(model.invoke, [HumanMessage(content=prompt)], label="Dashboard summary")
     
-    if response and response.content:
+    if response and response.content and isinstance(response.content, list):
+        return str(response.content[0]['text'].strip())
+    elif response and response.content:
         return str(response.content).strip()
-    
     # Fallback
     return f"I've created a dashboard with {len(charts)} chart(s) and {len(metrics)} metric(s) based on your request."
 

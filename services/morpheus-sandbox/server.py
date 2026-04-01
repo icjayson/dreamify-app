@@ -14,7 +14,7 @@ from pydantic import BaseModel
 import aiohttp
 import requests
 
-from morpheus.workflows.analyze_csv.state_graph import StatefulAnalyzeCSVWorkflow
+from morpheus.workflows.analyze_csv.workflow import AnalyzeCSVWorkflow
 from utils.config import config
 from utils.dynamodb import save_dashboard_metadata
 from utils.health import check_health

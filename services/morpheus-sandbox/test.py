@@ -13,11 +13,11 @@ def test_workflow_with_logging():
     print("Testing updated workflow with logging and workflow output...")
     
     try:
-        from morpheus.workflows.analyze_csv.workflow import AnalyzeCSVWorkflow
+        from morpheus.workflows.analyze_csv.state_graph import StatefulAnalyzeCSVWorkflow
         from pathlib import Path
         
         # Initialize workflow
-        workflow = AnalyzeCSVWorkflow()
+        workflow = StatefulAnalyzeCSVWorkflow()
         
         # Test file path
         file_path = "/home/hungnq/projects/dreamify-morpheus/storage/in/sales_amazon.csv"

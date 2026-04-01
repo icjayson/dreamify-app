@@ -756,7 +756,7 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
     
     # Call router model
     try:
-        from morpheus.workflows.analyze_csv.workflow import RouteDecision
+        from morpheus.workflows.analyze_csv.state_models import RouteDecision
         
         # Try structured output first
         try:

@@ -37,8 +37,8 @@ credit_service_instance = CreditService()
 # Verify valid IDs at: https://ai.google.dev/gemini-api/docs/models
 # Override via env vars without code changes: DREAMIFY_PRO_MODEL / DREAMIFY_FAST_MODEL
 MODEL_ID_MAP = {
-    "pro": os.environ.get("DREAMIFY_PRO_MODEL", "gemini-3.1-pro-preview"),
-    "fast": os.environ.get("DREAMIFY_FAST_MODEL", "gemini-2.5-pro"),
+    "pro": os.environ.get("DREAMIFY_PRO_MODEL", "gpt-5.4-mini"),
+    "fast": os.environ.get("DREAMIFY_FAST_MODEL", "gemini-3-flash-preview"),
 }
 
 

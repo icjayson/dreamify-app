@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Download, Pencil, Sparkles, SquareArrowOutUpRight, X } from "lucide-react";
+import { ArrowLeft, Download, Pencil, Sparkles, SquareArrowOutUpRight, X, Sun, Moon } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
@@ -32,6 +32,22 @@ export default function ProjectPage() {
   const [renameValue, setRenameValue] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const [isDashboardDarkMode, setIsDashboardDarkMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`dashboard_theme_mode_${projectId || 'default'}`);
+      return saved !== null ? saved === 'true' : true;
+    } catch { return true; }
+  });
+
+  const handleThemeModeToggle = () => {
+    setIsDashboardDarkMode(prev => {
+      const next = !prev;
+      try { localStorage.setItem(`dashboard_theme_mode_${projectId || 'default'}`, String(next)); }
+      catch { /* ignore */ }
+      return next;
+    });
+  };
 
   const {
     projects,
@@ -453,6 +469,16 @@ export default function ProjectPage() {
               </div>
             </div>
             <div className="flex items-center">
+              {isDashboardOpen && (
+                <button
+                  onClick={handleThemeModeToggle}
+                  className="button-outline h-8 w-8 mr-2 rounded-md flex items-center justify-center"
+                  title={isDashboardDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+                  aria-label={isDashboardDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+                >
+                  {isDashboardDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
+              )}
               <FeedbackProjectButton />
               {isDashboardOpen && (
                 <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center ml-2"><span>Publish</span>
@@ -579,7 +605,7 @@ export default function ProjectPage() {
                 isProjectLoading ? (
                   <DashboardLoading title="Restoring your dashboard..." description="Wait a few seconds" durationSec={5} />
                 ) : processedData ? (
-                  <DashboardPreview dashboardId={selectedDashboardId || undefined} processedData={processedData} className="h-full overflow-y-auto" showCardActionsMenu />
+                  <DashboardPreview dashboardId={selectedDashboardId || undefined} processedData={processedData} className="h-full overflow-y-auto" showCardActionsMenu isDarkMode={isDashboardDarkMode} />
                 ) : (
                   <div className="flex items-center justify-center h-full bg-black/5">
                     <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/70 border border-white/15 shadow-lg backdrop-blur-md">

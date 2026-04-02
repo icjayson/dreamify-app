@@ -12,7 +12,8 @@ export const CHART_PRESET_THEMES = {
   SUNSET: 'sunset',
   MIDNIGHT: 'midnight',
   SAKURA: 'sakura',
-  MONOCHROME: 'monochrome'
+  MONOCHROME: 'monochrome',
+  LIGHT: 'light'
 } as const;
 
 export type ChartPresetTheme = typeof CHART_PRESET_THEMES[keyof typeof CHART_PRESET_THEMES];
@@ -83,6 +84,15 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'title-color': '#ffffff',
     'description-color': '#a0a0a0',
     'element-color': '#6b7280'
+  },
+  [CHART_PRESET_THEMES.LIGHT]: {
+    'highlight-color': '#1e3a5f',
+    'bg-dashboard-color': '#f0f2f5',
+    'bg-card-color': '#ffffff',
+    'border-card-color': '#e2e8f0',
+    'title-color': '#0f172a',
+    'description-color': '#64748b',
+    'element-color': '#94a3b8'
   }
 };
 
@@ -127,6 +137,35 @@ function getMonochromePaletteFromCSS(element?: HTMLElement): string[] {
     }
   }
   
+  return colors;
+}
+
+/**
+ * Get light color palette from CSS variables
+ * Reads CSS variables from the document root or a specific element
+ * Falls back to minimal inline values if CSS variables are not available
+ * @param element - Optional element to read CSS variables from (defaults to document.documentElement)
+ * @returns Array of 10 color strings
+ */
+function getLightPaletteFromCSS(element?: HTMLElement): string[] {
+  const targetElement = element || document.documentElement;
+  const computedStyle = window.getComputedStyle(targetElement);
+
+  const colors: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const cssVar = `--light-color-${i}`;
+    const color = computedStyle.getPropertyValue(cssVar).trim();
+
+    if (color) {
+      colors.push(color);
+    } else {
+      // CSS variable not found - this should not happen in normal operation
+      // Return minimal inline fallback for critical error handling
+      console.error(`CSS variable ${cssVar} not found. Using minimal fallback.`);
+      return ["#1e3a5f", "#0d9488", "#d97706", "#e11d48", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#9333ea", "#0284c7"];
+    }
+  }
+
   return colors;
 }
 
@@ -256,11 +295,27 @@ export function getColorPalette(
       ];
     }
     
-    return Array.from({ length: datasetCount }, (_, i) => 
+    return Array.from({ length: datasetCount }, (_, i) =>
       palette[i % palette.length]
     );
   }
-  
+
+  if (theme === CHART_PRESET_THEMES.LIGHT) {
+    let palette: string[];
+    try {
+      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        palette = getLightPaletteFromCSS();
+      } else {
+        console.warn('Browser environment not available. Using minimal fallback.');
+        palette = ["#1e3a5f", "#0d9488", "#d97706", "#e11d48", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#9333ea", "#0284c7"];
+      }
+    } catch (error) {
+      console.error('Failed to read light palette from CSS variables, using minimal fallback:', error);
+      palette = ["#1e3a5f", "#0d9488", "#d97706", "#e11d48", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#9333ea", "#0284c7"];
+    }
+    return Array.from({ length: datasetCount }, (_, i) => palette[i % palette.length]);
+  }
+
   const themeColors = CHART_THEME_COLORS[theme];
   if (!themeColors) {
     return generateOpacityCascade(CHART_THEME_COLORS[CHART_PRESET_THEMES.MONOCHROME]['highlight-color'], datasetCount);
@@ -326,17 +381,18 @@ export function convertLLMStylingToChartStyling(
     'sunset': CHART_PRESET_THEMES.SUNSET,
     'midnight': CHART_PRESET_THEMES.MIDNIGHT,
     'sakura': CHART_PRESET_THEMES.SAKURA,
-    'monochrome': CHART_PRESET_THEMES.MONOCHROME
+    'monochrome': CHART_PRESET_THEMES.MONOCHROME,
+    'light': CHART_PRESET_THEMES.LIGHT
   };
   
   const theme = themeMap[llmStyling.theme?.toLowerCase() || ''] || CHART_PRESET_THEMES.MONOCHROME;
   const themeColors = CHART_THEME_COLORS[theme];
   
-  // Special handling for MONOCHROME theme: use solid colors instead of opacity cascade
-  const colorPalette = theme === CHART_PRESET_THEMES.MONOCHROME
-    ? getColorPalette(CHART_PRESET_THEMES.MONOCHROME, 10)
+  // Special handling for MONOCHROME and LIGHT themes: use solid colors instead of opacity cascade
+  const colorPalette = (theme === CHART_PRESET_THEMES.MONOCHROME || theme === CHART_PRESET_THEMES.LIGHT)
+    ? getColorPalette(theme, 10)
     : generateOpacityCascade(themeColors['highlight-color'], 10);
-  
+
   return {
     presetTheme: theme,
     colorPalette: colorPalette,
@@ -380,11 +436,11 @@ export function validateChartStyling(styling: ChartStyling): {
 export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_THEMES.MONOCHROME): ChartStyling {
   const themeColors = CHART_THEME_COLORS[theme];
   
-  // Special handling for MONOCHROME theme: use solid colors instead of opacity cascade
-  const colorPalette = theme === CHART_PRESET_THEMES.MONOCHROME
-    ? getColorPalette(CHART_PRESET_THEMES.MONOCHROME, 10)
+  // Special handling for MONOCHROME and LIGHT themes: use solid colors instead of opacity cascade
+  const colorPalette = (theme === CHART_PRESET_THEMES.MONOCHROME || theme === CHART_PRESET_THEMES.LIGHT)
+    ? getColorPalette(theme, 10)
     : generateOpacityCascade(themeColors['highlight-color'], 10);
-  
+
   return {
     presetTheme: theme,
     colorPalette: colorPalette,

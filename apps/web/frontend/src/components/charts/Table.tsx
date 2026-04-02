@@ -139,8 +139,8 @@ const Table = ({
                 <thead
                   className="sticky top-0 z-10"
                   style={{
-                    backgroundColor: styling?.headerBg || 'var(--highlight-color)',
-                    color: styling?.headerText || 'var(--bg-card-color)'
+                    backgroundColor: styling?.headerBg || 'var(--table-header-bg, var(--highlight-color))',
+                    color: styling?.headerText || 'var(--table-header-text, var(--bg-card-color))'
                   }}
                 >
                   <tr>

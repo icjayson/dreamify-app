@@ -795,6 +795,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const restoredMessages = conversationNodesToMessages(conversation);
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
+                  
+                  // Auto-open dashboard if the latest message includes a dashboard card
+                  const lastMsg = restoredMessages[restoredMessages.length - 1];
+                  const dashId = lastMsg?.dashboardCard?.dashboardId;
+                  if (dashId) {
+                    set({
+                      isDashboardOpen: true,
+                      hasShownInitialDashboard: true,
+                      isInitialLoading: false,
+                    });
+                    get().selectDashboard(dashId, projectId).then((data) => {
+                      if (data && onProcessedDataChange) {
+                        onProcessedDataChange(data);
+                      }
+                    });
+                  }
                 }
                 // Update file status to processed to hide chip
                 get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'processed' }));
@@ -1116,6 +1132,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
               console.log('Q&A conversation loaded, restored', restoredMessages.length, 'messages');
               if (restoredMessages.length) {
                 get().setMessages(restoredMessages);
+                
+                // Auto-open dashboard if the latest message includes a dashboard card
+                const lastMsg = restoredMessages[restoredMessages.length - 1];
+                const dashId = lastMsg?.dashboardCard?.dashboardId;
+                if (dashId) {
+                  set({
+                    isDashboardOpen: true,
+                    hasShownInitialDashboard: true,
+                    isInitialLoading: false,
+                  });
+                  get().selectDashboard(dashId, projectId).then((data) => {
+                    if (data && onProcessedDataChange) {
+                      onProcessedDataChange(data);
+                    }
+                  });
+                }
               }
             } catch (error) {
               console.error('Failed to load conversation for Q&A response:', error);

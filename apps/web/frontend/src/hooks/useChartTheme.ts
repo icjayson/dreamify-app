@@ -52,6 +52,12 @@ export function useChartTheme(options: UseChartThemeOptions = {}): UseChartTheme
   // Validation state
   const [validation, setValidation] = useState(() => validateChartStyling(styling));
 
+  // Sync internal styling state when the preset theme prop changes (e.g. dark/light toggle)
+  useEffect(() => {
+    setStylingState(prev => mergeChartStyling(initialStyling, prev));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStyling.presetTheme]);
+
   // Update validation when styling changes
   useEffect(() => {
     const newValidation = validateChartStyling(styling);

@@ -129,6 +129,40 @@
   --chart-hover-scale: 1.02;
 }
 
+/* LIGHT Theme - Clean white, professional, corporate */
+.chart-theme-light {
+  --highlight-color: #1e3a5f;
+  --bg-dashboard-color: #f0f2f5;
+  --bg-card-color: #ffffff;
+  --border-card-color: #e2e8f0;
+  --title-color: #0f172a;
+  --description-color: #64748b;
+  --element-color: #94a3b8;
+
+  --highlight-color-rgb: 30, 58, 95;
+  --element-color-rgb: 148, 163, 184;
+
+  /* 10 distinct colors visible on white backgrounds */
+  --light-color-0: #1e3a5f;
+  --light-color-1: #0d9488;
+  --light-color-2: #d97706;
+  --light-color-3: #e11d48;
+  --light-color-4: #7c3aed;
+  --light-color-5: #0891b2;
+  --light-color-6: #16a34a;
+  --light-color-7: #ea580c;
+  --light-color-8: #9333ea;
+  --light-color-9: #0284c7;
+
+  /* Table header — subtle slate on white, not the full navy accent */
+  --table-header-bg: #f1f5f9;
+  --table-header-text: #0f172a;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
 @layer components {
   /* Chart Animation Classes */
   .chart-animate-fade-in {

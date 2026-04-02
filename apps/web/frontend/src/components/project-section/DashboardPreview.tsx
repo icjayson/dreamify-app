@@ -25,6 +25,7 @@ import {
   getChartStylingClasses,
   getDashboardBackgroundStyle,
   CHART_THEME_COLORS,
+  CHART_PRESET_THEMES,
   ChartPresetTheme
 } from "@/utils/chartStyling";
 import type { ChartChipData } from "@/components/chat/ChartPreviewChip";
@@ -61,6 +62,10 @@ interface DashboardPreviewProps {
   onExportLayoutChange?: (didSplit: boolean) => void;
   /** Card ⋮ menu (Fix in chat, …). Only enabled on project workspace; keep false for public preview & exports. */
   showCardActionsMenu?: boolean;
+  /** Controlled dark/light mode — when provided, overrides internal state */
+  isDarkMode?: boolean;
+  /** Callback when user toggles dark/light mode from within the dashboard (legacy, now handled externally) */
+  onThemeModeChange?: (isDarkMode: boolean) => void;
 }
 
 const DashboardPreview = ({
@@ -73,6 +78,7 @@ const DashboardPreview = ({
   isExporting = false,
   onExportLayoutChange,
   showCardActionsMenu = false,
+  isDarkMode: isDarkModeProp,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -80,6 +86,18 @@ const DashboardPreview = ({
   // Pass undefined to useDashboard if staticConfig or processedData exists so it doesn't try to fetch
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(staticConfig || processedData ? undefined : dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const themeModeStorageKey = `dashboard_theme_mode_${dashboardId || 'default'}`;
+
+  const [isDarkModeInternal, setIsDarkModeInternal] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`dashboard_theme_mode_${dashboardId || 'default'}`);
+      return saved !== null ? saved === 'true' : true;
+    } catch { return true; }
+  });
+
+  // Use controlled prop if provided, otherwise fall back to internal state
+  const isDarkMode = isDarkModeProp !== undefined ? isDarkModeProp : isDarkModeInternal;
 
   // Edit feedback loop state from store
   const changedComponentIds = useChatStore((s) => s.changedComponentIds);
@@ -96,6 +114,7 @@ const DashboardPreview = ({
       return () => clearTimeout(timer);
     }
   }, [changedComponentIds]);
+
 
   // Determine which configuration to use (static from parent vs fetched from state)
   const configuration = staticConfig || dashboardState.configuration;
@@ -709,11 +728,24 @@ const DashboardPreview = ({
 
   // Apply dashboard-level styling to container
   const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData]);
-  useEffect(() => {
-    if (containerRef.current && dashboardStylingForContainer) {
-      applyChartStyling(containerRef.current, dashboardStylingForContainer);
+
+  const effectiveStyling = useMemo(() => {
+    const base = dashboardStylingForContainer || getDefaultChartStyling();
+    if (!isDarkMode) {
+      return {
+        ...base,
+        presetTheme: CHART_PRESET_THEMES.LIGHT,
+        dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.LIGHT]['bg-dashboard-color']
+      };
     }
-  }, [dashboardStylingForContainer]);
+    return base;
+  }, [isDarkMode, dashboardStylingForContainer]);
+
+  useEffect(() => {
+    if (containerRef.current && effectiveStyling) {
+      applyChartStyling(containerRef.current, effectiveStyling);
+    }
+  }, [effectiveStyling]);
 
   // Helper function to get dashboard theme styles as inline CSS properties
   const getDashboardThemeStyles = (styling: any): React.CSSProperties => {
@@ -749,6 +781,22 @@ const DashboardPreview = ({
     if (configuration && configuration.components) return configuration as any;
     return null;
   }, [normalizedProcessed, configuration]);
+
+  const displayComponents = useMemo(() => {
+    if (!activeDashboard?.components) return [];
+    if (isDarkMode) return activeDashboard.components;
+    return activeDashboard.components.map((comp: any) => ({
+      ...comp,
+      component_config: {
+        ...comp.component_config,
+        styling: {
+          ...comp.component_config?.styling,
+          presetTheme: CHART_PRESET_THEMES.LIGHT,
+          dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.LIGHT]['bg-dashboard-color']
+        }
+      }
+    }));
+  }, [activeDashboard?.components, isDarkMode]);
 
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {
@@ -1060,10 +1108,10 @@ const DashboardPreview = ({
       ref={containerRef}
       id={isExporting ? "dashboard-export-inner-root" : "dashboard-preview-root"}
       data-dashboard-root
-      className={`h-full overflow-y-auto relative chat-scrollbar-hide ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)} ${className}`}
+      className={`h-full overflow-y-auto relative chat-scrollbar-hide ${getChartStylingClasses(effectiveStyling || getDefaultChartStyling() as any)} ${className}`}
       style={{
         ...style,
-        ...getDashboardBackgroundStyle(dashboardStylingForContainer || getDefaultChartStyling())
+        ...getDashboardBackgroundStyle(effectiveStyling || getDefaultChartStyling())
       }}
       data-theme="dashboard-preview"
     >
@@ -1120,9 +1168,9 @@ const DashboardPreview = ({
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent
-                      className={`w-auto p-0 [&]:!bg-[var(--bg-card-color)] ${getChartStylingClasses(dashboardStylingForContainer || getDefaultChartStyling() as any)}`}
+                      className={`w-auto p-0 [&]:!bg-[var(--bg-card-color)] ${getChartStylingClasses(effectiveStyling || getDefaultChartStyling() as any)}`}
                       align="end"
-                      style={getDashboardThemeStyles(dashboardStylingForContainer)}
+                      style={getDashboardThemeStyles(effectiveStyling)}
                     >
                       <Calendar
                         initialFocus
@@ -1131,7 +1179,7 @@ const DashboardPreview = ({
                         selected={dateRange}
                         onSelect={setDateRange}
                         numberOfMonths={2}
-                        themeStyles={getDashboardThemeStyles(dashboardStylingForContainer)}
+                        themeStyles={getDashboardThemeStyles(effectiveStyling)}
                       />
                     </PopoverContent>
                   </Popover>
@@ -1233,7 +1281,7 @@ const DashboardPreview = ({
                 isBounded
                 compactType={null}
               >
-                {activeDashboard.components.map((component: any) => (
+                {displayComponents.map((component: any) => (
                   <div key={String(component.id)} className="animate-fade-in">
                     <ChartRenderer
                       component={component}
@@ -1263,7 +1311,7 @@ const DashboardPreview = ({
                 onDragStop={handleDragResizeStop}
                 onResizeStop={handleDragResizeStop}
               >
-                {activeDashboard.components.map((component: any) => {
+                {displayComponents.map((component: any) => {
                   const compId = component.component_config?.id || component.id;
                   const isHighlighted = highlightedIds.has(String(compId)) || highlightedIds.has(String(component.id));
                   const cellKey = String(component.id);

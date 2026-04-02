@@ -31,26 +31,23 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           e.stopPropagation();
           onToggle();
         }}
-        className={`flex items-center gap-2 transition-all duration-300 group h-[34px] ${
-          variant === 'compact'
-            ? `px-2.5 py-1.5 rounded-md border text-sm ${
-                isOpen || selectedModel === 'pro'
-                  ? 'border-primary/60 bg-white/10 text-white'
-                  : 'border-white/30 text-gray-400 hover:text-white hover:bg-white/5'
-              }`
-            : `px-3 py-1.5 text-sm button-outline ${
-                selectedModel === 'pro'
-                  ? 'border-primary/60 bg-primary/20 text-primary-glow shadow-[inset_0_0_12px_rgba(255,255,255,0.1),inset_0_0_20px_hsl(var(--primary)/0.3)]'
-                  : 'hover:border-primary/60 hover:bg-white/5 text-white/90'
-              }`
-        } ${isOpen && variant === 'classic' ? 'ring-2 ring-primary/20 border-primary/40' : ''}`}
+        className={`flex items-center gap-2 transition-all duration-300 group h-[34px] ${variant === 'compact'
+          ? `px-2.5 py-1.5 rounded-md border text-sm ${isOpen || selectedModel === 'pro'
+            ? 'border-primary/60 bg-white/10 text-white'
+            : 'border-white/30 text-gray-400 hover:text-white hover:bg-white/5'
+          }`
+          : `px-3 py-1.5 text-sm button-outline ${selectedModel === 'pro'
+            ? 'border-primary/60 bg-primary/20 text-primary-glow shadow-[inset_0_0_12px_rgba(255,255,255,0.1),inset_0_0_20px_hsl(var(--primary)/0.3)]'
+            : 'hover:border-primary/60 hover:bg-white/5 text-white/90'
+          }`
+          } ${isOpen && variant === 'classic' ? 'ring-2 ring-primary/20 border-primary/40' : ''}`}
         title="Select intelligence model"
       >
         <div className="relative flex items-center justify-center">
           {selectedModel === 'fast' ? (
             <Zap className={`w-4 h-4 ${variant === 'compact' && selectedModel === 'fast' && !isOpen ? 'text-gray-400 group-hover:text-white' : ''}`} />
           ) : (
-            <Sparkles className="w-4 h-4 text-primary animate-pulse-glow" />
+            <Sparkles className="w-4 h-4 text-white animate-pulse-glow" />
           )}
           {selectedModel === 'pro' && (
             <motion.div
@@ -70,16 +67,14 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: placement === 'bottom' ? 5 : -5, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            className={`absolute ${
-              placement === 'bottom' ? 'top-full mt-3' : 'bottom-full mb-3'
-            } w-64 bg-[#121214]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-20 overflow-hidden ${
-              anchor === 'right' ? 'right-0' : 'left-0'
-            }`}
+            className={`absolute ${placement === 'bottom' ? 'top-full mt-3' : 'bottom-full mb-3'
+              } w-64 bg-[#121214]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-20 overflow-hidden ${anchor === 'right' ? 'right-0' : 'left-0'
+              }`}
           >
             <div className="p-2 space-y-1">
               <button
                 onClick={() => { onSelect('fast'); }}
-                className={`w-full p-3 text-left rounded-xl transition-all duration-200 group flex items-start gap-3 ${selectedModel === 'fast' ? 'bg-white/10 ring-1 ring-white/10 shadow-[inset_-2px_-2px_8px_rgba(255,255,255,0.05)]' : 'hover:bg-white/5 opacity-60 hover:opacity-100'}`}
+                className={`w-full p-2 text-left rounded-xl transition-all duration-200 group flex items-start gap-3 ${selectedModel === 'fast' ? 'bg-white/10 ring-1 ring-white/10 shadow-[inset_-2px_-2px_8px_rgba(255,255,255,0.05)]' : 'hover:bg-white/5 opacity-60 hover:opacity-100'}`}
               >
                 <div className={`p-2 rounded-lg ${selectedModel === 'fast' ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-white/40 group-hover:text-white/60'}`}>
                   <Zap className="w-4 h-4" />
@@ -101,7 +96,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
               <button
                 onClick={() => { onSelect('pro'); }}
-                className={`w-full p-3 text-left rounded-xl transition-all duration-200 group flex items-start gap-3 ${selectedModel === 'pro' ? 'bg-primary/20 ring-1 ring-primary/30 shadow-[inset_-2px_-2px_8px_hsl(var(--primary)/0.15)]' : 'hover:bg-white/5 opacity-60 hover:opacity-100'}`}
+                className={`w-full p-2 text-left rounded-xl transition-all duration-200 group flex items-start gap-3 ${selectedModel === 'pro' ? 'bg-primary/20 ring-1 ring-primary/30 shadow-[inset_-2px_-2px_8px_hsl(var(--primary)/0.15)]' : 'hover:bg-white/5 opacity-60 hover:opacity-100'}`}
               >
                 <div className={`p-2 rounded-lg ${selectedModel === 'pro' ? 'bg-primary/30 text-primary-glow' : 'bg-white/5 text-white/40 group-hover:text-white/60'}`}>
                   <Sparkles className="w-4 h-4" />

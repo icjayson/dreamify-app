@@ -118,6 +118,50 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   const [lottieData, setLottieData] = useState(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
 
+  // Typewriter rotating words for subheading
+  const rotatingWords = [
+    { text: 'marketing', gradient: 'linear-gradient(90deg, #FF4D4D, #FF9A3C)', cursorColor: '#FF4D4D' },
+    { text: 'sales', gradient: 'linear-gradient(90deg, #00C9FF, #92FE9D)', cursorColor: '#00C9FF' },
+    { text: 'finance', gradient: 'linear-gradient(90deg, #FFE259, #FFA751)', cursorColor: '#FFE259' },
+    { text: 'product', gradient: 'linear-gradient(90deg, #DA22FF, #9733EE)', cursorColor: '#DA22FF' },
+    { text: 'e-commerce', gradient: 'linear-gradient(90deg, #11998E, #38EF7D)', cursorColor: '#11998E' },
+    { text: 'logistics', gradient: 'linear-gradient(90deg, #FC5C7D, #6A82FB)', cursorColor: '#FC5C7D' },
+    { text: 'other', gradient: 'linear-gradient(90deg, #FDC830, #F37335)', cursorColor: '#FDC830' },
+  ];
+  const [rotatingIndex, setRotatingIndex] = useState(0);
+  const [displayedText, setDisplayedText] = useState('');
+  const [isTypingIn, setIsTypingIn] = useState(true);
+
+  useEffect(() => {
+    const currentWord = rotatingWords[rotatingIndex].text;
+    let timeout: ReturnType<typeof setTimeout>;
+
+    if (isTypingIn) {
+      if (displayedText.length < currentWord.length) {
+        timeout = setTimeout(() => {
+          setDisplayedText(currentWord.slice(0, displayedText.length + 1));
+        }, 80);
+      } else {
+        // Pause at full word before typing out
+        timeout = setTimeout(() => {
+          setIsTypingIn(false);
+        }, 1800);
+      }
+    } else {
+      if (displayedText.length > 0) {
+        timeout = setTimeout(() => {
+          setDisplayedText(displayedText.slice(0, -1));
+        }, 50);
+      } else {
+        // Move to next word
+        setRotatingIndex((prev) => (prev + 1) % rotatingWords.length);
+        setIsTypingIn(true);
+      }
+    }
+
+    return () => clearTimeout(timeout);
+  }, [displayedText, isTypingIn, rotatingIndex]);
+
   // Model selector state
   const [selectedModel, setSelectedModel] = useState<'pro' | 'fast'>('fast');
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
@@ -650,14 +694,36 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
             {/* Row 1: The AI Data Analyst with gradient styling */}
             <h1 className="text-5xl md:text-7xl font-bold mb-6 font-instrument-serif">
               <span className="px-0 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
-                The AI Data Analyst
+                AI-native Data Analyst
               </span>
             </h1>
 
             {/* Row 2: Logo + Build Fancy Dashboard in minutes */}
             <div className="flex items-center justify-center gap-2 flex-wrap">
               <h2 className="text-xl lg:text-3xl text-white font-inter">
-                Build Fancy Dashboard in minutes with
+                Centralize and visualize your{' '}
+                <span
+                  className="inline-flex items-center rounded-lg px-3 py-1 button-outline"
+                >
+                  <span
+                    className="text-transparent bg-clip-text font-bold"
+                    style={{ backgroundImage: rotatingWords[rotatingIndex].gradient }}
+                  >
+                    {displayedText || '\u00A0'}
+                  </span>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: '2px',
+                      height: '0.75em',
+                      backgroundColor: rotatingWords[rotatingIndex].cursorColor,
+                      marginLeft: '1px',
+                      verticalAlign: 'middle',
+                      animation: 'blink-cursor 0.7s step-end infinite',
+                    }}
+                  />
+                </span>
+                {' '}data in 2 mins with
               </h2>
               <div className="button-gradient rounded-xl px-4 py-2 flex items-center gap-3">
                 <img
@@ -1012,7 +1078,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showWelcome} onOpenChange={() => {}}>
+      <Dialog open={showWelcome} onOpenChange={() => { }}>
         <DialogContent className="sm:max-w-md bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-xl sm:text-2xl font-bold text-white">Welcome to Dreamify! 🎉</DialogTitle>

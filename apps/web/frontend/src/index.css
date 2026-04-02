@@ -378,6 +378,11 @@
     animation: caret-blink 1s steps(2, jump-none) infinite;
   }
 
+  @keyframes blink-cursor {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
   .active-breathing { animation: text-breathing-glow 2s ease-in-out infinite; }
 
   @media (prefers-reduced-motion: reduce) {

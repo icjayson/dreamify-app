@@ -117,6 +117,7 @@ class AgentState(BaseModel):
     status: Literal["RUNNING", "FINISHED", "ERROR", "STOPPED"] = Field(default="RUNNING", description="Workflow execution status")
     iteration: int = Field(default=0, description="Current iteration count")
     max_iterations: int = Field(default=60, description="Maximum iterations before timeout")
+    use_internal_reasoning: bool = Field(default=False, description="Use internal reasoning branch (single node replacing REASONING + EXECUTION + SYNTHESIS)")
     
     # Input/Output
     input_prompt: str = Field(description="User's request/question")

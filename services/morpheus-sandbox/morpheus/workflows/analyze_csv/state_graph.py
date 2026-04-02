@@ -25,7 +25,7 @@ from morpheus.workflows.analyze_csv.edges import decide_next_node
 from morpheus.workflows.base import WorkflowOutput
 from morpheus.tools.python_repl.tool import PythonREPLTool
 from morpheus.tools.charts_knowledge.tool import get_available_chart_types
-from morpheus.models.base import get_model_for_agent
+from morpheus.models.base import get_model_for_agent, get_model_for_quick_agent
 from utils.config import load_config
 from utils.logger import logger
 
@@ -42,9 +42,17 @@ class StatefulAnalyzeCSVWorkflow:
         """Initialize workflow with model, tools, and node registry."""
         self.config = load_config()
         self.model = get_model_for_agent(model_override=model_override)
+        self.quick_model = get_model_for_quick_agent()
         self.python_tool = PythonREPLTool()
         self.tools = [self.python_tool, get_available_chart_types]
         self.model_with_tools = self.model.bind_tools(self.tools)
+
+        # Detect reasoning strategy based on model type
+        # OpenAI models (with Responses API) → internal reasoning loop
+        # Gemini models → split REASONING ⇄ EXECUTION loop
+        model_name = getattr(self.model, 'model_name', '') or getattr(self.model, 'model', '')
+        self.use_internal_reasoning = not str(model_name).startswith("gemini")
+        logger.info(f"Reasoning strategy: {'INTERNAL' if self.use_internal_reasoning else 'SPLIT'} (model={model_name})")
 
         # Node registry: maps node names to node functions
         self.nodes = {
@@ -52,6 +60,7 @@ class StatefulAnalyzeCSVWorkflow:
             "EXPLORE_FILES": nodes.node_explore_files,
             "ROUTING": nodes.node_routing,
             "REASONING": nodes.node_reasoning,
+            "REASONING_INTERNAL": nodes.node_reasoning_internal,
             "EXECUTION": nodes.node_execution,
             "SYNTHESIS": nodes.node_synthesis,
             "VALIDATION": nodes.node_validation,
@@ -527,10 +536,15 @@ class StatefulAnalyzeCSVWorkflow:
 
                 start_time = time.time()
 
-                # Execute node with dependencies
+                # Pass quick_model for lightweight nodes, full model for reasoning
+                if state.current_node in ("EXPLORE_FILES", "ROUTING"):
+                    node_model = self.quick_model
+                else:
+                    node_model = self.model
+
                 state = node_func(
                     state,
-                    model=self.model,
+                    model=node_model,
                     model_with_tools=self.model_with_tools,
                     python_tool=self.python_tool,
                 )
@@ -693,6 +707,7 @@ class StatefulAnalyzeCSVWorkflow:
             file_paths=file_paths,
             assets_dict=assets_dict,
             chart_mentions=chart_mentions or [],
+            use_internal_reasoning=self.use_internal_reasoning,
             conversation_id=conversation.get("conversation_id"),
             project_id=conversation.get("project_id"),
             conversation_uri=conversation_uri,

@@ -23,7 +23,7 @@ from morpheus.workflows.analyze_csv.state_models import (
 )
 from morpheus.tools.python_repl.tool import PythonREPLTool
 from morpheus.tools.charts_knowledge.tool import get_available_chart_types
-from morpheus.models.base import get_model_for_agent
+from morpheus.models.base import get_model_for_agent, get_model_for_quick_agent
 from utils.logger import logger
 from utils.postprocess import clean_json
 
@@ -529,8 +529,8 @@ def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
     """
     logger.info("Running EXPLORE_FILES node")
     
-    if not state.assets_dict:
-        logger.info("No assets to explore. Proceeding to ROUTING.")
+    if (not state.assets_dict) or (len(state.assets_dict) <= 1):
+        logger.info("No assets or multiple assets to explore. Proceeding to ROUTING.")
         return state
         
     try:
@@ -543,7 +543,7 @@ def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
             python_tool.python_repl.locals['file_paths'] = state.assets_dict
 
         if model is None:
-            model = get_model_for_agent()
+            model = get_model_for_quick_agent()
 
         has_multiple_files = len(state.assets_dict) > 1
         user_prompt = state.input_prompt or ""
@@ -724,7 +724,7 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
 
     # Get or create model
     if model is None:
-        model = get_model_for_agent()
+        model = get_model_for_quick_agent()
     
     # Extract context flags
     has_asset = len(state.user_state.user_assets) > 0
@@ -1312,6 +1312,345 @@ def node_execution(state: AgentState, python_tool=None, **kwargs) -> AgentState:
     state.working_memory.tool_outputs.pop("pending_action", None)
     state.working_memory.tool_outputs.pop("pending_tool_calls", None)
     
+    return state
+
+
+def node_reasoning_internal(state: AgentState, model=None, python_tool=None, **kwargs) -> AgentState:
+    """
+    REASONING_INTERNAL Node: Self-contained reasoning with internal tool loop.
+
+    Replaces REASONING + EXECUTION + SYNTHESIS in a single node:
+    1. Binds Python_REPL and get_available_chart_types to the model
+    2. Builds same messages as node_reasoning (system prompt, file context,
+       conversation_history, state context, grounding reminders)
+    3. Internal loop: model decides → we execute tools → feed results back
+    4. On final text output: extracts JSON/QA + runs synthesis formatting
+    5. Sets state.output so flow goes directly to VALIDATION
+
+    Best for models with built-in reasoning (e.g. OpenAI GPT-5.4-mini
+    with Responses API + reasoning_effort).
+
+    Args:
+        state: Current agent state
+        model: Base LLM model (optional)
+        python_tool: Python REPL tool instance (optional)
+
+    Returns:
+        Updated agent state with state.output set, ready for VALIDATION
+    """
+    logger.info(f"Running REASONING_INTERNAL node (iteration {state.iteration})")
+
+    # --- Setup model and tools ---
+    if model is None:
+        model = get_model_for_agent()
+    if python_tool is None:
+        python_tool = PythonREPLTool()
+
+    # Inject file_paths dict into REPL environment
+    if state.assets_dict:
+        if hasattr(python_tool.python_repl, 'globals') and isinstance(python_tool.python_repl.globals, dict):
+            python_tool.python_repl.globals['file_paths'] = state.assets_dict
+        elif hasattr(python_tool.python_repl, 'locals') and isinstance(python_tool.python_repl.locals, dict):
+            python_tool.python_repl.locals['file_paths'] = state.assets_dict
+
+    tools = [python_tool, get_available_chart_types]
+    model_with_tools = model.bind_tools(tools)
+
+    # --- Route context ---
+    route_decision = state.working_memory.tool_outputs.get("route_decision", {})
+    mode = route_decision.get("next_step", "dashboard")
+    is_chart_mod = route_decision.get("is_chart_modification", False)
+
+    # --- Build messages (same inputs as node_reasoning) ---
+    base_prompt = DASHBOARD_SYSTEM_PROMPT if mode == "dashboard" else QA_SYSTEM_PROMPT
+    state_context = _format_state_for_prompt_basic(state)
+
+    system_prompt = f"""{base_prompt}
+
+{state_context}
+
+Based on the above context, decide your next action."""
+
+    messages = [SystemMessage(content=system_prompt)]
+
+    # Build user instruction with file context
+    if state.file_paths:
+        valid_files = [
+            fp for fp in state.file_paths
+            if fp and os.path.exists(fp) and "qa_" not in fp
+        ]
+
+        if valid_files:
+            file_info = ""
+
+            # Inject Data Profile from EXPLORE_FILES
+            if state.data_profile:
+                file_info += f"=== DATASET PROFILES ===\n{state.data_profile}\n========================\n\n"
+
+            if len(valid_files) == 1:
+                file_info += f"CSV file available at: {valid_files[0]}"
+            else:
+                files_list = "\n".join([f"- File {i+1}: {fp}" for i, fp in enumerate(valid_files)])
+                file_info += f"""Multiple CSV files available for analysis:
+{files_list}
+
+Load ALL files and combine/analyze as needed for the user's request. You can use pandas to merge, concatenate, or analyze files together."""
+
+            file_info += "\n\nCRITICAL: When writing Python code, load the files using the paths pre-loaded in the `file_paths` dictionary object in your environment (e.g. `file_paths['users.csv']`)."
+
+            if is_chart_mod and state.chart_mentions:
+                chart_info = state.chart_mentions[0]
+                existing_config = chart_info.get("config", {})
+                existing_config_json = json.dumps(existing_config, ensure_ascii=False, indent=2)
+                chart_id = chart_info.get('chart_id', 'chart_modified')
+
+                chart_columns_hint = ""
+                if existing_config.get("axisConfig"):
+                    ax = existing_config["axisConfig"]
+                    cols = []
+                    if ax.get("x_axis", {}).get("column"): cols.append(ax["x_axis"]["column"])
+                    if ax.get("y_axis", {}).get("column"): cols.append(ax["y_axis"]["column"])
+                    if cols:
+                        chart_columns_hint = f"\nThis chart uses columns: {', '.join(cols)}"
+                elif existing_config.get("datasets"):
+                    ds_labels = [ds.get("label", "") for ds in existing_config.get("datasets", [])]
+                    if ds_labels:
+                        chart_columns_hint = f"\nThis chart uses datasets: {', '.join(ds_labels)}"
+
+                instruction = f"""User wants to MODIFY an existing chart in their dashboard.
+
+TARGET CHART TO MODIFY:
+- Chart ID: {chart_id}
+- Title: {chart_info.get('title', 'Untitled')}
+- Current Type: {chart_info.get('chart_type', 'unknown')}{chart_columns_hint}
+- Current Config:
+```json
+{existing_config_json}
+```
+
+User's modification request: {state.input_prompt}
+
+{file_info}
+
+IMPORTANT SCOPE RULE: You are modifying ONLY this one chart.
+
+WORKFLOW:
+1. First, use Python REPL to load the relevant CSV file and analyze the data.
+2. Then output a dashboard JSON with ONLY the modified chart.
+
+You MUST output a valid JSON code block. Keep chart ID as "{chart_id}".
+Populate datasets with REAL computed data from Python analysis (never empty arrays).
+Output ONLY the modified chart in "charts" array."""
+            elif mode == "dashboard":
+                instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
+            else:
+                instruction = f"User question: {state.input_prompt}\n\n{file_info}"
+
+            messages.append(HumanMessage(content=instruction))
+
+    # Fallback: ensure we always have a user message
+    if not any(isinstance(m, HumanMessage) for m in messages):
+        messages.append(HumanMessage(content=state.input_prompt))
+
+    # Include conversation history from previous tool executions (same as node_reasoning)
+    conversation_history = _build_conversation_history_from_executions(state)
+    messages.extend(conversation_history)
+
+    # Anti-hallucination: force_more_tools from validation retry
+    force_more_tools_msg = state.working_memory.tool_outputs.get("force_more_tools")
+    if force_more_tools_msg:
+        messages.append(HumanMessage(content=force_more_tools_msg))
+        state.working_memory.tool_outputs.pop("force_more_tools", None)
+
+    # Data grounding reminder if we already have some tool executions
+    if mode == "dashboard" and len(state.working_memory.python_execution_results) >= 1:
+        messages.append(HumanMessage(content="""REMINDER: When you generate your dashboard JSON:
+- Use ONLY values that came from your Python analysis above
+- Every number must be traceable to a print() statement you executed
+- If you did not compute a value with Python, do NOT include it in the dashboard"""))
+
+    # --- Internal tool execution loop ---
+    max_turns = 30
+    tool_execution_count = 0
+
+    try:
+        for turn in range(max_turns):
+            response = _llm_invoke(
+                model_with_tools.invoke, messages,
+                label=f"Internal reasoning turn {turn + 1}"
+            )
+
+            # Normalize content (Gemini returns list)
+            if isinstance(response.content, list):
+                response.content = "\n".join(
+                    item.get("text", "") if isinstance(item, dict) else str(item)
+                    for item in response.content
+                )
+
+            messages.append(response)
+
+            if response.tool_calls and len(response.tool_calls) > 0:
+                # --- Execute tool calls inline ---
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+                    tool_call_id = tool_call["id"]
+
+                    try:
+                        if tool_name.lower() == "python_repl":
+                            query = tool_args.get("query", "")
+                            logger.info(f"[Internal] Turn {turn+1} — Python:\n{query[:200]}...")
+                            result = python_tool.run(query)
+                            success, error = True, None
+                        elif tool_name.lower() == "get_available_chart_types":
+                            logger.info(f"[Internal] Turn {turn+1} — get_available_chart_types")
+                            result = get_available_chart_types.invoke({})
+                            success, error = True, None
+                        else:
+                            logger.warning(f"[Internal] Unknown tool '{tool_name}'")
+                            result = (
+                                f"ERROR: Tool '{tool_name}' does not exist. "
+                                "ONLY 'Python_REPL' (with 'query' param) and "
+                                "'get_available_chart_types' are available."
+                            )
+                            success, error = False, str(result)
+
+                        result_str = str(result)
+                        preview = result_str[:300] + "...[truncated]" if len(result_str) > 300 else result_str
+                        logger.info(f"[Internal] Turn {turn+1} result: {preview}")
+
+                    except SystemExit as e:
+                        result_str = "Code attempted to exit(). Remove exit()/quit() calls."
+                        success, error = False, result_str
+                        logger.warning(f"[Internal] SystemExit caught: {e}")
+
+                    except Exception as e:
+                        result_str = f"Error executing {tool_name}: {str(e)}"
+                        success, error = False, result_str
+                        logger.error(f"[Internal] Tool error: {result_str}")
+
+                    # Store in working memory (observability + validation)
+                    state.working_memory.python_execution_results.append({
+                        "tool_name": tool_name,
+                        "tool_call_id": tool_call_id,
+                        "tool_args": tool_args,
+                        "success": success,
+                        "output": result_str,
+                        "error": error,
+                        "timestamp": datetime.now().isoformat(),
+                    })
+
+                    if success:
+                        tool_execution_count += 1
+                    else:
+                        state.working_memory.retry_count += 1
+
+                    # Feed result back to model
+                    messages.append(ToolMessage(content=result_str, tool_call_id=tool_call_id))
+
+            else:
+                # --- No tool calls → model produced final output ---
+
+                # Anti-hallucination: enforce minimum tool usage
+                min_tools = _get_minimum_tool_executions_required(state)
+                if tool_execution_count < min_tools:
+                    logger.warning(
+                        f"[Internal] Only {tool_execution_count}/{min_tools} tool executions. "
+                        "Nudging model to use tools first."
+                    )
+                    messages.append(HumanMessage(
+                        content=f"⚠️ You have only used tools {tool_execution_count} time(s) but need "
+                                f"at least {min_tools}. You MUST use Python_REPL to load and analyze "
+                                "the data BEFORE generating any output. Call Python_REPL now."
+                    ))
+                    continue
+
+                # Check for empty response
+                content = str(response.content) if response.content else ""
+                if not content.strip():
+                    if turn < max_turns - 3:
+                        logger.warning(f"[Internal] Empty response on turn {turn+1}, nudging")
+                        messages.append(HumanMessage(
+                            content="Your response was empty. Please continue your analysis."
+                        ))
+                        continue
+                    else:
+                        break
+
+                # --- Extract output → store in working_memory for SYNTHESIS ---
+                if mode == "dashboard":
+                    json_data = _extract_json_from_content(content)
+
+                    # Chart modification wrapping
+                    if json_data and is_chart_mod and "dashboard" not in json_data:
+                        if "chart_type" in json_data or "datasets" in json_data:
+                            json_data = {
+                                "dashboard": {"title": "Chart Modification", "description": "Modified chart"},
+                                "metrics": [], "charts": [json_data], "tables": [], "insights": [],
+                            }
+                        elif "charts" in json_data:
+                            json_data["dashboard"] = {"title": "Chart Modification", "description": "Modified chart"}
+                            json_data.setdefault("metrics", [])
+                            json_data.setdefault("tables", [])
+                            json_data.setdefault("insights", [])
+
+                    if json_data:
+                        state.working_memory.dashboard_json = json_data
+
+                        # Generate summary
+                        try:
+                            summary = _generate_summary_for_dashboard(model, json_data, state.input_prompt)
+                            state.working_memory.dashboard_summary = summary
+                        except Exception as e:
+                            logger.warning(f"[Internal] Summary generation failed: {e}")
+                            charts_count = len(json_data.get("charts", []))
+                            metrics_count = len(json_data.get("metrics", []))
+                            state.working_memory.dashboard_summary = (
+                                f"I've created a dashboard with {charts_count} chart(s) and "
+                                f"{metrics_count} metric(s) based on your data analysis request."
+                            )
+                    else:
+                        # No JSON → treat as Q&A text
+                        state.working_memory.qa_response = content
+                else:
+                    # QA mode
+                    state.working_memory.qa_response = content
+
+                logger.info(
+                    f"[Internal] Completed — {turn + 1} turns, {tool_execution_count} tool calls, mode={mode}"
+                )
+                break
+
+        else:
+            # Max turns exhausted — salvage last AI message
+            logger.error(f"[Internal] Max turns ({max_turns}) exhausted")
+            for msg in reversed(messages):
+                if isinstance(msg, AIMessage) and msg.content and str(msg.content).strip():
+                    last_content = str(msg.content)
+                    if mode == "dashboard":
+                        json_data = _extract_json_from_content(last_content)
+                        if json_data:
+                            state.working_memory.dashboard_json = json_data
+                        else:
+                            state.working_memory.qa_response = last_content
+                    else:
+                        state.working_memory.qa_response = last_content
+                    break
+            else:
+                state.working_memory.errors.append({
+                    "node": "REASONING_INTERNAL",
+                    "error": f"Max turns ({max_turns}) exhausted with no output",
+                    "timestamp": datetime.now().isoformat(),
+                })
+
+    except Exception as e:
+        logger.error(f"Error in REASONING_INTERNAL node: {str(e)}", exc_info=True)
+        state.working_memory.errors.append({
+            "node": "REASONING_INTERNAL",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+        })
+
     return state
 
 
@@ -2032,15 +2371,11 @@ def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
         label_lower = label.lower().strip()
         
         # Check in tool outputs
-        if label_lower in all_outputs_lower:
-            return True
-        
-        # Check in actual CSV data values (exact match in set)
-        if label_lower in all_csv_values:
+        if (label_lower in all_outputs_lower) or (all_outputs_lower in label_lower):
             return True
         
         # Partial match in CSV values (for truncated or slightly different values)
-        if label_lower in all_csv_values_str:
+        if (label_lower in all_csv_values_str) or (all_csv_values_str in label_lower):
             return True
         
         # Check if it's a common word (dates, months, etc.) - allow these

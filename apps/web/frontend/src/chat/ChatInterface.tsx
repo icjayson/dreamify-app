@@ -1720,7 +1720,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           >
                             <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
                             {connector.name && <span className="pl-2">{connector.name}</span>}
-                            {!connector.isActive && <span className="text-xs text-white/30 pl-1">(coming soon)</span>}
+                            {!connector.isActive && <span className="text-xs text-white/30 pl-1">(SOON)</span>}
                           </button>
                         ))}
                       </div>

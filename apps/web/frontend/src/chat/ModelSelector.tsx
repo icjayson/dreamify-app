@@ -32,12 +32,14 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           onToggle();
         }}
         className={`flex items-center gap-2 transition-all duration-300 group h-[34px] ${variant === 'compact'
-          ? `px-2.5 py-1.5 rounded-md border text-sm ${isOpen || selectedModel === 'pro'
-            ? 'border-primary/60 bg-white/10 text-white'
-            : 'border-white/30 text-gray-400 hover:text-white hover:bg-white/5'
+          ? `px-2.5 py-1.5 rounded-md border text-sm ${selectedModel === 'pro'
+            ? 'border-primary bg-primary text-white shadow-lg shadow-primary/20'
+            : isOpen
+              ? 'border-white/50 bg-white/10 text-white'
+              : 'border-white/30 text-gray-400 hover:text-white hover:bg-white/5'
           }`
           : `px-3 py-1.5 text-sm button-outline ${selectedModel === 'pro'
-            ? 'border-primary/60 bg-primary/20 text-primary-glow shadow-[inset_0_0_12px_rgba(255,255,255,0.1),inset_0_0_20px_hsl(var(--primary)/0.3)]'
+            ? 'border-primary bg-primary text-white shadow-[0_4px_20px_hsl(var(--primary)/0.4)]'
             : 'hover:border-primary/60 hover:bg-white/5 text-white/90'
           }`
           } ${isOpen && variant === 'classic' ? 'ring-2 ring-primary/20 border-primary/40' : ''}`}
@@ -56,7 +58,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
             />
           )}
         </div>
-        <span className="font-medium">{selectedModel === 'fast' ? 'Fast' : 'Pro'}</span>
+        <span className="font-medium">{selectedModel === 'fast' ? 'Standard' : 'Pro'}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-white/40 group-hover:text-white/70 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
@@ -81,7 +83,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-white">Fast Mode</span>
+                    <span className="text-sm font-semibold text-white">Standard</span>
                     <div className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/5 text-white/60">
                       <span>5</span>
                       <Sparkles className="w-2.5 h-2.5" />
@@ -103,7 +105,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-white">Pro Mode</span>
+                    <span className="text-sm font-semibold text-white">Pro</span>
                     <div className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/20 text-primary-glow">
                       <span>10</span>
                       <Sparkles className="w-2.5 h-2.5" />

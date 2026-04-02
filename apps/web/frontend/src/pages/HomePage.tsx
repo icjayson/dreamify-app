@@ -693,7 +693,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           <div className="text-center mb-8 animate-slide-up">
             {/* Row 1: The AI Data Analyst with gradient styling */}
             <h1 className="text-5xl md:text-7xl font-bold mb-6 font-instrument-serif">
-              <span className="px-0 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
+              <span className="px-2 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
                 AI-native Data Analyst
               </span>
             </h1>
@@ -706,7 +706,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   className="inline-flex items-center rounded-lg px-3 py-1 button-outline"
                 >
                   <span
-                    className="text-transparent bg-clip-text font-bold"
+                    className="text-transparent bg-clip-text font-bold font-instrument-serif italic"
                     style={{ backgroundImage: rotatingWords[rotatingIndex].gradient }}
                   >
                     {displayedText || '\u00A0'}
@@ -895,7 +895,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                             >
                               <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
                               {connector.name && <span className="pl-2">{connector.name}</span>}
-                              {!connector.isActive && <span className="text-xs text-white/30 pl-1">(coming soon)</span>}
+                              {!connector.isActive && <span className="text-xs text-white/30 pl-1">(SOON)</span>}
                             </button>
                           ))}
                         </div>

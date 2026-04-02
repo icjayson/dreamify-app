@@ -161,6 +161,7 @@ Use these semantic tokens in ALL styling objects:
 
 Available Themes (choose ONE):
 - monochrome: Basic monochrome, minimal
+- light: Clean white/light-gray, professional, corporate, high readability
 - ocean: Vibrant blue, professional
 - forest: Emerald green, natural
 - sunset: Amber, warm

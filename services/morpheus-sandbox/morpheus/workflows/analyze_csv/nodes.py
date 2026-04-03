@@ -676,15 +676,15 @@ Ensure the format is clear and actionable for the next reasoning agent."""
                     ))
                     continue
                 
-            state.data_profile = str(response.content)
-            # Log merge strategy if present, otherwise brief summary
-            content_str = str(response.content)
-            if "=== MERGE STRATEGY ===" in content_str:
-                merge_part = content_str[content_str.index("=== MERGE STRATEGY ==="):]
-                logger.info(f"[Data Profiler] Data exploration complete.\nMerge Strategy:\n{merge_part}")
-            else:
-                logger.info(f"[Data Profiler] Data exploration complete. (No merge strategy — single file or unrelated datasets)")
-            break
+                state.data_profile = str(response.content)
+                # Log merge strategy if present, otherwise brief summary
+                content_str = str(response.content)
+                if "=== MERGE STRATEGY ===" in content_str:
+                    merge_part = content_str[content_str.index("=== MERGE STRATEGY ==="):]
+                    logger.info(f"[Data Profiler] Data exploration complete.\nMerge Strategy:\n{merge_part}")
+                else:
+                    logger.info(f"[Data Profiler] Data exploration complete. (No merge strategy — single file or unrelated datasets)")
+                break
                 
     except Exception as e:
         logger.error(f"Error exploring files: {str(e)}")

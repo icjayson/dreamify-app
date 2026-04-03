@@ -40,7 +40,7 @@ export const FooterSection = () => {
     { icon: XIcon, href: "https://x.com/dreamify_dev", label: "X (Twitter)", external: true },
     { icon: FacebookIcon, href: "https://www.facebook.com/profile.php?id=61587411536040", label: "Facebook", external: true },
     { icon: DiscordIcon, href: "https://discord.gg/GhFjdbgdxd", label: "Discord", external: true },
-    { icon: Mail, href: "https://mail.google.com/mail/?view=cm&to=dreamify.dev@gmail.com&su=Contact%20Dreamify", label: "Contact", external: false }
+    { icon: Mail, href: "https://mail.google.com/mail/?view=cm&to=dreamify.dev@gmail.com&su=Contact%20Dreamify", label: "Contact", external: true }
   ];
 
   return (

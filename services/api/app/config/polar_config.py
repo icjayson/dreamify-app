@@ -59,9 +59,10 @@ SUBSCRIPTION_PLANS = {
         "data_retention_days": 7,
         "features": [
             "100 monthly credits",
-            "Diverse templates",
-            "User roles & permissions",
-            "7-day data retention",
+            "Limited AI reasoning",
+            "30-day dashboard history",
+            #"Diverse templates",
+            #"User roles & permissions",
         ],
     },
     "pro": {
@@ -71,10 +72,11 @@ SUBSCRIPTION_PLANS = {
         "data_retention_days": 30,
         "features": [
             "1,000 monthly credits",
-            "30-day data retention",
-            "Custom domains",
+            "Advanced AI reasoning",
+            "Keep dashboards forever",
             "Remove the Dreamify badge",
-            "User roles & permissions",
+            #"Custom domains",
+            #"User roles & permissions",
         ],
     },
     "enterprise": {
@@ -83,11 +85,10 @@ SUBSCRIPTION_PLANS = {
         "monthly_credits": -1,  # Unlimited
         "data_retention_days": 365,
         "features": [
-            "Dedicated support",
-            "Onboarding services",
-            "Custom connections",
-            "Group-based access control",
-            "Custom design systems",
+            "Custom credit volume",
+            "Custom internal data connectors",
+            "Advanced group-based access control",
+            "Dedicated onboarding & support",
         ],
     },
 }

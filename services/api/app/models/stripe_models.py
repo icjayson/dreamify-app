@@ -134,9 +134,7 @@ class CreditUsage(BaseModel):
     """Model for credit usage tracking."""
     user_id: str
     subscription_tier: SubscriptionTier
-    daily_credits_used: int
     monthly_credits_used: int
-    daily_credits_limit: int
     monthly_credits_limit: int
     last_reset_date: datetime
     can_use_credits: bool

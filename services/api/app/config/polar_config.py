@@ -56,10 +56,9 @@ SUBSCRIPTION_PLANS = {
         "name": "Sandbox",
         "product_id": None,  # Free tier
         "monthly_credits": 100,
-        "daily_credits": 100,
         "data_retention_days": 7,
         "features": [
-            "5 daily credits",
+            "100 monthly credits",
             "Diverse templates",
             "User roles & permissions",
             "7-day data retention",
@@ -68,12 +67,10 @@ SUBSCRIPTION_PLANS = {
     "pro": {
         "name": "Pro",
         "product_id": "3811ada3-0bd9-48e5-9455-c4a57af6bc54",  # Actual Polar Product ID
-        "monthly_credits": 100,
-        "daily_credits": 100,
+        "monthly_credits": 1000,
         "data_retention_days": 30,
         "features": [
-            "100 monthly credits",
-            "5 daily credits (up to 150/month)",
+            "1,000 monthly credits",
             "30-day data retention",
             "Custom domains",
             "Remove the Dreamify badge",
@@ -84,7 +81,6 @@ SUBSCRIPTION_PLANS = {
         "name": "Enterprise",
         "product_id": "enterprise_product_id",  # Custom pricing
         "monthly_credits": -1,  # Unlimited
-        "daily_credits": -1,  # Unlimited
         "data_retention_days": 365,
         "features": [
             "Dedicated support",

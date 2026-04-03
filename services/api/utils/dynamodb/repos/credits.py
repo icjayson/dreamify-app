@@ -15,9 +15,9 @@ def get_credits_used(user_id: str, date: str) -> int:
     return int(item.get("credits_used", 0))
 
 
-def add_credits_atomic(user_id: str, date: str, amount: int, daily_limit: int) -> int:
+def add_credits_atomic(user_id: str, date: str, amount: int, limit: int) -> int:
     table = get_table(tables.credits)
-    max_allowed = daily_limit - amount
+    max_allowed = limit - amount
     resp = table.update_item(
         Key={"user_id": user_id, "date": date},
         UpdateExpression="ADD credits_used :amount",

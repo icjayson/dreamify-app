@@ -13,7 +13,7 @@ from utils.dynamodb.repos import credits as credits_repo
 
 logger = logging.getLogger(__name__)
 
-DAILY_CREDIT_LIMIT = 100
+MONTHLY_CREDIT_LIMIT = 1000
 MODEL_COSTS = {"pro": 10, "fast": 5}
 
 
@@ -25,18 +25,18 @@ class CreditService:
         pass
 
     def get_credits_remaining(self, user_id: str) -> int:
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        used = credits_repo.get_credits_used(user_id, today)
-        return max(0, DAILY_CREDIT_LIMIT - used)
+        month = datetime.utcnow().strftime("%Y-%m")
+        used = credits_repo.get_credits_used(user_id, month)
+        return max(0, MONTHLY_CREDIT_LIMIT - used)
 
     def consume_credits(self, user_id: str, amount: int) -> dict:
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        month = datetime.utcnow().strftime("%Y-%m")
         try:
             new_total = credits_repo.add_credits_atomic(
-                user_id, today, amount, DAILY_CREDIT_LIMIT
+                user_id, month, amount, MONTHLY_CREDIT_LIMIT
             )
             return {
-                "credits_remaining": DAILY_CREDIT_LIMIT - new_total,
+                "credits_remaining": MONTHLY_CREDIT_LIMIT - new_total,
                 "credits_used": amount,
             }
         except ClientError as e:
@@ -60,22 +60,18 @@ class CreditService:
         """Get current credit usage for a user."""
         try:
             plan = get_subscription_plan(subscription_tier.value)
-            daily_credits_used = credits_repo.get_credits_used(
-                user_id, datetime.utcnow().strftime("%Y-%m-%d")
+            monthly_credits_used = credits_repo.get_credits_used(
+                user_id, datetime.utcnow().strftime("%Y-%m")
             )
-            daily_limit = plan["daily_credits"]
             monthly_limit = plan["monthly_credits"]
             can_use_credits = (
-                daily_limit == -1
-                or monthly_limit == -1
-                or daily_credits_used < daily_limit
+                monthly_limit == -1
+                or monthly_credits_used < monthly_limit
             )
             return CreditUsage(
                 user_id=user_id,
                 subscription_tier=subscription_tier,
-                daily_credits_used=daily_credits_used,
-                monthly_credits_used=daily_credits_used,
-                daily_credits_limit=daily_limit,
+                monthly_credits_used=monthly_credits_used,
                 monthly_credits_limit=monthly_limit,
                 last_reset_date=datetime.now(),
                 can_use_credits=can_use_credits,
@@ -88,20 +84,17 @@ class CreditService:
         """Get credit limits for a subscription tier."""
         plan = get_subscription_plan(subscription_tier.value)
         return {
-            "daily_credits": plan["daily_credits"],
             "monthly_credits": plan["monthly_credits"],
             "data_retention_days": plan["data_retention_days"],
             "features": plan["features"],
         }
 
     def _get_default_usage(self, user_id: str) -> CreditUsage:
-        plan = get_subscription_plan("sandbox")
+        plan = get_subscription_plan("pro")
         return CreditUsage(
             user_id=user_id,
-            subscription_tier=SubscriptionTier.SANDBOX,
-            daily_credits_used=0,
+            subscription_tier=SubscriptionTier.PRO,
             monthly_credits_used=0,
-            daily_credits_limit=plan["daily_credits"],
             monthly_credits_limit=plan["monthly_credits"],
             last_reset_date=datetime.now(),
             can_use_credits=True,

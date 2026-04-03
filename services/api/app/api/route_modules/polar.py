@@ -11,7 +11,7 @@ from app.models.polar_models import (
 )
 from app.config.polar_config import get_all_subscription_plans
 from app.dependencies.auth import require_user
-from app.services.credit_service import CreditService, DAILY_CREDIT_LIMIT
+from app.services.credit_service import CreditService, MONTHLY_CREDIT_LIMIT
 import logging
 
 # Create router
@@ -92,16 +92,14 @@ async def get_credit_usage(
     """Get credit usage for the authenticated user (reads from DynamoDB)."""
     try:
         remaining = credit_service.get_credits_remaining(user_id)
-        daily_used = DAILY_CREDIT_LIMIT - remaining
+        monthly_used = MONTHLY_CREDIT_LIMIT - remaining
         return {
             "success": True,
             "credits_remaining": remaining,
             "usage": {
                 "user_id": user_id,
-                "daily_credits_used": daily_used,
-                "daily_credits_limit": DAILY_CREDIT_LIMIT,
-                "monthly_credits_used": daily_used,
-                "monthly_credits_limit": DAILY_CREDIT_LIMIT,
+                "monthly_credits_used": monthly_used,
+                "monthly_credits_limit": MONTHLY_CREDIT_LIMIT,
                 "can_use_credits": remaining > 0,
             }
         }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUser, useAuth } from '@clerk/clerk-react';
+import { API_CONFIG } from '@/api/config';
 
 interface SubscriptionInfo {
   subscription_id: string;
@@ -55,7 +56,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
 
       const token = await getBearerToken();
       // Fetch subscription from Polar backend
-      const response = await fetch(`/api/v1/polar/subscriptions?user_id=${user.id}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/polar/subscriptions?user_id=${user.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -91,7 +92,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
 
     try {
       const token = await getBearerToken();
-      const response = await fetch(`/api/v1/polar/credits/usage`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/polar/credits/usage`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -126,7 +127,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
 
       const token = await getBearerToken();
       // Create checkout session for Polar Pro plan
-      const response = await fetch(`/api/v1/polar/checkout/sessions`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/polar/checkout/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -167,7 +168,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
 
     try {
       const token = await getBearerToken();
-      const response = await fetch(`/api/v1/polar/credits/consume`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/polar/credits/consume`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

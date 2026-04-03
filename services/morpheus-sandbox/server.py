@@ -9,7 +9,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import aiohttp
@@ -33,6 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Pydantic models for request/response
 class RunRequest(BaseModel):
     conversation_id: str
@@ -40,11 +41,13 @@ class RunRequest(BaseModel):
     conversation_backup_uri: Optional[str] = None
     project_id: str
     user_id: str
+    model: Optional[str] = None
 
 
 class StatusRequest(BaseModel):
     conversation_id: str
     project_id: str
+
 
 # Backend API URL for updating file records
 BACKEND_API_URL = config.app.backend_url.rstrip("/")
@@ -82,8 +85,10 @@ def _parse_run_tasks(prompt: str) -> List[Dict[str, str]]:
     return tasks
 
 logger.info(
-    "Config AWS credentials present: %s", "yes" if getattr(config, "aws", None) else "no"
+    "Config AWS credentials present: %s",
+    "yes" if getattr(config, "aws", None) else "no",
 )
+
 
 def _parse_s3_key(s3_key: str) -> Optional[dict]:
     """Parse S3 key to extract user/project/asset metadata."""
@@ -105,8 +110,8 @@ def _parse_s3_key(s3_key: str) -> Optional[dict]:
     asset_id = parts[5]
     filename = "/".join(parts[6:])
 
-    if '.' in filename:
-        file_id, extension = filename.rsplit('.', 1)
+    if "." in filename:
+        file_id, extension = filename.rsplit(".", 1)
     else:
         file_id = filename
         extension = ""
@@ -134,26 +139,28 @@ def _fetch_asset_from_backend(asset_id: str) -> Optional[Dict[str, Any]]:
             logger.info(f"Successfully fetched asset {asset_id} from backend API")
             return asset_data
         else:
-            logger.warning(f"Failed to fetch asset {asset_id}: HTTP {response.status_code}")
+            logger.warning(
+                f"Failed to fetch asset {asset_id}: HTTP {response.status_code}"
+            )
             return None
     except Exception as e:
         logger.error(f"Error fetching asset {asset_id} from backend: {e}")
         return None
 
 
-def _build_processed_json_key(user_id: str, project_id: str, asset_id: str, file_id: str) -> str:
+def _build_processed_json_key(
+    user_id: str, project_id: str, asset_id: str, file_id: str
+) -> str:
     """Build S3 key for processed JSON file."""
     return f"users/{user_id}/projects/{project_id}/assets/{asset_id}/processed/{file_id}.json"
 
-def _upload_bytes_to_s3(bucket: str, key: str, data: bytes, content_type: str = 'application/json'):
+
+def _upload_bytes_to_s3(
+    bucket: str, key: str, data: bytes, content_type: str = "application/json"
+):
     """Upload bytes to S3."""
     s3_client = get_s3_client()
-    s3_client.put_object(
-        Bucket=bucket,
-        Key=key,
-        Body=data,
-        ContentType=content_type
-    )
+    s3_client.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -166,24 +173,26 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
     return bucket, key.lstrip("/")
 
 
-def _load_json_from_s3_uri(uri: str, max_retries: int = 3, initial_delay: float = 1.0) -> Dict[str, Any]:
+def _load_json_from_s3_uri(
+    uri: str, max_retries: int = 3, initial_delay: float = 1.0
+) -> Dict[str, Any]:
     """
     Load JSON from S3 URI with retry logic for handling eventual consistency.
-    
+
     Args:
         uri: S3 URI to load from
         max_retries: Maximum number of retry attempts
         initial_delay: Initial delay in seconds (doubles with each retry)
-    
+
     Returns:
         Parsed JSON data as dictionary
-    
+
     Raises:
         FileNotFoundError: If the object doesn't exist after all retries
     """
     bucket, key = _parse_s3_uri(uri)
     delay = initial_delay
-    
+
     for attempt in range(max_retries + 1):
         try:
             payload = download_bytes(bucket, key)
@@ -196,7 +205,9 @@ def _load_json_from_s3_uri(uri: str, max_retries: int = 3, initial_delay: float 
                 time.sleep(delay)
                 delay *= 2  # Exponential backoff
             else:
-                logger.error(f"Conversation not found at {uri} after {max_retries + 1} attempts")
+                logger.error(
+                    f"Conversation not found at {uri} after {max_retries + 1} attempts"
+                )
                 raise
 
 
@@ -206,7 +217,9 @@ def _upload_json_to_s3_uri(uri: str, data: Dict[str, Any]):
     _upload_bytes_to_s3(bucket, key, body)
 
 
-def _persist_conversation(primary_uri: str, backup_uri: Optional[str], payload: Dict[str, Any]):
+def _persist_conversation(
+    primary_uri: str, backup_uri: Optional[str], payload: Dict[str, Any]
+):
     _upload_json_to_s3_uri(primary_uri, payload)
     if backup_uri:
         try:
@@ -229,8 +242,6 @@ def _load_existing_dashboards(conversation: Dict[str, Any]) -> Dict[str, Any]:
     return dashboards
 
 
-
-
 def _build_dashboard_key(user_id: str, project_id: str, dashboard_id: str) -> str:
     return f"users/{user_id}/projects/{project_id}/dashboards/{dashboard_id}.json"
 
@@ -244,7 +255,9 @@ def _save_dashboard_artifact(
     project_id = conversation.get("project_id")
     conversation_id = conversation.get("conversation_id")
     if not user_id or not project_id or not conversation_id:
-        raise ValueError("Conversation missing identifiers required for dashboard persistence")
+        raise ValueError(
+            "Conversation missing identifiers required for dashboard persistence"
+        )
     dashboard_id = str(uuid.uuid4())
     key = _build_dashboard_key(user_id, project_id, dashboard_id)
     payload = json.dumps(dashboard_data, ensure_ascii=False, indent=2).encode("utf-8")
@@ -264,11 +277,16 @@ def _save_dashboard_artifact(
         "s3_uri": f"s3://{bucket}/{key}",
     }
 
-async def _post_node_status(conversation_id: Optional[str], status: str, metadata: Optional[dict] = None):
+
+async def _post_node_status(
+    conversation_id: Optional[str], status: str, metadata: Optional[dict] = None
+):
     if not conversation_id:
         return
     try:
-        logger.info(f"Posting node status: {conversation_id}, {status}, {metadata} to {BACKEND_API_URL}/api/v1/morpheus/workflow-status")
+        logger.info(
+            f"Posting node status: {conversation_id}, {status}, {metadata} to {BACKEND_API_URL}/api/v1/morpheus/workflow-status"
+        )
         timeout = aiohttp.ClientTimeout(total=100)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
@@ -287,11 +305,15 @@ async def _post_node_status(conversation_id: Optional[str], status: str, metadat
                         f"Failed to update node status: HTTP {response.status} - {response_text[:200]} "
                         f"(conversation_id={conversation_id}, status={status})"
                     )
-                    raise Exception(f"Failed to update node status: HTTP {response.status} - {response_text[:200]} "
-                        f"(conversation_id={conversation_id}, status={status})")
+                    raise Exception(
+                        f"Failed to update node status: HTTP {response.status} - {response_text[:200]} "
+                        f"(conversation_id={conversation_id}, status={status})"
+                    )
                 return await response.json()
     except asyncio.TimeoutError:
-        logger.warning(f"Timeout updating node status for conversation {conversation_id}")
+        logger.warning(
+            f"Timeout updating node status for conversation {conversation_id}"
+        )
         return None
     except aiohttp.ClientError as e:
         logger.warning(f"Failed to update node status: {e}")
@@ -301,7 +323,9 @@ async def _post_node_status(conversation_id: Optional[str], status: str, metadat
         return None
 
 
-def _post_node_status_sync(conversation_id: Optional[str], status: str, metadata: Optional[dict] = None):
+def _post_node_status_sync(
+    conversation_id: Optional[str], status: str, metadata: Optional[dict] = None
+):
     """Synchronous wrapper for _post_node_status to use in background tasks."""
     try:
         loop = asyncio.get_event_loop()
@@ -323,7 +347,9 @@ async def _get_workflow_status(conversation_id: str, project_id: str) -> Optiona
             ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    logger.info(f"Workflow status response for {conversation_id}: {json.dumps(data, default=str)[:500]}")
+                    logger.info(
+                        f"Workflow status response for {conversation_id}: {json.dumps(data, default=str)[:500]}"
+                    )
                     nodes = data.get("nodes", [])
                     for node in nodes:
                         if node.get("node_id") == "workflow":
@@ -332,7 +358,9 @@ async def _get_workflow_status(conversation_id: str, project_id: str) -> Optiona
                     if data.get("status"):
                         return data.get("status")
                 else:
-                    logger.debug(f"Workflow status returned HTTP {response.status} for {conversation_id}")
+                    logger.debug(
+                        f"Workflow status returned HTTP {response.status} for {conversation_id}"
+                    )
                 return None
     except Exception as e:
         logger.debug(f"Could not get workflow status: {e}")
@@ -340,7 +368,10 @@ async def _get_workflow_status(conversation_id: str, project_id: str) -> Optiona
 
 
 async def _wait_for_workflow_completion(
-    conversation_id: str, project_id: str, timeout: float = 60.0, poll_interval: float = 1.0
+    conversation_id: str,
+    project_id: str,
+    timeout: float = 60.0,
+    poll_interval: float = 1.0,
 ) -> bool:
     """
     Wait for any running workflow to fully stop before starting a new one.
@@ -351,18 +382,23 @@ async def _wait_for_workflow_completion(
     if status != "processing":
         return True
 
-
-    logger.info(f"Previous workflow still running for {conversation_id}, waiting for it to stop...")
+    logger.info(
+        f"Previous workflow still running for {conversation_id}, waiting for it to stop..."
+    )
     elapsed = 0.0
     while elapsed < timeout:
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
         status = await _get_workflow_status(conversation_id, project_id)
         if status != "processing":
-            logger.info(f"Previous workflow stopped for {conversation_id} after {elapsed:.1f}s")
+            logger.info(
+                f"Previous workflow stopped for {conversation_id} after {elapsed:.1f}s"
+            )
             return True
 
-    logger.warning(f"Previous workflow did not stop within {timeout}s for {conversation_id}")
+    logger.warning(
+        f"Previous workflow did not stop within {timeout}s for {conversation_id}"
+    )
     return False
 
 
@@ -382,19 +418,26 @@ async def _clear_stop_signal(conversation_id: str):
                 },
             ) as response:
                 if response.status != 200:
-                    logger.warning(f"Failed to clear stop signal: HTTP {response.status}")
+                    logger.warning(
+                        f"Failed to clear stop signal: HTTP {response.status}"
+                    )
     except Exception:
         pass
 
 
 def _wait_for_workflow_completion_sync(
-    conversation_id: str, project_id: str, timeout: float = 60.0, poll_interval: float = 1.0
+    conversation_id: str,
+    project_id: str,
+    timeout: float = 60.0,
+    poll_interval: float = 1.0,
 ) -> bool:
     """Synchronous wrapper for _wait_for_workflow_completion to use in background tasks."""
     try:
         loop = asyncio.new_event_loop()
         return loop.run_until_complete(
-            _wait_for_workflow_completion(conversation_id, project_id, timeout, poll_interval)
+            _wait_for_workflow_completion(
+                conversation_id, project_id, timeout, poll_interval
+            )
         )
     except Exception as e:
         logger.warning(f"Error in _wait_for_workflow_completion_sync: {e}")
@@ -417,27 +460,27 @@ def _clear_stop_signal_sync(conversation_id: str):
 def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Extract asset content items from conversation nodes.
-    
+
     Respects user_node_metadata.asset_selection to filter assets:
     - 'explicit' with selected_asset_ids: Only return those specific assets
     - 'all' or no metadata: Return all assets in conversation
     """
     nodes = conversation.get("nodes", [])
-    
+
     # Find latest user node to check for selection metadata
     latest_user_node = None
     for node in reversed(nodes):
         if node.get("role") == "user":
             latest_user_node = node
             break
-    
+
     # Check metadata for selection mode
     metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
     selection_mode = metadata.get("asset_selection", "all")
     selected_ids = set(metadata.get("selected_asset_ids", []))
-    
+
     logger.info(f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}")
-    
+
     # Extract all assets from conversation
     assets = []
     for node in nodes:
@@ -447,33 +490,43 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
             if content_type in ["asset", "attachment"]:
                 asset_data = content.get("data", {})
                 # Ensure we have required fields
-                if asset_data.get("asset_id") and asset_data.get("s3_bucket") and asset_data.get("s3_key"):
-                    assets.append({
-                        "asset_id": asset_data.get("asset_id"),
-                        "file_id": asset_data.get("file_id"),
-                        "s3_bucket": asset_data.get("s3_bucket"),
-                        "s3_key": asset_data.get("s3_key"),
-                        "extension": asset_data.get("extension", "csv"),
-                        "filename": asset_data.get("filename", ""),
-                    })
-    
+                if (
+                    asset_data.get("asset_id")
+                    and asset_data.get("s3_bucket")
+                    and asset_data.get("s3_key")
+                ):
+                    assets.append(
+                        {
+                            "asset_id": asset_data.get("asset_id"),
+                            "file_id": asset_data.get("file_id"),
+                            "s3_bucket": asset_data.get("s3_bucket"),
+                            "s3_key": asset_data.get("s3_key"),
+                            "extension": asset_data.get("extension", "csv"),
+                            "filename": asset_data.get("filename", ""),
+                        }
+                    )
+
     # Filter based on selection mode
     if selection_mode == "explicit" and selected_ids:
         filtered_assets = [a for a in assets if a.get("asset_id") in selected_ids]
-        logger.info(f"Filtered assets from {len(assets)} to {len(filtered_assets)} based on explicit selection")
+        logger.info(
+            f"Filtered assets from {len(assets)} to {len(filtered_assets)} based on explicit selection"
+        )
         return filtered_assets
-    
+
     # Default: return all assets
     return assets
 
 
-def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[str, Any]]:
+def _postprocess_workflow_to_conversation_nodes(
+    workflow_output,
+) -> List[Dict[str, Any]]:
     """Convert all workflow_output.messages into conversation nodes."""
     from morpheus.workflows.base import WorkflowMessage
-    
-    if not workflow_output or not hasattr(workflow_output, 'messages'):
+
+    if not workflow_output or not hasattr(workflow_output, "messages"):
         return []
-    
+
     nodes = []
     for msg in workflow_output.messages:
         # Handle WorkflowMessage objects
@@ -485,12 +538,12 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
             msg_tool_call_id = msg.get("tool_call_id")
         else:
             # Pydantic model access
-            msg_type = getattr(msg, 'type', 'unknown')
-            msg_content = getattr(msg, 'content', '')
-            msg_timestamp = getattr(msg, 'timestamp', datetime.now())
-            msg_tool_calls = getattr(msg, 'tool_calls', None)
-            msg_tool_call_id = getattr(msg, 'tool_call_id', None)
-        
+            msg_type = getattr(msg, "type", "unknown")
+            msg_content = getattr(msg, "content", "")
+            msg_timestamp = getattr(msg, "timestamp", datetime.now())
+            msg_tool_calls = getattr(msg, "tool_calls", None)
+            msg_tool_call_id = getattr(msg, "tool_call_id", None)
+
         # Map message types to conversation roles
         role_map = {
             "human": "user",
@@ -499,19 +552,19 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
             "tool": "tool",
         }
         role = role_map.get(msg_type, "system")
-        
+
         # If AIMessage has tool_calls, treat it as 'tool' role (tool invocation)
         if msg_type == "ai" and msg_tool_calls:
             role = "tool"
-        
+
         # Get timestamp as ISO string
         if isinstance(msg_timestamp, str):
             timestamp_iso = msg_timestamp
-        elif hasattr(msg_timestamp, 'isoformat'):
+        elif hasattr(msg_timestamp, "isoformat"):
             timestamp_iso = msg_timestamp.isoformat()
         else:
             timestamp_iso = datetime.now().isoformat()
-        
+
         # Build node
         node = {
             "node_id": f"node_{uuid.uuid4().hex[:8]}",
@@ -527,19 +580,19 @@ def _postprocess_workflow_to_conversation_nodes(workflow_output) -> List[Dict[st
                 }
             ],
         }
-        
+
         # Add metadata for tool calls if present
         metadata = {}
         if msg_tool_calls:
             metadata["tool_calls"] = msg_tool_calls
         if msg_tool_call_id:
             metadata["tool_call_id"] = msg_tool_call_id
-        
+
         if metadata:
             node["metadata"] = metadata
-        
+
         nodes.append(node)
-    
+
     return nodes
 
 
@@ -550,6 +603,7 @@ def _process_conversation_background(
     project_id: str,
     user_id: str,
     wait_for_previous: bool = False,
+    model_override: Optional[str] = None,
 ):
     """Background processing function for workflow execution."""
     temp_file_path = None
@@ -572,12 +626,14 @@ def _process_conversation_background(
 
         if wait_for_previous:
             # Wait for any running workflow to fully stop before starting a new one
-            workflow_stopped = _wait_for_workflow_completion_sync(conversation_id, project_id)
+            workflow_stopped = _wait_for_workflow_completion_sync(
+                conversation_id, project_id
+            )
             if not workflow_stopped:
                 logger.warning(
                     f"Previous workflow did not stop within timeout for {conversation_id}, proceeding anyway"
                 )
-            
+
             # Clear stale stop signal AFTER previous workflow has stopped
             _clear_stop_signal_sync(conversation_id)
 
@@ -591,7 +647,9 @@ def _process_conversation_background(
                 },
             )
 
-        _collecting_post_status(conversation_id, "processing", {"step": "load_conversation"})
+        _post_node_status_sync(
+            conversation_id, "processing", {"step": "load_conversation"}
+        )
 
         try:
             conversation = _load_json_from_s3_uri(conversation_uri)
@@ -619,7 +677,9 @@ def _process_conversation_background(
         # Handle file download - download all assets or create placeholder for Q&A
         temp_file_paths = []
         if not assets:
-            logger.info(f"No assets in conversation {conversation_id} - processing Q&A without file")
+            logger.info(
+                f"No assets in conversation {conversation_id} - processing Q&A without file"
+            )
             # Create empty CSV file for Q&A mode (workflow will handle it)
             temp_dir = tempfile.gettempdir()
             temp_file_path = os.path.join(temp_dir, f"qa_{conversation_id}.csv")
@@ -629,19 +689,27 @@ def _process_conversation_background(
             temp_file_paths.append(temp_file_path)
             logger.info(f"Created placeholder file for Q&A: {temp_file_path}")
         else:
-            _collecting_post_status(conversation_id, "processing", {"step": "download_asset"})
+            _post_node_status_sync(
+                conversation_id, "processing", {"step": "download_asset"}
+            )
             for idx, asset_info in enumerate(assets):
                 asset_bucket = asset_info.get("s3_bucket")
                 asset_key = asset_info.get("s3_key")
-                
+
                 if not asset_bucket or not asset_key:
-                    logger.warning(f"Asset {asset_info.get('asset_id')} missing s3_bucket or s3_key, skipping")
+                    logger.warning(
+                        f"Asset {asset_info.get('asset_id')} missing s3_bucket or s3_key, skipping"
+                    )
                     continue
-                
-                logger.info(f"Downloading asset {idx + 1}/{len(assets)} for conversation {conversation_id}: s3://{asset_bucket}/{asset_key}")
+
+                logger.info(
+                    f"Downloading asset {idx + 1}/{len(assets)} for conversation {conversation_id}: s3://{asset_bucket}/{asset_key}"
+                )
                 try:
                     file_content = download_bytes(asset_bucket, asset_key)
-                    logger.info(f"Successfully downloaded {len(file_content)} bytes from S3")
+                    logger.info(
+                        f"Successfully downloaded {len(file_content)} bytes from S3"
+                    )
 
                     # Safely get extension with proper None handling
                     extension = asset_info.get("extension", "csv")
@@ -649,17 +717,27 @@ def _process_conversation_background(
                         file_ext = extension.lstrip(".")
                     else:
                         file_ext = "csv"
-                    
-                    file_identifier = asset_info.get("file_id") or asset_info.get("asset_id") or f"{conversation_id}_{idx}"
+
+                    file_identifier = (
+                        asset_info.get("file_id")
+                        or asset_info.get("asset_id")
+                        or f"{conversation_id}_{idx}"
+                    )
                     temp_dir = tempfile.gettempdir()
-                    temp_file_path = os.path.join(temp_dir, f"{file_identifier}.{file_ext}")
+                    temp_file_path = os.path.join(
+                        temp_dir, f"{file_identifier}.{file_ext}"
+                    )
                     with open(temp_file_path, "wb") as handle:
                         handle.write(file_content)
                     temp_file_paths.append(temp_file_path)
-                    logger.info(f"Saved file to {temp_file_path} ({os.path.getsize(temp_file_path)} bytes)")
+                    logger.info(
+                        f"Saved file to {temp_file_path} ({os.path.getsize(temp_file_path)} bytes)"
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to download asset {asset_info.get('asset_id')}: {e}")
-                    _collecting_post_status(
+                    logger.error(
+                        f"Failed to download asset {asset_info.get('asset_id')}: {e}"
+                    )
+                    _post_node_status_sync(
                         conversation_id,
                         "error",
                         {
@@ -670,7 +748,7 @@ def _process_conversation_background(
                     )
                     # Continue with other assets instead of returning
                     continue
-            
+
             if not temp_file_paths:
                 logger.error("No assets were successfully downloaded")
                 _collecting_post_status(
@@ -682,13 +760,13 @@ def _process_conversation_background(
                     },
                 )
                 return
-        
+
         # Store primary_asset for later use in error handling and completion
         primary_asset = assets[0] if assets else None
 
-        workflow = StatefulAnalyzeCSVWorkflow()
-        _collecting_post_status(conversation_id, "processing", {"step": "run_workflow"})
-        
+        workflow = StatefulAnalyzeCSVWorkflow(model_override=model_override)
+        _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
+
         # Extract user prompt and chart_mention context from latest user node
         user_prompt = None
         chart_mentions = []
@@ -705,7 +783,9 @@ def _process_conversation_background(
                 break  # only from latest user node
 
         if chart_mentions:
-            logger.info(f"Found {len(chart_mentions)} chart mention(s) for modification: {[cm.get('title') for cm in chart_mentions]}")
+            logger.info(
+                f"Found {len(chart_mentions)} chart mention(s) for modification: {[cm.get('title') for cm in chart_mentions]}"
+            )
 
         result = workflow.execute(
             file_paths=temp_file_paths,  # Pass all file paths for multi-file analysis
@@ -718,26 +798,32 @@ def _process_conversation_background(
             post_status_fn=_collecting_post_status,
             assets=assets,
         )
-        
+
         # Validate result is not None
         if result is None:
             error_msg = "Workflow returned None result"
             logger.error(error_msg)
             _collecting_post_status(conversation_id, "error", {"error": error_msg})
             return
-        
+
         # Check response type to route handling
-        response_type = result.get("type", "dashboard_config")  # Default to dashboard for backward compatibility
-        
+        response_type = result.get(
+            "type", "dashboard_config"
+        )  # Default to dashboard for backward compatibility
+
         # Postprocess workflow messages into conversation nodes
         workflow_output = result.get("workflow_output")
         if workflow_output:
-            postprocessed_nodes = _postprocess_workflow_to_conversation_nodes(workflow_output)
+            postprocessed_nodes = _postprocess_workflow_to_conversation_nodes(
+                workflow_output
+            )
             conversation.setdefault("nodes", []).extend(postprocessed_nodes)
 
         # Handle chart modification responses — merge modified chart into existing dashboard
         if response_type == "chart_modification":
-            logger.info("Processing chart modification response — merging into existing dashboard")
+            logger.info(
+                "Processing chart modification response — merging into existing dashboard"
+            )
             chart_mod_context = result.get("chart_modification_context", {})
             target_chart_id = chart_mod_context.get("chart_id")
             modified_data = result.get("data", {})
@@ -750,6 +836,7 @@ def _process_conversation_background(
 
             if existing_dashboard and modified_data:
                 import copy
+
                 merged = copy.deepcopy(existing_dashboard)
 
                 # Replace the target chart
@@ -765,7 +852,9 @@ def _process_conversation_background(
                             break
                     if not replaced:
                         existing_charts.append(modified_charts[0])
-                        logger.info(f"Merged: appended chart (target '{target_chart_id}' not found)")
+                        logger.info(
+                            f"Merged: appended chart (target '{target_chart_id}' not found)"
+                        )
                     merged["charts"] = existing_charts
 
                 # Replace metrics/tables if LLM converted types
@@ -788,31 +877,41 @@ def _process_conversation_background(
                 result["data"] = merged
                 result["type"] = "dashboard_config"
                 response_type = "dashboard_config"
-                logger.info("Chart modification merged successfully into existing dashboard")
+                logger.info(
+                    "Chart modification merged successfully into existing dashboard"
+                )
             else:
                 # No existing dashboard — treat the chart-only output as a regular dashboard
-                logger.warning("No existing dashboard for merge, using chart-only output as dashboard")
+                logger.warning(
+                    "No existing dashboard for merge, using chart-only output as dashboard"
+                )
                 result["type"] = "dashboard_config"
                 response_type = "dashboard_config"
 
         # Handle Q&A responses (type == "message")
         if response_type == "message":
             logger.info("Processing Q&A response - skipping dashboard generation")
-            
+
             # Extract Q&A content from result
             qa_content = result.get("content", "I've processed your question.")
-            
+
             # The workflow_output messages have already been added to conversation nodes above
             # But we should ensure the final assistant response is clear
             # The postprocessed_nodes should already contain the assistant's text response
-            
+
             # Q&A responses don't generate dashboards, just save conversation with text response
             conversation["updated_at"] = datetime.now().isoformat()
-            _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
-            
+            _persist_conversation(
+                conversation_uri, conversation_backup_uri, conversation
+            )
+
             # Post completion status with Q&A content in metadata
-            file_identifier = assets[0].get("file_id") or assets[0].get("asset_id") if assets else conversation_id
-            _collecting_post_status(
+            file_identifier = (
+                assets[0].get("file_id") or assets[0].get("asset_id")
+                if assets
+                else conversation_id
+            )
+            _post_node_status_sync(
                 conversation_id,
                 "completed",
                 {
@@ -821,18 +920,22 @@ def _process_conversation_background(
                     "content": qa_content,
                 },
             )
-            
+
             logger.info(f"Q&A workflow completed for conversation {conversation_id}")
             return
 
         # Handle Dashboard responses (type == "dashboard_config")
         logger.info("Processing Dashboard response")
-        
+
         # Use first asset for processed JSON key generation (for backward compatibility)
         primary_asset = assets[0] if assets else None
-        file_size = os.path.getsize(temp_file_path) if temp_file_path and os.path.exists(temp_file_path) else 0
+        file_size = (
+            os.path.getsize(temp_file_path)
+            if temp_file_path and os.path.exists(temp_file_path)
+            else 0
+        )
         processed_json_s3_key = None
-        
+
         if primary_asset and primary_asset.get("s3_key"):
             asset_key = primary_asset.get("s3_key")
             key_parts = _parse_s3_key(asset_key)
@@ -851,10 +954,18 @@ def _process_conversation_background(
         result_data = result.get("data", {}) if result else {}
         if not isinstance(result_data, dict):
             result_data = {}
-        
-        file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") if primary_asset else conversation_id
-        file_ext = primary_asset.get("extension", "csv").lstrip(".") if primary_asset else "csv"
-        
+
+        file_identifier = (
+            primary_asset.get("file_id") or primary_asset.get("asset_id")
+            if primary_asset
+            else conversation_id
+        )
+        file_ext = (
+            primary_asset.get("extension", "csv").lstrip(".")
+            if primary_asset
+            else "csv"
+        )
+
         processed_data = {
             "fileID": file_identifier,
             "status": "completed",
@@ -870,24 +981,35 @@ def _process_conversation_background(
         if result.get("workflow_output"):
             output_dir = Path("storage/out")
             output_dir.mkdir(exist_ok=True, parents=True)
-            workflow_output_file = output_dir / f"workflow_{file_identifier}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            workflow_output_file = (
+                output_dir
+                / f"workflow_{file_identifier}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            )
             result["workflow_output"].save_to_file(str(workflow_output_file))
             processed_data["workflow_output_path"] = str(workflow_output_file)
 
-        processed_json_bytes = json.dumps(processed_data, ensure_ascii=False, indent=2).encode("utf-8")
+        processed_json_bytes = json.dumps(
+            processed_data, ensure_ascii=False, indent=2
+        ).encode("utf-8")
         if processed_json_s3_key and primary_asset:
             asset_bucket = primary_asset.get("s3_bucket")
             if asset_bucket:
-                _upload_bytes_to_s3(asset_bucket, processed_json_s3_key, processed_json_bytes)
+                _upload_bytes_to_s3(
+                    asset_bucket, processed_json_s3_key, processed_json_bytes
+                )
             else:
                 logger.warning(f"Skipping processed JSON upload: missing asset_bucket")
         else:
-            logger.warning(f"Skipping processed JSON upload: processed_json_s3_key={processed_json_s3_key}, primary_asset={primary_asset is not None}")
+            logger.warning(
+                f"Skipping processed JSON upload: processed_json_s3_key={processed_json_s3_key}, primary_asset={primary_asset is not None}"
+            )
 
         asset_id = primary_asset.get("asset_id") if primary_asset else None
         if asset_id and processed_json_s3_key:
             try:
-                update_url = f"{BACKEND_API_URL}/api/v1/morpheus/asset/{asset_id}/processed-key"
+                update_url = (
+                    f"{BACKEND_API_URL}/api/v1/morpheus/asset/{asset_id}/processed-key"
+                )
                 headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
                 response = requests.put(
                     update_url,
@@ -896,7 +1018,9 @@ def _process_conversation_background(
                     timeout=10,
                 )
                 if response.status_code != 200:
-                    logger.warning(f"Failed to update asset {asset_id}: {response.status_code} - {response.text}")
+                    logger.warning(
+                        f"Failed to update asset {asset_id}: {response.status_code} - {response.text}"
+                    )
             except Exception as exc:
                 logger.warning(f"Failed to update asset via API: {exc}")
 
@@ -904,7 +1028,9 @@ def _process_conversation_background(
         dashboard_description = None
         result_data = result.get("data")
         if result_data:
-            dashboard_meta = result_data.get("dashboard") if isinstance(result_data, dict) else {}
+            dashboard_meta = (
+                result_data.get("dashboard") if isinstance(result_data, dict) else {}
+            )
             if isinstance(dashboard_meta, dict):
                 dashboard_title = dashboard_meta.get("title")
                 dashboard_description = dashboard_meta.get("description")
@@ -970,29 +1096,23 @@ def _process_conversation_background(
                         }
                     )
                 else:
-                    contents: List[Dict[str, Any]] = []
-                    if todo_tasks_to_save:
-                        contents.append(
-                            {
-                                "type": "todo_tasks",
-                                "data": {"tasks": todo_tasks_to_save},
-                            }
-                        )
-                    contents.append(
-                        {
-                            "type": "dashboard",
-                            "data": {
-                                "dashboard_id": new_dashboard_record["dashboard_id"],
-                                "s3_uri": new_dashboard_record["s3_uri"],
-                            },
-                        }
-                    )
+                    # Create a new assistant node for dashboard if none exists
                     dashboard_node = {
                         "node_id": f"node_{uuid.uuid4().hex[:8]}",
                         "role": "assistant",
                         "status": "completed",
                         "created_at": datetime.now().isoformat(),
-                        "contents": contents,
+                        "contents": [
+                            {
+                                "type": "dashboard",
+                                "data": {
+                                    "dashboard_id": new_dashboard_record[
+                                        "dashboard_id"
+                                    ],
+                                    "s3_uri": new_dashboard_record["s3_uri"],
+                                },
+                            }
+                        ],
                     }
                     conversation.setdefault("nodes", []).append(dashboard_node)
 
@@ -1008,15 +1128,23 @@ def _process_conversation_background(
 
         conversation["updated_at"] = datetime.now().isoformat()
         _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
-        
-        completion_file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") if primary_asset else conversation_id
-        _collecting_post_status(
+
+        completion_file_identifier = (
+            primary_asset.get("file_id") or primary_asset.get("asset_id")
+            if primary_asset
+            else conversation_id
+        )
+        _post_node_status_sync(
             conversation_id,
             "completed",
             {
                 "fileID": completion_file_identifier,
                 "response_type": "dashboard_config",
-                "dashboard_id": new_dashboard_record["dashboard_id"] if new_dashboard_record else None,
+                "dashboard_id": (
+                    new_dashboard_record["dashboard_id"]
+                    if new_dashboard_record
+                    else None
+                ),
             },
         )
 
@@ -1027,9 +1155,11 @@ def _process_conversation_background(
                 "name": dashboard_title,
                 "description": dashboard_description,
                 "latest_conversation_id": conversation_id,
-                "latest_dashboard_id": new_dashboard_record["dashboard_id"]
-                if new_dashboard_record
-                else None,
+                "latest_dashboard_id": (
+                    new_dashboard_record["dashboard_id"]
+                    if new_dashboard_record
+                    else None
+                ),
                 "dashboard_title": dashboard_title,
             }
             headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
@@ -1064,35 +1194,56 @@ def _process_conversation_background(
                 "status": "error",
                 "created_at": datetime.now().isoformat(),
                 "contents": [
-                    {"type": "text", "data": {"text": "Sorry, we encountered an error. Please try again."}}
+                    {
+                        "type": "text",
+                        "data": {
+                            "text": "Sorry, we encountered an error. Please try again."
+                        },
+                    }
                 ],
             }
             conversation.setdefault("nodes", []).append(error_node)
             conversation["updated_at"] = datetime.now().isoformat()
             try:
-                _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
+                _persist_conversation(
+                    conversation_uri, conversation_backup_uri, conversation
+                )
             except Exception as persist_error:
-                logger.warning(f"Failed to persist errored conversation: {persist_error}")
+                logger.warning(
+                    f"Failed to persist errored conversation: {persist_error}"
+                )
 
         if processed_json_s3_key and conversation is not None and primary_asset:
             try:
-                error_file_identifier = primary_asset.get("file_id") or primary_asset.get("asset_id") or conversation_id
+                error_file_identifier = (
+                    primary_asset.get("file_id")
+                    or primary_asset.get("asset_id")
+                    or conversation_id
+                )
                 error_payload = {
                     "fileID": error_file_identifier,
                     "status": "error",
                     "error": str(exc),
                     "processed_at": datetime.now().isoformat(),
                 }
-                error_asset_bucket = primary_asset.get("s3_bucket") or conversation_bucket
+                error_asset_bucket = (
+                    primary_asset.get("s3_bucket") or conversation_bucket
+                )
                 _upload_bytes_to_s3(
                     error_asset_bucket,
                     processed_json_s3_key,
-                    json.dumps(error_payload, ensure_ascii=False, indent=2).encode("utf-8"),
+                    json.dumps(error_payload, ensure_ascii=False, indent=2).encode(
+                        "utf-8"
+                    ),
                 )
             except Exception as upload_error:
                 logger.error(f"Failed to save error payload: {upload_error}")
 
-        _collecting_post_status(conversation_id, "error", {"error": "Sorry, we encountered an error. Please try again."})
+        _post_node_status_sync(
+            conversation_id,
+            "error",
+            {"error": "Sorry, we encountered an error. Please try again."},
+        )
 
     finally:
         # Clean up all downloaded asset files
@@ -1102,7 +1253,9 @@ def _process_conversation_background(
                     try:
                         os.remove(temp_path)
                     except Exception as cleanup_error:
-                        logger.warning(f"Failed to clean up temporary file {temp_path}: {cleanup_error}")
+                        logger.warning(
+                            f"Failed to clean up temporary file {temp_path}: {cleanup_error}"
+                        )
 
 
 @app.post("/run")
@@ -1121,7 +1274,9 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
         )
 
         # Check if previous workflow is running
-        previous_status = await _get_workflow_status(request.conversation_id, request.project_id)
+        previous_status = await _get_workflow_status(
+            request.conversation_id, request.project_id
+        )
         is_previous_running = previous_status == "processing"
 
         if not is_previous_running:
@@ -1149,7 +1304,9 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
                 }
             logger.info(f"Node status updated successfully: {response}")
         else:
-            logger.info(f"Previous workflow is still running for {request.conversation_id}, delegating wait to background task")
+            logger.info(
+                f"Previous workflow is still running for {request.conversation_id}, delegating wait to background task"
+            )
 
         background_tasks.add_task(
             _process_conversation_background,
@@ -1159,6 +1316,7 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
             request.project_id,
             request.user_id,
             is_previous_running,
+            request.model,
         )
 
         return {
@@ -1209,3 +1367,13 @@ async def get_workflow_status(request: StatusRequest):
 @app.get("/health")
 async def health():
     return await check_health()
+
+
+@app.post("/api/v1/users/{user_id}/signals/log")
+async def silence_lovable_signals(user_id: str, request: Request):
+    """
+    Silence automated signals from development tools (e.g., lovable-tagger).
+    Returns 200 OK to prevent 404 log clutter in Morpheus.
+    """
+    # Simply consume the signal
+    return {"status": "ok", "message": "Signal received"}

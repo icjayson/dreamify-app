@@ -97,8 +97,17 @@ def decide_next_node(state: AgentState) -> str:
         return "ROUTING"
     
     elif current == "ROUTING":
-        # After routing decision, proceed to reasoning
+        # After routing, choose reasoning strategy
+        if state.use_internal_reasoning:
+            return "REASONING_INTERNAL"
         return "REASONING"
+    
+    elif current == "REASONING_INTERNAL":
+        # Self-contained node (replaces REASONING + EXECUTION)
+        # Goes to shared SYNTHESIS node to build state.output
+        if state.working_memory.errors and not state.working_memory.dashboard_json and not state.working_memory.qa_response:
+            return "ERROR"
+        return "SYNTHESIS"
     
     elif current == "REASONING":
         # Check if agent decided to finish
@@ -148,11 +157,12 @@ def decide_next_node(state: AgentState) -> str:
         
         elif state.working_memory.retry_count < 2:
             # Try again with error context
+            retry_target = "REASONING_INTERNAL" if state.use_internal_reasoning else "REASONING"
             logger.info(
                 f"Validation failed (retry {state.working_memory.retry_count}/2), "
-                f"returning to REASONING"
+                f"returning to {retry_target}"
             )
-            return "REASONING"
+            return retry_target
         
         else:
             # Validation failed too many times

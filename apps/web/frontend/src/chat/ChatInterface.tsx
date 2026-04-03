@@ -1667,22 +1667,24 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span className="text-xs text-amber-300/80 truncate">Monthly credits used · Resets next month</span>
                 </div>
-                {subscription?.tier === "pro" ? (
-                  <a
-                    href="mailto:dreamify.dev@gmail.com?subject=More%20Credits%20Request"
-                    className="shrink-0 inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20 hover:bg-amber-500/25 transition-colors"
-                  >
-                    Contact us
-                  </a>
-                ) : (
-                  <button
-                    onClick={upgradeToPro}
-                    className="shrink-0 inline-flex items-center justify-center gap-1 h-7 px-3 rounded-lg text-xs font-semibold bg-primary text-white hover:opacity-90 transition-opacity"
-                  >
-                    <Zap className="w-3 h-3" />
-                    Upgrade to Pro
-                  </button>
-                )}
+                {/*{subscription?.tier === "pro" ? (*/}
+                <a
+                  href="https://mail.google.com/mail/?view=cm&to=dreamify.dev@gmail.com&su=More%20Credits%20Request"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20 hover:bg-amber-500/25 transition-colors"
+                >
+                  Contact us
+                </a>
+                {/*) : (
+                     <button
+                      onClick={upgradeToPro}
+                      className="shrink-0 inline-flex items-center justify-center gap-1 h-7 px-3 rounded-lg text-xs font-semibold bg-primary text-white hover:opacity-90 transition-opacity"
+                    >
+                      <Zap className="w-3 h-3" />
+                      Upgrade to Pro
+                    </button>*/}
+                {/*)}*/}
               </div>
             )}
 

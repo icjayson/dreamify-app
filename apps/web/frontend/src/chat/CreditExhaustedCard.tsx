@@ -43,20 +43,22 @@ export const CreditExhaustedCard: React.FC<CreditExhaustedCardProps> = ({
       {/* CTAs */}
       {isPro ? (
         <a
-          href="mailto:dreamify.dev@gmail.com?subject=More%20Credits%20Request"
+          href="https://mail.google.com/mail/?view=cm&to=dreamify.dev@gmail.com&su=More%20Credits%20Request"
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center justify-center gap-1.5 h-8 px-4 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20 hover:bg-amber-500/25 transition-colors w-fit"
         >
           Contact us for more credits
         </a>
       ) : (
         <div className="flex items-center gap-2">
-          <button
+          {/* <button
             onClick={onUpgrade}
             className="inline-flex items-center justify-center gap-1.5 h-8 px-4 rounded-lg text-xs font-semibold bg-primary text-white shadow-[0_4px_20px_hsl(var(--primary)/0.35)] hover:opacity-90 transition-opacity"
           >
             <Zap className="w-3.5 h-3.5" />
             Upgrade to Pro
-          </button>
+          </button>*/}
           <a
             href="/pricing"
             className="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs text-white/40 hover:text-white/70 transition-colors"

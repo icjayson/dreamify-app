@@ -146,6 +146,9 @@ interface ChatState {
   // Pending action state for cross-page navigation
   pendingAction: PendingAction | null;
 
+  // Selected model state
+  selectedModel: 'pro' | 'fast';
+
   // Actions
   setInputValue: (value: string) => void;
   setIsTyping: (typing: boolean) => void;
@@ -178,6 +181,7 @@ interface ChatState {
   setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
   setCurrentProjectId: (id: string | null) => void;
   setPendingAction: (action: PendingAction | null) => void;
+  setSelectedModel: (model: 'pro' | 'fast') => void;
 
   // Integration setters
   setGoogleSheetsModalOpen: (open: boolean) => void;
@@ -189,7 +193,7 @@ interface ChatState {
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: () => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast') => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => Promise<void>;
   stopGeneration: () => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<any>;
 
@@ -249,6 +253,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isGA4ModalOpen: false,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
+  selectedModel: 'fast',
 
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -301,6 +306,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
   setPendingAction: (action) => set({ pendingAction: action }),
+  setSelectedModel: (model) => set({ selectedModel: model }),
   setGoogleSheetsModalOpen: (open) => set({ isGoogleSheetsModalOpen: open }),
   setGA4ModalOpen: (open) => set({ isGA4ModalOpen: open }),
   setGoogleSheetsFileId: (id) => {
@@ -413,7 +419,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast') => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => {
     const state = get();
     const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
 
@@ -650,6 +656,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         console.log('Q&A processing result:', startResult);
 
         if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
+          // Invoke onAccepted callback to allow early UI updates (e.g. credit refresh)
+          if (onAccepted) onAccepted();
+
           const conversationId = startResult.data?.conversation_id || currentConversationId;
           if (conversationId) {
             setCurrentConversationId(conversationId);
@@ -795,7 +804,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const restoredMessages = conversationNodesToMessages(conversation);
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
-                  
+
                   // Auto-open dashboard if the latest message includes a dashboard card
                   const lastMsg = restoredMessages[restoredMessages.length - 1];
                   const dashId = lastMsg?.dashboardCard?.dashboardId;
@@ -841,7 +850,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: 'error while generating dashboard',
+                content: 'Error while generating dashboard',
                 timestamp: new Date(),
                 isError: true,
               }
@@ -854,7 +863,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             {
               id: (Date.now() + 1).toString(),
               role: 'assistant',
-              content: 'error while generating dashboard',
+              content: 'Error while generating dashboard',
               timestamp: new Date(),
               isError: true,
             }
@@ -863,14 +872,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } catch (error) {
         console.error('Q&A processing error:', error);
         uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
+        const errObj = error as Record<string, unknown>;
+        const errDetail = (errObj?.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+        const isInsufficientCredits =
+          errObj?.status === 402 ||
+          (errDetail as Record<string, unknown> | undefined)?.error === 'insufficient_credits' ||
+          (errObj?.detail as Record<string, unknown> | undefined)?.error === 'insufficient_credits';
         updateMessages((prev) => ([
           ...prev,
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: 'error while generating dashboard',
+            content: 'Error while generating dashboard',
             timestamp: new Date(),
             isError: true,
+            isInsufficientCredits,
           }
         ]));
       } finally {
@@ -1014,6 +1030,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.log('Run processing result:', startResult);
       // processing or accepted
       if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
+        // Invoke onAccepted callback to allow early UI updates (e.g. credit refresh)
+        if (onAccepted) onAccepted();
+
         const conversationId = startResult.data?.conversation_id;
         if (conversationId) {
           set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, conversationId })), currentConversationId: conversationId }));
@@ -1132,7 +1151,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               console.log('Q&A conversation loaded, restored', restoredMessages.length, 'messages');
               if (restoredMessages.length) {
                 get().setMessages(restoredMessages);
-                
+
                 // Auto-open dashboard if the latest message includes a dashboard card
                 const lastMsg = restoredMessages[restoredMessages.length - 1];
                 const dashId = lastMsg?.dashboardCard?.dashboardId;
@@ -1179,7 +1198,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: 'error while generating dashboard',
+                content: 'Error while generating dashboard',
                 timestamp: new Date(),
                 isError: true,
               }
@@ -1192,7 +1211,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: 'error while generating dashboard',
+                content: 'Error while generating dashboard',
                 timestamp: new Date(),
                 isError: true,
               }
@@ -1207,7 +1226,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: 'error while generating dashboard',
+            content: 'Error while generating dashboard',
             timestamp: new Date(),
             isError: true,
           }
@@ -1216,15 +1235,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error) {
       console.error('Processing error:', error);
       get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
-      const errorMsg = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      const errObj = error as Record<string, unknown>;
+      const errDetail = (errObj?.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+      const isInsufficientCredits =
+        errObj?.status === 402 ||
+        (errDetail as Record<string, unknown> | undefined)?.error === 'insufficient_credits' ||
+        (errObj?.detail as Record<string, unknown> | undefined)?.error === 'insufficient_credits';
       updateMessages((prev) => ([
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: 'error while generating dashboard',
+          content: 'Error while generating dashboard',
           timestamp: new Date(),
           isError: true,
+          isInsufficientCredits,
         }
       ]));
     } finally {

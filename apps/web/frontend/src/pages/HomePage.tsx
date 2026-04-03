@@ -81,7 +81,8 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     deleteProject,
     openProject
   } = useProjects();
-  const { creditsRemaining } = useSubscription();
+  const { creditsRemaining, creditUsage, subscription } = useSubscription();
+  const tierLimit = 1000; // All users have Pro access (1000 credits/month)
   // Zustand stores
   const {
     inputValue,
@@ -104,6 +105,8 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     addMessage,
     processFileWithMessage,
     resetChat,
+    selectedModel,
+    setSelectedModel,
   } = useChatStore();
 
   const {
@@ -163,7 +166,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
   }, [displayedText, isTypingIn, rotatingIndex]);
 
   // Model selector state
-  const [selectedModel, setSelectedModel] = useState<'pro' | 'fast'>('fast');
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -938,6 +940,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                       setModelDropdownOpen(false);
                     }}
                     creditsRemaining={creditsRemaining}
+                    creditsMonthlyLimit={tierLimit}
                     isOpen={modelDropdownOpen}
                     onToggle={() => setModelDropdownOpen(prev => !prev)}
                     anchor="right"
@@ -1088,7 +1091,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
               You're currently on the <strong className="text-white">Pro plan</strong> — enjoy full access while we're in early access.
             </p>
             <p className="text-sm sm:text-base text-white/70 mt-2">
-              You have <strong className="text-white">100 credits per day</strong> to analyze data and generate dashboards.
+              You have <strong className="text-white">1,000 credits per month</strong> to analyze data and generate dashboards.
             </p>
           </div>
           <DialogFooter>

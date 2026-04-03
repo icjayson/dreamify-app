@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   isError?: boolean;
+  isInsufficientCredits?: boolean;
   attachment?: {
     kind: "csv" | "file";
     name: string;

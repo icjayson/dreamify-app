@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { ChartConfiguration } from '@/types/dashboard';
 import { useChartTheme } from '@/hooks/useChartTheme';
-import { assignDatasetColors } from '@/utils/chartStyling';
+import { assignDatasetColors, CHART_PRESET_THEMES } from '@/utils/chartStyling';
 
 interface RechartsPieChartProps {
   title?: string;
@@ -94,6 +94,8 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
 
   // Get styling classes
   const stylingClasses = getStylingClasses();
+  const isLightTheme = styling?.presetTheme === CHART_PRESET_THEMES.LIGHT;
+  const labelFillColor = isLightTheme ? '#0f172a' : '#fff';
 
   // Custom tooltip component
   const CustomTooltip = ({ active, payload }: any) => {
@@ -130,7 +132,17 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
             cx="50%"
             cy="50%"
             labelLine={false}
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+            label={({ name, percent, cx, cy, midAngle, innerRadius, outerRadius }) => {
+              const RADIAN = Math.PI / 180;
+              const radius = outerRadius + 16;
+              const x = cx + radius * Math.cos(-midAngle * RADIAN);
+              const y = cy + radius * Math.sin(-midAngle * RADIAN);
+              return (
+                <text x={x} y={y} fill={labelFillColor} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12}>
+                  {`${name} ${(percent * 100).toFixed(0)}%`}
+                </text>
+              );
+            }}
             outerRadius={80}
             fill="#8884d8"
             dataKey="value"

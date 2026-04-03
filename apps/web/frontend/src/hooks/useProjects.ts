@@ -108,6 +108,7 @@ export const useProjects = () => {
             if (response.success && response.project) {
                 useChatStore.getState().resetChat();
                 navigate(`/workspace/project?projectId=${response.project.id}`);
+                await refreshProjects();
                 return response.project;
             } else {
                 toast({

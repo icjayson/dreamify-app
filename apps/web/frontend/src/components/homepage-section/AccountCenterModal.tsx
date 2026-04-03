@@ -82,7 +82,7 @@ const PricingContent: React.FC = () => {
           <h3 className="text-lg font-semibold text-white">Sandbox</h3>
           <div className="mt-3"><span className="text-4xl font-bold text-white">$0</span><span className="text-white/70 text-sm"> / month</span></div>
           <ul className="my-4 space-y-2 text-sm text-white/80">
-            <li>5 daily credits</li>
+            <li>100 credits / month</li>
             <li>Diverse templates</li>
             <li>User roles & permissions</li>
             <li>7-day data retention</li>
@@ -101,8 +101,7 @@ const PricingContent: React.FC = () => {
           </div>
           <div className="mt-3"><span className="text-4xl font-bold text-white">$25</span><span className="text-white/70 text-sm"> / month</span></div>
           <ul className="my-4 space-y-2 text-sm text-white/80">
-            <li>100 monthly credits</li>
-            <li>5 daily credits (up to 150/month)</li>
+            <li>1,000 credits / month</li>
             <li>30-day data retention</li>
             <li>Custom domains</li>
             <li>Remove the Dreamify badge</li>

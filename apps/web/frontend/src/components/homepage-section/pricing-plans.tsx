@@ -93,7 +93,7 @@ export const PricingPlansSection: React.FC<{ className?: string }> = ({ classNam
             <ul className="my-8 space-y-4 text-sm text-white/70 flex-1">
               <li className="flex items-center gap-2">
                 <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                5 daily credits
+                100 credits / month
               </li>
               <li className="flex items-center gap-2">
                 <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
@@ -135,11 +135,7 @@ export const PricingPlansSection: React.FC<{ className?: string }> = ({ classNam
             <ul className="my-8 space-y-4 text-sm text-white/80 flex-1">
               <li className="flex items-center gap-2 font-medium text-white">
                 <svg className="w-4 h-4 text-primary font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                100 monthly credits
-              </li>
-              <li className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                5 daily credits (up to 150/month)
+                1,000 credits / month
               </li>
               <li className="flex items-center gap-2">
                 <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>

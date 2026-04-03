@@ -5,6 +5,7 @@
 import React from 'react';
 import { Treemap, Tooltip, ResponsiveContainer } from 'recharts';
 import { useChartTheme } from '@/hooks/useChartTheme';
+import { CHART_PRESET_THEMES } from '@/utils/chartStyling';
 
 interface RechartsTreemapChartProps {
   title?: string;
@@ -57,7 +58,9 @@ const RechartsTreemapChart: React.FC<RechartsTreemapChartProps> = ({
   }, [datasets, title]);
 
   const palette = React.useMemo(() => {
-    return styling?.colorPalette || ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    return styling?.colorPalette && styling.colorPalette.length > 0
+      ? styling.colorPalette
+      : ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
   }, [styling?.colorPalette]);
 
   const stylingClasses = getStylingClasses();
@@ -76,6 +79,10 @@ const RechartsTreemapChart: React.FC<RechartsTreemapChartProps> = ({
     return null;
   };
 
+  const isLightTheme = styling?.presetTheme === CHART_PRESET_THEMES.LIGHT;
+  const strokeColor = isLightTheme ? '#e2e8f0' : '#fff';
+  const textColor = isLightTheme ? '#0f172a' : '#fff';
+
   const colorFn = (node: any) => palette[(node.index || 0) % palette.length];
 
   const TreemapContent: React.FC<any> = (props) => {
@@ -83,9 +90,9 @@ const RechartsTreemapChart: React.FC<RechartsTreemapChartProps> = ({
     const fill = colorFn(props);
     return (
       <g>
-        <rect x={x} y={y} width={width} height={height} style={{ fill, stroke: '#fff' }} />
+        <rect x={x} y={y} width={width} height={height} style={{ fill, stroke: strokeColor }} />
         {width > 60 && height > 14 && (
-          <text x={(x || 0) + 4} y={(y || 0) + 14} fill="#fff" fontSize={12} pointerEvents="none">
+          <text x={(x || 0) + 4} y={(y || 0) + 14} fill={textColor} fontSize={12} pointerEvents="none">
             {name}
           </text>
         )}
@@ -106,7 +113,7 @@ const RechartsTreemapChart: React.FC<RechartsTreemapChartProps> = ({
         <Treemap
           data={treemapData}
           dataKey="size"
-          stroke="#fff"
+          stroke={strokeColor}
           fill="#8884d8"
           isAnimationActive={!!styling?.animationEnabled}
           content={<TreemapContent />}

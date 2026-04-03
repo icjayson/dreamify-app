@@ -24,6 +24,7 @@ import {
   applyChartStyling,
   getChartStylingClasses,
   getDashboardBackgroundStyle,
+  getColorPalette,
   CHART_THEME_COLORS,
   CHART_PRESET_THEMES,
   ChartPresetTheme
@@ -785,6 +786,7 @@ const DashboardPreview = ({
   const displayComponents = useMemo(() => {
     if (!activeDashboard?.components) return [];
     if (isDarkMode) return activeDashboard.components;
+    const lightPalette = getColorPalette(CHART_PRESET_THEMES.LIGHT, 10);
     return activeDashboard.components.map((comp: any) => ({
       ...comp,
       component_config: {
@@ -792,6 +794,7 @@ const DashboardPreview = ({
         styling: {
           ...comp.component_config?.styling,
           presetTheme: CHART_PRESET_THEMES.LIGHT,
+          colorPalette: lightPalette,
           dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.LIGHT]['bg-dashboard-color']
         }
       }

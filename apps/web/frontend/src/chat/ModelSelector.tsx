@@ -7,6 +7,7 @@ interface ModelSelectorProps {
   selectedModel: 'pro' | 'fast';
   onSelect: (model: 'pro' | 'fast') => void;
   creditsRemaining: number;
+  creditsMonthlyLimit?: number;
   isOpen: boolean;
   onToggle: () => void;
   anchor: 'left' | 'right';
@@ -18,12 +19,15 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   selectedModel,
   onSelect,
   creditsRemaining,
+  creditsMonthlyLimit = 100,
   isOpen,
   onToggle,
   anchor = 'right',
   placement = 'bottom',
   variant = 'classic'
 }) => {
+  const creditPct = creditsMonthlyLimit > 0 ? creditsRemaining / creditsMonthlyLimit : 0;
+  const creditState = creditsRemaining === 0 ? 'empty' : creditPct <= 0.1 ? 'critical' : creditPct <= 0.3 ? 'warning' : 'ok';
   return (
     <div className="relative">
       <button
@@ -56,6 +60,12 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
               layoutId="pro-glow"
               className="absolute inset-0 bg-primary/30 blur-md rounded-full -z-10"
             />
+          )}
+          {(creditState === 'critical' || creditState === 'empty') && (
+            <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-red-500" />
+          )}
+          {creditState === 'warning' && (
+            <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
           )}
         </div>
         <span className="font-medium">{selectedModel === 'fast' ? 'Standard' : 'Pro'}</span>
@@ -122,19 +132,24 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
             <div className="mt-2 border-t border-white/5 bg-white/[0.02] p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <CreditIcon className="w-3.5 h-3.5" glow={false} />
-                  <span className="text-xs text-white/60">Credit Balance</span>
+                  <CreditIcon className={`w-3.5 h-3.5 ${creditState === 'empty' || creditState === 'critical' ? 'text-red-400' : creditState === 'warning' ? 'text-amber-400' : ''}`} glow={false} />
+                  <span className="text-xs text-white/60">Credit</span>
                 </div>
-                <span className="text-xs font-bold text-white">{creditsRemaining} <span className="text-white/30 font-normal">/ 100</span></span>
+                <span className={`text-xs font-bold ${creditState === 'empty' || creditState === 'critical' ? 'text-red-400' : creditState === 'warning' ? 'text-amber-400' : 'text-white'}`}>
+                  {creditsRemaining.toLocaleString()} <span className="text-white/30 font-normal">/ {creditsMonthlyLimit.toLocaleString()}</span>
+                </span>
               </div>
               <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${(creditsRemaining / 100) * 100}%` }}
+                  animate={{ width: `${Math.min(creditPct * 100, 100)}%` }}
                   transition={{ duration: 1, ease: "easeOut" }}
-                  className={`h-full rounded-full ${creditsRemaining < 20 ? 'bg-red-500' : 'bg-primary'}`}
+                  className={`h-full rounded-full ${creditState === 'empty' || creditState === 'critical' ? 'bg-red-500' : creditState === 'warning' ? 'bg-amber-500' : 'bg-primary'}`}
                 />
               </div>
+              {creditState === 'empty' && (
+                <p className="text-[10px] text-red-400/70 mt-1.5">Resets next month</p>
+              )}
             </div>
           </motion.div>
         )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useAuth } from '@clerk/clerk-react';
 
 interface SubscriptionInfo {
   subscription_id: string;
@@ -31,11 +31,22 @@ interface UseSubscriptionReturn {
 
 export const useSubscription = (): UseSubscriptionReturn => {
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [creditUsage, setCreditUsage] = useState<CreditUsage | null>(null);
   const [creditsRemaining, setCreditsRemaining] = useState<number>(100);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  /** Helper to get a fresh Clerk JWT for API calls. */
+  const getBearerToken = async (): Promise<string> => {
+    try {
+      const token = await getToken();
+      return token || '';
+    } catch {
+      return '';
+    }
+  };
 
   const fetchSubscription = async () => {
     if (!user) return;
@@ -44,10 +55,11 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setIsLoading(true);
       setError(null);
 
+      const token = await getBearerToken();
       // Fetch subscription from Polar backend
       const response = await fetch(`/api/v1/polar/subscriptions?user_id=${user.id}`, {
         headers: {
-          'Authorization': `Bearer ${user.id}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
@@ -80,7 +92,12 @@ export const useSubscription = (): UseSubscriptionReturn => {
     if (!user) return;
 
     try {
-      const response = await fetch(`/api/v1/polar/credits/usage?user_id=${user.id}&subscription_tier=sandbox`);
+      const token = await getBearerToken();
+      const response = await fetch(`/api/v1/polar/credits/usage`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       
       if (!response.ok) {
         throw new Error('Failed to fetch credit usage');
@@ -88,8 +105,9 @@ export const useSubscription = (): UseSubscriptionReturn => {
 
       const data = await response.json();
       
-      if (data.success) {
+      if (data.success && data.usage) {
         setCreditUsage(data.usage);
+        // creditsRemaining is derived by the tier-aware useEffect below
       }
     } catch (err) {
       console.error('Credit usage fetch error:', err);
@@ -100,12 +118,16 @@ export const useSubscription = (): UseSubscriptionReturn => {
     if (!user) return;
 
     try {
-      const response = await fetch(`/api/v1/polar/credits/usage?user_id=${user.id}`);
+      const token = await getBearerToken();
+      const response = await fetch(`/api/v1/polar/credits/usage`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       if (!response.ok) return;
       const data = await response.json();
-      if (data.credits_remaining !== undefined) {
-        setCreditsRemaining(data.credits_remaining);
-      }
+      // creditUsage is updated by fetchCreditUsage; nothing to set here
+
     } catch (err) {
       console.error('Daily credits fetch error:', err);
     }
@@ -122,12 +144,13 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setIsLoading(true);
       setError(null);
 
+      const token = await getBearerToken();
       // Create checkout session for Polar Pro plan
       const response = await fetch(`/api/v1/polar/checkout/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.id}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           product_id: 'pro_product_id', // TODO: Get from backend or config
@@ -163,11 +186,12 @@ export const useSubscription = (): UseSubscriptionReturn => {
     if (!user) return false;
 
     try {
+      const token = await getBearerToken();
       const response = await fetch(`/api/v1/polar/credits/consume`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.id}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           user_id: user.id,
@@ -179,6 +203,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
       const data = await response.json();
 
       if (data.success) {
+        // Refresh credit display after consumption
         await fetchCreditUsage();
         return true;
       } else {
@@ -196,9 +221,20 @@ export const useSubscription = (): UseSubscriptionReturn => {
   useEffect(() => {
     if (user) {
       refreshSubscription();
-      fetchDailyCredits();
     }
   }, [user?.id]);
+
+  // Recompute creditsRemaining using tier-aware limits once both subscription and
+  // creditUsage are available. This overrides the raw API monthly_credits_limit
+  // (which may reflect stale backend data) with the canonical frontend tier limits:
+  // Pro → 1000 / month, Standard/Sandbox → 100 / month.
+  useEffect(() => {
+    if (!creditUsage) return;
+    // All users currently have Pro access (1000 credits/month).
+    // Update this when the backend enforces tier-based limits correctly.
+    const tierLimit = 1000;
+    setCreditsRemaining(Math.max(0, tierLimit - creditUsage.monthly_credits_used));
+  }, [subscription, creditUsage]);
 
   return {
     subscription,

@@ -18,6 +18,7 @@ import type { ChartChipData } from "../components/chat/ChartPreviewChip";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
 import CreditIcon from "./CreditIcon";
 import ModelSelector from "./ModelSelector";
+import { CreditExhaustedCard } from "./CreditExhaustedCard";
 import type { DashboardComponent } from "@/types/dashboard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
@@ -328,10 +329,10 @@ interface ChatInterfaceProps {
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, dashboardComponents }: ChatInterfaceProps) => {
 
   // Model selector state
-  const [selectedModel, setSelectedModel] = useState<'pro' | 'fast'>('fast');
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
-  const { creditsRemaining } = useSubscription();
+  const { creditsRemaining, creditUsage, subscription, refreshSubscription, upgradeToPro } = useSubscription();
+  const tierLimit = 1000; // All users have Pro access (1000 credits/month)
 
   // Template state
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
@@ -391,6 +392,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setGoogleSheetsModalOpen,
     setGA4ModalOpen,
     isDashboardOpen,
+    selectedModel,
+    setSelectedModel,
   } = useChatStore();
 
   const {
@@ -659,7 +662,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       }
 
       try {
-        await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, hasChartMentions ? chartsWithConfig : undefined, selectedModel);
+        await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, hasChartMentions ? chartsWithConfig : undefined, selectedModel, refreshSubscription);
       } catch (err: unknown) {
         const errObj = err as Record<string, unknown>;
         const detail = (errObj?.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
@@ -668,9 +671,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           (detail as Record<string, unknown> | undefined)?.error === 'insufficient_credits' ||
           (errObj?.detail as Record<string, unknown> | undefined)?.error === 'insufficient_credits';
         if (isInsufficientCredits) {
+          refreshSubscription();
           toast({
             title: "Out of credits",
-            description: "You've used all your daily credits. They reset at midnight UTC.",
+            description: "You've used all your monthly credits. They reset next month.",
             variant: "destructive",
           });
           return;
@@ -679,6 +683,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       }
       setMentionedAssetIds([]);
       setMentionedCharts([]);
+      refreshSubscription();
     } finally {
       isSendingRef.current = false;
     }
@@ -686,6 +691,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
   const handleRetry = async () => {
     if (isSendingRef.current) return;
+    if (creditUsage?.can_use_credits === false) return;
     isSendingRef.current = true;
     try {
       const activeFiles = uploadedFiles.filter(f => f.status !== 'processed');
@@ -714,7 +720,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
       }
 
-      await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment);
+      await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, undefined, undefined, refreshSubscription);
     } finally {
       isSendingRef.current = false;
     }
@@ -1317,25 +1323,33 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       );
                     })()}
                     {message.isError && (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2 text-red-500">
-                          <AlertCircle className="w-4 h-4" />
-                          <span
-                            title="llm are not perfect"
-                            className="text-sm cursor-help focus:outline-none"
+                      message.isInsufficientCredits ? (
+                        <CreditExhaustedCard
+                          tier={subscription?.tier ?? "standard"}
+                          creditsLimit={tierLimit}
+                          onUpgrade={upgradeToPro}
+                        />
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2 text-red-500">
+                            <AlertCircle className="w-4 h-4" />
+                            <span
+                              title="llm are not perfect"
+                              className="text-sm cursor-help focus:outline-none"
+                            >
+                              {message.content}
+                            </span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRetry}
+                            className="self-start h-7 px-3 text-xs bg-transparent border-red-500/30 text-red-500 hover:bg-red-500/10"
                           >
-                            {message.content}
-                          </span>
+                            Retry
+                          </Button>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleRetry}
-                          className="self-start h-7 px-3 text-xs bg-transparent border-red-500/30 text-red-500 hover:bg-red-500/10"
-                        >
-                          Retry
-                        </Button>
-                      </div>
+                      )
                     )}
                     {/* Render saved todo tasks (between text and dashboard card) */}
                     {message.role === 'assistant' && message.todoTasks && message.todoTasks.length > 0 && (
@@ -1646,6 +1660,32 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           )}
           */}
 
+            {/* Credit exhausted banner */}
+            {creditUsage?.can_use_credits === false && (
+              <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-xs text-amber-300/80 truncate">Monthly credits used · Resets next month</span>
+                </div>
+                {subscription?.tier === "pro" ? (
+                  <a
+                    href="mailto:dreamify.dev@gmail.com?subject=More%20Credits%20Request"
+                    className="shrink-0 inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20 hover:bg-amber-500/25 transition-colors"
+                  >
+                    Contact us
+                  </a>
+                ) : (
+                  <button
+                    onClick={upgradeToPro}
+                    className="shrink-0 inline-flex items-center justify-center gap-1 h-7 px-3 rounded-lg text-xs font-semibold bg-primary text-white hover:opacity-90 transition-opacity"
+                  >
+                    <Zap className="w-3 h-3" />
+                    Upgrade to Pro
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Buttons Row */}
             <div className="flex items-center justify-between">
               {/* Left side - File Upload and Data Connector Buttons */}
@@ -1740,6 +1780,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     setModelDropdownOpen(false);
                   }}
                   creditsRemaining={creditsRemaining}
+                  creditsMonthlyLimit={tierLimit}
                   isOpen={modelDropdownOpen}
                   onToggle={() => setModelDropdownOpen(prev => !prev)}
                   anchor="right"

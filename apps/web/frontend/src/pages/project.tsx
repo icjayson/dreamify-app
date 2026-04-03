@@ -115,6 +115,15 @@ export default function ProjectPage() {
       setIsRenaming(false);
     }
   };
+  const refreshProjectTitle = async () => {
+    if (!projectId) return;
+    const response = await projectService.getProject(projectId);
+    if (response.success && response.project) {
+      const displayTitle = response.project.name || response.project.dashboard_title || "Untitled Project";
+      setProjectTitle(displayTitle);
+    }
+  };
+
   const uploadedFiles = useChatStore((s) => s.uploadedFiles);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
   const hasPolledStatus = uploadedFiles.some(f =>
@@ -314,6 +323,9 @@ export default function ProjectPage() {
               console.log('Found pending action, executing...', pendingAction);
               hasConversation = true;  // Treat as active project to prevent cleanup
               useChatStore.getState().addFiles(pendingAction.files);
+              if (pendingAction.model) {
+                useChatStore.getState().setSelectedModel(pendingAction.model);
+              }
 
               // Execute processing
               void useChatStore.getState().processFileWithMessage(
@@ -530,6 +542,8 @@ export default function ProjectPage() {
                         setHasShownInitialDashboard(true);
                         setIsDashboardOpen(true);
                         setActiveTab('dashboard');
+                        void refreshProjectTitle();
+                        window.dispatchEvent(new Event('projectUpdated'));
                       }
                     }}
                     onSwitchToDashboard={(dashboardId) => {

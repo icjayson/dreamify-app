@@ -23,9 +23,7 @@ interface SubscriptionInfo {
 }
 
 interface CreditUsage {
-  daily_credits_used: number;
   monthly_credits_used: number;
-  daily_credits_limit: number;
   monthly_credits_limit: number;
   can_use_credits: boolean;
 }
@@ -84,11 +82,6 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
-  };
-
-  const getDailyProgress = () => {
-    if (!creditUsage) return 0;
-    return (creditUsage.daily_credits_used / creditUsage.daily_credits_limit) * 100;
   };
 
   const getMonthlyProgress = () => {
@@ -161,23 +154,12 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
         {creditUsage && (
           <div className="space-y-3">
             <div className="text-sm font-medium">Credit Usage</div>
-            
-            {/* Daily Credits */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-sm">
-                <span>Daily Credits</span>
-                <span className={!creditUsage.can_use_credits ? 'text-red-500' : ''}>
-                  {creditUsage.daily_credits_used} / {creditUsage.daily_credits_limit}
-                </span>
-              </div>
-              <Progress value={getDailyProgress()} className="h-2" />
-            </div>
 
             {/* Monthly Credits */}
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
                 <span>Monthly Credits</span>
-                <span>
+                <span className={!creditUsage.can_use_credits ? 'text-red-500' : ''}>
                   {creditUsage.monthly_credits_used} / {creditUsage.monthly_credits_limit}
                 </span>
               </div>
@@ -186,7 +168,7 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
 
             {!creditUsage.can_use_credits && (
               <div className="text-sm text-red-500">
-                Daily credit limit reached. Credits reset daily.
+                Monthly credit limit reached. Credits reset next month.
               </div>
             )}
           </div>

@@ -5,6 +5,7 @@
 import React from 'react';
 import { Sankey, Tooltip, ResponsiveContainer } from 'recharts';
 import { useChartTheme } from '@/hooks/useChartTheme';
+import { CHART_PRESET_THEMES } from '@/utils/chartStyling';
 
 // Rename to avoid clashing with recharts' internal SankeyData type
 interface SankeyGraph {
@@ -52,8 +53,13 @@ const RechartsSankeyChart: React.FC<RechartsSankeyChartProps> = ({
   const { getStylingClasses } = useChartTheme({ initialStyling: styling });
 
   const palette = React.useMemo(() => {
-    return styling?.colorPalette || ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    return styling?.colorPalette && styling.colorPalette.length > 0
+      ? styling.colorPalette
+      : ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
   }, [styling?.colorPalette]);
+
+  const isLightTheme = styling?.presetTheme === CHART_PRESET_THEMES.LIGHT;
+  const nodeStrokeColor = isLightTheme ? '#e2e8f0' : '#fff';
 
   // Normalize config.data: allow string references for source/target
   const sankeyData = React.useMemo(() => {
@@ -114,7 +120,7 @@ const RechartsSankeyChart: React.FC<RechartsSankeyChartProps> = ({
           iterations={32}
           node={{
             // color accessor via palette based on node index
-            stroke: '#fff',
+            stroke: nodeStrokeColor,
             fill: (n: any) => palette[(n?.index || 0) % palette.length]
           } as any}
           link={{

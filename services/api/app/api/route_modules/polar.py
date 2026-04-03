@@ -2,7 +2,7 @@
 FastAPI Polar routes for payment operations.
 """
 
-from fastapi import APIRouter, HTTPException, Query, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, Request
 from fastapi.responses import JSONResponse
 from app.services.polar_service import polar_service
 from app.models.polar_models import (
@@ -10,12 +10,17 @@ from app.models.polar_models import (
     SubscriptionTier
 )
 from app.config.polar_config import get_all_subscription_plans
+from app.dependencies.auth import require_user
+from app.services.credit_service import CreditService, DAILY_CREDIT_LIMIT
 import logging
 
 # Create router
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+# Credit service instance for real DynamoDB operations
+credit_service = CreditService()
 
 @router.get("/products", tags=["polar"])
 async def get_products():
@@ -82,41 +87,43 @@ async def get_subscription(subscription_id: str = Path(..., description="Subscri
 
 @router.get("/credits/usage", tags=["polar"])
 async def get_credit_usage(
-    user_id: str = Query(..., description="User ID"),
-    subscription_tier: str = Query("sandbox", description="Subscription tier")
+    user_id: str = Depends(require_user),
 ):
-    """Get credit usage for a user."""
+    """Get credit usage for the authenticated user (reads from DynamoDB)."""
     try:
-        try:
-            subscription_tier_enum = SubscriptionTier(subscription_tier)
-        except ValueError:
-            raise HTTPException(
-                status_code=400, 
-                detail=f'Invalid subscription tier: {subscription_tier}'
-            )
-        
-        response = polar_service.get_credit_usage(user_id, subscription_tier_enum)
-        
-        if response.success:
-            return response.dict()
-        else:
-            raise HTTPException(status_code=400, detail=response.error)
-            
+        remaining = credit_service.get_credits_remaining(user_id)
+        daily_used = DAILY_CREDIT_LIMIT - remaining
+        return {
+            "success": True,
+            "credits_remaining": remaining,
+            "usage": {
+                "user_id": user_id,
+                "daily_credits_used": daily_used,
+                "daily_credits_limit": DAILY_CREDIT_LIMIT,
+                "monthly_credits_used": daily_used,
+                "monthly_credits_limit": DAILY_CREDIT_LIMIT,
+                "can_use_credits": remaining > 0,
+            }
+        }
     except Exception as e:
         logger.error(f"Error getting credit usage: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/credits/consume", tags=["polar"])
-async def consume_credits(consume_request: ConsumeCreditRequest):
-    """Consume credits for a user action."""
+async def consume_credits(
+    consume_request: ConsumeCreditRequest,
+    user_id: str = Depends(require_user),
+):
+    """Consume credits for a user action (atomic DynamoDB write)."""
     try:
-        response = polar_service.consume_credits(consume_request)
-        
-        if response.success:
-            return response.dict()
-        else:
-            raise HTTPException(status_code=400, detail=response.error)
-            
+        result = credit_service.consume_credits(user_id, consume_request.credits_required)
+        return {
+            "success": True,
+            "credits_consumed": consume_request.credits_required,
+            "remaining_credits": result["credits_remaining"],
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error consuming credits: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")

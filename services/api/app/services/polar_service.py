@@ -108,21 +108,22 @@ class PolarService:
         return SubscriptionTier.SANDBOX
 
     def get_credit_usage(self, user_id: str, subscription_tier: SubscriptionTier) -> CreditUsageResponse:
-        """Get credit usage information for a user."""
+        """Get credit usage information for a user (reads from DynamoDB)."""
         try:
-            plan = get_subscription_plan(subscription_tier.value)
-            
-            # TODO: Implement actual credit tracking from database
-            # For now, return mock data similar to the Stripe service but updated
+            from app.services.credit_service import CreditService, DAILY_CREDIT_LIMIT
+            credit_svc = CreditService()
+            remaining = credit_svc.get_credits_remaining(user_id)
+            daily_used = DAILY_CREDIT_LIMIT - remaining
+
             usage = CreditUsage(
                 user_id=user_id,
                 subscription_tier=subscription_tier,
-                daily_credits_used=0,
-                monthly_credits_used=0,
-                daily_credits_limit=plan['daily_credits'],
-                monthly_credits_limit=plan['monthly_credits'],
+                daily_credits_used=daily_used,
+                monthly_credits_used=daily_used,
+                daily_credits_limit=DAILY_CREDIT_LIMIT,
+                monthly_credits_limit=DAILY_CREDIT_LIMIT,
                 last_reset_date=datetime.now(),
-                can_use_credits=True
+                can_use_credits=remaining > 0
             )
             
             return CreditUsageResponse(
@@ -138,20 +139,22 @@ class PolarService:
             )
     
     def consume_credits(self, request: ConsumeCreditRequest) -> ConsumeCreditResponse:
-        """Consume credits for a user action."""
+        """Consume credits for a user action (atomic DynamoDB write)."""
         try:
-            # TODO: Implement actual credit consumption logic in database
+            from app.services.credit_service import CreditService
+            credit_svc = CreditService()
+            result = credit_svc.consume_credits(request.user_id, request.credits_required)
             return ConsumeCreditResponse(
                 success=True,
                 credits_consumed=request.credits_required,
-                remaining_credits=100
+                remaining_credits=result["credits_remaining"]
             )
             
         except Exception as e:
             logger.error(f"Error consuming credits: {str(e)}")
             return ConsumeCreditResponse(
                 success=False,
-                error="Internal server error"
+                error=str(e)
             )
     
     def handle_webhook(self, payload: bytes, headers: Dict[str, str]) -> Dict[str, Any]:

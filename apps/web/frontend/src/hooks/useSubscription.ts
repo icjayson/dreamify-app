@@ -10,9 +10,7 @@ interface SubscriptionInfo {
 }
 
 interface CreditUsage {
-  daily_credits_used: number;
   monthly_credits_used: number;
-  daily_credits_limit: number;
   monthly_credits_limit: number;
   can_use_credits: boolean;
 }
@@ -114,27 +112,9 @@ export const useSubscription = (): UseSubscriptionReturn => {
     }
   };
 
-  const fetchDailyCredits = async () => {
-    if (!user) return;
-
-    try {
-      const token = await getBearerToken();
-      const response = await fetch(`/api/v1/polar/credits/usage`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      // creditUsage is updated by fetchCreditUsage; nothing to set here
-
-    } catch (err) {
-      console.error('Daily credits fetch error:', err);
-    }
-  };
 
   const refreshSubscription = async () => {
-    await Promise.all([fetchSubscription(), fetchCreditUsage(), fetchDailyCredits()]);
+    await Promise.all([fetchSubscription(), fetchCreditUsage()]);
   };
 
   const upgradeToPro = async () => {

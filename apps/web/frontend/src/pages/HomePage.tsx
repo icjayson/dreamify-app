@@ -167,7 +167,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
   // Model selector state
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   // File upload integration
   const { uploadState: legacyUploadState, uploadCSVFile, uploadExcelFile } = useFileUpload();
@@ -250,10 +249,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
       if (dropdownOpen && !target.closest('.data-source-dropdown')) {
         setDropdownOpen(false);
-      }
-
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(target)) {
-        setModelDropdownOpen(false);
       }
     };
 
@@ -872,7 +867,13 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   {/* Connect Data Source Dropdown */}
                   <div className="relative data-source-dropdown">
                     <Button
-                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      onClick={() => {
+                        const newState = !dropdownOpen;
+                        setDropdownOpen(newState);
+                        if (newState) {
+                          setModelDropdownOpen(false);
+                        }
+                      }}
                       className={`rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto ${selectedDataSource
                         ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
                         : 'button-gradient'
@@ -942,7 +943,13 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     creditsRemaining={creditsRemaining}
                     creditsMonthlyLimit={tierLimit}
                     isOpen={modelDropdownOpen}
-                    onToggle={() => setModelDropdownOpen(prev => !prev)}
+                    onToggle={() => {
+                      const newState = !modelDropdownOpen;
+                      setModelDropdownOpen(newState);
+                      if (newState) {
+                        setDropdownOpen(false);
+                      }
+                    }}
                     anchor="right"
                     placement="bottom"
                     variant="classic"

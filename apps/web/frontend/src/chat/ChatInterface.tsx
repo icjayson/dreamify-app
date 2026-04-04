@@ -330,7 +330,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
   // Model selector state
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
   const { creditsRemaining, creditUsage, subscription, refreshSubscription, upgradeToPro } = useSubscription();
   const tierLimit = 1000; // All users have Pro access (1000 credits/month)
 
@@ -583,11 +582,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       // Close context picker if clicked outside
       if (isContextPickerOpen && !target.closest('.project-context-picker-container') && !target.closest('.project-context-trigger')) {
         setIsContextPickerOpen(false);
-      }
-
-      // Close model dropdown if clicked outside
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(target)) {
-        setModelDropdownOpen(false);
       }
     };
 
@@ -1584,26 +1578,34 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   const textBeforeCursor = value.slice(0, cursorPos);
                   const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
-                  if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
-                    // User just typed @
-                    setIsContextPickerOpen(true);
-                    setPickerTriggerMode('mention');
-                    setMentionQuery('');
-                    setMentionCursorPos(cursorPos);
+                    if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
+                      // User just typed @
+                      setIsContextPickerOpen(true);
+                      setPickerTriggerMode('mention');
+                      setMentionQuery('');
+                      setMentionCursorPos(cursorPos);
+
+                      // Mutual Exclusion
+                      setModelDropdownOpen(false);
+                      setDropdownOpen(false);
 
                     // Fetch assets if not already loaded
                     if (projectId && projectAssets.length === 0) {
                       fetchProjectAssets(projectId).then(setProjectAssets);
                     }
-                  } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
-                    // User is typing after @
-                    const query = textBeforeCursor.slice(lastAtIndex + 1);
-                    if (!/\s/.test(query)) {
-                      // No space means still in mention mode
-                      setMentionQuery(query);
-                      setIsContextPickerOpen(true);
-                      setPickerTriggerMode('mention');
-                    } else {
+                    } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
+                      // User is typing after @
+                      const query = textBeforeCursor.slice(lastAtIndex + 1);
+                      if (!/\s/.test(query)) {
+                        // No space means still in mention mode
+                        setMentionQuery(query);
+                        setIsContextPickerOpen(true);
+                        setPickerTriggerMode('mention');
+
+                        // Mutual Exclusion
+                        setModelDropdownOpen(false);
+                        setDropdownOpen(false);
+                      } else {
                       setIsContextPickerOpen(false);
                     }
                   } else {
@@ -1705,12 +1707,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Toggle picker
-                    if (isContextPickerOpen && pickerTriggerMode === 'button') {
-                      setIsContextPickerOpen(false);
-                    } else {
-                      setIsContextPickerOpen(true);
-                      setPickerTriggerMode('button');
+                    setIsContextPickerOpen(prev => !prev);
+                    setPickerTriggerMode('button');
+                    if (!isContextPickerOpen) {
+                      setModelDropdownOpen(false);
+                      setDropdownOpen(false);
                       // Ensure assets are loaded
                       if (projectId && projectAssets.length === 0) {
                         fetchProjectAssets(projectId).then(setProjectAssets);
@@ -1737,7 +1738,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 {/* Data Connector Dropup */}
                 <div className="relative data-source-dropdown">
                   <button
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    onClick={() => {
+                      const newState = !dropdownOpen;
+                      setDropdownOpen(newState);
+                      if (newState) {
+                        setModelDropdownOpen(false);
+                        setIsContextPickerOpen(false);
+                      }
+                    }}
                     className={`p-2 flex items-center justify-center gap-1 rounded-md transition-all duration-200 ${selectedDataSource
                       ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
                       : 'border border-white/30 text-gray-400 hover:text-white'
@@ -1784,7 +1792,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   creditsRemaining={creditsRemaining}
                   creditsMonthlyLimit={tierLimit}
                   isOpen={modelDropdownOpen}
-                  onToggle={() => setModelDropdownOpen(prev => !prev)}
+                  onToggle={() => {
+                    const newState = !modelDropdownOpen;
+                    setModelDropdownOpen(newState);
+                    if (newState) {
+                      setDropdownOpen(false);
+                      setIsContextPickerOpen(false);
+                    }
+                  }}
                   anchor="right"
                   placement="top"
                   variant="compact"

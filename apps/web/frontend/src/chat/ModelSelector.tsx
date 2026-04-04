@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import { Zap, Sparkles, ChevronDown, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "@clerk/clerk-react";
@@ -28,12 +28,25 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   variant = 'classic'
 }) => {
   const { isSignedIn } = useUser();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isOpen && containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        onToggle();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen, onToggle]);
+
   const creditPct = creditsMonthlyLimit > 0 ? creditsRemaining / creditsMonthlyLimit : 0;
   const creditState = creditsRemaining === 0 ? 'empty' : creditPct <= 0.1 ? 'critical' : creditPct <= 0.3 ? 'warning' : 'ok';
 
   if (!isSignedIn) return null;
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         onClick={(e) => {
           e.stopPropagation();

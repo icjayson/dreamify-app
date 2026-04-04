@@ -1,6 +1,7 @@
 import React from "react";
 import { Zap, Sparkles, ChevronDown, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useUser } from "@clerk/clerk-react";
 import CreditIcon from "./CreditIcon";
 
 interface ModelSelectorProps {
@@ -26,8 +27,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   placement = 'bottom',
   variant = 'classic'
 }) => {
+  const { isSignedIn } = useUser();
   const creditPct = creditsMonthlyLimit > 0 ? creditsRemaining / creditsMonthlyLimit : 0;
   const creditState = creditsRemaining === 0 ? 'empty' : creditPct <= 0.1 ? 'critical' : creditPct <= 0.3 ? 'warning' : 'ok';
+
+  if (!isSignedIn) return null;
   return (
     <div className="relative">
       <button

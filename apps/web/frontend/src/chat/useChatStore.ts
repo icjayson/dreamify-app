@@ -4,63 +4,6 @@ import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService } from '@/services/processingService';
 import { ConversationChatRequest } from '@/services/conversationService';
 
-// Theme detection function (keyword-based only)
-const detectThemeChange = (message: string): 'light' | 'dark' | null => {
-  const lowerMessage = message.toLowerCase();
-  const themeKeywords = ['dark', 'theme', 'modify', 'change', 'switch'];
-  const hasThemeKeywords = themeKeywords.some(keyword => lowerMessage.includes(keyword));
-  if (!hasThemeKeywords) return null;
-  if (lowerMessage.includes('dark')) return 'dark';
-  return 'dark';
-};
-
-// Helper function for AI response generation - simplified without Ollama
-const generateAIResponse = async (
-  userPrompt: string,
-  processedData: any,
-  messagesSnapshot: Message[],
-  updateMessages: (updater: (prev: Message[]) => Message[]) => void,
-  uploadedFileName?: string
-) => {
-  console.log('generateAIResponse called with:', { userPrompt, hasProcessedData: !!processedData, messageCount: messagesSnapshot.length });
-
-  // Check if there's already an assistant message for this specific user prompt to avoid duplicates
-  const lastMessage = messagesSnapshot[messagesSnapshot.length - 1];
-  const hasRecentAssistantMessage = lastMessage && lastMessage.role === 'assistant' && lastMessage.content.trim() !== '';
-  if (hasRecentAssistantMessage) {
-    console.log('Last message is already an assistant message, skipping AI response generation');
-    return;
-  }
-
-  console.log('Proceeding with AI response generation...');
-
-  // Always return success message
-  const getContextualResponse = (input: string): string => {
-    return "";
-  };
-
-  try {
-    const response = getContextualResponse(userPrompt);
-
-    // Add success message
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: response,
-      timestamp: new Date(),
-    };
-
-    updateMessages((prev) => [...prev, aiMessage]);
-  } catch (_error) {
-    const aiMessage: Message = {
-      id: (Date.now() + 3).toString(),
-      role: "assistant",
-      content: "I'm here to help you create beautiful dashboards! Please let me know what you'd like to visualize.",
-      timestamp: new Date(),
-    };
-    updateMessages((prev) => [...prev, aiMessage]);
-  }
-};
 
 export interface UploadedFile {
   fileID: string;
@@ -439,47 +382,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     get().clearFiles();
 
     const isTextOnly = !hasUploadedFiles;
-    const detectedTheme = detectThemeChange(content);
-    if (isTextOnly && hasShownInitialDashboard && dashboardTheme === 'light' && detectedTheme) {
-      console.log('Theme change detected:', detectedTheme);
-      setIsThemeChanging(true);
-
-      // Add user message
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        role: "user",
-        content: content.trim(),
-        timestamp: new Date(),
-        template: get().selectedTemplate || undefined,
-      };
-      addMessage(userMessage);
-
-      // Add loading message
-      const loadingMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Changing dashboard theme...",
-        timestamp: new Date(),
-      };
-      addMessage(loadingMessage);
-
-      // Wait 10 seconds for loading effect
-      setTimeout(() => {
-        setDashboardTheme(detectedTheme);
-        setIsThemeChanging(false);
-
-        // Add completion message
-        const completionMessage: Message = {
-          id: (Date.now() + 2).toString(),
-          role: "assistant",
-          content: `Dashboard theme has been changed to ${detectedTheme} mode!`,
-          timestamp: new Date(),
-        };
-        addMessage(completionMessage);
-      }, 10000);
-
-      return;
-    }
 
     if (isTextOnly) {
       // No file uploaded - process Q&A (with or without existing conversation)

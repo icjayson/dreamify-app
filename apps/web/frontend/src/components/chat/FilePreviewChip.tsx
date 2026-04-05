@@ -14,9 +14,7 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
   const isSheets = sType.includes('Sheets') || sType.includes('gsheets') || sType.includes('integration_gsheets');
   const isMeta = sType.includes('Meta Ads') || sType.includes('meta_ads');
   const isIntegration = isGA4 || isSheets || isMeta;
-  const showSchemaOnlyBadge =
-    file.schemaOnly === true ||
-    (file.rowCount === 0 && file.sourceType === 'Meta Ads');
+
 
   // Render the "Live Status" group: App Logo (always prioritized)
   const renderLiveStatus = () => {
@@ -83,14 +81,7 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
             <span className="min-w-0 flex-1 truncate text-gray-400" title={getContextText()}>
               {getContextText()}
             </span>
-            {showSchemaOnlyBadge && (
-              <span
-                className="flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-amber-500/20 text-amber-200 border border-amber-500/30"
-                title="No data rows — analysis needs at least one row"
-              >
-                Schema only
-              </span>
-            )}
+
           </div>
 
           <button

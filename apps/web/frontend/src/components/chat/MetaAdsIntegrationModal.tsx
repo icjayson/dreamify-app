@@ -4,20 +4,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { integrationService, MetaAdAccount, MetaConnectionStatusResponse } from '@/services/integrationService';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, CalendarIcon, Link2, Link2Off } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, Link2, Link2Off, SearchX } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { fileService } from '@/services/fileService';
 import type { AssetRecord } from '@/services/fileService';
 
@@ -317,7 +309,9 @@ export default function MetaAdsIntegrationModal() {
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[440px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]">
+      <DialogContent className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]">
+        {!emptyRowsDialog ? (
+          <>
         <DialogHeader>
           <div className="flex items-center gap-3 mb-1">
             <img src="/meta.png" alt="Meta Logo" className="w-8 h-8 object-contain" />
@@ -328,31 +322,46 @@ export default function MetaAdsIntegrationModal() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 space-y-4">
+        <div className="py-6 space-y-4">
 
-          {/* ── Connection status bar ── */}
-          <div className={cn(
-            "flex items-center justify-between px-3 py-2 rounded-lg border text-sm",
-            isConnected
-              ? "bg-green-500/10 border-green-500/20 text-green-300"
-              : "bg-white/5 border-white/10 text-gray-400"
-          )}>
-            <div className="flex items-center gap-2">
-              {isConnected
-                ? <Link2 className="w-4 h-4" />
-                : <Link2Off className="w-4 h-4" />}
-              <span>{isConnected ? 'Facebook account connected' : 'Not connected'}</span>
-            </div>
-            {isConnected && (
-              <button
+          {/* ── Connection UI ── */}
+          {isConnected && !loadingAccounts ? (
+            <div className="flex items-center justify-between p-3 border border-blue-500/30 rounded-lg bg-blue-500/10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-md bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <Link2 className="w-4 h-4 text-blue-500" />
+                </div>
+                <span className="text-sm font-medium truncate text-white">
+                  Facebook account connected
+                </span>
+              </div>
+              <Button 
+                type="button"
+                variant="ghost" 
+                size="sm" 
+                className="h-8 text-gray-400 hover:text-white hover:bg-white/10 px-2"
                 onClick={handleDisconnect}
                 disabled={disconnecting}
-                className="text-xs text-gray-400 hover:text-red-400 transition-colors"
               >
                 {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-              </button>
-            )}
-          </div>
+              </Button>
+            </div>
+          ) : !isConnected ? (
+            <div 
+              onClick={!connecting ? handleConnect : undefined}
+              className={cn(
+                "flex items-center justify-between p-3 border border-white/10 rounded-lg bg-[#222] hover:bg-white/5 transition-colors cursor-pointer group",
+                connecting && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-md bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
+                  {connecting ? <Loader2 className="w-4 h-4 text-gray-400 animate-spin" /> : <img src="/meta.png" alt="" className="w-4 h-4 object-contain opacity-70 group-hover:opacity-100 transition-opacity" />}
+                </div>
+                <span className="text-sm text-gray-300">Connect with Meta</span>
+              </div>
+            </div>
+          ) : null}
 
           {/* ── Error banner ── */}
           {error && (
@@ -360,27 +369,6 @@ export default function MetaAdsIntegrationModal() {
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span>{error}</span>
             </div>
-          )}
-
-          {/* ── Not connected: connect button ── */}
-          {!isConnected && (
-            <Button
-              onClick={handleConnect}
-              disabled={connecting}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium"
-            >
-              {connecting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Connecting to Meta…
-                </>
-              ) : (
-                <>
-                  <img src="/meta.png" alt="" className="w-4 h-4 mr-2 object-contain" />
-                  Connect with Meta
-                </>
-              )}
-            </Button>
           )}
 
           {/* ── Connected: ad account + date pickers ── */}
@@ -431,7 +419,7 @@ export default function MetaAdsIntegrationModal() {
                   </div>
 
                   {isCustomRange && (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-200">Start Date</label>
                         <Popover>
@@ -472,73 +460,58 @@ export default function MetaAdsIntegrationModal() {
           <Button type="button" variant="ghost" onClick={onClose} className="text-gray-400 hover:text-white hover:bg-white/10" disabled={syncing}>
             Cancel
           </Button>
-          {isConnected && adAccounts.length > 0 && (
-            <Button
-              type="button"
-              onClick={handleSync}
-              disabled={syncing || !selectedAccountId}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4"
-            >
-              {syncing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Syncing…
-                </>
-              ) : 'Connect & Sync'}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <AlertDialog open={!!emptyRowsDialog}>
-      <AlertDialogContent className="bg-[#1A1A1A] border-white/10 text-white z-[210] sm:max-w-[440px]">
-        <AlertDialogHeader>
-          <AlertDialogTitle>No insights in this range</AlertDialogTitle>
-          <AlertDialogDescription className="text-gray-400">
-            Meta returned no campaign insights for the selected ad account and date range (the export has column
-            headers only). You can pick a wider range, keep the schema in the project for reference, or discard this
-            export.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end w-full">
-            <Button
-              type="button"
-              variant="outline"
-              className="border-white/20 bg-transparent text-gray-300 hover:bg-white/10 hover:text-white"
-              disabled={discardingEmpty}
-              onClick={() => void handleEmptyTryAnotherRange()}
-            >
-              Try another range
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={discardingEmpty}
-              onClick={() => void handleEmptyDiscard()}
-            >
-              {discardingEmpty ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Removing…
-                </>
-              ) : (
-                'Discard & close'
-              )}
-            </Button>
-          </div>
           <Button
             type="button"
-            className="bg-blue-600 hover:bg-blue-700 text-white w-full"
-            disabled={discardingEmpty}
-            onClick={handleEmptyKeepSchema}
+            onClick={handleSync}
+            disabled={!isConnected || syncing || !selectedAccountId || adAccounts.length === 0}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors"
           >
-            Keep schema in project
+            {syncing ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Syncing…
+              </>
+            ) : 'Connect & Sync'}
           </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        </DialogFooter>
+          </>
+        ) : (
+          <div className="flex flex-col items-center py-6 animate-in fade-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-6">
+              <SearchX className="w-8 h-8 text-orange-400" />
+            </div>
+            
+            <h2 className="text-xl font-semibold text-white mb-2">No insights found</h2>
+            
+            <p className="text-center text-sm text-gray-400 mb-8 max-w-[300px]">
+              Meta returned no campaign insights for the selected date range. The export only contains schema headers.
+            </p>
+
+            <div className="w-full space-y-3">
+              <Button 
+                type="button"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 shadow-lg shadow-blue-900/20 transition-all font-medium"
+                onClick={() => void handleEmptyTryAnotherRange()}
+                disabled={discardingEmpty}
+              >
+                {discardingEmpty ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarIcon className="w-4 h-4 mr-2" />}
+                Try another date range
+              </Button>
+              
+              <Button 
+                type="button"
+                variant="outline"
+                className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10 transition-all font-medium"
+                onClick={handleEmptyKeepSchema}
+                disabled={discardingEmpty}
+              >
+                Keep schema
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
     </>
   );
 }

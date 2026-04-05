@@ -1201,12 +1201,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           const isGA4 = !isMultiple && (sType.includes('GA4') || sType.includes('Google Analytics') || sType.includes('integration_ga4') || sType.toLowerCase().includes('google_analytics'));
                           const isSheets = !isMultiple && (sType.includes('Google Sheets') || sType.includes('gsheets') || sType.includes('integration_gsheets') || sType.toLowerCase().includes('google_sheet'));
 
-                          const displayName = isMultiple ? "Multiple Data Sources" : isGA4 ? "Google Analytics 4" : isSheets ? "Google Sheets" : "Attached Data";
-                          const logoBg = isMultiple ? "bg-indigo-500/10" : isGA4 ? "bg-orange-500/10" : isSheets ? "bg-green-500/10" : "bg-white/10";
+                          const isMeta = !isMultiple && (sType.includes('Meta') || sType.includes('meta'));
+
+                          const displayName = isMultiple ? "Multiple Data Sources" : isGA4 ? "Google Analytics 4" : isSheets ? "Google Sheets" : isMeta ? "Meta Ads" : "Attached Data";
+                          const logoBg = isMultiple ? "bg-indigo-500/10" : isGA4 ? "bg-orange-500/10" : isSheets ? "bg-green-500/10" : isMeta ? "bg-blue-500/10" : "bg-white/10";
 
                           const connector = isMultiple ? undefined : CONNECTORS.find(c => {
                             if (isGA4 && c.name === 'GA4') return true;
                             if (isSheets && c.name === 'Google Sheets') return true;
+                            if (isMeta && c.name === 'Meta') return true;
                             return false;
                           });
                           const icon = connector?.icon;

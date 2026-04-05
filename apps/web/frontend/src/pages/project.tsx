@@ -15,6 +15,8 @@ import { conversationService } from "@/services/conversationService";
 import { conversationNodesToMessages } from "@/chat/conversationToMessages";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackProjectButton } from "@/components/ui/feedback-button";
+import HeaderCreditBadge from "@/components/ui/HeaderCreditBadge";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useProjects } from "@/hooks/useProjects";
 import ProjectsSidebar from "@/components/homepage-section/ProjectsSidebar";
 import { PanelRightClose } from "lucide-react";
@@ -190,6 +192,7 @@ export default function ProjectPage() {
   }, [processedData]);
 
   const { user } = useUser();
+  const { creditsRemaining, creditUsage } = useSubscription();
   const { toast } = useToast();
   const displayName = user?.username || user?.fullName || user?.firstName || "you";
   const setMessages = useChatStore((s) => s.setMessages);
@@ -438,11 +441,11 @@ export default function ProjectPage() {
         </div>
       )}
 
-      <div className="min-h-screen bg-muted">
+      <div className="h-[100dvh] flex flex-col bg-muted">
         {/* Header */}
-        <div className="px-4 py-2 relative z-[200]">
-          <div className="flex items-center justify-between h-10">
-            <div className="flex items-center gap-3 min-w-0">
+        <div className="px-4 py-2 relative z-[200] shrink-0">
+          <div className="flex flex-wrap items-center justify-between min-h-10 gap-y-2 pb-2 md:pb-0 shrink-0">
+            <div className="flex items-center gap-3 order-1 shrink-0">
               <button
                 onClick={() => setIsSidebarOpen(true)}
                 className="button-outline h-8 w-8 rounded-md flex items-center justify-center text-white/70 hover:text-white"
@@ -450,71 +453,81 @@ export default function ProjectPage() {
               >
                 <PanelRightClose className="w-4 h-4" />
               </button>
-              <button aria-label="Go back" onClick={() => navigate('/')} className="button-outline h-8 px-4 rounded-md text-sm flex items-center gap-2">
+              <button aria-label="Go back" onClick={() => navigate('/')} className="button-outline h-8 px-2 md:px-4 rounded-md text-sm flex items-center gap-2">
                 <ArrowLeft className="w-4 h-4" />
-                Back
+                <span className="hidden md:inline">Back</span>
               </button>
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm text-white/70 truncate" title={displayName}>{displayName}</span>
-                <span className="text-sm text-white/50">›</span>
-                {isEditingTitle ? (
-                  <div className="flex items-center gap-2 min-w-0">
-                    <input
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleRenameSave();
-                        } else if (e.key === "Escape") {
-                          e.preventDefault();
-                          cancelEditingTitle();
-                        }
-                      }}
-                      className="text-sm text-white bg-transparent border-b border-white/40 focus:outline-none focus:border-white/80 leading-none w-40 sm:w-56"
-                      autoFocus
-                    />
-                    <button
-                      className="px-2 py-1 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
-                      onClick={cancelEditingTitle}
-                      disabled={isRenaming}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="px-2 py-1 text-xs rounded-md button-gradient disabled:opacity-70 disabled:pointer-events-none"
-                      onClick={handleRenameSave}
-                      disabled={isRenaming}
-                    >
-                      {isRenaming ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="font-regular text-sm truncate" title={projectTitle}>{projectTitle}</span>
-                    <button
-                      aria-label="Rename project"
-                      onClick={startEditingTitle}
-                      className="text-white/60 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-2 sm:ml-2 min-w-0 w-full md:w-auto order-3 md:order-2 md:mr-auto pl-1 md:pl-0 mt-1 md:mt-0">
+              <span className="hidden md:inline text-sm text-white/70 truncate" title={displayName}>{displayName}</span>
+              <span className="hidden md:inline text-sm text-white/50">›</span>
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleRenameSave();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        cancelEditingTitle();
+                      }
+                    }}
+                    className="text-sm text-white bg-transparent border-b border-white/40 focus:outline-none focus:border-white/80 leading-none w-40 sm:w-56"
+                    autoFocus
+                  />
+                  <button
+                    className="px-2 py-1 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
+                    onClick={cancelEditingTitle}
+                    disabled={isRenaming}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-2 py-1 text-xs rounded-md button-gradient disabled:opacity-70 disabled:pointer-events-none"
+                    onClick={handleRenameSave}
+                    disabled={isRenaming}
+                  >
+                    {isRenaming ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <span className="font-regular text-sm truncate" title={projectTitle}>{projectTitle}</span>
+                  <button
+                    aria-label="Rename project"
+                    onClick={startEditingTitle}
+                    className="text-white/60 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+
+              {/* Mobile Publish Button */}
+              {isDashboardOpen && (
+                <button onClick={() => setIsPublishOpen(true)} className="md:hidden button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center ml-auto shrink-0">
+                  <span>Publish</span>
+                  <SquareArrowOutUpRight className="w-4 h-4 ml-1.5" />
+                </button>
+              )}
+
+            </div>
+            <div className="flex items-center order-2 md:order-3 ml-auto md:ml-0 shrink-0">
+              <HeaderCreditBadge creditsRemaining={creditsRemaining} monthlyCreditsUsed={creditUsage?.monthly_credits_used} />
               {isDashboardOpen && (
                 <div className="relative mr-2" ref={themeDropdownRef}>
                   <button
                     onClick={() => setIsThemeDropdownOpen(prev => !prev)}
-                    className="button-outline h-8 px-3 rounded-md flex items-center gap-1.5"
+                    className="button-outline h-8 px-2 md:px-3 rounded-md flex items-center gap-1.5"
                     aria-haspopup="true"
                     aria-expanded={isThemeDropdownOpen}
                     aria-label="Theme mode"
                   >
                     {isDashboardDarkMode ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
-                    <span className="text-xs text-white/80">{isDashboardDarkMode ? 'Dark' : 'Light'}</span>
+                    <span className="text-xs text-white/80 hidden md:inline">{isDashboardDarkMode ? 'Dark' : 'Light'}</span>
                     <ChevronDown
                       className="w-3 h-3 text-white/50 transition-transform duration-200"
                       style={{ transform: isThemeDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
@@ -590,16 +603,19 @@ export default function ProjectPage() {
                 </div>
               )}
               <FeedbackProjectButton />
+
+              {/* Desktop Publish Button */}
               {isDashboardOpen && (
-                <button onClick={() => setIsPublishOpen(true)} className="button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center ml-2"><span>Publish</span>
-                  <SquareArrowOutUpRight className="w-4 h-4 ml-2" />
+                <button onClick={() => setIsPublishOpen(true)} className="hidden md:flex button-gradient h-8 px-4 rounded-md text-sm text-white items-center ml-2">
+                  <span>Publish</span>
+                  <SquareArrowOutUpRight className="w-4 h-4 ml-1.5" />
                 </button>
               )}
             </div>
           </div>
         </div>
         {/* Top Tabs (sm only) */}
-        <div className="lg:hidden px-4 pb-2">
+        <div className="lg:hidden px-4 pb-2 shrink-0">
           <div className="w-full rounded-xl border border-white/15 bg-background/70 backdrop-blur p-1 flex">
             <button
               onClick={() => setActiveTab('chat')}
@@ -619,11 +635,11 @@ export default function ProjectPage() {
         </div>
 
         {/* Content */}
-        <div className={`grid grid-cols-1 ${shouldShowDashboard && isDashboardOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0`}>
-          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300`}>
-            <div className=" bg-muted  h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] min-h-0">
-              <div>
-                <div className="px-1 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)]" data-chat-root>
+        <div className={`grid grid-cols-1 ${shouldShowDashboard && isDashboardOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} flex-1 min-h-0`}>
+          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300 h-full min-h-0`}>
+            <div className="bg-muted h-full min-h-0 flex flex-col">
+              <div className="flex-1 min-h-0 h-full">
+                <div className="px-1 h-full flex flex-col" data-chat-root>
                   <ChatInterface
                     projectId={projectId ?? undefined}
                     onProcessedDataChange={(data) => {
@@ -673,7 +689,7 @@ export default function ProjectPage() {
                 <X className="w-4 h-4 group-hover:scale-110 transition-transform" />
               </button>
             )}
-            <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-[calc(100vh-6rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative">
+            <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-full overflow-hidden relative">
               {!shouldShowDashboard ? (
                 <BlankState
                   subtexts={[

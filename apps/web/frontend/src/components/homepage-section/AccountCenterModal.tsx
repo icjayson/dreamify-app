@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Star, CreditCard, Bell, LogOut, LogIn, User as UserIcon } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Star, CreditCard, Bell, LogOut, LogIn, User as UserIcon, Sparkles, Check } from "lucide-react";
 import { useClerk, useUser, UserProfile } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { dark } from "@clerk/themes";
 import AccountSettings from "@/components/homepage-section/AccountSettings";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useSubscription } from "@/hooks/useSubscription";
+import { PricingPlansCenterModal } from "@/components/homepage-section/pricing-plans-center-modal";
 
-type AccountCenterTab = "pricing" | "account" | "billing" | "notifications";
+type AccountCenterTab = "pricing" | "account" | "billing" | "notifications" | "plans";
 
 interface AccountCenterModalProps {
   open: boolean;
@@ -102,10 +104,9 @@ const PricingContent: React.FC = () => {
           <div className="mt-3"><span className="text-4xl font-bold text-white">$25</span><span className="text-white/70 text-sm"> / month</span></div>
           <ul className="my-4 space-y-2 text-sm text-white/80">
             <li>1,000 credits / month</li>
-            <li>30-day data retention</li>
-            <li>Custom domains</li>
+            <li>Advanced AI reasoning</li>
+            <li>Keep dashboards forever</li>
             <li>Remove the Dreamify badge</li>
-            <li>User roles & permissions</li>
           </ul>
           <button
             onClick={handleProUpgrade}
@@ -133,6 +134,76 @@ const PricingContent: React.FC = () => {
           </button>
         </div>
       </div>
+    </div>
+  );
+};
+
+const PlansCreditsContent: React.FC = () => {
+  const { creditsRemaining, creditUsage } = useSubscription();
+  const tierLimit = 1000;
+  const used = creditUsage?.monthly_credits_used ?? (tierLimit - creditsRemaining);
+  const pct = tierLimit > 0 ? Math.max(0, Math.min(1, creditsRemaining / tierLimit)) : 0;
+
+  return (
+    <div className="w-full p-6">
+      <div className="mb-1">
+        <h2 className="text-xl font-semibold text-white">Plans & credits</h2>
+        <p className="text-sm text-white/50 mt-1">Manage your subscription plan and credit balance.</p>
+      </div>
+
+      {/* Top section: Plan info + Credits */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+        {/* Current Plan Card */}
+        <div className="col-span-1 w-full rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <img src="/logo-white.png" alt="Dreamify" className="w-12 h-6 object-contain" />
+            <div>
+              <p className="text-white font-semibold">You're on Pro plan</p>
+              <p className="text-xs text-white/40">Early access member</p>
+            </div>
+          </div>
+          <div className="space-y-0 text-sm text-white/70">
+            <div className="flex items-center gap-2">
+              <Check className="w-3.5 h-3.5 text-primary" />
+              <span>1,000 credits / month</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Check className="w-3.5 h-3.5 text-primary" />
+              <span>Advanced AI reasoning</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Check className="w-3.5 h-3.5 text-primary" />
+              <span>Keep dashboards forever</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Credits remaining card */}
+        <div className="col-span-2 w-full rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-white/70">Credits remaining</span>
+            <span className="text-2xl font-bold text-white tabular-nums">{creditsRemaining.toLocaleString()}</span>
+          </div>
+          <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden mb-4">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${Math.min(pct * 100, 100)}%` }}
+            />
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/80">Monthly credits</p>
+                <p className="text-[11px] text-white/40">Resets monthly on the 1st</p>
+              </div>
+              <span className="text-sm font-semibold text-white tabular-nums">{used.toLocaleString()} / {tierLimit.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Pricing Plans */}
+      <PricingPlansCenterModal className="mt-6" />
     </div>
   );
 };
@@ -233,6 +304,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
     const items = [];
     if (isSignedIn) {
       items.push(
+        { key: "plans" as AccountCenterTab, label: "Plans & credits", icon: <Sparkles className="w-4 h-4" /> },
         { key: "account" as AccountCenterTab, label: "Manage Account", icon: <UserIcon className="w-4 h-4" /> },
         /* { key: "billing" as AccountCenterTab, label: "Billing", icon: <CreditCard className="w-4 h-4" /> },
         { key: "notifications" as AccountCenterTab, label: "Notifications", icon: <Bell className="w-4 h-4" /> },*/
@@ -243,7 +315,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
 
   if (!open) return null;
 
-  return (
+  const modalContent = (
     <>
       {/* Mobile: Single Sheet toggling between Settings list and Content (sm:hidden) */}
       {open && !isDesktop && (
@@ -334,6 +406,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
                   {/* Content body */}
                   <div className="flex-1 overflow-y-auto">
                     {(isSignedIn ? mobileActiveTab : 'pricing') === "pricing" && <PricingContent />}
+                    {isSignedIn && mobileActiveTab === "plans" && <PlansCreditsContent />}
                     {isSignedIn && mobileActiveTab === "account" && <AccountSettings />}
                     {isSignedIn && mobileActiveTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-white" />} />}
                     {isSignedIn && mobileActiveTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-white" />} />}
@@ -414,6 +487,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
           {/* Content */}
           <section className="h-full overflow-y-auto">
             {(isSignedIn ? activeTab : 'pricing') === "pricing" && <PricingContent />}
+            {isSignedIn && activeTab === "plans" && <PlansCreditsContent />}
             {isSignedIn && activeTab === "account" && <AccountSettings />}
             {isSignedIn && activeTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-white" />} />}
             {isSignedIn && activeTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-white" />} />}
@@ -422,6 +496,8 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
       </div>
     </>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : modalContent;
 };
 
 export default AccountCenterModal;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { PanelLeftClose, SquarePlus, Ellipsis, SquareArrowOutUpRight } from "lucide-react";
+import { PanelLeftClose, SquarePlus, Ellipsis, SquareArrowOutUpRight, Plug, LayoutDashboard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface ProjectsSidebarProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface ProjectsSidebarProps {
 
 
 const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewProject, recents, isLoading, onOpenProject, onRenameProject, onDeleteProject, className }) => {
+  const navigate = useNavigate();
   const [sidebarShown, setSidebarShown] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -91,7 +93,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
       />
       <div className={`absolute left-0 top-0 h-full w-[280px] max-w-[80vw] ${className || 'bg-muted/80'} border-r border-border p-4 flex flex-col transform transition-transform duration-300 ease-out ${sidebarShown ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between mb-4">
-          <div className="text-white/90 font-medium">My projects</div>
+          <div className="text-white/90 font-medium">My workspace</div>
           <button onClick={onClose} className="text-white/70 hover:text-white text-sm" aria-label="Close projects">
             <PanelLeftClose className="w-4 h-4" />
           </button>
@@ -103,8 +105,24 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
           <SquarePlus className="w-4 h-4 text-white/70" />
           <span>New project</span>
         </button>
+        {/* Connectors */}
+        <button
+          className="w-full text-left px-3 py-2 mt-2 rounded-md text-sm flex items-center gap-2 hover:bg-black/30 transition-colors text-white/80"
+          onClick={() => { onClose(); navigate('/workspace?tab=connectors'); }}
+        >
+          <Plug className="w-4 h-4 text-white/60" />
+          <span>Connectors</span>
+        </button>
+        {/* My Dashboards */}
+        <button
+          className="w-full text-left px-3 py-2 mt-2 rounded-md text-sm flex items-center gap-2 hover:bg-black/30 transition-colors text-white/80"
+          onClick={() => { onClose(); navigate('/workspace?tab=dashboards'); }}
+        >
+          <LayoutDashboard className="w-4 h-4 text-white/60" />
+          <span>My Dashboards</span>
+        </button>
         <div className="flex-1 overflow-y-auto space-y-2">
-          <div className="text-white/50 text-xs mt-10 mb-4">Recents</div>
+          <div className="text-white/50 text-xs mt-4 mb-4">Recent projects</div>
           {isLoading ? (
             <div className="text-white/50 text-xs mt-4 text-center flex items-center justify-center gap-2">
               <div className="w-3 h-3 border-2 border-white/20 border-t-white/80 rounded-full animate-spin"></div>

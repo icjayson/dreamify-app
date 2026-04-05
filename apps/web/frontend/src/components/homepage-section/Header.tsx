@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LogIn, User as UserIcon, Star, CreditCard, Bell, ChevronsUpDown, LogOut, PanelLeftOpen, Menu } from "lucide-react";
+import { LogIn, User as UserIcon, Star, CreditCard, Bell, ChevronsUpDown, LogOut, PanelLeftOpen, Menu, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, useUser, useClerk, UserProfile } from "@clerk/clerk-react";
@@ -8,6 +8,7 @@ import { dark } from "@clerk/themes";
 import { cn } from "@/lib/utils";
 import AccountCenterModal from "@/components/homepage-section/AccountCenterModal";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useSubscription } from "@/hooks/useSubscription";
 
 const Header = () => {
   const navigate = useNavigate();
@@ -15,12 +16,15 @@ const Header = () => {
   const [userProfileOpen, setUserProfileOpen] = useState(false);
   const [pricingOpen, setPricingOpen] = useState(false);
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
-  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications">("pricing");
+  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans">("pricing");
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user } = useUser();
   const { signOut } = useClerk();
   const [showProjectsBtn, setShowProjectsBtn] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { creditsRemaining, creditUsage } = useSubscription();
+  const tierLimit = 1000;
+  const creditPct = tierLimit > 0 ? creditsRemaining / tierLimit : 0;
 
   useEffect(() => {
     const handleOpen = () => setShowProjectsBtn(false);
@@ -284,6 +288,48 @@ const Header = () => {
                       <Star className="w-4 h-4 text-muted-foreground" />
                       <span className="text-sm text-foreground">Upgrade to Pro</span>
                     </button>*/}
+                      {/* Pro Plan badge */}
+                      <div className="w-full px-3 py-2.5 rounded-lg mb-1.5 relative overflow-hidden button-gradient">
+                        <div className="flex items-center justify-between relative">
+                          <div className="flex items-center gap-2.5">
+                            <Sparkles className="w-4 h-4 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]" />
+                            <span className="text-sm font-semibold text-white">Pro Plan</span>
+                          </div>
+                          <span className="text-xs font-regular tracking-wide text-white/90 bg-white/15 border border-white/20 px-2 py-0.5 rounded-full">Current plan</span>
+                        </div>
+                      </div>
+
+                      {/* Credit usage */}
+                      <div className="w-full p-2 rounded-md bg-white/10 mb-2">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-3.5 h-3.5 text-primary" />
+                            <span className="text-sm text-foreground">Credit</span>
+                          </div>
+                          <span className="text-sm font-bold text-white tabular-nums">
+                            {creditsRemaining.toLocaleString()}
+                            <span className="text-white/30 font-normal"> / {tierLimit.toLocaleString()}</span>
+                          </span>
+                        </div>
+                        <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all duration-500"
+                            style={{ width: `${Math.min(creditPct * 100, 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <p className="text-[10px] text-white/30">Resets monthly</p>
+                          <button
+                            onClick={() => { setUserMenuOpen(false); setAccountCenterTab("plans"); setAccountCenterOpen(true); }}
+                            className="text-[10px] text-white/40 hover:text-white/70 hover:underline transition-colors cursor-pointer"
+                          >
+                            Plans & credits →
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-border my-1"></div>
+
                       <button
                         onClick={() => { setUserMenuOpen(false); setAccountCenterTab("account"); setAccountCenterOpen(true); }}
                         className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors"

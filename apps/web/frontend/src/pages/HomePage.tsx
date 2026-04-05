@@ -263,6 +263,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       return;
     }
     if (!inputValue.trim()) return;
+
+    if (uploadedFiles.some(f => f.status === 'uploading')) {
+      toast({ title: "Upload in progress", description: "Please wait for the file to finish uploading.", variant: "destructive" });
+      return;
+    }
     if (uploadedFiles.length === 0 || !uploadedFiles.some(f => ['uploaded', 'processed', 'accepted'].includes(f.status))) {
       toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
       return;
@@ -962,7 +967,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
                   <Button
                     onClick={handleChatSubmit}
-                    disabled={!inputValue.trim() || isProcessing}
+                    disabled={!inputValue.trim() || isProcessing || uploadedFiles.some(f => f.status === 'uploading')}
                     className="button-gradient p-3 disabled:opacity-50"
                   >
                     {isProcessing ? (

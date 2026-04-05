@@ -107,6 +107,94 @@ class IntegrationService {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
+
+  getMetaOAuthStartUrl(): string {
+    // The backend redirects to Facebook OAuth — open this in a popup
+    return '/api/v1/integration/meta/oauth/start';
+  }
+
+  async getMetaConnectionStatus(): Promise<MetaConnectionStatusResponse> {
+    try {
+      const res = await api.get<MetaConnectionStatusResponse>(`${this.baseUrl}/meta/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectMeta(): Promise<void> {
+    await api.delete(`${this.baseUrl}/meta/disconnect`);
+  }
+
+  async fetchMetaAdAccounts(): Promise<MetaAdAccountsResponse> {
+    try {
+      const res = await api.get<MetaAdAccountsResponse>(`${this.baseUrl}/meta/accounts`);
+      if (res.success && res.data) {
+        return res.data;
+      }
+      return { success: false, ad_accounts: [], error: res.error || 'Failed to fetch Meta ad accounts' };
+    } catch (error) {
+      return { success: false, ad_accounts: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncMetaAdsData(
+    adAccountId: string,
+    projectId?: string,
+    datePreset?: string,
+    startDate?: string,
+    endDate?: string,
+    accountName?: string,
+  ): Promise<GA4SyncResponse> {
+    try {
+      const payload: MetaAdsSyncRequest = {
+        ad_account_id: adAccountId,
+        ...(projectId && { project_id: projectId }),
+        ...(datePreset && { date_preset: datePreset }),
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+        ...(accountName && { account_name: accountName }),
+      };
+      const res = await api.post<GA4SyncResponse>(`${this.baseUrl}/meta/sync`, payload);
+      if (res.success && res.data) {
+        return res.data;
+      }
+      return { success: false, error: res.error || 'Failed to sync Meta Ads data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+}
+
+export interface MetaConnectionStatusResponse {
+  connected: boolean;
+  expires_at?: string;
+  reason?: string;
+}
+
+export interface MetaAdAccount {
+  id: string;
+  name: string;
+  account_status: number;
+  currency: string;
+  timezone_name: string;
+}
+
+export interface MetaAdAccountsResponse {
+  success: boolean;
+  ad_accounts: MetaAdAccount[];
+  error?: string;
+}
+
+export interface MetaAdsSyncRequest {
+  ad_account_id: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  account_name?: string;
 }
 
 export const integrationService = new IntegrationService();
+

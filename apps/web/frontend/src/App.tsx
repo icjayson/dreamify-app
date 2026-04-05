@@ -29,6 +29,7 @@ import AdminConversationPage from "./pages/admin/conversation";
 import { useChatStore } from "./chat/useChatStore";
 import GA4IntegrationModal from "./components/chat/GA4IntegrationModal";
 import GoogleSheetsIntegrationModal from "./components/chat/GoogleSheetsIntegrationModal";
+import MetaAdsIntegrationModal from "./components/chat/MetaAdsIntegrationModal";
 
 const queryClient = new QueryClient();
 
@@ -88,6 +89,7 @@ const AppContent = () => {
       </Routes>
       <GA4IntegrationModal />
       <GoogleSheetsIntegrationModal />
+      <MetaAdsIntegrationModal />
     </>
   );
 };

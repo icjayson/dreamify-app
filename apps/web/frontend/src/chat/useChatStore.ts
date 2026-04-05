@@ -3,6 +3,7 @@ import { Message } from '@/types/message';
 import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService } from '@/services/processingService';
 import { ConversationChatRequest } from '@/services/conversationService';
+import type { AssetRecord } from '@/services/fileService';
 
 
 export interface UploadedFile {
@@ -24,6 +25,24 @@ export interface UploadedFile {
   accountName?: string;
   /** GA4 property display name */
   propertyName?: string;
+  /** True when user chose to keep a header-only / zero-row integration export (not sufficient for analysis) */
+  schemaOnly?: boolean;
+}
+
+/** Result of Meta Ads sync API (used by Meta modal for empty-data hybrid flow) */
+export interface MetaAdsSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: AssetRecord;
+  message?: string;
+}
+
+/** Files that must not trigger analysis-only flows (schema-only Meta export or legacy 0-row Meta CSV). */
+export function isNonAnalyzableUpload(file: UploadedFile): boolean {
+  if (file.schemaOnly) return true;
+  if (file.rowCount === 0 && file.sourceType === 'Meta Ads') return true;
+  return false;
 }
 
 interface ChatState {
@@ -83,6 +102,7 @@ interface ChatState {
   // Integration states
   isGoogleSheetsModalOpen: boolean;
   isGA4ModalOpen: boolean;
+  isMetaAdsModalOpen: boolean;
   googleSheetsFileId: string | null;
   googleSheetsFileName: string | null;
 
@@ -129,6 +149,7 @@ interface ChatState {
   // Integration setters
   setGoogleSheetsModalOpen: (open: boolean) => void;
   setGA4ModalOpen: (open: boolean) => void;
+  setMetaAdsModalOpen: (open: boolean) => void;
   setGoogleSheetsFileId: (id: string | null) => void;
   setGoogleSheetsFileName: (name: string | null) => void;
 
@@ -143,6 +164,7 @@ interface ChatState {
   // Sync actions
   syncGoogleSheets: (projectId?: string) => Promise<void>;
   syncGA4: (propertyId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string, propertyName?: string) => Promise<void>;
+  syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<MetaAdsSyncResult>;
 }
 
 export interface PendingAction {
@@ -194,6 +216,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingAction: null,
   isGoogleSheetsModalOpen: false,
   isGA4ModalOpen: false,
+  isMetaAdsModalOpen: false,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
   selectedModel: 'fast',
@@ -252,6 +275,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSelectedModel: (model) => set({ selectedModel: model }),
   setGoogleSheetsModalOpen: (open) => set({ isGoogleSheetsModalOpen: open }),
   setGA4ModalOpen: (open) => set({ isGA4ModalOpen: open }),
+  setMetaAdsModalOpen: (open) => set({ isMetaAdsModalOpen: open }),
   setGoogleSheetsFileId: (id) => {
     console.log('Store: setting googleSheetsFileId:', id);
     set({ googleSheetsFileId: id });
@@ -331,6 +355,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } catch (err) {
       console.error('Sync GA4 error:', err);
+      throw err;
+    }
+  },
+
+  syncMetaAds: async (adAccountId, projectId, datePreset, startDate, endDate, accountName) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncMetaAdsData(
+        adAccountId,
+        projectId,
+        datePreset || 'last_30d',
+        startDate,
+        endDate,
+        accountName || 'Meta Ads',
+      );
+
+      if (response.success && response.asset) {
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Meta Ads');
+    } catch (err) {
+      console.error('Sync Meta Ads error:', err);
       throw err;
     }
   },

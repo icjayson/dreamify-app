@@ -555,6 +555,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       setTimeout(() => useChatStore.getState().setGoogleSheetsModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'Meta') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setMetaAdsModalOpen(true), 0);
+      return;
+    }
 
     if (connector.isActive) {
       handleDataSourceSelect(connector.name);

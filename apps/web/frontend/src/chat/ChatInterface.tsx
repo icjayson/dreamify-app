@@ -9,7 +9,7 @@ import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { fileService, type UploadResponse, type AssetRecord } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
-import { useChatStore, type UploadedFile } from "@/chat/useChatStore";
+import { useChatStore, type UploadedFile, isNonAnalyzableUpload } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
@@ -390,6 +390,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     stopGeneration,
     setGoogleSheetsModalOpen,
     setGA4ModalOpen,
+    setMetaAdsModalOpen,
     isDashboardOpen,
     selectedModel,
     setSelectedModel,
@@ -601,6 +602,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
       return;
     }
+    const hasAnalyzableUpload = uploadedFiles.some(
+      (f) => ['uploaded', 'processed', 'accepted'].includes(f.status) && !isNonAnalyzableUpload(f),
+    );
+    const hasOtherContext =
+      mentionedAssetIds.length > 0 || mentionedCharts.length > 0 || projectAssets.length > 0;
+    if (!hasAnalyzableUpload && !hasOtherContext) {
+      toast({
+        title: "No data rows to analyze",
+        description:
+          "This attachment has column headers only. Widen the date range in Meta Ads sync, or upload a file with at least one data row.",
+        variant: "destructive",
+      });
+      return;
+    }
     isSendingRef.current = true;
     const messageContent = inputValue.trim();
 
@@ -686,6 +701,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const handleRetry = async () => {
     if (isSendingRef.current) return;
     if (creditUsage?.can_use_credits === false) return;
+    const hasAnalyzableUpload = uploadedFiles.some(
+      (f) => ['uploaded', 'processed', 'accepted'].includes(f.status) && !isNonAnalyzableUpload(f),
+    );
+    const hasOtherContext =
+      mentionedAssetIds.length > 0 || mentionedCharts.length > 0 || projectAssets.length > 0;
+    if (!hasAnalyzableUpload && !hasOtherContext) {
+      toast({
+        title: "No data rows to analyze",
+        description:
+          "This attachment has column headers only. Widen the date range in Meta Ads sync, or upload a file with at least one data row.",
+        variant: "destructive",
+      });
+      return;
+    }
     isSendingRef.current = true;
     try {
       const activeFiles = uploadedFiles.filter(f => f.status !== 'processed');
@@ -740,8 +769,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       const assetType = assetData?.asset_type || '';
       if (assetType === 'integration_ga4' || assetType === 'GA4') sourceType = 'GA4';
       else if (assetType === 'integration_gsheets' || assetType === 'Google Sheets') sourceType = 'Google Sheets';
+      else if (assetType === 'integration_meta_ads') sourceType = 'Meta Ads';
 
-      const newFile = {
+      const newFile: UploadedFile = {
         fileID: assetData.asset_id,
         filename: assetData.filename,
         size: assetData.size_bytes,
@@ -752,6 +782,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         columnCount: assetData.column_count,
         isFromMention: true,
         sourceType,
+        schemaOnly: sourceType === 'Meta Ads' && assetData.row_count === 0,
         // Since it's from project assets, we might not have account/property name in metadata,
         // but sourceType alone will fix "CSV" label showing as "GA4 Data".
       };
@@ -1026,6 +1057,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     if (connector.name === 'Google Sheets') {
       setDropdownOpen(false);
       setTimeout(() => setGoogleSheetsModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Meta') {
+      setDropdownOpen(false);
+      setTimeout(() => setMetaAdsModalOpen(true), 0);
       return;
     }
     if (connector.isActive) {

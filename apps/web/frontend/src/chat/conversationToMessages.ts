@@ -117,6 +117,8 @@ export function conversationNodesToMessages(
           sourceType = 'GA4';
         } else if (lowerAssetType.includes('sheet') || lowerAssetType.includes('google sheets')) {
           sourceType = 'Google Sheets';
+        } else if (lowerAssetType.includes('meta') || lowerAssetType.includes('meta_ads')) {
+          sourceType = 'Meta Ads';
         }
 
         normalized.attachment = {

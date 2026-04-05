@@ -7,6 +7,7 @@ transition to other nodes (that's handled by edges.py).
 """
 
 import os
+import csv
 import time
 import json
 import re
@@ -482,6 +483,26 @@ ROUTING RULES:
 Remember: When in doubt, consider if the user wants to SEE data (dashboard) or KNOW information (qa)."""
 
 
+def _file_has_at_least_one_data_row(file_path: str) -> bool:
+    """Return False if the file is empty or contains only a header row (no data rows)."""
+    ext = (os.path.splitext(file_path)[1] or "").lower()
+    try:
+        if ext in (".csv", ".txt"):
+            with open(file_path, newline="", encoding="utf-8", errors="replace") as f:
+                reader = csv.reader(f)
+                next(reader, None)  # header row (if any)
+                return next(reader, None) is not None
+        if ext in (".xlsx", ".xls"):
+            import pandas as pd
+
+            df = pd.read_excel(file_path, nrows=1)
+            return len(df) > 0
+    except Exception as e:
+        logger.warning(f"[START] Could not check row count for {file_path}: {e}")
+        return True
+    return True
+
+
 def node_start(state: AgentState, **kwargs) -> AgentState:
     """
     START Node: Initialize and validate user state.
@@ -514,6 +535,22 @@ def node_start(state: AgentState, **kwargs) -> AgentState:
         for idx, fp in enumerate(state.file_paths):
             file_exists = os.path.exists(fp)
             logger.info(f"  File {idx + 1}: {fp} (exists: {file_exists})")
+
+        existing = [fp for fp in state.file_paths if os.path.exists(fp)]
+        if existing and all(not _file_has_at_least_one_data_row(fp) for fp in existing):
+            msg = (
+                "The attached file(s) contain column headers but **no data rows**, so there is nothing to chart or "
+                "summarize. If this came from Meta Ads, try a wider date range or confirm the ad account has "
+                "campaign activity in that period. Upload a CSV with at least one data row to run analysis."
+            )
+            logger.info("[START] All input files are header-only / empty — short-circuiting to Q&A message")
+            state.working_memory.tool_outputs["early_exit_empty_data"] = True
+            state.working_memory.tool_outputs["route_decision"] = {
+                "next_step": "qa",
+                "reasoning": "No data rows in CSV inputs",
+            }
+            state.working_memory.qa_response = msg
+            state.output = {"type": "message", "content": msg}
     
     return state
 

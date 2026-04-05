@@ -91,6 +91,9 @@ def decide_next_node(state: AgentState) -> str:
     current = state.current_node
     
     if current == "START":
+        if state.working_memory.tool_outputs.get("early_exit_empty_data"):
+            logger.info("START → FINISH (empty CSV / header-only inputs)")
+            return "FINISH"
         return "EXPLORE_FILES"
     
     elif current == "EXPLORE_FILES":

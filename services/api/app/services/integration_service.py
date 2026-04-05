@@ -5,7 +5,12 @@ import json
 import logging
 import time
 import asyncio
-from typing import Dict, Any, Optional
+import hashlib
+import hmac
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, Optional, List
+
+import httpx
 
 from clerk_backend_api import Clerk
 from google.analytics.data_v1beta import BetaAnalyticsDataClient, BetaAnalyticsDataAsyncClient
@@ -20,6 +25,7 @@ from google.oauth2.credentials import Credentials
 
 from utils.config import config
 from utils.dynamodb.repos import assets as assets_repo
+from utils.dynamodb.repos import connected_accounts as connected_accounts_repo
 from utils.s3.client import compute_sha256_checksum, upload_bytes
 from utils.s3.paths import build_asset_key
 
@@ -124,7 +130,15 @@ class IntegrationService:
             csv_content = output.getvalue().encode('utf-8')
             
             # Save the CSV as an asset using existing infrastructure
-            asset_info = self._save_analytics_asset(user_id, project_id, csv_content, account_name, property_name)
+            asset_info = self._save_analytics_asset(
+                user_id,
+                project_id,
+                csv_content,
+                account_name,
+                property_name,
+                row_count=len(rows),
+                column_count=len(headers),
+            )
             
             return {
                 "success": True,
@@ -220,7 +234,17 @@ class IntegrationService:
                 "error": f"Failed to load Google Analytics properties. Please try again later."
             }
 
-    def _save_integration_asset(self, user_id: str, project_id: str, file_content: bytes, filename: str, asset_type: str, extension: str) -> Dict[str, Any]:
+    def _save_integration_asset(
+        self,
+        user_id: str,
+        project_id: str,
+        file_content: bytes,
+        filename: str,
+        asset_type: str,
+        extension: str,
+        row_count: Optional[int] = None,
+        column_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Save generic integration asset content as a user asset in S3 and DynamoDB."""
         asset_id = str(uuid.uuid4())
         file_id = str(uuid.uuid4())
@@ -261,20 +285,32 @@ class IntegrationService:
             file_id=file_id,
             original_filename=filename,
             extension=extension,
+            row_count=row_count,
+            column_count=column_count,
         )
         
         return asset
 
-    def _save_analytics_asset(self, user_id: str, project_id: str, csv_content: bytes, account_name: str, property_name: str) -> Dict[str, Any]:
+    def _save_analytics_asset(
+        self,
+        user_id: str,
+        project_id: str,
+        csv_content: bytes,
+        account_name: str,
+        property_name: str,
+        row_count: Optional[int] = None,
+        column_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Save the generated CSV content as a user asset in S3 and DynamoDB."""
-        asset_id = str(uuid.uuid4())
         return self._save_integration_asset(
             user_id=user_id,
             project_id=project_id,
             file_content=csv_content,
             filename=f"{account_name}/{property_name}.csv",
             asset_type="integration_ga4",
-            extension="csv"
+            extension="csv",
+            row_count=row_count,
+            column_count=column_count,
         )
 
     async def fetch_google_sheet_data(self, user_id: str, file_id: str, project_id: str) -> Dict[str, Any]:
@@ -347,7 +383,9 @@ class IntegrationService:
                 file_content=csv_content,
                 filename=filename,
                 asset_type="integration_gsheets",
-                extension="csv"
+                extension="csv",
+                row_count=row_count,
+                column_count=len(headers),
             )
             
             return {
@@ -360,5 +398,309 @@ class IntegrationService:
         except Exception as e:
             logger.error(f"Failed to fetch Google Sheet data: {e}")
             raise Exception(f"Failed to fetch Google Sheet data: {str(e)}")
+
+    # ── Meta OAuth helpers ────────────────────────────────────────────────────
+
+    def _meta_config(self):
+        if not config.meta:
+            raise ValueError("Meta configuration is missing from config.yaml. Add app_id, app_secret, and redirect_uri under the 'meta:' key.")
+        return config.meta
+
+    def _make_meta_state(self, user_id: str) -> str:
+        """Create a signed, time-limited state token for CSRF protection."""
+        ts = int(datetime.now(timezone.utc).timestamp())
+        payload = f"{user_id}:{ts}"
+        sig = hmac.new(
+            config.app.secret_key.encode(),
+            payload.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        return f"{payload}:{sig}"
+
+    def _verify_meta_state(self, state: str, max_age_seconds: int = 600) -> Optional[str]:
+        """Verify the state token and return the user_id, or None if invalid."""
+        try:
+            parts = state.split(":")
+            if len(parts) != 3:
+                return None
+            user_id, ts_str, sig = parts
+            expected = hmac.new(
+                config.app.secret_key.encode(),
+                f"{user_id}:{ts_str}".encode(),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                return None
+            age = int(datetime.now(timezone.utc).timestamp()) - int(ts_str)
+            if age > max_age_seconds:
+                return None
+            return user_id
+        except Exception:
+            return None
+
+    def get_meta_oauth_url(self, user_id: str) -> str:
+        """Return the Facebook OAuth URL for the user to authorize."""
+        meta = self._meta_config()
+        state = self._make_meta_state(user_id)
+        params = {
+            "client_id": meta.app_id,
+            "redirect_uri": meta.redirect_uri,
+            "scope": "ads_read",
+            "response_type": "code",
+            "state": state,
+        }
+        query = "&".join(f"{k}={v}" for k, v in params.items())
+        return f"https://www.facebook.com/v21.0/dialog/oauth?{query}"
+
+    async def handle_meta_oauth_callback(self, code: str, state: str) -> str:
+        """Exchange the authorization code for a long-lived token, store it, return user_id."""
+        user_id = self._verify_meta_state(state)
+        if not user_id:
+            raise ValueError("Invalid or expired OAuth state.")
+
+        meta = self._meta_config()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Step 1: exchange code for short-lived token
+            resp = await client.get(
+                "https://graph.facebook.com/v21.0/oauth/access_token",
+                params={
+                    "client_id": meta.app_id,
+                    "client_secret": meta.app_secret,
+                    "redirect_uri": meta.redirect_uri,
+                    "code": code,
+                },
+            )
+            resp.raise_for_status()
+            short_lived_token = resp.json()["access_token"]
+
+            # Step 2: exchange for long-lived token (~60 days)
+            resp2 = await client.get(
+                "https://graph.facebook.com/v21.0/oauth/access_token",
+                params={
+                    "grant_type": "fb_exchange_token",
+                    "client_id": meta.app_id,
+                    "client_secret": meta.app_secret,
+                    "fb_exchange_token": short_lived_token,
+                },
+            )
+            resp2.raise_for_status()
+            data = resp2.json()
+            long_lived_token = data["access_token"]
+            expires_in = data.get("expires_in", 5184000)  # default 60 days
+            expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
+
+        connected_accounts_repo.save_connection(
+            user_id=user_id,
+            provider="facebook",
+            access_token=long_lived_token,
+            expires_at=expires_at,
+        )
+        return user_id
+
+    def _get_facebook_access_token(self, user_id: str) -> Optional[str]:
+        """Retrieve the stored Facebook access token from DynamoDB."""
+        record = connected_accounts_repo.get_connection(user_id, "facebook")
+        if not record:
+            return None
+        # Check expiry
+        try:
+            expires_at = datetime.fromisoformat(record["expires_at"].replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) >= expires_at:
+                logger.warning(f"Facebook token expired for user {user_id}")
+                return None
+        except Exception:
+            pass
+        return record.get("access_token")
+
+    def get_meta_connection_status(self, user_id: str) -> Dict[str, Any]:
+        """Return whether the user has a valid stored Facebook token."""
+        record = connected_accounts_repo.get_connection(user_id, "facebook")
+        if not record:
+            return {"connected": False}
+        try:
+            expires_at = datetime.fromisoformat(record["expires_at"].replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) >= expires_at:
+                return {"connected": False, "reason": "expired"}
+        except Exception:
+            pass
+        return {"connected": True, "expires_at": record.get("expires_at")}
+
+    def disconnect_meta(self, user_id: str) -> None:
+        """Remove the stored Facebook token."""
+        connected_accounts_repo.delete_connection(user_id, "facebook")
+
+    # ── Meta Ads data ─────────────────────────────────────────────────────────
+
+    async def fetch_meta_ad_accounts(self, user_id: str) -> Dict[str, Any]:
+        """Fetch all Meta ad accounts the user has access to."""
+        access_token = self._get_facebook_access_token(user_id)
+        if not access_token:
+            return {
+                "success": False,
+                "ad_accounts": [],
+                "error": "Facebook account not connected or token expired. Please connect via the Meta Ads modal."
+            }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    "https://graph.facebook.com/v21.0/me/adaccounts",
+                    params={
+                        "fields": "id,name,account_status,currency,timezone_name",
+                        "access_token": access_token,
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+
+            ad_accounts = []
+            for account in data.get("data", []):
+                ad_accounts.append({
+                    "id": account.get("id", ""),
+                    "name": account.get("name", ""),
+                    "account_status": account.get("account_status", 0),
+                    "currency": account.get("currency", ""),
+                    "timezone_name": account.get("timezone_name", ""),
+                })
+
+            return {"success": True, "ad_accounts": ad_accounts}
+
+        except httpx.HTTPStatusError as e:
+            error_body = e.response.text
+            logger.error(f"Meta API error fetching ad accounts: {e.response.status_code} {error_body}")
+            if e.response.status_code in (401, 403):
+                return {
+                    "success": False,
+                    "ad_accounts": [],
+                    "error": "Facebook access denied. Please reconnect your Facebook account and grant Ads permissions."
+                }
+            return {
+                "success": False,
+                "ad_accounts": [],
+                "error": f"Meta API error ({e.response.status_code}). Please try again later."
+            }
+        except Exception as e:
+            logger.error(f"Failed to fetch Meta ad accounts: {e}")
+            return {
+                "success": False,
+                "ad_accounts": [],
+                "error": "Failed to load Meta ad accounts. Please try again later."
+            }
+
+    def _extract_action(self, actions: List[Dict], action_type: str) -> str:
+        """Extract the value of a specific action type from Meta's actions array."""
+        for action in (actions or []):
+            if action.get("action_type") == action_type:
+                return action.get("value", "0")
+        return "0"
+
+    async def fetch_meta_ads_data(
+        self,
+        user_id: str,
+        ad_account_id: str,
+        project_id: str,
+        date_preset: Optional[str] = "last_30d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        account_name: str = "",
+    ) -> Dict[str, Any]:
+        """Fetch Meta Ads insights data and save it as a CSV asset."""
+        access_token = self._get_facebook_access_token(user_id)
+        if not access_token:
+            raise ValueError("Facebook account not connected or token expired. Please reconnect via the Meta Ads modal.")
+
+        try:
+            fields = (
+                "campaign_id,campaign_name,date_start,date_stop,"
+                "impressions,clicks,reach,spend,ctr,cpc,cpm,frequency,actions"
+            )
+            params: Dict[str, Any] = {
+                "fields": fields,
+                "level": "campaign",
+                "limit": 500,
+                "access_token": access_token,
+            }
+
+            if start_date and end_date:
+                params["time_range"] = json.dumps({"since": start_date, "until": end_date})
+            else:
+                params["date_preset"] = date_preset or "last_30d"
+
+            url = f"https://graph.facebook.com/v21.0/{ad_account_id}/insights"
+            all_rows = []
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                while url:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                    all_rows.extend(data.get("data", []))
+
+                    paging = data.get("paging", {})
+                    url = paging.get("next")
+                    params = {}  # next URL already contains all params
+
+            headers = [
+                "campaign_id", "campaign_name", "date_start", "date_stop",
+                "impressions", "clicks", "reach", "spend",
+                "ctr", "cpc", "cpm", "frequency",
+                "link_clicks", "post_engagements", "purchases", "leads",
+            ]
+
+            csv_rows = []
+            for row in all_rows:
+                actions = row.get("actions", [])
+                csv_rows.append([
+                    row.get("campaign_id", ""),
+                    row.get("campaign_name", ""),
+                    row.get("date_start", ""),
+                    row.get("date_stop", ""),
+                    row.get("impressions", "0"),
+                    row.get("clicks", "0"),
+                    row.get("reach", "0"),
+                    row.get("spend", "0"),
+                    row.get("ctr", "0"),
+                    row.get("cpc", "0"),
+                    row.get("cpm", "0"),
+                    row.get("frequency", "0"),
+                    self._extract_action(actions, "link_click"),
+                    self._extract_action(actions, "post_engagement"),
+                    self._extract_action(actions, "purchase"),
+                    self._extract_action(actions, "lead"),
+                ])
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(headers)
+            writer.writerows(csv_rows)
+            csv_content = output.getvalue().encode("utf-8")
+
+            safe_account_name = account_name.replace("/", "_") or "meta_ads"
+            asset_info = self._save_integration_asset(
+                user_id=user_id,
+                project_id=project_id,
+                file_content=csv_content,
+                filename=f"{safe_account_name}.csv",
+                asset_type="integration_meta_ads",
+                extension="csv",
+                row_count=len(csv_rows),
+                column_count=len(headers),
+            )
+
+            return {
+                "success": True,
+                "message": "Meta Ads data synced successfully",
+                "asset": asset_info,
+                "row_count": len(csv_rows),
+                "column_count": len(headers),
+            }
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Meta API error fetching ads data: {e.response.status_code} {e.response.text}")
+            raise Exception(f"Meta API error ({e.response.status_code}): {e.response.text}")
+        except Exception as e:
+            logger.error(f"Failed to fetch Meta Ads data: {e}")
+            raise Exception(f"Failed to fetch Meta Ads data: {str(e)}")
+
 
 integration_service = IntegrationService()

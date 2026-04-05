@@ -133,6 +133,18 @@ def _get_file_metadata(data: bytes, extension: str) -> Dict[str, Optional[int]]:
 
 
 def _map_asset(item: dict, row_count: Optional[int] = None, column_count: Optional[int] = None) -> AssetResponse:
+    rc = row_count if row_count is not None else item.get("row_count")
+    cc = column_count if column_count is not None else item.get("column_count")
+    if isinstance(rc, str):
+        try:
+            rc = int(rc)
+        except ValueError:
+            rc = None
+    if isinstance(cc, str):
+        try:
+            cc = int(cc)
+        except ValueError:
+            cc = None
     return AssetResponse(
         asset_id=item["asset_id"],
         file_id=item.get("file_id", item["asset_id"]),
@@ -146,8 +158,8 @@ def _map_asset(item: dict, row_count: Optional[int] = None, column_count: Option
         size_bytes=int(item.get("size_bytes", 0)),
         processed_json_s3_key=item.get("processed_json_s3_key"),
         created_at=item.get("created_at"),
-        row_count=row_count,
-        column_count=column_count,
+        row_count=rc,
+        column_count=cc,
     )
 
 

@@ -32,6 +32,8 @@ def create_asset(
     file_id: Optional[str] = None,
     original_filename: Optional[str] = None,
     extension: Optional[str] = None,
+    row_count: Optional[int] = None,
+    column_count: Optional[int] = None,
 ) -> Dict:
     table = get_table(tables.assets)
     asset_id = asset_id or str(uuid.uuid4())
@@ -54,6 +56,10 @@ def create_asset(
         "updated_at": _now_iso(),
         "processed_json_s3_key": None,
     }
+    if row_count is not None:
+        item["row_count"] = row_count
+    if column_count is not None:
+        item["column_count"] = column_count
     table.put_item(Item=item)
     return item
 

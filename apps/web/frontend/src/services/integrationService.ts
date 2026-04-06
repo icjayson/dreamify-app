@@ -179,11 +179,15 @@ export interface MetaAdAccount {
   account_status: number;
   currency: string;
   timezone_name: string;
+  source_type: 'personal' | 'business';
+  business_id?: string;
+  business_name?: string;
 }
 
 export interface MetaAdAccountsResponse {
   success: boolean;
   ad_accounts: MetaAdAccount[];
+  has_business_management?: boolean;
   error?: string;
 }
 

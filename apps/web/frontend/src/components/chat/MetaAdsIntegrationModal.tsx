@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { integrationService, MetaAdAccount, MetaConnectionStatusResponse } from '@/services/integrationService';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, AlertCircle, CalendarIcon, Link2, Link2Off, SearchX } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
@@ -46,6 +46,9 @@ export default function MetaAdsIntegrationModal() {
   const [datePreset, setDatePreset] = useState<string>('last_30d');
   const [startDate, setStartDate] = useState<Date | undefined>(subDays(new Date(), 30));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+
+  // Business management scope flag: null=unknown, true=has scope, false=lacks scope
+  const [hasBizMgmt, setHasBizMgmt] = useState<boolean | null>(null);
 
   // Sync state
   const [syncing, setSyncing] = useState(false);
@@ -117,6 +120,7 @@ export default function MetaAdsIntegrationModal() {
     setEndDate(new Date());
     setError(null);
     setConnecting(false);
+    setHasBizMgmt(null);
     setEmptyRowsDialog(null);
     setDiscardingEmpty(false);
   };
@@ -139,6 +143,7 @@ export default function MetaAdsIntegrationModal() {
       const response = await integrationService.fetchMetaAdAccounts();
       if (response.success) {
         setAdAccounts(response.ad_accounts || []);
+        setHasBizMgmt(response.has_business_management ?? null);
         if (response.ad_accounts?.length > 0) {
           setSelectedAccountId(response.ad_accounts[0].id);
         }
@@ -207,13 +212,19 @@ export default function MetaAdsIntegrationModal() {
     setError(null);
     try {
       const selectedAccount = adAccounts.find((a) => a.id === selectedAccountId);
+      const accountLabel = selectedAccount
+        ? selectedAccount.source_type === 'business' && selectedAccount.business_name
+          ? `${selectedAccount.business_name} — ${selectedAccount.name}`
+          : selectedAccount.name
+        : 'Meta Ads';
+
       const result = await syncMetaAds(
         selectedAccountId,
         currentProjectId || undefined,
         isCustomRange ? undefined : datePreset,
         isCustomRange && startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
         isCustomRange && endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
-        selectedAccount?.name,
+        accountLabel,
       );
 
       if (result.row_count > 0) {
@@ -226,8 +237,8 @@ export default function MetaAdsIntegrationModal() {
             status: 'uploaded',
             projectId: result.asset.project_id || undefined,
             sourceType: 'Meta Ads',
-            accountName: selectedAccount?.name || 'Meta Ads',
-            propertyName: selectedAccount?.name || result.asset.filename,
+            accountName: accountLabel,
+            propertyName: accountLabel,
             rowCount: result.row_count,
             columnCount: result.column_count,
             schemaOnly: false,
@@ -239,7 +250,7 @@ export default function MetaAdsIntegrationModal() {
 
       setEmptyRowsDialog({
         asset: result.asset,
-        accountLabel: selectedAccount?.name || 'Meta Ads',
+        accountLabel,
         columnCount: result.column_count,
       });
     } catch (err: any) {
@@ -392,15 +403,70 @@ export default function MetaAdsIntegrationModal() {
                         <SelectValue placeholder="Select an ad account" />
                       </SelectTrigger>
                       <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                        {adAccounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id} className="focus:bg-white/10 focus:text-white">
-                            {account.name}
-                            {account.currency ? ` (${account.currency})` : ''}
-                          </SelectItem>
-                        ))}
+                        {/* Personal accounts group */}
+                        {(() => {
+                          const personal = adAccounts.filter(a => a.source_type === 'personal');
+                          const bizGroups = adAccounts.reduce<Record<string, MetaAdAccount[]>>((acc, a) => {
+                            if (a.source_type === 'business' && a.business_name) {
+                              const k = a.business_id ?? a.business_name;
+                              acc[k] = [...(acc[k] ?? []), a];
+                            }
+                            return acc;
+                          }, {});
+                          const hasBizAccounts = Object.keys(bizGroups).length > 0;
+
+                          return (
+                            <>
+                              {personal.length > 0 && (
+                                <SelectGroup>
+                                  {hasBizAccounts && (
+                                    <SelectLabel className="text-xs text-gray-500 uppercase tracking-wide px-2 py-1">
+                                      Personal
+                                    </SelectLabel>
+                                  )}
+                                  {personal.map(a => (
+                                    <SelectItem key={a.id} value={a.id} className="focus:bg-white/10 focus:text-white">
+                                      {a.name}{a.currency ? ` (${a.currency})` : ''}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              )}
+                              {Object.entries(bizGroups).map(([k, accounts]) => (
+                                <SelectGroup key={k}>
+                                  <SelectLabel className="text-xs text-gray-500 uppercase tracking-wide px-2 py-1">
+                                    {accounts[0].business_name}
+                                  </SelectLabel>
+                                  {accounts.map(a => (
+                                    <SelectItem key={a.id} value={a.id} className="focus:bg-white/10 focus:text-white">
+                                      {a.name}{a.currency ? ` (${a.currency})` : ''}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              ))}
+                            </>
+                          );
+                        })()}
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Reconnect notice — shown when token lacks business_management scope */}
+                  {hasBizMgmt === false && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2 text-amber-400 text-sm">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span>
+                        Only personal ad accounts are shown.{' '}
+                        <button
+                          type="button"
+                          className="underline hover:text-amber-300 transition-colors"
+                          onClick={handleConnect}
+                        >
+                          Reconnect Meta
+                        </button>{' '}
+                        to also access Business Suite accounts.
+                      </span>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-200">Date Range</label>

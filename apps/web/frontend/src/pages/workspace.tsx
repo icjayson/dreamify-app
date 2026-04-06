@@ -117,7 +117,8 @@ export default function WorkspacePage() {
   const { 
     setGA4ModalOpen, 
     setGoogleSheetsModalOpen, 
-    setMetaAdsModalOpen 
+    setMetaAdsModalOpen,
+    setTikTokModalOpen
   } = useChatStore();
 
   const handleIntegrationClick = (connectorName: string) => {
@@ -127,6 +128,8 @@ export default function WorkspacePage() {
       setGoogleSheetsModalOpen(true);
     } else if (connectorName === 'Meta') {
       setMetaAdsModalOpen(true);
+    } else if (connectorName === 'TikTok') {
+      setTikTokModalOpen(true);
     }
   };
 
@@ -149,6 +152,22 @@ export default function WorkspacePage() {
         }
       } else {
         results["Meta"] = { connected: false };
+      }
+
+      const tiktokStatus = await integrationService.getTikTokConnectionStatus();
+      if (tiktokStatus.connected) {
+        try {
+          const ttAccounts = await integrationService.fetchTikTokAdAccounts();
+          const firstTTAccount = ttAccounts.ad_accounts?.[0];
+          results["TikTok"] = {
+            connected: true,
+            info: firstTTAccount ? `Account: ${firstTTAccount.name}` : "Account: TikTok Ads",
+          };
+        } catch (_) {
+          results["TikTok"] = { connected: true, info: "Account: TikTok Ads" };
+        }
+      } else {
+        results["TikTok"] = { connected: false };
       }
 
       const googleToken = await integrationService.getGoogleOAuthToken();
@@ -398,7 +417,8 @@ export default function WorkspacePage() {
                     return (
                       <Card
                         key={connector.name}
-                        className={`p-4 transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40"}`}
+                        onClick={() => !isSoon && handleIntegrationClick(connector.name)}
+                        className={`p-4 transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40 cursor-pointer"}`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
@@ -406,7 +426,7 @@ export default function WorkspacePage() {
                               <img
                                 src={connector.icon}
                                 alt={connector.name}
-                                className="w-7 h-7 object-contain"
+                                className={`w-7 h-7 object-contain ${connector.name === 'TikTok' ? 'scale-125' : ''}`}
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                               />
                             </div>

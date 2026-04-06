@@ -391,6 +391,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setGoogleSheetsModalOpen,
     setGA4ModalOpen,
     setMetaAdsModalOpen,
+    setTikTokModalOpen,
     isDashboardOpen,
     selectedModel,
     setSelectedModel,
@@ -1064,6 +1065,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       setTimeout(() => setMetaAdsModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'TikTok') {
+      setDropdownOpen(false);
+      setTimeout(() => setTikTokModalOpen(true), 0);
+      return;
+    }
     if (connector.isActive) {
       handleDataSourceSelect(connector.name);
     } else {
@@ -1138,6 +1144,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       "Google Sheets": { bg: "bg-green-500", border: "border-green-400", text: "text-white", hover: "hover:bg-green-600" },
       "GA4": { bg: "bg-orange-500", border: "border-orange-400", text: "text-white", hover: "hover:bg-orange-600" },
       "Meta": { bg: "bg-blue-600", border: "border-blue-500", text: "text-white", hover: "hover:bg-blue-700" },
+      "TikTok": { bg: "bg-zinc-900", border: "border-zinc-800", text: "text-white", hover: "hover:bg-black" },
       "Airtable": { bg: "bg-blue-400", border: "border-blue-300", text: "text-white", hover: "hover:bg-blue-500" },
       "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
@@ -1200,16 +1207,17 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           const isMultiple = sType === 'Multiple';
                           const isGA4 = !isMultiple && (sType.includes('GA4') || sType.includes('Google Analytics') || sType.includes('integration_ga4') || sType.toLowerCase().includes('google_analytics'));
                           const isSheets = !isMultiple && (sType.includes('Google Sheets') || sType.includes('gsheets') || sType.includes('integration_gsheets') || sType.toLowerCase().includes('google_sheet'));
-
                           const isMeta = !isMultiple && (sType.includes('Meta') || sType.includes('meta'));
+                          const isTikTok = !isMultiple && (sType.includes('TikTok') || sType.includes('tiktok') || sType.includes('integration_tiktok'));
 
-                          const displayName = isMultiple ? "Multiple Data Sources" : isGA4 ? "Google Analytics 4" : isSheets ? "Google Sheets" : isMeta ? "Meta Ads" : "Attached Data";
-                          const logoBg = isMultiple ? "bg-indigo-500/10" : isGA4 ? "bg-orange-500/10" : isSheets ? "bg-green-500/10" : isMeta ? "bg-blue-500/10" : "bg-white/10";
+                          const displayName = isMultiple ? "Multiple Data Sources" : isGA4 ? "Google Analytics 4" : isSheets ? "Google Sheets" : isMeta ? "Meta Ads" : isTikTok ? "TikTok Ads" : "Attached Data";
+                          const logoBg = isMultiple ? "bg-indigo-500/10" : isGA4 ? "bg-orange-500/10" : isSheets ? "bg-green-500/10" : isMeta ? "bg-blue-500/10" : isTikTok ? "bg-zinc-900/10" : "bg-white/10";
 
                           const connector = isMultiple ? undefined : CONNECTORS.find(c => {
                             if (isGA4 && c.name === 'GA4') return true;
                             if (isSheets && c.name === 'Google Sheets') return true;
                             if (isMeta && c.name === 'Meta') return true;
+                            if (isTikTok && c.name === 'TikTok') return true;
                             return false;
                           });
                           const icon = connector?.icon;
@@ -1244,7 +1252,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                                 >
                                   <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md p-2 ${logoBg}`}>
                                     {icon ? (
-                                      <img src={icon} className="h-full w-full object-contain" alt="" />
+                                      <img src={icon} className={`h-full w-full object-contain ${isTikTok ? 'scale-125' : ''}`} alt="" />
                                     ) : (
                                       <Database className="h-5 w-5 text-emerald-400" />
                                     )}
@@ -1807,7 +1815,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                             onClick={() => handleIntegrationClick(connector)}
                             className="w-full px-3 py-2 text-left text-sm flex items-center hover:bg-white/10 rounded-md transition-colors duration-200 cursor-pointer"
                           >
-                            <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
+                            <img 
+                                src={connector.icon} 
+                                alt={connector.name} 
+                                className={`w-4 h-4 object-cover ${connector.name === 'TikTok' ? 'scale-125' : ''}`} 
+                              />
                             {connector.name && <span className="pl-2">{connector.name}</span>}
                             {!connector.isActive && <span className="text-xs text-white/30 pl-1">(SOON)</span>}
                           </button>

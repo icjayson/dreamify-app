@@ -185,6 +185,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       "Google Sheets": { bg: "bg-green-500", border: "border-green-400", text: "text-white", hover: "hover:bg-green-600" },
       "GA4": { bg: "bg-orange-500", border: "border-orange-400", text: "text-white", hover: "hover:bg-orange-600" },
       "Meta": { bg: "bg-blue-600", border: "border-blue-500", text: "text-white", hover: "hover:bg-blue-700" },
+      "TikTok": { bg: "bg-zinc-900", border: "border-zinc-800", text: "text-white", hover: "hover:bg-black" },
       "Airtable": { bg: "bg-blue-400", border: "border-blue-300", text: "text-white", hover: "hover:bg-blue-500" },
       "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
@@ -565,6 +566,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       setTimeout(() => useChatStore.getState().setMetaAdsModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'TikTok') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setTikTokModalOpen(true), 0);
+      return;
+    }
 
     if (connector.isActive) {
       handleDataSourceSelect(connector.name);
@@ -906,7 +912,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                               onClick={() => handleIntegrationClick(connector)}
                               className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 rounded-md transition-colors duration-200 flex items-center cursor-pointer"
                             >
-                              <img src={connector.icon} alt={connector.name} className="w-4 h-4 object-cover" />
+                              <img 
+                                src={connector.icon} 
+                                alt={connector.name} 
+                                className={`w-4 h-4 object-cover ${connector.name === 'TikTok' ? 'scale-125' : ''}`} 
+                              />
                               {connector.name && <span className="pl-2">{connector.name}</span>}
                               {!connector.isActive && <span className="text-xs text-white/30 pl-1">(SOON)</span>}
                             </button>

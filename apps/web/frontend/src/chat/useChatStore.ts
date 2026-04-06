@@ -38,10 +38,19 @@ export interface MetaAdsSyncResult {
   message?: string;
 }
 
-/** Files that must not trigger analysis-only flows (schema-only Meta export or legacy 0-row Meta CSV). */
+/** Result of TikTok Ads sync API */
+export interface TikTokAdsSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: AssetRecord;
+  message?: string;
+}
+
+/** Files that must not trigger analysis-only flows. */
 export function isNonAnalyzableUpload(file: UploadedFile): boolean {
   if (file.schemaOnly) return true;
-  if (file.rowCount === 0 && file.sourceType === 'Meta Ads') return true;
+  if (file.rowCount === 0 && (file.sourceType === 'Meta Ads' || file.sourceType === 'TikTok Ads')) return true;
   return false;
 }
 
@@ -103,6 +112,7 @@ interface ChatState {
   isGoogleSheetsModalOpen: boolean;
   isGA4ModalOpen: boolean;
   isMetaAdsModalOpen: boolean;
+  isTikTokModalOpen: boolean;
   googleSheetsFileId: string | null;
   googleSheetsFileName: string | null;
 
@@ -150,6 +160,7 @@ interface ChatState {
   setGoogleSheetsModalOpen: (open: boolean) => void;
   setGA4ModalOpen: (open: boolean) => void;
   setMetaAdsModalOpen: (open: boolean) => void;
+  setTikTokModalOpen: (open: boolean) => void;
   setGoogleSheetsFileId: (id: string | null) => void;
   setGoogleSheetsFileName: (name: string | null) => void;
 
@@ -165,6 +176,7 @@ interface ChatState {
   syncGoogleSheets: (projectId?: string) => Promise<void>;
   syncGA4: (propertyId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string, propertyName?: string) => Promise<void>;
   syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<MetaAdsSyncResult>;
+  syncTikTokAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<TikTokAdsSyncResult>;
 }
 
 export interface PendingAction {
@@ -217,6 +229,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isGoogleSheetsModalOpen: false,
   isGA4ModalOpen: false,
   isMetaAdsModalOpen: false,
+  isTikTokModalOpen: false,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
   selectedModel: 'fast',
@@ -276,6 +289,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setGoogleSheetsModalOpen: (open) => set({ isGoogleSheetsModalOpen: open }),
   setGA4ModalOpen: (open) => set({ isGA4ModalOpen: open }),
   setMetaAdsModalOpen: (open) => set({ isMetaAdsModalOpen: open }),
+  setTikTokModalOpen: (open) => set({ isTikTokModalOpen: open }),
   setGoogleSheetsFileId: (id) => {
     console.log('Store: setting googleSheetsFileId:', id);
     set({ googleSheetsFileId: id });
@@ -383,6 +397,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync Meta Ads');
     } catch (err) {
       console.error('Sync Meta Ads error:', err);
+      throw err;
+    }
+  },
+
+  syncTikTokAds: async (adAccountId, projectId, datePreset, startDate, endDate, accountName) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncTikTokAdsData(
+        adAccountId,
+        projectId,
+        datePreset || 'last_30d',
+        startDate,
+        endDate,
+        accountName || 'TikTok Ads',
+      );
+
+      if (response.success && response.asset) {
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync TikTok Ads');
+    } catch (err) {
+      console.error('Sync TikTok Ads error:', err);
       throw err;
     }
   },

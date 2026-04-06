@@ -30,6 +30,7 @@ import { useChatStore } from "./chat/useChatStore";
 import GA4IntegrationModal from "./components/chat/GA4IntegrationModal";
 import GoogleSheetsIntegrationModal from "./components/chat/GoogleSheetsIntegrationModal";
 import MetaAdsIntegrationModal from "./components/chat/MetaAdsIntegrationModal";
+import TikTokIntegrationModal from "./components/chat/TikTokIntegrationModal";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,7 @@ const AppContent = () => {
       <GA4IntegrationModal />
       <GoogleSheetsIntegrationModal />
       <MetaAdsIntegrationModal />
+      <TikTokIntegrationModal />
     </>
   );
 };

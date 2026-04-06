@@ -165,6 +165,63 @@ class IntegrationService {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
+
+  getTikTokOAuthStartUrl(): string {
+    return '/api/v1/integration/tiktok/oauth/start';
+  }
+
+  async getTikTokConnectionStatus(): Promise<TikTokConnectionStatusResponse> {
+    try {
+      const res = await api.get<TikTokConnectionStatusResponse>(`${this.baseUrl}/tiktok/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectTikTok(): Promise<void> {
+    await api.delete(`${this.baseUrl}/tiktok/disconnect`);
+  }
+
+  async fetchTikTokAdAccounts(): Promise<TikTokAdAccountsResponse> {
+    try {
+      const res = await api.get<TikTokAdAccountsResponse>(`${this.baseUrl}/tiktok/accounts`);
+      if (res.success && res.data) {
+        return res.data;
+      }
+      return { success: false, ad_accounts: [], error: res.error || 'Failed to fetch TikTok ad accounts' };
+    } catch (error) {
+      return { success: false, ad_accounts: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncTikTokAdsData(
+    adAccountId: string,
+    projectId?: string,
+    datePreset?: string,
+    startDate?: string,
+    endDate?: string,
+    accountName?: string,
+  ): Promise<GA4SyncResponse> {
+    try {
+      const payload: TikTokAdsSyncRequest = {
+        ad_account_id: adAccountId,
+        ...(projectId && { project_id: projectId }),
+        ...(datePreset && { date_preset: datePreset }),
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+        ...(accountName && { account_name: accountName }),
+      };
+      const res = await api.post<GA4SyncResponse>(`${this.baseUrl}/tiktok/sync`, payload);
+      if (res.success && res.data) {
+        return res.data;
+      }
+      return { success: false, error: res.error || 'Failed to sync TikTok Ads data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
 }
 
 export interface MetaConnectionStatusResponse {
@@ -192,6 +249,36 @@ export interface MetaAdAccountsResponse {
 }
 
 export interface MetaAdsSyncRequest {
+  ad_account_id: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  account_name?: string;
+}
+
+export interface TikTokConnectionStatusResponse {
+  connected: boolean;
+  expires_at?: string;
+  reason?: string;
+}
+
+export interface TikTokAdAccount {
+  id: string;
+  name: string;
+  account_status: number;
+  currency: string;
+  timezone_name: string;
+  source_type: 'personal' | 'business';
+}
+
+export interface TikTokAdAccountsResponse {
+  success: boolean;
+  ad_accounts: TikTokAdAccount[];
+  error?: string;
+}
+
+export interface TikTokAdsSyncRequest {
   ad_account_id: string;
   project_id?: string;
   date_preset?: string;

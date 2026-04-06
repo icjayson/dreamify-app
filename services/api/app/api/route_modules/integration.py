@@ -345,6 +345,8 @@ class MetaAdsSyncRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     account_name: str = ""
+    adset_ids: Optional[list[str]] = None
+    campaign_ids: Optional[list[str]] = None
 
 
 class MetaAdsSyncResponse(BaseModel):
@@ -353,6 +355,29 @@ class MetaAdsSyncResponse(BaseModel):
     asset: AssetResponse
     row_count: int
     column_count: int
+
+
+class MetaCampaign(BaseModel):
+    id: str
+    name: str
+    status: Optional[str] = None
+    objective: Optional[str] = None
+
+class MetaCampaignsResponse(BaseModel):
+    success: bool
+    campaigns: list[MetaCampaign]
+    error: Optional[str] = None
+
+class MetaAdSet(BaseModel):
+    id: str
+    name: str
+    status: Optional[str] = None
+    campaign_id: Optional[str] = None
+
+class MetaAdSetsResponse(BaseModel):
+    success: bool
+    adsets: list[MetaAdSet]
+    error: Optional[str] = None
 
 
 @router.get("/integration/meta/accounts", response_model=MetaAdAccountsResponse)
@@ -393,6 +418,8 @@ async def sync_meta_ads_data(
             start_date=request.start_date,
             end_date=request.end_date,
             account_name=request.account_name,
+            adset_ids=request.adset_ids,
+            campaign_ids=request.campaign_ids,
         )
 
         mapped_asset = _map_asset(
@@ -412,6 +439,7 @@ async def sync_meta_ads_data(
         logger.error(f"Failed to sync Meta Ads data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+<<<<<<< ours
 
 # ── TikTok Ads ──────────────────────────────────────────────────────────────────
 
@@ -570,4 +598,55 @@ async def sync_tiktok_ads_data(
         )
     except Exception as e:
         logger.error(f"Failed to sync TikTok Ads data: {e}")
+=======
+@router.get("/integration/meta/accounts/{ad_account_id}/campaigns", response_model=MetaCampaignsResponse)
+async def get_meta_campaigns(
+    ad_account_id: str,
+    date_preset: Optional[str] = "last_30d",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user_id: str = Depends(require_user),
+):
+    """Fetch campaigns for a given account within a time range."""
+    try:
+        result = await integration_service.fetch_meta_campaigns(
+            user_id=user_id,
+            ad_account_id=ad_account_id,
+            date_preset=date_preset,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return MetaCampaignsResponse(
+            success=result["success"],
+            campaigns=result.get("campaigns", []),
+            error=result.get("error")
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch Meta campaigns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class MetaAdSetsRequest(BaseModel):
+    campaign_ids: list[str]
+
+@router.post("/integration/meta/accounts/{ad_account_id}/adsets", response_model=MetaAdSetsResponse)
+async def get_meta_adsets(
+    ad_account_id: str,
+    request: MetaAdSetsRequest,
+    user_id: str = Depends(require_user),
+):
+    """Fetch adsets belonging to specific campaigns."""
+    try:
+        result = await integration_service.fetch_meta_adsets(
+            user_id=user_id,
+            ad_account_id=ad_account_id,
+            campaign_ids=request.campaign_ids,
+        )
+        return MetaAdSetsResponse(
+            success=result["success"],
+            adsets=result.get("adsets", []),
+            error=result.get("error")
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch Meta adsets: {e}")
+>>>>>>> theirs
         raise HTTPException(status_code=500, detail=str(e))

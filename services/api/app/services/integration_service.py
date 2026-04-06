@@ -676,6 +676,148 @@ class IntegrationService:
                 return action.get("value", "0")
         return "0"
 
+    async def fetch_meta_campaigns(
+        self,
+        user_id: str,
+        ad_account_id: str,
+        date_preset: Optional[str] = "last_30d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Fetch Meta Campaigns that have impressions/spend within a date range."""
+        access_token = self._get_facebook_access_token(user_id)
+        if not access_token:
+            return {"success": False, "error": "Facebook account not connected."}
+
+        try:
+            params: Dict[str, Any] = {
+                "fields": "campaign_id,campaign_name,objective",
+                "level": "campaign",
+                "limit": 500,
+                "access_token": access_token,
+            }
+
+            if start_date and end_date:
+                params["time_range"] = json.dumps({"since": start_date, "until": end_date})
+            else:
+                params["date_preset"] = date_preset or "last_30d"
+
+            url = f"https://graph.facebook.com/v21.0/{ad_account_id}/insights"
+            all_campaigns = {}
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                while url:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    for row in data.get("data", []):
+                        camp_id = row.get("campaign_id")
+                        if camp_id and camp_id not in all_campaigns:
+                            all_campaigns[camp_id] = {
+                                "id": camp_id,
+                                "name": row.get("campaign_name", ""),
+                                "objective": row.get("objective", ""),
+                                "status": "ACTIVE"  # Since we're fetching from insights, they are somewhat active
+                            }
+
+                    paging = data.get("paging", {})
+                    url = paging.get("next")
+                    params = {}
+
+            # Fallback if insights empty, just fetch recent campaigns? Or return empty.
+            # Usually users might want to see campaigns even with no spend recently.
+            # But per the design doc, fetching via insights is preferred to align with time_range.
+            # Let's also fetch standard campaigns to get true status (ACTIVE/PAUSED).
+            cmp_url = f"https://graph.facebook.com/v21.0/{ad_account_id}/campaigns"
+            cmp_params = {
+                "fields": "id,name,effective_status,objective",
+                "limit": 500,
+                "access_token": access_token,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.get(cmp_url, params=cmp_params)
+                    if resp.status_code == 200:
+                        cmp_data = resp.json().get("data", [])
+                        cmp_map = {c["id"]: c for c in cmp_data}
+                        # Merge statuses into the ones we found via insights
+                        for camp_id, cmp in all_campaigns.items():
+                            if camp_id in cmp_map:
+                                cmp["status"] = cmp_map[camp_id].get("effective_status", cmp["status"])
+                                cmp["objective"] = cmp_map[camp_id].get("objective", cmp["objective"])
+            except Exception:
+                pass # Ignore if this fallback fails
+
+            return {
+                "success": True,
+                "campaigns": list(all_campaigns.values())
+            }
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Meta API error fetching campaigns: {e.response.status_code} {e.response.text}")
+            return {"success": False, "error": f"Meta API error ({e.response.status_code})"}
+        except Exception as e:
+            logger.error(f"Failed to fetch Meta campaigns: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def fetch_meta_adsets(
+        self,
+        user_id: str,
+        ad_account_id: str,
+        campaign_ids: List[str],
+    ) -> Dict[str, Any]:
+        """Fetch AdSets belonging to given campaigns."""
+        access_token = self._get_facebook_access_token(user_id)
+        if not access_token:
+            return {"success": False, "error": "Facebook account not connected."}
+
+        if not campaign_ids:
+            return {"success": True, "adsets": []}
+
+        try:
+            params: Dict[str, Any] = {
+                "fields": "id,name,effective_status,campaign_id",
+                "limit": 500,
+                "filtering": json.dumps([{
+                    "field": "campaign.id",
+                    "operator": "IN",
+                    "value": campaign_ids
+                }]),
+                "access_token": access_token,
+            }
+
+            url = f"https://graph.facebook.com/v21.0/{ad_account_id}/adsets"
+            all_adsets = []
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                while url:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    for row in data.get("data", []):
+                        all_adsets.append({
+                            "id": row.get("id", ""),
+                            "name": row.get("name", ""),
+                            "status": row.get("effective_status", ""),
+                            "campaign_id": row.get("campaign_id", ""),
+                        })
+
+                    paging = data.get("paging", {})
+                    url = paging.get("next")
+                    params = {}
+
+            return {
+                "success": True,
+                "adsets": all_adsets
+            }
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Meta API error fetching adsets: {e.response.status_code} {e.response.text}")
+            return {"success": False, "error": f"Meta API error ({e.response.status_code})"}
+        except Exception as e:
+            logger.error(f"Failed to fetch Meta adsets: {e}")
+            return {"success": False, "error": str(e)}
+
     async def fetch_meta_ads_data(
         self,
         user_id: str,
@@ -685,6 +827,8 @@ class IntegrationService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         account_name: str = "",
+        adset_ids: Optional[List[str]] = None,
+        campaign_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Fetch Meta Ads insights data and save it as a CSV asset."""
         access_token = self._get_facebook_access_token(user_id)
@@ -692,16 +836,27 @@ class IntegrationService:
             raise ValueError("Facebook account not connected or token expired. Please reconnect via the Meta Ads modal.")
 
         try:
+            # We fetch adset level insights if we are syncing adsets, otherwise campaign
+            sync_level = "adset" if adset_ids else "campaign"
             fields = (
-                "campaign_id,campaign_name,date_start,date_stop,"
+                f"{sync_level}_id,{sync_level}_name,campaign_id,campaign_name,date_start,date_stop,"
                 "impressions,clicks,reach,spend,ctr,cpc,cpm,frequency,actions"
             )
             params: Dict[str, Any] = {
                 "fields": fields,
-                "level": "campaign",
+                "level": sync_level,
                 "limit": 500,
                 "access_token": access_token,
             }
+            
+            filtering = []
+            if adset_ids:
+                filtering.append({"field": "adset.id", "operator": "IN", "value": adset_ids})
+            elif campaign_ids:
+                filtering.append({"field": "campaign.id", "operator": "IN", "value": campaign_ids})
+                
+            if filtering:
+                params["filtering"] = json.dumps(filtering)
 
             if start_date and end_date:
                 params["time_range"] = json.dumps({"since": start_date, "until": end_date})
@@ -723,7 +878,7 @@ class IntegrationService:
                     params = {}  # next URL already contains all params
 
             headers = [
-                "campaign_id", "campaign_name", "date_start", "date_stop",
+                f"{sync_level}_id", f"{sync_level}_name", "campaign_id", "campaign_name", "date_start", "date_stop",
                 "impressions", "clicks", "reach", "spend",
                 "ctr", "cpc", "cpm", "frequency",
                 "link_clicks", "post_engagements", "purchases", "leads",
@@ -733,6 +888,8 @@ class IntegrationService:
             for row in all_rows:
                 actions = row.get("actions", [])
                 csv_rows.append([
+                    row.get(f"{sync_level}_id", ""),
+                    row.get(f"{sync_level}_name", ""),
                     row.get("campaign_id", ""),
                     row.get("campaign_name", ""),
                     row.get("date_start", ""),

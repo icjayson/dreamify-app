@@ -785,4 +785,283 @@ class IntegrationService:
             raise Exception(f"Failed to fetch Meta Ads data: {str(e)}")
 
 
+    # ── TikTok OAuth helpers ────────────────────────────────────────────────────
+
+    def _tiktok_config(self):
+        if not config.tiktok:
+            raise ValueError("TikTok configuration is missing from config.yaml. Add app_id, app_secret, and redirect_uri under the 'tiktok:' key.")
+        return config.tiktok
+
+    def _make_tiktok_state(self, user_id: str) -> str:
+        """Create a signed, time-limited state token for CSRF protection."""
+        ts = int(datetime.now(timezone.utc).timestamp())
+        payload = f"{user_id}:{ts}"
+        sig = hmac.new(
+            config.app.secret_key.encode(),
+            payload.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        return f"{payload}:{sig}"
+
+    def _verify_tiktok_state(self, state: str, max_age_seconds: int = 600) -> Optional[str]:
+        """Verify the state token and return the user_id, or None if invalid."""
+        try:
+            parts = state.split(":")
+            if len(parts) != 3:
+                return None
+            user_id, ts_str, sig = parts
+            expected = hmac.new(
+                config.app.secret_key.encode(),
+                f"{user_id}:{ts_str}".encode(),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                return None
+            age = int(datetime.now(timezone.utc).timestamp()) - int(ts_str)
+            if age > max_age_seconds:
+                return None
+            return user_id
+        except Exception:
+            return None
+
+    def get_tiktok_oauth_url(self, user_id: str) -> str:
+        """Return the TikTok OAuth URL for the user to authorize."""
+        tiktok = self._tiktok_config()
+        state = self._make_tiktok_state(user_id)
+        params = {
+            "app_id": tiktok.app_id,
+            "redirect_uri": tiktok.redirect_uri,
+            "state": state,
+        }
+        query = "&".join(f"{k}={v}" for k, v in params.items())
+        return f"https://business-api.tiktok.com/portal/auth?{query}"
+
+    async def handle_tiktok_oauth_callback(self, auth_code: str, state: str) -> str:
+        """Exchange the authorization code for an access token, store it, return user_id."""
+        user_id = self._verify_tiktok_state(state)
+        if not user_id:
+            raise ValueError("Invalid or expired OAuth state.")
+
+        tiktok = self._tiktok_config()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/",
+                json={
+                    "app_id": tiktok.app_id,
+                    "secret": tiktok.app_secret,
+                    "auth_code": auth_code,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("code") != 0:
+                raise ValueError(f"TikTok OAuth error: {data.get('message')}")
+                
+            token_data = data.get("data", {})
+            access_token = token_data.get("access_token")
+            # TikTok tokens default to not expiring or long lived, but let's assume standard behavior
+            # or we just mark them far in the future if no expires_in is provided
+            expires_in = token_data.get("expires_in", 31536000)  # assume 1 year if not provided
+            expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
+
+        connected_accounts_repo.save_connection(
+            user_id=user_id,
+            provider="tiktok",
+            access_token=access_token,
+            expires_at=expires_at,
+        )
+        return user_id
+
+    def _get_tiktok_access_token(self, user_id: str) -> Optional[str]:
+        """Retrieve the stored TikTok access token from DynamoDB."""
+        record = connected_accounts_repo.get_connection(user_id, "tiktok")
+        if not record:
+            return None
+        try:
+            expires_at = datetime.fromisoformat(record["expires_at"].replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) >= expires_at:
+                logger.warning(f"TikTok token expired for user {user_id}")
+                return None
+        except Exception:
+            pass
+        return record.get("access_token")
+
+    def get_tiktok_connection_status(self, user_id: str) -> Dict[str, Any]:
+        """Return whether the user has a valid stored TikTok token."""
+        record = connected_accounts_repo.get_connection(user_id, "tiktok")
+        if not record:
+            return {"connected": False}
+        try:
+            expires_at = datetime.fromisoformat(record["expires_at"].replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) >= expires_at:
+                return {"connected": False, "reason": "expired"}
+        except Exception:
+            pass
+        return {"connected": True, "expires_at": record.get("expires_at")}
+
+    def disconnect_tiktok(self, user_id: str) -> None:
+        """Remove the stored TikTok token."""
+        connected_accounts_repo.delete_connection(user_id, "tiktok")
+
+    # ── TikTok Ads data ─────────────────────────────────────────────────────────
+
+    async def fetch_tiktok_ad_accounts(self, user_id: str) -> Dict[str, Any]:
+        """Fetch TikTok ad accounts using the Advertiser API."""
+        access_token = self._get_tiktok_access_token(user_id)
+        if not access_token:
+            return {
+                "success": False,
+                "ad_accounts": [],
+                "error": "TikTok account not connected or token expired. Please connect via the TikTok modal.",
+            }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.get(
+                    "https://business-api.tiktok.com/open_api/v1.3/oauth2/advertiser/get/",
+                    headers={"Access-Token": access_token},
+                    params={"app_id": self._tiktok_config().app_id, "secret": self._tiktok_config().app_secret}
+                )
+                r.raise_for_status()
+                data = r.json()
+                
+                if data.get("code") != 0:
+                    return {
+                        "success": False,
+                        "ad_accounts": [],
+                        "error": f"TikTok API error: {data.get('message')}"
+                    }
+                    
+                accounts = data.get("data", {}).get("list", [])
+                
+                mapped_accounts = []
+                for acct in accounts:
+                    mapped_accounts.append({
+                        "id": str(acct.get("advertiser_id", "")),
+                        "name": acct.get("advertiser_name", ""),
+                        "account_status": 1, # assuming ok
+                        "currency": "",
+                        "timezone_name": "",
+                        "source_type": "business",
+                    })
+
+                return {
+                    "success": True,
+                    "ad_accounts": mapped_accounts,
+                }
+        except Exception as e:
+            logger.error(f"Failed to fetch TikTok ad accounts: {e}")
+            return {
+                "success": False,
+                "ad_accounts": [],
+                "error": "Failed to load TikTok ad accounts. Please try again later.",
+            }
+
+    async def fetch_tiktok_ads_data(
+        self,
+        user_id: str,
+        ad_account_id: str,
+        project_id: str,
+        date_preset: Optional[str] = "last_30d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        account_name: str = "",
+    ) -> Dict[str, Any]:
+        """Fetch TikTok Ads insights data and save it as a CSV asset."""
+        access_token = self._get_tiktok_access_token(user_id)
+        if not access_token:
+            raise ValueError("TikTok account not connected or token expired.")
+
+        try:
+            if not start_date or not end_date:
+                # default to last 30 days if not provided
+                end = datetime.now()
+                start = end - timedelta(days=30)
+                start_date = start.strftime("%Y-%m-%d")
+                end_date = end.strftime("%Y-%m-%d")
+
+            params: Dict[str, Any] = {
+                "advertiser_id": ad_account_id,
+                "data_level": "AUCTION_CAMPAIGN",
+                "report_type": "BASIC",
+                "start_date": start_date,
+                "end_date": end_date,
+                "page_size": 1000,
+            }
+            
+            headers = {"Access-Token": access_token}
+
+            url = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/"
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(url, params=params, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+
+                if data.get("code") != 0:
+                    raise Exception(f"TikTok API error: {data.get('message')}")
+                    
+                all_rows = data.get("data", {}).get("list", [])
+
+            csv_headers = [
+                "campaign_id", "campaign_name", "date_start", "date_stop",
+                "impressions", "clicks", "reach", "spend",
+                "ctr", "cpc", "cpm", "frequency",
+                "link_clicks", "post_engagements", "purchases", "leads",
+            ]
+
+            csv_rows = []
+            for row in all_rows:
+                metrics = row.get("metrics", {})
+                dimensions = row.get("dimensions", {})
+                csv_rows.append([
+                    dimensions.get("campaign_id", ""),
+                    dimensions.get("campaign_name", ""),
+                    start_date, # dimensions doesn't always have date
+                    end_date,
+                    metrics.get("impressions", "0"),
+                    metrics.get("clicks", "0"),
+                    metrics.get("reach", "0"),
+                    metrics.get("spend", "0"),
+                    metrics.get("ctr", "0"),
+                    metrics.get("cpc", "0"),
+                    metrics.get("cpm", "0"),
+                    metrics.get("frequency", "0"),
+                    metrics.get("conversion", "0"), # link_clicks roughly
+                    metrics.get("likes", "0"), # post_engagements roughly
+                    metrics.get("checkout", "0"), # purchases
+                    metrics.get("form", "0"), # leads roughly
+                ])
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(csv_headers)
+            writer.writerows(csv_rows)
+            csv_content = output.getvalue().encode("utf-8")
+
+            safe_account_name = account_name.replace("/", "_") or "tiktok_ads"
+            asset_info = self._save_integration_asset(
+                user_id=user_id,
+                project_id=project_id,
+                file_content=csv_content,
+                filename=f"{safe_account_name}.csv",
+                asset_type="integration_tiktok_ads",
+                extension="csv",
+                row_count=len(csv_rows),
+                column_count=len(csv_headers),
+            )
+
+            return {
+                "success": True,
+                "message": "TikTok Ads data synced successfully",
+                "asset": asset_info,
+                "row_count": len(csv_rows),
+                "column_count": len(csv_headers),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to fetch TikTok Ads data: {e}")
+            raise Exception(f"Failed to fetch TikTok Ads data: {str(e)}")
+
+
 integration_service = IntegrationService()

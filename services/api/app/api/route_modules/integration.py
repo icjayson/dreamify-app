@@ -439,8 +439,6 @@ async def sync_meta_ads_data(
         logger.error(f"Failed to sync Meta Ads data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-<<<<<<< ours
-
 # ── TikTok Ads ──────────────────────────────────────────────────────────────────
 
 class TikTokConnectionStatusResponse(BaseModel):
@@ -598,7 +596,9 @@ async def sync_tiktok_ads_data(
         )
     except Exception as e:
         logger.error(f"Failed to sync TikTok Ads data: {e}")
-=======
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/integration/meta/accounts/{ad_account_id}/campaigns", response_model=MetaCampaignsResponse)
 async def get_meta_campaigns(
     ad_account_id: str,
@@ -648,5 +648,4 @@ async def get_meta_adsets(
         )
     except Exception as e:
         logger.error(f"Failed to fetch Meta adsets: {e}")
->>>>>>> theirs
         raise HTTPException(status_code=500, detail=str(e))

@@ -635,11 +635,11 @@ export default function ProjectPage() {
         </div>
 
         {/* Content */}
-        <div className={`grid grid-cols-1 ${shouldShowDashboard && isDashboardOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} flex-1 min-h-0`}>
-          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300 h-full min-h-0`}>
-            <div className="bg-muted h-full min-h-0 flex flex-col">
-              <div className="flex-1 min-h-0 h-full">
-                <div className="px-1 h-full flex flex-col" data-chat-root>
+        <div className={`grid grid-cols-1 ${shouldShowDashboard && isDashboardOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} flex-1 lg:flex-none lg:h-[calc(100vh-4rem)] min-h-0`}>
+          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300 h-full lg:h-auto min-h-0`}>
+            <div className="bg-muted h-full lg:h-[calc(100vh-4rem)] min-h-0 flex flex-col lg:block">
+              <div className="flex-1 min-h-0 h-full lg:h-auto lg:block">
+                <div className="px-1 h-full lg:h-[calc(100vh-4rem)] flex flex-col lg:block" data-chat-root>
                   <ChatInterface
                     projectId={projectId ?? undefined}
                     onProcessedDataChange={(data) => {
@@ -679,7 +679,7 @@ export default function ProjectPage() {
           </div>
 
           {/* dashboard columns */}
-          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative`}>
+          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative h-full lg:h-auto min-h-0`}>
             {shouldShowDashboard && isDashboardOpen && (
               <button
                 onClick={() => { setIsDashboardOpen(false); setActiveTab('chat'); }}
@@ -689,7 +689,7 @@ export default function ProjectPage() {
                 <X className="w-4 h-4 group-hover:scale-110 transition-transform" />
               </button>
             )}
-            <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-full overflow-hidden relative">
+            <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-white/20 h-full lg:h-[calc(100vh-4rem)] overflow-hidden relative">
               {!shouldShowDashboard ? (
                 <BlankState
                   subtexts={[

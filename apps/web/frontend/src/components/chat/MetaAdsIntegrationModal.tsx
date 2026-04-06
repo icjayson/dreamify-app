@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { integrationService, MetaAdAccount, MetaConnectionStatusResponse } from '@/services/integrationService';
+import { integrationService, MetaAdAccount, MetaConnectionStatusResponse, MetaCampaign, MetaAdSet } from '@/services/integrationService';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, CalendarIcon, Link2, Link2Off, SearchX } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, Link2, Link2Off, SearchX, Search } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
 import { fileService } from '@/services/fileService';
 import type { AssetRecord } from '@/services/fileService';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const DATE_PRESETS = [
   { value: 'last_7d', label: 'Last 7 days' },
@@ -20,6 +21,7 @@ const DATE_PRESETS = [
   { value: 'this_month', label: 'This month' },
   { value: 'last_month', label: 'Last month' },
   { value: 'this_year', label: 'This year' },
+  { value: 'last_year', label: 'Last year' },
   { value: 'custom', label: 'Custom range' },
 ];
 
@@ -41,6 +43,17 @@ export default function MetaAdsIntegrationModal() {
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [adAccounts, setAdAccounts] = useState<MetaAdAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [campaignSearch, setCampaignSearch] = useState('');
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<Set<string>>(new Set());
+
+  const [adsets, setAdsets] = useState<MetaAdSet[]>([]);
+  const [loadingAdsets, setLoadingAdsets] = useState(false);
+  const [adsetSearch, setAdsetSearch] = useState('');
+  const [selectedAdsetIds, setSelectedAdsetIds] = useState<Set<string>>(new Set());
 
   // Date state
   const [datePreset, setDatePreset] = useState<string>('last_30d');
@@ -123,6 +136,14 @@ export default function MetaAdsIntegrationModal() {
     setHasBizMgmt(null);
     setEmptyRowsDialog(null);
     setDiscardingEmpty(false);
+    
+    setStep(1);
+    setCampaigns([]);
+    setSelectedCampaignIds(new Set());
+    setCampaignSearch('');
+    setAdsets([]);
+    setSelectedAdsetIds(new Set());
+    setAdsetSearch('');
   };
 
   // ── Connection check + ad account load ───────────────────────────────────
@@ -203,6 +224,51 @@ export default function MetaAdsIntegrationModal() {
 
   // ── Sync ─────────────────────────────────────────────────────────────────
 
+  const handleNextToCampaigns = async () => {
+    if (!selectedAccountId) return;
+    setLoadingCampaigns(true);
+    setStep(2);
+    try {
+      const dateArg = isCustomRange ? undefined : datePreset;
+      const startArg = isCustomRange && startDate ? format(startDate, 'yyyy-MM-dd') : undefined;
+      const endArg = isCustomRange && endDate ? format(endDate, 'yyyy-MM-dd') : undefined;
+      const res = await integrationService.fetchMetaCampaigns(selectedAccountId, dateArg, startArg, endArg);
+      if (res.success) {
+        setCampaigns(res.campaigns);
+        setSelectedCampaignIds(new Set(res.campaigns.map((c) => c.id)));
+      } else {
+        setError(res.error || 'Failed to fetch campaigns');
+        setStep(1);
+      }
+    } catch {
+      setError('Failed to fetch campaigns');
+      setStep(1);
+    } finally {
+      setLoadingCampaigns(false);
+    }
+  };
+
+  const handleNextToAdSets = async () => {
+    if (selectedCampaignIds.size === 0) return;
+    setLoadingAdsets(true);
+    setStep(3);
+    try {
+      const res = await integrationService.fetchMetaAdSets(selectedAccountId, Array.from(selectedCampaignIds));
+      if (res.success) {
+        setAdsets(res.adsets);
+        setSelectedAdsetIds(new Set(res.adsets.map((a) => a.id)));
+      } else {
+        setError(res.error || 'Failed to fetch adsets');
+        setStep(2);
+      }
+    } catch {
+      setError('Failed to fetch adsets');
+      setStep(2);
+    } finally {
+      setLoadingAdsets(false);
+    }
+  };
+
   const handleSync = async () => {
     if (!selectedAccountId) {
       setError('Please select an ad account.');
@@ -225,6 +291,8 @@ export default function MetaAdsIntegrationModal() {
         isCustomRange && startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
         isCustomRange && endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
         accountLabel,
+        Array.from(selectedAdsetIds),
+        Array.from(selectedCampaignIds)
       );
 
       if (result.row_count > 0) {
@@ -383,7 +451,7 @@ export default function MetaAdsIntegrationModal() {
           )}
 
           {/* ── Connected: ad account + date pickers ── */}
-          {isConnected && (
+          {isConnected && step === 1 && (
             <>
               {loadingAccounts ? (
                 <div className="flex flex-col items-center py-6 text-gray-400">
@@ -520,16 +588,165 @@ export default function MetaAdsIntegrationModal() {
               )}
             </>
           )}
+
+          {isConnected && step === 2 && (
+            <div className="flex flex-col space-y-3 animate-in fade-in slide-in-from-right-2 duration-300">
+              <div className="flex items-center space-x-2 bg-white/5 border border-white/10 rounded-md p-2">
+                <Search className="w-4 h-4 text-gray-400" />
+                <input 
+                  value={campaignSearch} 
+                  onChange={e => setCampaignSearch(e.target.value)} 
+                  placeholder="Search campaigns..." 
+                  className="bg-transparent border-none text-sm text-white outline-none w-full"
+                />
+              </div>
+              {loadingCampaigns ? (
+                <div className="py-8 flex justify-center text-blue-500"><Loader2 className="w-6 h-6 animate-spin" /></div>
+              ) : (
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-1 border border-white/10 rounded-md p-2 bg-black/20">
+                  {(() => {
+                    const filteredCampaigns = campaigns.filter(c => c.name.toLowerCase().includes(campaignSearch.toLowerCase()) || c.id.includes(campaignSearch));
+                    const isAllSelected = filteredCampaigns.length > 0 && filteredCampaigns.every(c => selectedCampaignIds.has(c.id));
+                    return (
+                      <>
+                        {filteredCampaigns.length > 0 && (
+                          <div className="flex items-start space-x-3 p-2 hover:bg-white/5 rounded-md cursor-pointer transition-colors border-b border-white/5 mb-1" onClick={() => {
+                            const next = new Set(selectedCampaignIds);
+                            if (isAllSelected) {
+                              filteredCampaigns.forEach(c => next.delete(c.id));
+                            } else {
+                              filteredCampaigns.forEach(c => next.add(c.id));
+                            }
+                            setSelectedCampaignIds(next);
+                          }}>
+                            <Checkbox checked={isAllSelected} className="mt-0.5 border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600" />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-sm font-medium text-white truncate leading-tight">Select All Campaigns</span>
+                            </div>
+                          </div>
+                        )}
+                        {filteredCampaigns.map(camp => (
+                          <div key={camp.id} className="flex items-start space-x-3 p-2 hover:bg-white/5 rounded-md cursor-pointer transition-colors" onClick={() => {
+                            const next = new Set(selectedCampaignIds);
+                            if (next.has(camp.id)) next.delete(camp.id);
+                            else next.add(camp.id);
+                            setSelectedCampaignIds(next);
+                          }}>
+                            <Checkbox checked={selectedCampaignIds.has(camp.id)} className="mt-0.5 border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600" />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-sm font-medium text-white truncate leading-tight">{camp.name}</span>
+                              <span className="text-[11px] text-gray-400 mt-1">ID: {camp.id} • {camp.status}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {filteredCampaigns.length === 0 && <div className="text-center text-sm text-gray-400 py-4">No campaigns found.</div>}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {isConnected && step === 3 && (
+            <div className="flex flex-col space-y-3 animate-in fade-in slide-in-from-right-2 duration-300">
+              <div className="flex items-center space-x-2 bg-white/5 border border-white/10 rounded-md p-2">
+                <Search className="w-4 h-4 text-gray-400" />
+                <input 
+                  value={adsetSearch} 
+                  onChange={e => setAdsetSearch(e.target.value)} 
+                  placeholder="Search ad sets..." 
+                  className="bg-transparent border-none text-sm text-white outline-none w-full"
+                />
+              </div>
+              {loadingAdsets ? (
+                <div className="py-8 flex justify-center text-blue-500"><Loader2 className="w-6 h-6 animate-spin" /></div>
+              ) : (
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-1 border border-white/10 rounded-md p-2 bg-black/20">
+                  {(() => {
+                    const filteredAdsets = adsets.filter(a => a.name.toLowerCase().includes(adsetSearch.toLowerCase()) || a.id.includes(adsetSearch));
+                    const isAllSelected = filteredAdsets.length > 0 && filteredAdsets.every(a => selectedAdsetIds.has(a.id));
+                    return (
+                      <>
+                        {filteredAdsets.length > 0 && (
+                          <div className="flex items-start space-x-3 p-2 hover:bg-white/5 rounded-md cursor-pointer transition-colors border-b border-white/5 mb-1" onClick={() => {
+                            const next = new Set(selectedAdsetIds);
+                            if (isAllSelected) {
+                              filteredAdsets.forEach(a => next.delete(a.id));
+                            } else {
+                              filteredAdsets.forEach(a => next.add(a.id));
+                            }
+                            setSelectedAdsetIds(next);
+                          }}>
+                            <Checkbox checked={isAllSelected} className="mt-0.5 border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600" />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-sm font-medium text-white truncate leading-tight">Select All Ad Sets</span>
+                            </div>
+                          </div>
+                        )}
+                        {filteredAdsets.map(adset => (
+                          <div key={adset.id} className="flex items-start space-x-3 p-2 hover:bg-white/5 rounded-md cursor-pointer transition-colors" onClick={() => {
+                            const next = new Set(selectedAdsetIds);
+                            if (next.has(adset.id)) next.delete(adset.id);
+                            else next.add(adset.id);
+                            setSelectedAdsetIds(next);
+                          }}>
+                            <Checkbox checked={selectedAdsetIds.has(adset.id)} className="mt-0.5 border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600" />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-sm font-medium text-white truncate leading-tight">{adset.name}</span>
+                              <span className="text-[11px] text-gray-400 mt-1">ID: {adset.id} • {adset.status}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {filteredAdsets.length === 0 && <div className="text-center text-sm text-gray-400 py-4">No adsets found in selected campaigns.</div>}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="sm:justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose} className="text-gray-400 hover:text-white hover:bg-white/10" disabled={syncing}>
-            Cancel
-          </Button>
+          {step > 1 && (
+            <Button type="button" variant="outline" onClick={() => setStep((step - 1) as 1|2|3)} className="bg-transparent border-white/10 text-white hover:bg-white/10" disabled={syncing}>
+              Back
+            </Button>
+          )}
+          {step === 1 && (
+            <Button type="button" variant="ghost" onClick={onClose} className="text-gray-400 hover:text-white hover:bg-white/10" disabled={syncing}>
+              Cancel
+            </Button>
+          )}
+
+          {step === 1 && (
+            <Button
+              type="button"
+              onClick={handleNextToCampaigns}
+              disabled={!isConnected || !selectedAccountId || adAccounts.length === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors"
+            >
+              Next
+            </Button>
+          )}
+
+          {step === 2 && (
+            <Button
+              type="button"
+              onClick={handleNextToAdSets}
+              disabled={selectedCampaignIds.size === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors"
+            >
+              Next
+            </Button>
+          )}
+
+          {step === 3 && (
           <Button
             type="button"
             onClick={handleSync}
-            disabled={!isConnected || syncing || !selectedAccountId || adAccounts.length === 0}
+            disabled={!isConnected || syncing || selectedAdsetIds.size === 0}
             className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors"
           >
             {syncing ? (
@@ -539,6 +756,7 @@ export default function MetaAdsIntegrationModal() {
               </>
             ) : 'Connect & Sync'}
           </Button>
+          )}
         </DialogFooter>
           </>
         ) : (

@@ -1123,24 +1123,24 @@ const DashboardPreview = ({
         <div className="px-6 pt-6 pb-4" style={{ borderColor: 'var(--border-card-color)' }}>
           <div className="flex flex-col gap-2">
             {/* Row 1: Title and Controls */}
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-1">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex-1 w-full">
                 <h1
-                  className="text-3xl font-bold"
+                  className="text-2xl md:text-3xl font-bold"
                   style={{ color: 'var(--highlight-color)' }}
                 >
                   {dashboardMetadata.title}
                 </h1>
                 {dashboardMetadata.description && (
                   <p
-                    className="text-base opacity-90 mt-1"
+                    className="text-sm md:text-base opacity-90 mt-1"
                     style={{ color: 'var(--description-color)' }}
                   >
                     {dashboardMetadata.description}
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center justify-start gap-2 flex-shrink-0 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
                 {/* Date Picker - Hide when exporting */}
                 {!isExporting && (
                   <Popover>

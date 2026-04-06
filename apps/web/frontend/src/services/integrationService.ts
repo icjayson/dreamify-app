@@ -139,6 +139,41 @@ class IntegrationService {
     }
   }
 
+  async fetchMetaCampaigns(
+    adAccountId: string,
+    datePreset?: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<MetaCampaignsResponse> {
+    try {
+      const params = new URLSearchParams();
+      if (datePreset) params.append('date_preset', datePreset);
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const res = await api.get<MetaCampaignsResponse>(`${this.baseUrl}/meta/accounts/${adAccountId}/campaigns${qs}`);
+      if (res.success && res.data) return res.data;
+      return { success: false, campaigns: [], error: res.error || 'Failed to fetch campaigns' };
+    } catch (error) {
+      return { success: false, campaigns: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchMetaAdSets(
+    adAccountId: string,
+    campaignIds: string[]
+  ): Promise<MetaAdSetsResponse> {
+    try {
+      const payload = { campaign_ids: campaignIds };
+      const res = await api.post<MetaAdSetsResponse>(`${this.baseUrl}/meta/accounts/${adAccountId}/adsets`, payload);
+      if (res.success && res.data) return res.data;
+      return { success: false, adsets: [], error: res.error || 'Failed to fetch adsets' };
+    } catch (error) {
+      return { success: false, adsets: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
   async syncMetaAdsData(
     adAccountId: string,
     projectId?: string,
@@ -146,6 +181,8 @@ class IntegrationService {
     startDate?: string,
     endDate?: string,
     accountName?: string,
+    adsetIds?: string[],
+    campaignIds?: string[],
   ): Promise<GA4SyncResponse> {
     try {
       const payload: MetaAdsSyncRequest = {
@@ -155,6 +192,8 @@ class IntegrationService {
         ...(startDate && { start_date: startDate }),
         ...(endDate && { end_date: endDate }),
         ...(accountName && { account_name: accountName }),
+        ...(adsetIds && adsetIds.length > 0 && { adset_ids: adsetIds }),
+        ...(campaignIds && campaignIds.length > 0 && { campaign_ids: campaignIds }),
       };
       const res = await api.post<GA4SyncResponse>(`${this.baseUrl}/meta/sync`, payload);
       if (res.success && res.data) {
@@ -248,6 +287,32 @@ export interface MetaAdAccountsResponse {
   error?: string;
 }
 
+export interface MetaCampaign {
+  id: string;
+  name: string;
+  status?: string;
+  objective?: string;
+}
+
+export interface MetaCampaignsResponse {
+  success: boolean;
+  campaigns: MetaCampaign[];
+  error?: string;
+}
+
+export interface MetaAdSet {
+  id: string;
+  name: string;
+  status?: string;
+  campaign_id?: string;
+}
+
+export interface MetaAdSetsResponse {
+  success: boolean;
+  adsets: MetaAdSet[];
+  error?: string;
+}
+
 export interface MetaAdsSyncRequest {
   ad_account_id: string;
   project_id?: string;
@@ -255,6 +320,8 @@ export interface MetaAdsSyncRequest {
   start_date?: string;
   end_date?: string;
   account_name?: string;
+  adset_ids?: string[];
+  campaign_ids?: string[];
 }
 
 export interface TikTokConnectionStatusResponse {

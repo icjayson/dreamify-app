@@ -175,8 +175,7 @@ interface ChatState {
   // Sync actions
   syncGoogleSheets: (projectId?: string) => Promise<void>;
   syncGA4: (propertyId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string, propertyName?: string) => Promise<void>;
-  syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<MetaAdsSyncResult>;
-  syncTikTokAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<TikTokAdsSyncResult>;
+  syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string, adsetIds?: string[], campaignIds?: string[]) => Promise<MetaAdsSyncResult>;
 }
 
 export interface PendingAction {
@@ -232,7 +231,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isTikTokModalOpen: false,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
-  selectedModel: 'fast',
+  selectedModel: 'pro',
 
   // Basic setters
   setInputValue: (value) => set({ inputValue: value }),
@@ -373,7 +372,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  syncMetaAds: async (adAccountId, projectId, datePreset, startDate, endDate, accountName) => {
+  syncMetaAds: async (adAccountId, projectId, datePreset, startDate, endDate, accountName, adsetIds, campaignIds) => {
     try {
       const { integrationService } = await import('@/services/integrationService');
       const response = await integrationService.syncMetaAdsData(
@@ -383,6 +382,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         startDate,
         endDate,
         accountName || 'Meta Ads',
+        adsetIds,
+        campaignIds
       );
 
       if (response.success && response.asset) {

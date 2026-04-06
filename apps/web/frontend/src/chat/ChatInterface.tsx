@@ -1060,12 +1060,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       setTimeout(() => setGoogleSheetsModalOpen(true), 0);
       return;
     }
-    if (connector.name === 'Meta') {
+    if (connector.name === 'Meta Ads') {
       setDropdownOpen(false);
       setTimeout(() => setMetaAdsModalOpen(true), 0);
       return;
     }
-    if (connector.name === 'TikTok') {
+    if (connector.name === 'TikTok Ads') {
       setDropdownOpen(false);
       setTimeout(() => setTikTokModalOpen(true), 0);
       return;
@@ -1625,34 +1625,34 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   const textBeforeCursor = value.slice(0, cursorPos);
                   const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
-                    if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
-                      // User just typed @
-                      setIsContextPickerOpen(true);
-                      setPickerTriggerMode('mention');
-                      setMentionQuery('');
-                      setMentionCursorPos(cursorPos);
+                  if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
+                    // User just typed @
+                    setIsContextPickerOpen(true);
+                    setPickerTriggerMode('mention');
+                    setMentionQuery('');
+                    setMentionCursorPos(cursorPos);
 
-                      // Mutual Exclusion
-                      setModelDropdownOpen(false);
-                      setDropdownOpen(false);
+                    // Mutual Exclusion
+                    setModelDropdownOpen(false);
+                    setDropdownOpen(false);
 
                     // Fetch assets if not already loaded
                     if (projectId && projectAssets.length === 0) {
                       fetchProjectAssets(projectId).then(setProjectAssets);
                     }
-                    } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
-                      // User is typing after @
-                      const query = textBeforeCursor.slice(lastAtIndex + 1);
-                      if (!/\s/.test(query)) {
-                        // No space means still in mention mode
-                        setMentionQuery(query);
-                        setIsContextPickerOpen(true);
-                        setPickerTriggerMode('mention');
+                  } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
+                    // User is typing after @
+                    const query = textBeforeCursor.slice(lastAtIndex + 1);
+                    if (!/\s/.test(query)) {
+                      // No space means still in mention mode
+                      setMentionQuery(query);
+                      setIsContextPickerOpen(true);
+                      setPickerTriggerMode('mention');
 
-                        // Mutual Exclusion
-                        setModelDropdownOpen(false);
-                        setDropdownOpen(false);
-                      } else {
+                      // Mutual Exclusion
+                      setModelDropdownOpen(false);
+                      setDropdownOpen(false);
+                    } else {
                       setIsContextPickerOpen(false);
                     }
                   } else {
@@ -1815,11 +1815,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                             onClick={() => handleIntegrationClick(connector)}
                             className="w-full px-3 py-2 text-left text-sm flex items-center hover:bg-white/10 rounded-md transition-colors duration-200 cursor-pointer"
                           >
-                            <img 
-                                src={connector.icon} 
-                                alt={connector.name} 
-                                className={`w-4 h-4 object-cover ${connector.name === 'TikTok' ? 'scale-125' : ''}`} 
-                              />
+                            <img
+                              src={connector.icon}
+                              alt={connector.name}
+                              className={`w-4 h-4 object-cover ${connector.name}`}
+                            />
                             {connector.name && <span className="pl-2">{connector.name}</span>}
                             {!connector.isActive && <span className="text-xs text-white/30 pl-1">(SOON)</span>}
                           </button>

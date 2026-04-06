@@ -445,7 +445,7 @@ class IntegrationService:
         params = {
             "client_id": meta.app_id,
             "redirect_uri": meta.redirect_uri,
-            "scope": "ads_read",
+            "scope": "ads_read,business_management",
             "response_type": "code",
             "state": state,
         }
@@ -531,39 +531,118 @@ class IntegrationService:
 
     # ── Meta Ads data ─────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _base_account_fields(acct: Dict) -> Dict:
+        return {
+            "id": acct.get("id", ""),
+            "name": acct.get("name", ""),
+            "account_status": acct.get("account_status", 0),
+            "currency": acct.get("currency", ""),
+            "timezone_name": acct.get("timezone_name", ""),
+        }
+
     async def fetch_meta_ad_accounts(self, user_id: str) -> Dict[str, Any]:
-        """Fetch all Meta ad accounts the user has access to."""
+        """Fetch personal + Business Suite ad accounts, merged and deduplicated."""
         access_token = self._get_facebook_access_token(user_id)
         if not access_token:
             return {
                 "success": False,
                 "ad_accounts": [],
-                "error": "Facebook account not connected or token expired. Please connect via the Meta Ads modal."
+                "has_business_management": False,
+                "error": "Facebook account not connected or token expired. Please connect via the Meta Ads modal.",
             }
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    "https://graph.facebook.com/v21.0/me/adaccounts",
-                    params={
-                        "fields": "id,name,account_status,currency,timezone_name",
-                        "access_token": access_token,
-                    }
-                )
-                response.raise_for_status()
-                data = response.json()
 
-            ad_accounts = []
-            for account in data.get("data", []):
-                ad_accounts.append({
-                    "id": account.get("id", ""),
-                    "name": account.get("name", ""),
-                    "account_status": account.get("account_status", 0),
-                    "currency": account.get("currency", ""),
-                    "timezone_name": account.get("timezone_name", ""),
+                async def _fetch_personal() -> List[Dict]:
+                    r = await client.get(
+                        "https://graph.facebook.com/v21.0/me/adaccounts",
+                        params={"fields": "id,name,account_status,currency,timezone_name",
+                                "access_token": access_token},
+                    )
+                    r.raise_for_status()
+                    return r.json().get("data", [])
+
+                async def _fetch_businesses() -> tuple:
+                    """Returns (businesses_list, has_business_management).
+                    Gracefully returns ([], False) for tokens without business_management scope.
+                    """
+                    r = await client.get(
+                        "https://graph.facebook.com/v21.0/me/businesses",
+                        params={"fields": "id,name", "access_token": access_token},
+                    )
+                    body = r.json()
+                    # Facebook returns permissions errors with an "error" key in the body,
+                    # sometimes as HTTP 400 and sometimes as HTTP 200.
+                    if "error" in body:
+                        fb_code = body["error"].get("code")
+                        if fb_code in (200, 190, 10):  # permission denied / bad token / app denied
+                            return [], False
+                        r.raise_for_status()
+                    r.raise_for_status()
+                    return body.get("data", []), True
+
+                async def _fetch_business_accounts(biz: Dict) -> List[Dict]:
+                    r = await client.get(
+                        f"https://graph.facebook.com/v21.0/{biz['id']}/adaccounts",
+                        params={"fields": "id,name,account_status,currency,timezone_name",
+                                "access_token": access_token},
+                    )
+                    if r.status_code in (400, 403):
+                        logger.warning(f"No access to ad accounts for business {biz['id']}: {r.text}")
+                        return []
+                    r.raise_for_status()
+                    accounts = r.json().get("data", [])
+                    for acct in accounts:
+                        acct["_biz_id"] = biz["id"]
+                        acct["_biz_name"] = biz["name"]
+                    return accounts
+
+                # Step 1: personal accounts + businesses list concurrently
+                personal_raw, (businesses, has_biz_mgmt) = await asyncio.gather(
+                    _fetch_personal(), _fetch_businesses()
+                )
+
+                # Step 2: all business account lists concurrently
+                biz_batches = list(await asyncio.gather(
+                    *[_fetch_business_accounts(b) for b in businesses]
+                )) if businesses else []
+
+            # Step 3: merge + deduplicate (personal wins on conflict)
+            seen: set = set()
+            accounts: List[Dict] = []
+
+            for acct in personal_raw:
+                aid = acct.get("id", "")
+                if aid in seen:
+                    continue
+                seen.add(aid)
+                accounts.append({
+                    **self._base_account_fields(acct),
+                    "source_type": "personal",
+                    "business_id": None,
+                    "business_name": None,
                 })
 
-            return {"success": True, "ad_accounts": ad_accounts}
+            for batch in biz_batches:
+                for acct in batch:
+                    aid = acct.get("id", "")
+                    if aid in seen:
+                        continue
+                    seen.add(aid)
+                    accounts.append({
+                        **self._base_account_fields(acct),
+                        "source_type": "business",
+                        "business_id": acct.get("_biz_id"),
+                        "business_name": acct.get("_biz_name"),
+                    })
+
+            return {
+                "success": True,
+                "ad_accounts": accounts,
+                "has_business_management": has_biz_mgmt,
+            }
 
         except httpx.HTTPStatusError as e:
             error_body = e.response.text
@@ -572,19 +651,22 @@ class IntegrationService:
                 return {
                     "success": False,
                     "ad_accounts": [],
-                    "error": "Facebook access denied. Please reconnect your Facebook account and grant Ads permissions."
+                    "has_business_management": False,
+                    "error": "Facebook access denied. Please reconnect your Facebook account.",
                 }
             return {
                 "success": False,
                 "ad_accounts": [],
-                "error": f"Meta API error ({e.response.status_code}). Please try again later."
+                "has_business_management": False,
+                "error": f"Meta API error ({e.response.status_code}). Please try again later.",
             }
         except Exception as e:
             logger.error(f"Failed to fetch Meta ad accounts: {e}")
             return {
                 "success": False,
                 "ad_accounts": [],
-                "error": "Failed to load Meta ad accounts. Please try again later."
+                "has_business_management": False,
+                "error": "Failed to load Meta ad accounts. Please try again later.",
             }
 
     def _extract_action(self, actions: List[Dict], action_type: str) -> str:

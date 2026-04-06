@@ -326,11 +326,15 @@ class MetaAdAccount(BaseModel):
     account_status: int
     currency: str
     timezone_name: str
+    source_type: str = "personal"        # "personal" | "business"
+    business_id: Optional[str] = None
+    business_name: Optional[str] = None
 
 
 class MetaAdAccountsResponse(BaseModel):
     success: bool
     ad_accounts: list[MetaAdAccount]
+    has_business_management: bool = False
     error: Optional[str] = None
 
 
@@ -361,6 +365,7 @@ async def get_meta_ad_accounts(
         return MetaAdAccountsResponse(
             success=result["success"],
             ad_accounts=result.get("ad_accounts", []),
+            has_business_management=result.get("has_business_management", False),
             error=result.get("error"),
         )
     except Exception as e:

@@ -114,11 +114,12 @@ export default function WorkspacePage() {
   const [connectorStatus, setConnectorStatus] = useState<Record<string, ConnectorStatus>>({});
   const [connectorsLoading, setConnectorsLoading] = useState(false);
 
-  const { 
-    setGA4ModalOpen, 
-    setGoogleSheetsModalOpen, 
+  const {
+    setGA4ModalOpen,
+    setGoogleSheetsModalOpen,
     setMetaAdsModalOpen,
-    setTikTokModalOpen
+    setTikTokModalOpen,
+    setAppsFlyerModalOpen,
   } = useChatStore();
 
   const handleIntegrationClick = (connectorName: string) => {
@@ -126,10 +127,12 @@ export default function WorkspacePage() {
       setGA4ModalOpen(true);
     } else if (connectorName === 'Google Sheets') {
       setGoogleSheetsModalOpen(true);
-    } else if (connectorName === 'Meta') {
+    } else if (connectorName === 'Meta' || connectorName === 'Meta Ads') {
       setMetaAdsModalOpen(true);
-    } else if (connectorName === 'TikTok') {
+    } else if (connectorName === 'TikTok' || connectorName === 'TikTok Ads') {
       setTikTokModalOpen(true);
+    } else if (connectorName === 'AppsFlyer') {
+      setAppsFlyerModalOpen(true);
     }
   };
 
@@ -193,6 +196,11 @@ export default function WorkspacePage() {
         results["GA4"] = { connected: false };
         results["Google Sheets"] = { connected: false };
       }
+
+      const appsflyerStatus = await integrationService.getAppsFlyerStatus();
+      results["AppsFlyer"] = appsflyerStatus.connected
+        ? { connected: true, info: "Account: AppsFlyer" }
+        : { connected: false };
 
       setConnectorStatus(results);
     } catch (e) {

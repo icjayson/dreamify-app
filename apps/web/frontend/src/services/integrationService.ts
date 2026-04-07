@@ -261,6 +261,50 @@ class IntegrationService {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
+
+  async connectAppsFlyer(apiToken: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await api.post<{ success: boolean; error?: string }>(`${this.baseUrl}/appsflyer/connect`, { api_token: apiToken });
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to connect AppsFlyer' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getAppsFlyerStatus(): Promise<AppsFlyerConnectionStatusResponse> {
+    try {
+      const res = await api.get<AppsFlyerConnectionStatusResponse>(`${this.baseUrl}/appsflyer/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async fetchAppsFlyerApps(): Promise<AppsFlyerAppsResponse> {
+    try {
+      const res = await api.get<AppsFlyerAppsResponse>(`${this.baseUrl}/appsflyer/apps`);
+      if (res.success && res.data) return res.data;
+      return { success: false, apps: [], error: res.error || 'Failed to fetch AppsFlyer apps' };
+    } catch (error) {
+      return { success: false, apps: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncAppsFlyer(req: AppsFlyerSyncRequest): Promise<AppsFlyerSyncResponse> {
+    try {
+      const res = await api.post<AppsFlyerSyncResponse>(`${this.baseUrl}/appsflyer/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync AppsFlyer data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async disconnectAppsFlyer(): Promise<void> {
+    await api.delete(`${this.baseUrl}/appsflyer/disconnect`);
+  }
 }
 
 export interface MetaConnectionStatusResponse {
@@ -352,6 +396,40 @@ export interface TikTokAdsSyncRequest {
   start_date?: string;
   end_date?: string;
   account_name?: string;
+}
+
+export interface AppsFlyerApp {
+  app_id: string;
+  app_name: string;
+  platform: string;
+}
+
+export interface AppsFlyerConnectionStatusResponse {
+  connected: boolean;
+}
+
+export interface AppsFlyerAppsResponse {
+  success: boolean;
+  apps: AppsFlyerApp[];
+  error?: string;
+}
+
+export interface AppsFlyerSyncRequest {
+  app_id: string;
+  app_name: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface AppsFlyerSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  error?: string;
 }
 
 export const integrationService = new IntegrationService();

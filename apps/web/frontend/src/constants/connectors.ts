@@ -9,6 +9,7 @@ export const CONNECTORS: ConnectorItem[] = [
   { name: "GA4", icon: "/GA4.png", isActive: true },
   { name: "Meta Ads", icon: "/meta.png", isActive: true },
   { name: "TikTok Ads", icon: "/tiktok.png", isActive: true },
+  { name: "AppsFlyer", icon: "/appsflyer.png", isActive: true },
   { name: "Airtable", icon: "/airtable.png" },
   { name: "Stripe", icon: "/stripe.jpeg" },
   { name: "Shopify", icon: "/shopify.png" },

@@ -571,6 +571,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       setTimeout(() => useChatStore.getState().setTikTokModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'AppsFlyer') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setAppsFlyerModalOpen(true), 0);
+      return;
+    }
 
     if (connector.isActive) {
       handleDataSourceSelect(connector.name);

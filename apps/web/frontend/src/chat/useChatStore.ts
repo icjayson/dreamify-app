@@ -113,6 +113,7 @@ interface ChatState {
   isGA4ModalOpen: boolean;
   isMetaAdsModalOpen: boolean;
   isTikTokModalOpen: boolean;
+  isAppsFlyerModalOpen: boolean;
   googleSheetsFileId: string | null;
   googleSheetsFileName: string | null;
 
@@ -161,6 +162,7 @@ interface ChatState {
   setGA4ModalOpen: (open: boolean) => void;
   setMetaAdsModalOpen: (open: boolean) => void;
   setTikTokModalOpen: (open: boolean) => void;
+  setAppsFlyerModalOpen: (open: boolean) => void;
   setGoogleSheetsFileId: (id: string | null) => void;
   setGoogleSheetsFileName: (name: string | null) => void;
 
@@ -176,6 +178,16 @@ interface ChatState {
   syncGoogleSheets: (projectId?: string) => Promise<void>;
   syncGA4: (propertyId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string, propertyName?: string) => Promise<void>;
   syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string, adsetIds?: string[], campaignIds?: string[]) => Promise<MetaAdsSyncResult>;
+  syncAppsFlyer: (appId: string, appName: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<AppsFlyerSyncResult>;
+}
+
+/** Result of AppsFlyer sync API */
+export interface AppsFlyerSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
 }
 
 export interface PendingAction {
@@ -229,6 +241,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isGA4ModalOpen: false,
   isMetaAdsModalOpen: false,
   isTikTokModalOpen: false,
+  isAppsFlyerModalOpen: false,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
   selectedModel: 'pro',
@@ -289,6 +302,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setGA4ModalOpen: (open) => set({ isGA4ModalOpen: open }),
   setMetaAdsModalOpen: (open) => set({ isMetaAdsModalOpen: open }),
   setTikTokModalOpen: (open) => set({ isTikTokModalOpen: open }),
+  setAppsFlyerModalOpen: (open) => set({ isAppsFlyerModalOpen: open }),
   setGoogleSheetsFileId: (id) => {
     console.log('Store: setting googleSheetsFileId:', id);
     set({ googleSheetsFileId: id });
@@ -426,6 +440,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync TikTok Ads');
     } catch (err) {
       console.error('Sync TikTok Ads error:', err);
+      throw err;
+    }
+  },
+
+  syncAppsFlyer: async (appId, appName, projectId, datePreset, startDate, endDate) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncAppsFlyer({
+        app_id: appId,
+        app_name: appName,
+        ...(projectId && { project_id: projectId }),
+        date_preset: datePreset || 'last_30d',
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+      });
+
+      if (response.success && response.asset) {
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync AppsFlyer');
+    } catch (err) {
+      console.error('Sync AppsFlyer error:', err);
       throw err;
     }
   },

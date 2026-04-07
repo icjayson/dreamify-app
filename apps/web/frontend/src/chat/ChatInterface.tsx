@@ -392,6 +392,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setGA4ModalOpen,
     setMetaAdsModalOpen,
     setTikTokModalOpen,
+    setAppsFlyerModalOpen,
     isDashboardOpen,
     selectedModel,
     setSelectedModel,
@@ -1068,6 +1069,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     if (connector.name === 'TikTok Ads') {
       setDropdownOpen(false);
       setTimeout(() => setTikTokModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'AppsFlyer') {
+      setDropdownOpen(false);
+      setTimeout(() => setAppsFlyerModalOpen(true), 0);
       return;
     }
     if (connector.isActive) {

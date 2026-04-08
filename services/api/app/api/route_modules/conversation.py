@@ -256,7 +256,14 @@ async def conversation_chat(
     conversation_bucket = config.aws.s3.USER_ASSETS_BUCKET
     now_iso = datetime.now().isoformat()
 
-    user_node = _create_user_node(enriched_contents, request.user_node_metadata)
+    model_alias = request.model or "fast"
+    resolved_model = MODEL_ID_MAP.get(model_alias, MODEL_ID_MAP["fast"])
+
+    user_node_metadata = request.user_node_metadata or {}
+    user_node_metadata["chat_mode"] = model_alias
+    user_node_metadata["resolved_model"] = resolved_model
+
+    user_node = _create_user_node(enriched_contents, user_node_metadata)
 
     is_new_conversation = False
     if request.conversation_id:
@@ -269,6 +276,14 @@ async def conversation_chat(
         conversation_keys = _conversation_keys(
             user_id, request.project_id, conversation_id
         )
+
+        # Update DynamoDB metadata so admin list views have the latest model info
+        existing_meta = conversations_repo.get_conversation(request.project_id, conversation_id)
+        if existing_meta:
+            dynamo_metadata = existing_meta.get("metadata", {})
+            dynamo_metadata["chat_mode"] = model_alias
+            dynamo_metadata["resolved_model"] = resolved_model
+            conversations_repo.update_conversation_metadata(request.project_id, conversation_id, dynamo_metadata)
     else:
         # Create new conversation
         is_new_conversation = True
@@ -279,6 +294,8 @@ async def conversation_chat(
 
         metadata = {
             "status": "active",
+            "chat_mode": model_alias,
+            "resolved_model": resolved_model,
             "project": {
                 "project_id": request.project_id,
                 "user_id": user_id,

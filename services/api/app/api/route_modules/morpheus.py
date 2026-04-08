@@ -210,3 +210,31 @@ async def update_conversation_node_count(
     return {"success": True}
 
 
+class ConversationTokensUpdateRequest(BaseModel):
+    total_tokens: int
+
+
+@router.put("/morpheus/project/{project_id}/conversation/{conversation_id}/tokens")
+async def update_conversation_tokens(
+    project_id: str,
+    conversation_id: str,
+    request: ConversationTokensUpdateRequest,
+    x_morpheus_key: Optional[str] = Header(None),
+):
+    _ensure_morpheus_key(x_morpheus_key)
+
+    conversation = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    metadata = conversation.get("metadata", {})
+    metadata["total_tokens"] = metadata.get("total_tokens", 0) + request.total_tokens
+    
+    updated = conversations_repo.update_conversation_metadata(
+        project_id=project_id,
+        conversation_id=conversation_id,
+        metadata=metadata,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Failed to update metadata")
+    return {"success": True}

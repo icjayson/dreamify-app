@@ -224,6 +224,9 @@ class ConversationListItem(BaseModel):
     updated_at: str
     s3_bucket: Optional[str] = None
     s3_key: Optional[str] = None
+    chat_mode: Optional[str] = None
+    model: Optional[str] = None
+    total_tokens: Optional[int] = None
 
 
 class ConversationDetailResponse(BaseModel):
@@ -341,6 +344,9 @@ async def list_conversations(
                 updated_at=item.get("updated_at", ""),
                 s3_bucket=item.get("s3_bucket"),
                 s3_key=item.get("s3_key"),
+                chat_mode=item.get("metadata", {}).get("chat_mode"),
+                model=item.get("metadata", {}).get("resolved_model"),
+                total_tokens=item.get("metadata", {}).get("total_tokens"),
             )
             for item in paginated_items
         ]

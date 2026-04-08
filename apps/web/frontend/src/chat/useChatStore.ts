@@ -70,6 +70,7 @@ interface ChatState {
   // Processing state
   isProcessing: boolean;
   currentWorkflowStep: string | null;
+  priorWorkflowSteps: string[];
 
   // UI state
   dropdownOpen: boolean;
@@ -140,6 +141,7 @@ interface ChatState {
   setDetectedLanguage: (language: string | null) => void;
   setIsProcessing: (processing: boolean) => void;
   setCurrentWorkflowStep: (step: string | null) => void;
+  setPriorWorkflowSteps: (steps: string[]) => void;
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setDashboardTheme: (theme: 'light' | 'dark') => void;
   setIsThemeChanging: (changing: boolean) => void;
@@ -199,6 +201,9 @@ export interface PendingAction {
   model?: 'pro' | 'fast';
 }
 
+// Ordered sequence of workflow steps (used to reconstruct prior steps on resume)
+const STEP_ORDER = ['start', 'load_conversation', 'download_asset', 'run_workflow', 'routing', 'reasoning', 'execution', 'synthesis', 'validation', 'finish'];
+
 const initialMessages: Message[] = [
   {
     id: "1",
@@ -218,6 +223,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentProjectId: null,
   isProcessing: false,
   currentWorkflowStep: null,
+  priorWorkflowSteps: [],
   dropdownOpen: false,
   selectedDataSource: "",
   isListening: false,
@@ -282,6 +288,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setDetectedLanguage: (language) => set({ detectedLanguage: language }),
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   setCurrentWorkflowStep: (step) => set({ currentWorkflowStep: step }),
+  setPriorWorkflowSteps: (steps) => set({ priorWorkflowSteps: steps }),
   updateMessages: (updater) => set((state) => ({ messages: updater(state.messages) })),
   setDashboardTheme: (theme) => set({ dashboardTheme: theme }),
   setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
@@ -1300,6 +1307,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   resumeWorkflowPolling: async (projectId: string, conversationId: string, onProcessedDataChange?: (data: any) => void) => {
+    // Pre-check (synchronous): processFileWithMessage sets abortController synchronously
+    // before its first await, so this catches concurrent fresh-start workflows
+    if (get().abortController !== null || get().isProcessing) return;
+
     const { processingService } = await import('@/services/processingService');
 
     // Check if a workflow is actually in progress before doing anything
@@ -1309,12 +1320,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    // Post-check: close the race window — processFileWithMessage may have started while
+    // getWorkflowStatus was in-flight (abortController is set synchronously, isProcessing lags)
+    if (get().abortController !== null || get().isProcessing) return;
+
     const { setIsProcessing, setIsTyping, setCurrentWorkflowStep, setCurrentConversationId } = get();
 
     // Seed the step display with whatever the backend currently reports
     const initialStep = statusCheck.data?.workflow_status?.metadata?.step;
     if (initialStep) {
       setCurrentWorkflowStep(initialStep);
+      // Compute all steps that logically preceded this one so the UI can show them as completed
+      const stepIdx = STEP_ORDER.indexOf(initialStep);
+      const priorSteps = stepIdx > 0 ? STEP_ORDER.slice(0, stepIdx) : [];
+      set({ priorWorkflowSteps: priorSteps });
     }
 
     const abortController = new AbortController();
@@ -1408,6 +1427,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     currentConversationId: null,
     isProcessing: false,
     currentWorkflowStep: null,
+    priorWorkflowSteps: [],
     dropdownOpen: false,
     selectedDataSource: "",
     isListening: false,

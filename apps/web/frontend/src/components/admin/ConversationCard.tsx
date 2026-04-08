@@ -60,8 +60,25 @@ export function ConversationCard({ conversation }: ConversationCardProps) {
             <span className="text-xs">{formatDate(conversation.created_at)}</span>
           </div>
         </div>
-        <div className="pt-2 border-t">
-          <span className="text-xs font-mono text-muted-foreground">
+        <div className="pt-2 border-t flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            {conversation.chat_mode && (
+              <span className="text-[10px] font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase">
+                {conversation.chat_mode}
+              </span>
+            )}
+            {conversation.model && (
+              <span className="text-[10px] text-muted-foreground truncate max-w-[120px]" title={conversation.model}>
+                {conversation.model}
+              </span>
+            )}
+            {conversation.total_tokens ? (
+              <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded border ml-auto">
+                {conversation.total_tokens.toLocaleString()} tkns
+              </span>
+            ) : null}
+          </div>
+          <span className="text-[10px] font-mono text-muted-foreground">
             ID: {conversation.conversation_id.slice(0, 16)}...
           </span>
         </div>

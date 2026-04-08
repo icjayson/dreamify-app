@@ -24,30 +24,136 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 
 
-// Friendly AI persona step mapping for Fluid Morph loading
-const STEP_FRIENDLY_MAP: Record<string, string> = {
-  // Initialization
-  'start': "Waking up...",
-  'load_conversation': "Reading conversation context...",
-  'download_asset': "Analyzing file structure...",
-
-  // Intelligence
-  'run_workflow': "Booting up data engine...",
-  'routing': "Understanding your goal...",
-  'reasoning': "Planning the best visualization...",
-
-  // Action
-  'execution': "Crunching the numbers...",
-  'synthesis': "Designing your dashboard...",
-  'validation': "Double-checking results...",
-
-  // Completion/Edge cases
-  'finish': "Finalizing...",
-  'error': "I ran into a hiccup.",
+// Creative phrase variants per backend step — each key maps to a real Morpheus workflow step
+const STEP_VARIANTS: Record<string, string[]> = {
+  'start': [
+    "Waking up my brain...",
+    "Coming online now...",
+    "Stretching my neurons...",
+    "Just getting started...",
+    "Firing up the engines...",
+    "Rising and shining...",
+  ],
+  'load_conversation': [
+    "Reading our conversation...",
+    "Catching up on context...",
+    "Refreshing my memory...",
+    "Picking up where we left off...",
+    "Getting back up to speed...",
+    "Reviewing the backstory...",
+  ],
+  'download_asset': [
+    "Taking a look at your data...",
+    "Reading through the file...",
+    "Getting familiar with the dataset...",
+    "Scanning what you've shared...",
+    "Absorbing your spreadsheet...",
+    "Digging into the file...",
+  ],
+  'run_workflow': [
+    "Spinning up the pipeline...",
+    "Getting the gears turning...",
+    "Kicking off the workflow...",
+    "Putting the wheels in motion...",
+    "Launching the data engine...",
+    "Starting the machinery...",
+  ],
+  'routing': [
+    "Understanding what you need...",
+    "Getting a feel for the goal...",
+    "Figuring out the best path...",
+    "Tuning in to your request...",
+    "Mapping out the mission...",
+    "Locking in on the objective...",
+  ],
+  'reasoning': [
+    "Thinking this through...",
+    "Planning the best approach...",
+    "Brainstorming the right angle...",
+    "Working out the strategy...",
+    "Deliberating on the best move...",
+    "Picking the smartest path...",
+  ],
+  'execution': [
+    "Crunching the numbers...",
+    "Running the analysis...",
+    "Doing the heavy lifting...",
+    "Putting the data to work...",
+    "Getting into the details...",
+    "Letting the math do its thing...",
+  ],
+  'synthesis': [
+    "Designing your dashboard...",
+    "Assembling the visuals...",
+    "Crafting the charts...",
+    "Building the layout...",
+    "Putting it all together...",
+    "Weaving the pieces together...",
+  ],
+  'validation': [
+    "Double-checking the results...",
+    "Making sure everything adds up...",
+    "Giving it a final once-over...",
+    "Confirming all looks good...",
+    "Reviewing for accuracy...",
+    "Verifying before handing over...",
+  ],
+  'finish': [
+    "Wrapping things up...",
+    "Putting on the finishing touches...",
+    "Almost ready for you...",
+    "Last few steps now...",
+    "Polishing before delivery...",
+    "Nearly there...",
+  ],
+  'error': [
+    "Hit a small snag.",
+    "Ran into a hiccup.",
+    "Something went sideways.",
+  ],
 };
 
+const STEP_LABELS_STORAGE_PREFIX = 'dreamify_step_labels_';
+const stepVariantCache = new Map<string, string>();
+
 const mapStepToDisplayText = (step: string): string => {
-  return STEP_FRIENDLY_MAP[step] || "Processing...";
+  const conversationId = useChatStore.getState().currentConversationId;
+  const cacheKey = conversationId ? `${conversationId}:${step}` : step;
+
+  // 1. In-memory cache (fast path)
+  if (stepVariantCache.has(cacheKey)) return stepVariantCache.get(cacheKey)!;
+
+  // 2. sessionStorage — survives F5 refresh, keyed by conversationId
+  if (conversationId) {
+    try {
+      const stored = sessionStorage.getItem(STEP_LABELS_STORAGE_PREFIX + conversationId);
+      if (stored) {
+        const parsed: Record<string, string> = JSON.parse(stored);
+        if (parsed[step]) {
+          stepVariantCache.set(cacheKey, parsed[step]);
+          return parsed[step];
+        }
+      }
+    } catch { /* sessionStorage unavailable */ }
+  }
+
+  // 3. Pick randomly and persist to both caches
+  const variants = STEP_VARIANTS[step];
+  const pick = variants
+    ? variants[Math.floor(Math.random() * variants.length)]
+    : "Processing...";
+  stepVariantCache.set(cacheKey, pick);
+
+  if (conversationId) {
+    try {
+      const stored = sessionStorage.getItem(STEP_LABELS_STORAGE_PREFIX + conversationId);
+      const existing: Record<string, string> = stored ? JSON.parse(stored) : {};
+      existing[step] = pick;
+      sessionStorage.setItem(STEP_LABELS_STORAGE_PREFIX + conversationId, JSON.stringify(existing));
+    } catch { /* sessionStorage unavailable */ }
+  }
+
+  return pick;
 };
 
 // Helper function to format file size
@@ -84,10 +190,11 @@ interface DeepThinkingTasksProps {
   isActive: boolean;
   currentStep?: string | null;
   savedTasks?: Array<{ id: string; text: string }>;
+  initialSteps?: Array<{ id: string; text: string }>;
   inline?: boolean;
 }
 
-const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, inline }: DeepThinkingTasksProps) => {
+const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialSteps, inline }: DeepThinkingTasksProps) => {
   const [isExpanded, setIsExpanded] = useState(!savedTasks);
 
   // Parse tasks from /run prompt (live mode only)
@@ -119,7 +226,15 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, inline }
     setIsExpanded(true);
 
     if (workflowTasks.length === 0) {
-      setWorkflowTasks([{ id: 'start', text: mapStepToDisplayText('start') }]);
+      // Clear variant cache so each new workflow gets a fresh random set of labels
+      stepVariantCache.clear();
+      if (initialSteps && initialSteps.length > 0) {
+        // Resume after reload: seed with all steps that completed before this session
+        setWorkflowTasks(initialSteps);
+        prevStepRef.current = initialSteps[initialSteps.length - 1].id;
+      } else {
+        setWorkflowTasks([{ id: 'start', text: mapStepToDisplayText('start') }]);
+      }
     }
 
     if (currentStep && currentStep !== prevStepRef.current) {
@@ -374,6 +489,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     detectedLanguage,
     selectedTemplate,
     currentWorkflowStep,
+    priorWorkflowSteps,
     setInputValue,
     setIsTyping,
     setMessages,
@@ -549,6 +665,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
   const parseMessageToHtml = (raw: string): string => {
     let html = escapeHtml(raw);
+    // ### / ## / # headings (must be at start of line)
+    html = html.replace(/^(#{1,3})\s+(.+)$/gm, (_m, hashes, text) => {
+      const level = hashes.length;
+      const cls = level === 1
+        ? 'text-base font-bold mt-3 mb-1'
+        : level === 2
+        ? 'text-sm font-bold mt-2 mb-1'
+        : 'text-sm font-semibold mt-2 mb-0.5';
+      return `<p class="${cls}">${text}</p>`;
+    });
     // <https://example.com>
     html = html.replace(/&lt;(https?:\/\/[^\s>]+)&gt;/g, (_m, url) => {
       return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="underline">${url}</a>`;
@@ -1520,6 +1646,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     prompt={message.content}
                     isActive={true}
                     currentStep={currentWorkflowStep}
+                    initialSteps={priorWorkflowSteps.map(s => ({ id: s, text: mapStepToDisplayText(s) }))}
                   />
                 </div>
               )}

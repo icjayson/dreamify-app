@@ -13,6 +13,9 @@ export interface ConversationListItem {
   updated_at: string;
   s3_bucket?: string;
   s3_key?: string;
+  chat_mode?: string;
+  model?: string;
+  total_tokens?: number;
 }
 
 export interface ConversationListResponse {
@@ -35,6 +38,9 @@ export interface AdminMetricsResponse {
   total_messages: number;
   avg_msgs_per_user: number;
   success_rate: number;
+  total_tokens: number;
+  mode_distribution: Record<string, number>;
+  model_distribution: Record<string, number>;
 }
 
 export interface TimeSeriesDataPoint {
@@ -42,6 +48,10 @@ export interface TimeSeriesDataPoint {
   messages: number;
   conversations: number;
   active_users: number;
+  tokens: number;
+  modes: Record<string, number>;
+  models: Record<string, number>;
+  tokens_by_model: Record<string, number>;
 }
 
 class AdminService {

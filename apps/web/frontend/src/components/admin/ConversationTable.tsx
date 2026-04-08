@@ -99,6 +99,8 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
                 <ArrowUpDown className="ml-2 h-3 w-3" />
               </Button>
             </TableHead>
+            <TableHead>Environment</TableHead>
+            <TableHead>Tokens</TableHead>
             <TableHead>
               <Button
                 variant="ghost"
@@ -154,6 +156,31 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
                 )}
               </TableCell>
               <TableCell>{conv.title}</TableCell>
+              <TableCell>
+                <div className="flex flex-col gap-1 items-start">
+                  {conv.chat_mode ? (
+                    <span className="text-[10px] font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase">
+                      {conv.chat_mode}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">-</span>
+                  )}
+                  {conv.model && (
+                    <span className="text-[10px] text-muted-foreground truncate max-w-[120px]" title={conv.model}>
+                      {conv.model}
+                    </span>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                {conv.total_tokens ? (
+                  <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded border">
+                    {conv.total_tokens.toLocaleString()}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground text-xs">-</span>
+                )}
+              </TableCell>
               <TableCell className="text-sm text-muted-foreground">
                 {formatDate(conv.created_at)}
               </TableCell>

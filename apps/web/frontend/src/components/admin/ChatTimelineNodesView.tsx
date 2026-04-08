@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Bot, User, Settings, Code } from 'lucide-react';
+import { Bot, User, Settings, Code, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -150,6 +150,28 @@ export function ChatTimelineNodesView({ nodes, conversationId, projectId }: Chat
                             )}>
                                 {node.contents && renderContent(node.contents, role)}
                                 {node.metadata && renderToolCalls(node.metadata)}
+
+                                {node.metadata && (
+                                    <div className="mt-3 pt-2 border-t border-border/20 flex flex-wrap gap-2 text-[10px] opacity-80">
+                                        {isUser && node.metadata.chat_mode && (
+                                            <span className="flex items-center gap-1 bg-background/20 px-1.5 py-0.5 rounded">
+                                                <Settings className="h-3 w-3" />
+                                                Mode: <span className="font-semibold">{node.metadata.chat_mode}</span>
+                                                {node.metadata.resolved_model && <span className="opacity-70 ml-1">({node.metadata.resolved_model})</span>}
+                                            </span>
+                                        )}
+                                        
+                                        {!isUser && node.metadata.usage && (
+                                            <span className="flex items-center gap-1 bg-background/50 text-muted-foreground px-1.5 py-0.5 rounded border border-border/50">
+                                                <Activity className="h-3 w-3" />
+                                                Tokens: <span className="font-semibold text-foreground/80">{node.metadata.usage.total_tokens || 0}</span>
+                                                <span className="opacity-70">
+                                                    ({node.metadata.usage.input_tokens || 0} in, {node.metadata.usage.output_tokens || 0} out)
+                                                </span>
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
 
                                 {node.metadata?.error && (
                                     <div className="mt-3 text-xs text-red-500 bg-red-500/10 p-2 rounded border border-red-500/20">

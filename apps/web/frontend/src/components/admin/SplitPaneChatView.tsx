@@ -137,12 +137,24 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                                         </div>
                                     </div>
 
-                                    {/* Timestamp */}
-                                    <div className="text-[10px] text-muted-foreground whitespace-nowrap self-start mt-1">
-                                        {new Date(conv.created_at).toLocaleDateString(undefined, {
-                                            month: 'short',
-                                            day: 'numeric'
-                                        })}
+                                    {/* Timestamp & Metrics */}
+                                    <div className="flex flex-col items-end gap-1 ml-auto mt-1 shrink-0">
+                                        <div className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                            {new Date(conv.created_at).toLocaleDateString(undefined, {
+                                                month: 'short',
+                                                day: 'numeric'
+                                            })}
+                                        </div>
+                                        {conv.chat_mode && (
+                                            <span className="text-[8px] font-semibold bg-primary/10 text-primary px-1 rounded uppercase">
+                                                {conv.chat_mode}
+                                            </span>
+                                        )}
+                                        {conv.total_tokens ? (
+                                            <span className="text-[8px] font-mono text-muted-foreground bg-muted px-1 rounded">
+                                                {conv.total_tokens >= 1000 ? `${(conv.total_tokens / 1000).toFixed(1)}k` : conv.total_tokens} t
+                                            </span>
+                                        ) : null}
                                     </div>
                                 </button>
                             ))}

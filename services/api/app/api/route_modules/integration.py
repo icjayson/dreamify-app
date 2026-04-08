@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ from app.dependencies.auth import require_user
 from app.services.integration_service import integration_service
 from app.api.route_modules.user import AssetResponse, _map_asset, _ensure_project
 
-router = APIRouter(tags=["integration", "google", "meta", "tiktok"])
+router = APIRouter(tags=["integration", "google", "meta", "tiktok", "appsflyer"])
 
 
 class GoogleAnalyticsSyncRequest(BaseModel):
@@ -68,7 +68,9 @@ class GoogleTokenResponse(BaseModel):
     token: Optional[str]
 
 
-@router.get("/integration/google/properties", response_model=GoogleAnalyticsPropertiesResponse)
+@router.get(
+    "/integration/google/properties", response_model=GoogleAnalyticsPropertiesResponse
+)
 async def get_google_analytics_properties(
     user_id: str = Depends(require_user),
 ):
@@ -76,11 +78,13 @@ async def get_google_analytics_properties(
     Get a list of all Google Analytics accounts and properties the user has access to.
     """
     try:
-        result = await integration_service.fetch_google_analytics_properties(user_id=user_id)
+        result = await integration_service.fetch_google_analytics_properties(
+            user_id=user_id
+        )
         return GoogleAnalyticsPropertiesResponse(
             success=result["success"],
             accounts=result.get("accounts", []),
-            error=result.get("error")
+            error=result.get("error"),
         )
     except Exception as e:
         logger.error(f"Failed to fetch GA properties: {e}")
@@ -99,9 +103,9 @@ async def sync_google_analytics_data(
     try:
         if not request.property_id:
             raise HTTPException(status_code=400, detail="property_id is required")
-            
+
         project = _ensure_project(user_id, request.project_id)
-            
+
         result = await integration_service.fetch_google_analytics_data(
             user_id=user_id,
             property_id=request.property_id,
@@ -109,22 +113,22 @@ async def sync_google_analytics_data(
             start_date=request.start_date,
             end_date=request.end_date,
             account_name=request.account_name,
-            property_name=request.property_name
+            property_name=request.property_name,
         )
-        
+
         # Map the created asset to the standard AssetResponse
         mapped_asset = _map_asset(
-            result["asset"], 
-            row_count=result["row_count"], 
-            column_count=result["column_count"]
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
         )
-        
+
         return GoogleAnalyticsSyncResponse(
             success=result["success"],
             message=result["message"],
             asset=mapped_asset,
             row_count=result["row_count"],
-            column_count=result["column_count"]
+            column_count=result["column_count"],
         )
     except Exception as e:
         # Wrap the error details
@@ -157,16 +161,14 @@ async def sync_google_sheet_data(
         project = _ensure_project(user_id, request.project_id)
 
         result = await integration_service.fetch_google_sheet_data(
-            user_id=user_id,
-            file_id=request.file_id,
-            project_id=project["project_id"]
+            user_id=user_id, file_id=request.file_id, project_id=project["project_id"]
         )
 
         # Map the created asset to the standard AssetResponse
         mapped_asset = _map_asset(
             result["asset"],
             row_count=result["row_count"],
-            column_count=result["column_count"]
+            column_count=result["column_count"],
         )
 
         return GoogleSheetSyncResponse(
@@ -174,7 +176,7 @@ async def sync_google_sheet_data(
             message=result["message"],
             asset=mapped_asset,
             row_count=result["row_count"],
-            column_count=result["column_count"]
+            column_count=result["column_count"],
         )
     except Exception as e:
         print(f"Error syncing google sheet: {e}")
@@ -236,9 +238,13 @@ def _verify_bearer(authorization: str) -> Optional[str]:
 
     class _FakeRequest:
         """Minimal request-like object that clerk_auth_jwt can read headers from."""
+
         def __init__(self, auth_header: str):
             self.headers = {"Authorization": auth_header}
-            self.scope = {"type": "http", "headers": [(b"authorization", auth_header.encode())]}
+            self.scope = {
+                "type": "http",
+                "headers": [(b"authorization", auth_header.encode())],
+            }
 
         def header(self, name: str) -> Optional[str]:
             return self.headers.get(name)
@@ -273,11 +279,15 @@ async def meta_oauth_start(
         bearer = f"Bearer {token}"
 
     if not bearer:
-        return HTMLResponse(_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in."))
+        return HTMLResponse(
+            _OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
 
     user_id = _verify_bearer(bearer)
     if not user_id:
-        return HTMLResponse(_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token."))
+        return HTMLResponse(
+            _OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
 
     try:
         url = integration_service.get_meta_oauth_url(user_id)
@@ -326,7 +336,7 @@ class MetaAdAccount(BaseModel):
     account_status: int
     currency: str
     timezone_name: str
-    source_type: str = "personal"        # "personal" | "business"
+    source_type: str = "personal"  # "personal" | "business"
     business_id: Optional[str] = None
     business_name: Optional[str] = None
 
@@ -363,16 +373,19 @@ class MetaCampaign(BaseModel):
     status: Optional[str] = None
     objective: Optional[str] = None
 
+
 class MetaCampaignsResponse(BaseModel):
     success: bool
     campaigns: list[MetaCampaign]
     error: Optional[str] = None
+
 
 class MetaAdSet(BaseModel):
     id: str
     name: str
     status: Optional[str] = None
     campaign_id: Optional[str] = None
+
 
 class MetaAdSetsResponse(BaseModel):
     success: bool
@@ -439,7 +452,9 @@ async def sync_meta_ads_data(
         logger.error(f"Failed to sync Meta Ads data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ── TikTok Ads ──────────────────────────────────────────────────────────────────
+
 
 class TikTokConnectionStatusResponse(BaseModel):
     connected: bool
@@ -458,11 +473,15 @@ async def tiktok_oauth_start(
         bearer = f"Bearer {token}"
 
     if not bearer:
-        return HTMLResponse(_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in."))
+        return HTMLResponse(
+            _OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
 
     user_id = _verify_bearer(bearer)
     if not user_id:
-        return HTMLResponse(_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token."))
+        return HTMLResponse(
+            _OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
 
     try:
         url = integration_service.get_tiktok_oauth_url(user_id)
@@ -484,15 +503,21 @@ async def tiktok_oauth_callback(
         return HTMLResponse(_OAUTH_ERROR_HTML.format(error=msg))
 
     try:
-        await integration_service.handle_tiktok_oauth_callback(auth_code=auth_code, state=state)
+        await integration_service.handle_tiktok_oauth_callback(
+            auth_code=auth_code, state=state
+        )
         # We can reuse the Meta broadcast JS logic by letting the frontend know it's a success
         # Wait, the broadcast channel in _OAUTH_SUCCESS_HTML is 'meta_oauth'. We can either duplicate it or reuse it.
         # It's better to create a TikTok specific one or just use the same template but replace 'meta_oauth' with 'tiktok_oauth'
-        success_html = _OAUTH_SUCCESS_HTML.replace('meta_oauth', 'tiktok_oauth').replace('META_OAUTH_SUCCESS', 'TIKTOK_OAUTH_SUCCESS')
+        success_html = _OAUTH_SUCCESS_HTML.replace(
+            "meta_oauth", "tiktok_oauth"
+        ).replace("META_OAUTH_SUCCESS", "TIKTOK_OAUTH_SUCCESS")
         return HTMLResponse(success_html)
     except Exception as e:
         logger.error(f"TikTok OAuth callback error: {e}")
-        error_html = _OAUTH_ERROR_HTML.replace('meta_oauth', 'tiktok_oauth').replace('META_OAUTH_ERROR', 'TIKTOK_OAUTH_ERROR')
+        error_html = _OAUTH_ERROR_HTML.replace("meta_oauth", "tiktok_oauth").replace(
+            "META_OAUTH_ERROR", "TIKTOK_OAUTH_ERROR"
+        )
         return HTMLResponse(error_html.format(error=str(e)))
 
 
@@ -599,7 +624,10 @@ async def sync_tiktok_ads_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/integration/meta/accounts/{ad_account_id}/campaigns", response_model=MetaCampaignsResponse)
+@router.get(
+    "/integration/meta/accounts/{ad_account_id}/campaigns",
+    response_model=MetaCampaignsResponse,
+)
 async def get_meta_campaigns(
     ad_account_id: str,
     date_preset: Optional[str] = "last_30d",
@@ -619,16 +647,60 @@ async def get_meta_campaigns(
         return MetaCampaignsResponse(
             success=result["success"],
             campaigns=result.get("campaigns", []),
-            error=result.get("error")
+            error=result.get("error"),
         )
     except Exception as e:
         logger.error(f"Failed to fetch Meta campaigns: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class AppsFlyerConnectRequest(BaseModel):
+    api_token: str
+
+
+class AppsFlyerConnectResponse(BaseModel):
+    success: bool
+    error: Optional[str] = None
+
+
+class AppsFlyerApp(BaseModel):
+    app_id: str
+    app_name: str
+    platform: str
+
+
+class AppsFlyerAppsResponse(BaseModel):
+    success: bool
+    apps: List[AppsFlyerApp] = []
+    error: Optional[str] = None
+
+
+class AppsFlyerSyncRequest(BaseModel):
+    app_id: str
+    app_name: str
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class AppsFlyerSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    error: Optional[str] = None
+
+
 class MetaAdSetsRequest(BaseModel):
     campaign_ids: list[str]
 
-@router.post("/integration/meta/accounts/{ad_account_id}/adsets", response_model=MetaAdSetsResponse)
+
+@router.post(
+    "/integration/meta/accounts/{ad_account_id}/adsets",
+    response_model=MetaAdSetsResponse,
+)
 async def get_meta_adsets(
     ad_account_id: str,
     request: MetaAdSetsRequest,
@@ -644,8 +716,100 @@ async def get_meta_adsets(
         return MetaAdSetsResponse(
             success=result["success"],
             adsets=result.get("adsets", []),
-            error=result.get("error")
+            error=result.get("error"),
         )
     except Exception as e:
         logger.error(f"Failed to fetch Meta adsets: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── AppsFlyer ─────────────────────────────────────────────────────────────────
+
+
+@router.post("/integration/appsflyer/connect", response_model=AppsFlyerConnectResponse)
+async def appsflyer_connect(
+    request: AppsFlyerConnectRequest,
+    user_id: str = Depends(require_user),
+):
+    """Validate AppsFlyer API token and store it."""
+    try:
+        await integration_service.validate_and_save_appsflyer_token(
+            user_id, request.api_token
+        )
+        return AppsFlyerConnectResponse(success=True)
+    except HTTPException as e:
+        return AppsFlyerConnectResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"AppsFlyer connect error: {e}")
+        return AppsFlyerConnectResponse(success=False, error=str(e))
+
+
+@router.get("/integration/appsflyer/status")
+async def appsflyer_status(user_id: str = Depends(require_user)):
+    """Return whether the user has a stored AppsFlyer token."""
+    try:
+        status = await integration_service.get_appsflyer_connection_status(user_id)
+        return status
+    except Exception as e:
+        logger.error(f"AppsFlyer status error: {e}")
+        return {"connected": False}
+
+
+@router.get("/integration/appsflyer/apps", response_model=AppsFlyerAppsResponse)
+async def appsflyer_apps(user_id: str = Depends(require_user)):
+    """Fetch the list of apps registered under the user's AppsFlyer account."""
+    try:
+        apps = await integration_service.fetch_appsflyer_apps(user_id)
+        return AppsFlyerAppsResponse(success=True, apps=apps)
+    except HTTPException as e:
+        return AppsFlyerAppsResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"AppsFlyer apps error: {e}")
+        return AppsFlyerAppsResponse(success=False, error=str(e))
+
+
+@router.post("/integration/appsflyer/sync", response_model=AppsFlyerSyncResponse)
+async def appsflyer_sync(
+    request: AppsFlyerSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    """Fetch AppsFlyer partners aggregate report and save as a CSV asset."""
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await integration_service.fetch_appsflyer_data(
+            user_id=user_id,
+            app_id=request.app_id,
+            app_name=request.app_name,
+            project_id=project["project_id"],
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return AppsFlyerSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result.get("row_count"),
+            column_count=result.get("column_count"),
+        )
+    except HTTPException as e:
+        return AppsFlyerSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"AppsFlyer sync error: {e}")
+        return AppsFlyerSyncResponse(success=False, error=str(e))
+
+
+@router.delete("/integration/appsflyer/disconnect")
+async def appsflyer_disconnect(user_id: str = Depends(require_user)):
+    """Remove the stored AppsFlyer token."""
+    try:
+        await integration_service.disconnect_appsflyer(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"AppsFlyer disconnect error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

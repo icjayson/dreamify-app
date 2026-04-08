@@ -67,6 +67,9 @@ async def get_admin_metrics(
         total_unique_users = set()
         total_conversations = 0
         total_messages = 0
+        total_tokens = 0
+        mode_distribution = {}
+        model_distribution = {}
         
         last_key = None
         while True:
@@ -82,6 +85,17 @@ async def get_admin_metrics(
                     total_messages += int(node_count)
                 else:
                     total_messages += 2
+                    
+                metadata = item.get("metadata", {})
+                tokens = metadata.get("total_tokens", 0)
+                if tokens:
+                    total_tokens += tokens
+                
+                mode = metadata.get("chat_mode", "standard") or "standard"
+                mode_distribution[mode] = mode_distribution.get(mode, 0) + 1
+                
+                model = metadata.get("resolved_model", "unknown") or "unknown"
+                model_distribution[model] = model_distribution.get(model, 0) + 1
             
             last_key = result.get("LastEvaluatedKey")
             if not last_key:
@@ -125,7 +139,10 @@ async def get_admin_metrics(
             "total_conversations": total_conversations,
             "total_messages": total_messages,
             "avg_msgs_per_user": round(avg_msgs, 1),
-            "success_rate": round(success_rate, 1)
+            "success_rate": round(success_rate, 1),
+            "total_tokens": total_tokens,
+            "mode_distribution": mode_distribution,
+            "model_distribution": model_distribution
         }
         metrics_cache.set(metrics)
         return metrics
@@ -143,7 +160,7 @@ async def get_admin_metrics_timeseries(
     """
     Get time-series metrics for the last N days.
     """
-    cache_key = f"timeseries_{days}"
+    cache_key = f"timeseries_v3_{days}"
     
     # We cheat the MetricsCache by storing a dict of cache keys inside
     cached_data = timeseries_cache.get()
@@ -163,7 +180,11 @@ async def get_admin_metrics_timeseries(
                 "messages": 0,
                 "conversations": 0,
                 "users_set": set(),
-                "active_users": 0
+                "active_users": 0,
+                "tokens": 0,
+                "modes": {},
+                "models": {},
+                "tokens_by_model": {}
             }
             
         last_key = None
@@ -188,6 +209,20 @@ async def get_admin_metrics_timeseries(
                             
                         if "user_id" in item:
                             buckets[date_prefix]["users_set"].add(item["user_id"])
+                            
+                        metadata = item.get("metadata", {})
+                        tokens = metadata.get("total_tokens", 0)
+                        if tokens:
+                            buckets[date_prefix]["tokens"] += tokens
+                            
+                        mode = metadata.get("chat_mode", "standard") or "standard"
+                        buckets[date_prefix]["modes"][mode] = buckets[date_prefix]["modes"].get(mode, 0) + 1
+                        
+                        model = metadata.get("resolved_model", "unknown") or "unknown"
+                        buckets[date_prefix]["models"][model] = buckets[date_prefix]["models"].get(model, 0) + 1
+                        
+                        if tokens:
+                            buckets[date_prefix]["tokens_by_model"][model] = buckets[date_prefix]["tokens_by_model"].get(model, 0) + tokens
             
             last_key = result.get("LastEvaluatedKey")
             if not last_key:

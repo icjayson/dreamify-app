@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
+import warnings
+warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality isn't compatible with Python 3.14", category=UserWarning)
+
 """
 Test the updated workflow with logging and workflow output
 """
 
 import sys
 import os
-sys.path.insert(0, '/home/hungnq/projects/morpheus')
+sys.path.insert(0, os.getcwd())
 
 def test_workflow_with_logging():
     """Test the workflow with the new logging and output features"""
@@ -20,7 +23,7 @@ def test_workflow_with_logging():
         workflow = StatefulAnalyzeCSVWorkflow()
         
         # Test file path
-        file_path = "/home/hungnq/projects/dreamify-morpheus/storage/in/sales_amazon.csv"
+        file_path = os.path.join(os.getcwd(), "storage/in/sales_amazon.csv")
         
         if not os.path.exists(file_path):
             print(f"❌ Test file not found: {file_path}")

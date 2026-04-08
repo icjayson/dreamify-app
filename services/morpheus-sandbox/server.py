@@ -1,3 +1,6 @@
+import warnings 
+warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality isn't compatible with Python 3.14", category=UserWarning)
+
 from datetime import datetime
 import json
 import os
@@ -588,6 +591,14 @@ def _postprocess_workflow_to_conversation_nodes(
         if msg_tool_call_id:
             metadata["tool_call_id"] = msg_tool_call_id
 
+        # Extract token usage if present
+        msg_usage = getattr(msg, "usage_metadata", None)
+        if hasattr(msg, "get") and msg_usage is None:
+            msg_usage = msg.get("usage_metadata")
+            
+        if msg_usage:
+            metadata["usage"] = msg_usage
+
         if metadata:
             node["metadata"] = metadata
 
@@ -818,6 +829,25 @@ def _process_conversation_background(
                 workflow_output
             )
             conversation.setdefault("nodes", []).extend(postprocessed_nodes)
+
+            # Calculate total tokens from workflow_output and update backend metadata
+            total_tokens = 0
+            if hasattr(workflow_output, "messages"):
+                for msg in workflow_output.messages:
+                    msg_usage = getattr(msg, "usage_metadata", None)
+                    if hasattr(msg, "get") and msg_usage is None:
+                        msg_usage = msg.get("usage_metadata")
+                    if msg_usage and isinstance(msg_usage, dict):
+                        total_tokens += msg_usage.get("total_tokens", 0)
+
+            if total_tokens > 0:
+                try:
+                    tokens_url = f"{BACKEND_API_URL}/api/v1/morpheus/project/{project_id}/conversation/{conversation_id}/tokens"
+                    headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
+                    requests.put(tokens_url, json={"total_tokens": total_tokens}, headers=headers, timeout=5)
+                    logger.info(f"Updated total tokens for conversation {conversation_id}: {total_tokens}")
+                except Exception as exc:
+                    logger.warning(f"Failed to update total tokens: {exc}")
 
         # Handle chart modification responses — merge modified chart into existing dashboard
         if response_type == "chart_modification":

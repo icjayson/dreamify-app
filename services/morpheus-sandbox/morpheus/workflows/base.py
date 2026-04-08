@@ -16,6 +16,7 @@ class WorkflowMessage(BaseModel):
     timestamp: datetime
     tool_calls: Optional[List[Dict[str, Any]]] = None
     tool_call_id: Optional[str] = None
+    usage_metadata: Optional[Dict[str, Any]] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -67,12 +68,18 @@ class WorkflowOutput(BaseModel):
         
         msg_type = msg_type_map.get(message.__class__.__name__, "unknown")
         
+        # Extract usage metadata if present
+        usage_metadata = getattr(message, "usage_metadata", None)
+        if hasattr(message, "get") and usage_metadata is None:
+            usage_metadata = message.get("usage_metadata")
+        
         workflow_msg = WorkflowMessage(
             type=msg_type,
             content=str(message.content),
             timestamp=datetime.now(),
             tool_calls=tool_calls,
-            tool_call_id=tool_call_id
+            tool_call_id=tool_call_id,
+            usage_metadata=usage_metadata
         )
         
         self.messages.append(workflow_msg)

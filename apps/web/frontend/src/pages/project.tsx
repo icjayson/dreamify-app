@@ -341,6 +341,12 @@ export default function ProjectPage() {
             if (latestConversationId) {
               hasConversation = true;
               await hydrateConversation(response.project.id, latestConversationId);
+              // Resume polling if a workflow is still running (e.g. after page reload / F5)
+              void useChatStore.getState().resumeWorkflowPolling(
+                response.project.id,
+                latestConversationId,
+                setProcessedData
+              );
             }
 
             // Check for pending action from HomePage

@@ -172,6 +172,7 @@ interface ChatState {
   resetChat: () => void;
   processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => Promise<void>;
   stopGeneration: () => Promise<void>;
+  resumeWorkflowPolling: (projectId: string, conversationId: string, onProcessedDataChange?: (data: any) => void) => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<any>;
 
   // Sync actions
@@ -1295,6 +1296,78 @@ export const useChatStore = create<ChatState>((set, get) => ({
       setIsTyping(false);
       setIsProcessing(false);
       set({ isUpdatingDashboard: false, abortController: null });
+    }
+  },
+
+  resumeWorkflowPolling: async (projectId: string, conversationId: string, onProcessedDataChange?: (data: any) => void) => {
+    const { processingService } = await import('@/services/processingService');
+
+    // Check if a workflow is actually in progress before doing anything
+    const statusCheck = await processingService.getWorkflowStatus(conversationId, projectId);
+    if (statusCheck.data?.status !== 'processing') {
+      // Not actively processing (completed, error, stopped, starting/404) — nothing to resume
+      return;
+    }
+
+    const { setIsProcessing, setIsTyping, setCurrentWorkflowStep, setCurrentConversationId } = get();
+
+    // Seed the step display with whatever the backend currently reports
+    const initialStep = statusCheck.data?.workflow_status?.metadata?.step;
+    if (initialStep) {
+      setCurrentWorkflowStep(initialStep);
+    }
+
+    const abortController = new AbortController();
+    set({ abortController, isProcessing: true, isTyping: true });
+    setCurrentConversationId(conversationId);
+
+    try {
+      const finalResult = await processingService.pollProcessingStatus(
+        '',
+        projectId,
+        conversationId,
+        (status) => {
+          const workflowStatus = status.data?.workflow_status?.status;
+          if (workflowStatus === 'error' || workflowStatus === 'stopped') {
+            setIsProcessing(false);
+            setIsTyping(false);
+          }
+          const step = status.data?.workflow_status?.metadata?.step;
+          if (step) setCurrentWorkflowStep(step);
+        },
+        360,
+        5000,
+        abortController.signal
+      );
+
+      if (finalResult.data?.success && finalResult.data?.status === 'completed') {
+        const { conversationService } = await import('@/services/conversationService');
+        const { conversationNodesToMessages } = await import('@/chat/conversationToMessages');
+        const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+        const conversation = conversationResponse.conversation;
+        const restoredMessages = conversationNodesToMessages(conversation);
+        if (restoredMessages.length) {
+          get().setMessages(restoredMessages);
+        }
+
+        // Auto-open dashboard if the latest message has a dashboard card
+        const lastMsg = restoredMessages[restoredMessages.length - 1];
+        const dashId = lastMsg?.dashboardCard?.dashboardId;
+        if (dashId) {
+          set({ selectedDashboardId: dashId, isDashboardOpen: true, hasShownInitialDashboard: true, isInitialLoading: false });
+          get().selectDashboard(dashId, projectId).then((data) => {
+            if (data && onProcessedDataChange) onProcessedDataChange(data);
+          });
+        } else if (finalResult.data?.dashboard_data && onProcessedDataChange) {
+          onProcessedDataChange(finalResult.data.dashboard_data);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to resume workflow polling:', error);
+    } finally {
+      setIsTyping(false);
+      setIsProcessing(false);
+      set({ abortController: null });
     }
   },
 

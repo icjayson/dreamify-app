@@ -32,6 +32,7 @@ import GoogleSheetsIntegrationModal from "./components/chat/GoogleSheetsIntegrat
 import MetaAdsIntegrationModal from "./components/chat/MetaAdsIntegrationModal";
 import TikTokIntegrationModal from "./components/chat/TikTokIntegrationModal";
 import AppsFlyerIntegrationModal from "./components/chat/AppsFlyerIntegrationModal";
+import StripeIntegrationModal from "./components/chat/StripeIntegrationModal";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +95,7 @@ const AppContent = () => {
       <MetaAdsIntegrationModal />
       <TikTokIntegrationModal />
       <AppsFlyerIntegrationModal />
+      <StripeIntegrationModal />
     </>
   );
 };

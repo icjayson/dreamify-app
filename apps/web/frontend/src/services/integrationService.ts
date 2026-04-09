@@ -113,6 +113,11 @@ class IntegrationService {
     return '/api/v1/integration/meta/oauth/start';
   }
 
+  getStripeOAuthStartUrl(): string {
+    // The backend redirects to Stripe Connect OAuth — open this in a popup
+    return '/api/v1/integration/stripe/oauth/start';
+  }
+
   async getMetaConnectionStatus(): Promise<MetaConnectionStatusResponse> {
     try {
       const res = await api.get<MetaConnectionStatusResponse>(`${this.baseUrl}/meta/status`);
@@ -305,6 +310,30 @@ class IntegrationService {
   async disconnectAppsFlyer(): Promise<void> {
     await api.delete(`${this.baseUrl}/appsflyer/disconnect`);
   }
+
+  async getStripeStatus(): Promise<StripeConnectionStatusResponse> {
+    try {
+      const res = await api.get<StripeConnectionStatusResponse>(`${this.baseUrl}/stripe/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async syncStripe(req: StripeSyncRequest): Promise<StripeSyncResponse> {
+    try {
+      const res = await api.post<StripeSyncResponse>(`${this.baseUrl}/stripe/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Stripe data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async disconnectStripe(): Promise<void> {
+    await api.delete(`${this.baseUrl}/stripe/disconnect`);
+  }
 }
 
 export interface MetaConnectionStatusResponse {
@@ -424,6 +453,27 @@ export interface AppsFlyerSyncRequest {
 }
 
 export interface AppsFlyerSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  error?: string;
+}
+
+export interface StripeConnectionStatusResponse {
+  connected: boolean;
+}
+
+export interface StripeSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface StripeSyncResponse {
   success: boolean;
   message?: string;
   asset?: AssetRecord;

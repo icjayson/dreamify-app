@@ -509,6 +509,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setMetaAdsModalOpen,
     setTikTokModalOpen,
     setAppsFlyerModalOpen,
+    setStripeModalOpen,
     isDashboardOpen,
     selectedModel,
     setSelectedModel,
@@ -1200,6 +1201,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     if (connector.name === 'AppsFlyer') {
       setDropdownOpen(false);
       setTimeout(() => setAppsFlyerModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Stripe') {
+      setDropdownOpen(false);
+      setTimeout(() => setStripeModalOpen(true), 0);
       return;
     }
     if (connector.isActive) {

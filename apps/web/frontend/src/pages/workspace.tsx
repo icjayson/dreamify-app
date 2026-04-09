@@ -120,6 +120,7 @@ export default function WorkspacePage() {
     setMetaAdsModalOpen,
     setTikTokModalOpen,
     setAppsFlyerModalOpen,
+    setStripeModalOpen,
   } = useChatStore();
 
   const handleIntegrationClick = (connectorName: string) => {
@@ -133,6 +134,8 @@ export default function WorkspacePage() {
       setTikTokModalOpen(true);
     } else if (connectorName === 'AppsFlyer') {
       setAppsFlyerModalOpen(true);
+    } else if (connectorName === 'Stripe') {
+      setStripeModalOpen(true);
     }
   };
 
@@ -200,6 +203,11 @@ export default function WorkspacePage() {
       const appsflyerStatus = await integrationService.getAppsFlyerStatus();
       results["AppsFlyer"] = appsflyerStatus.connected
         ? { connected: true, info: "Account: AppsFlyer" }
+        : { connected: false };
+
+      const stripeStatus = await integrationService.getStripeStatus();
+      results["Stripe"] = stripeStatus.connected
+        ? { connected: true, info: "Account: Stripe" }
         : { connected: false };
 
       setConnectorStatus(results);

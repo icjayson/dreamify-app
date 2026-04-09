@@ -115,6 +115,7 @@ interface ChatState {
   isMetaAdsModalOpen: boolean;
   isTikTokModalOpen: boolean;
   isAppsFlyerModalOpen: boolean;
+  isStripeModalOpen: boolean;
   googleSheetsFileId: string | null;
   googleSheetsFileName: string | null;
 
@@ -165,6 +166,7 @@ interface ChatState {
   setMetaAdsModalOpen: (open: boolean) => void;
   setTikTokModalOpen: (open: boolean) => void;
   setAppsFlyerModalOpen: (open: boolean) => void;
+  setStripeModalOpen: (open: boolean) => void;
   setGoogleSheetsFileId: (id: string | null) => void;
   setGoogleSheetsFileName: (name: string | null) => void;
 
@@ -182,10 +184,20 @@ interface ChatState {
   syncGA4: (propertyId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string, propertyName?: string) => Promise<void>;
   syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string, adsetIds?: string[], campaignIds?: string[]) => Promise<MetaAdsSyncResult>;
   syncAppsFlyer: (appId: string, appName: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<AppsFlyerSyncResult>;
+  syncStripe: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
 }
 
 /** Result of AppsFlyer sync API */
 export interface AppsFlyerSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+}
+
+/** Result of Stripe sync API */
+export interface StripeSyncResult {
   success: true;
   row_count: number;
   column_count: number;
@@ -249,6 +261,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isMetaAdsModalOpen: false,
   isTikTokModalOpen: false,
   isAppsFlyerModalOpen: false,
+  isStripeModalOpen: false,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
   selectedModel: 'pro',
@@ -311,6 +324,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setMetaAdsModalOpen: (open) => set({ isMetaAdsModalOpen: open }),
   setTikTokModalOpen: (open) => set({ isTikTokModalOpen: open }),
   setAppsFlyerModalOpen: (open) => set({ isAppsFlyerModalOpen: open }),
+  setStripeModalOpen: (open) => set({ isStripeModalOpen: open }),
   setGoogleSheetsFileId: (id) => {
     console.log('Store: setting googleSheetsFileId:', id);
     set({ googleSheetsFileId: id });
@@ -476,6 +490,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync AppsFlyer');
     } catch (err) {
       console.error('Sync AppsFlyer error:', err);
+      throw err;
+    }
+  },
+
+  syncStripe: async (reportType, projectId, datePreset, startDate, endDate) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncStripe({
+        report_type: reportType,
+        ...(projectId && { project_id: projectId }),
+        date_preset: datePreset || 'last_30d',
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+      });
+
+      if (response.success && response.asset) {
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Stripe');
+    } catch (err) {
+      console.error('Sync Stripe error:', err);
       throw err;
     }
   },

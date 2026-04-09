@@ -11,7 +11,7 @@ export const CONNECTORS: ConnectorItem[] = [
   { name: "TikTok Ads", icon: "/tiktok.png", isActive: true },
   { name: "AppsFlyer", icon: "/appsflyer.png", isActive: true },
   { name: "Airtable", icon: "/airtable.png" },
-  { name: "Stripe", icon: "/stripe.jpeg" },
+  { name: "Stripe", icon: "/stripe.jpeg", isActive: true },
   { name: "Shopify", icon: "/shopify.png" },
   { name: "HubSpot", icon: "/hubspot.jpeg" },
   { name: "PostgreSQL", icon: "/PostgreSQL.png" },

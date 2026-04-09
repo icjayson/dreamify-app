@@ -30,6 +30,7 @@ import {
   ChartPresetTheme
 } from "@/utils/chartStyling";
 import type { ChartChipData } from "@/components/chat/ChartPreviewChip";
+import { exportChartAsPng } from "@/utils/exportUtils";
 
 const SELECT_CHART_CONTEXT_EVENT = "dreamify:select-chart-context";
 
@@ -105,6 +106,7 @@ const DashboardPreview = ({
 
   // Track highlight fade-out timer
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
+  const [exportingIds, setExportingIds] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (changedComponentIds.size > 0) {
       setHighlightedIds(new Set(changedComponentIds));
@@ -1320,7 +1322,7 @@ const DashboardPreview = ({
                   const cellKey = String(component.id);
                   return (
                     <div key={cellKey} className={`animate-fade-in h-full min-h-0 ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
-                      <div className="relative h-full min-h-0 rounded-md">
+                      <div className="relative h-full min-h-0 rounded-md" data-chart-id={cellKey}>
                         {showCardActionsMenu && (
                           <div
                             className="dashboard-card-menu-trigger absolute right-2 top-2 z-20"
@@ -1356,14 +1358,30 @@ const DashboardPreview = ({
                                   Fix in chat
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  disabled
-                                  className="gap-2 opacity-50"
+                                  className="cursor-pointer gap-2 focus:bg-white/10 focus:text-white"
+                                  disabled={exportingIds.has(cellKey)}
+                                  onSelect={async () => {
+                                    const cardEl = document.querySelector<HTMLElement>(
+                                      `[data-chart-id="${cellKey}"]`
+                                    );
+                                    if (!cardEl) return;
+                                    setExportingIds(prev => new Set(prev).add(cellKey));
+                                    try {
+                                      const chartTitle = component.component_config?.title || 'chart';
+                                      await exportChartAsPng(cardEl, chartTitle);
+                                    } finally {
+                                      setExportingIds(prev => {
+                                        const next = new Set(prev);
+                                        next.delete(cellKey);
+                                        return next;
+                                      });
+                                    }
+                                  }}
                                 >
-                                  <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />
-                                  <span className="flex flex-1 items-center justify-between gap-2">
-                                    Export to PNG
-                                    <span className="text-[10px] font-medium uppercase tracking-wide text-white/35">Soon</span>
-                                  </span>
+                                  {exportingIds.has(cellKey)
+                                    ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-400" />
+                                    : <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />}
+                                  Export to PNG
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

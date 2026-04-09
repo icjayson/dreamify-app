@@ -227,8 +227,9 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
           {chartElement}
         </div>
         {insight && (
-          <div 
-            className="relative z-10 flex-shrink-0" 
+          <div
+            className="relative z-10 flex-shrink-0"
+            data-export-exclude
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >

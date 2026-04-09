@@ -132,6 +132,75 @@ export async function exportDashboardAsPdf() {
   console.log('PDF saved successfully');
 }
 
+export async function exportChartAsPng(element: HTMLElement, title: string): Promise<void> {
+  const menuBtn = element.querySelector<HTMLElement>('.dashboard-card-menu-trigger');
+  if (menuBtn) menuBtn.style.visibility = 'hidden';
+
+  // Allow SVGs to paint beyond their viewport so rotated labels aren't clipped
+  type SvgRestore = { el: SVGSVGElement; overflow: string };
+  const svgRestoreList: SvgRestore[] = [];
+  element.querySelectorAll<SVGSVGElement>('svg.recharts-surface').forEach((svg) => {
+    svgRestoreList.push({ el: svg, overflow: svg.style.overflow });
+    svg.style.overflow = 'visible';
+  });
+
+  // Rotate X-axis tick labels -35° around their own anchor point.
+  // Each Recharts tick <text> uses x/y attributes as its position;
+  // rotating around (x, y) keeps the label anchored to its tick mark.
+  type TickRestore = { el: SVGTextElement; transform: string | null; anchor: string | null };
+  const tickRestoreList: TickRestore[] = [];
+  element.querySelectorAll<SVGTextElement>('.recharts-xAxis .recharts-cartesian-axis-tick text').forEach((text) => {
+    const x = text.getAttribute('x') || '0';
+    const y = text.getAttribute('y') || '0';
+    tickRestoreList.push({ el: text, transform: text.getAttribute('transform'), anchor: text.getAttribute('text-anchor') });
+    text.setAttribute('transform', `rotate(-35, ${x}, ${y})`);
+    text.setAttribute('text-anchor', 'end');
+  });
+
+  try {
+    // Short wait for any pending paint — do NOT dispatch resize events as they
+    // trigger Recharts ResponsiveContainer to re-render and reload the chart.
+    await new Promise(r => setTimeout(r, 200));
+
+    const { toPng } = await import('html-to-image');
+
+    // Pass extra height and bottom padding via html-to-image's clone options so
+    // the rotated labels have room without touching the live DOM layout.
+    const extraBottom = tickRestoreList.length > 0 ? 48 : 0;
+
+    const dataUrl = await toPng(element, {
+      pixelRatio: 2,
+      skipFonts: false,
+      height: element.offsetHeight + extraBottom,
+      style: { paddingBottom: `${extraBottom}px`, overflow: 'visible' },
+      filter: (node) => {
+        if (node instanceof HTMLElement) {
+          if (node.classList.contains('dashboard-card-menu-trigger')) return false;
+          if (node.hasAttribute('data-export-exclude')) return false;
+        }
+        return true;
+      },
+    });
+
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const link = document.createElement('a');
+    link.download = `chart-${slug}-${new Date().toISOString().slice(0, 10)}.png`;
+    link.href = dataUrl;
+    link.click();
+  } finally {
+    for (const { el, overflow } of svgRestoreList) {
+      el.style.overflow = overflow;
+    }
+    for (const { el, transform, anchor } of tickRestoreList) {
+      if (transform !== null) el.setAttribute('transform', transform);
+      else el.removeAttribute('transform');
+      if (anchor !== null) el.setAttribute('text-anchor', anchor);
+      else el.removeAttribute('text-anchor');
+    }
+    if (menuBtn) menuBtn.style.visibility = '';
+  }
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

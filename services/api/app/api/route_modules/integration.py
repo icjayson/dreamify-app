@@ -11,7 +11,7 @@ from app.dependencies.auth import require_user
 from app.services.integration_service import integration_service
 from app.api.route_modules.user import AssetResponse, _map_asset, _ensure_project
 
-router = APIRouter(tags=["integration", "google", "meta", "tiktok", "appsflyer"])
+router = APIRouter(tags=["integration", "google", "meta", "tiktok", "appsflyer", "stripe"])
 
 
 class GoogleAnalyticsSyncRequest(BaseModel):
@@ -812,4 +812,141 @@ async def appsflyer_disconnect(user_id: str = Depends(require_user)):
         return {"success": True}
     except Exception as e:
         logger.error(f"AppsFlyer disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Stripe Connect ─────────────────────────────────────────────────────────────
+
+_STRIPE_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "stripe_oauth"
+).replace("META_OAUTH_SUCCESS", "STRIPE_OAUTH_SUCCESS")
+
+_STRIPE_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "stripe_oauth"
+).replace("META_OAUTH_ERROR", "STRIPE_OAUTH_ERROR")
+
+
+class StripeSyncRequest(BaseModel):
+    report_type: str  # "charges" | "subscriptions" | "customers"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class StripeSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/stripe/oauth/start")
+async def stripe_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+):
+    """Redirect the popup to the Stripe Connect OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+
+    if not bearer:
+        return HTMLResponse(
+            _STRIPE_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _STRIPE_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+
+    try:
+        url = integration_service.get_stripe_oauth_url(user_id)
+        return RedirectResponse(url=url)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/stripe/oauth/callback", response_class=HTMLResponse)
+async def stripe_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Stripe redirects here after the user grants/denies access."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_STRIPE_OAUTH_ERROR_HTML.format(error=msg))
+
+    try:
+        await integration_service.handle_stripe_oauth_callback(code=code, state=state)
+        return HTMLResponse(_STRIPE_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Stripe OAuth callback error: {e}")
+        return HTMLResponse(_STRIPE_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/stripe/status")
+async def stripe_status(user_id: str = Depends(require_user)):
+    """Return whether the authenticated user has a connected Stripe account."""
+    try:
+        status = await integration_service.get_stripe_connection_status(user_id)
+        return status
+    except Exception as e:
+        logger.error(f"Stripe status error: {e}")
+        return {"connected": False}
+
+
+@router.post("/integration/stripe/sync", response_model=StripeSyncResponse)
+async def stripe_sync(
+    request: StripeSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    """Fetch Stripe data for the connected account and save as a CSV asset."""
+    try:
+        if request.report_type not in ("charges", "subscriptions", "customers"):
+            return StripeSyncResponse(
+                success=False, error="Invalid report_type. Must be charges, subscriptions, or customers."
+            )
+        project = _ensure_project(user_id, request.project_id)
+        result = await integration_service.fetch_stripe_data(
+            user_id=user_id,
+            report_type=request.report_type,
+            project_id=project["project_id"],
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return StripeSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+    except HTTPException as e:
+        return StripeSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Stripe sync error: {e}")
+        return StripeSyncResponse(success=False, error=str(e))
+
+
+@router.delete("/integration/stripe/disconnect")
+async def stripe_disconnect(user_id: str = Depends(require_user)):
+    """Remove the stored Stripe connection for the authenticated user."""
+    try:
+        await integration_service.disconnect_stripe(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Stripe disconnect error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

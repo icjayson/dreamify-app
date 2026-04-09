@@ -9,6 +9,7 @@ import hashlib
 import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException
@@ -1558,6 +1559,318 @@ class IntegrationService:
     async def disconnect_appsflyer(self, user_id: str) -> None:
         """Remove stored AppsFlyer token."""
         connected_accounts_repo.delete_connection(user_id, "appsflyer")
+
+    # ── Stripe Connect ────────────────────────────────────────────────────────
+
+    def _make_stripe_state(self, user_id: str) -> str:
+        """Create a short-lived HMAC-signed state token to prevent CSRF."""
+        ts = int(datetime.now(timezone.utc).timestamp())
+        payload = f"{user_id}:{ts}"
+        sig = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        return f"{payload}:{sig}"
+
+    def _verify_stripe_state(self, state: str) -> str:
+        """Verify state token and return user_id. Raises ValueError on failure."""
+        parts = state.split(":")
+        if len(parts) != 3:
+            raise ValueError("Invalid state format")
+        user_id, ts_str, sig = parts
+        payload = f"{user_id}:{ts_str}"
+        expected = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            raise ValueError("Invalid state signature")
+        if int(datetime.now(timezone.utc).timestamp()) - int(ts_str) > 600:
+            raise ValueError("State token expired")
+        return user_id
+
+    def get_stripe_oauth_url(self, user_id: str) -> str:
+        """Build the Stripe Connect OAuth authorization URL."""
+        if not config.stripe.client_id:
+            raise ValueError("Stripe Connect client_id is not configured.")
+        state = self._make_stripe_state(user_id)
+        redirect_uri = config.stripe.redirect_uri
+        params = urlencode(
+            {
+                "client_id": config.stripe.client_id,
+                "scope": "read_write",
+                "response_type": "code",
+                "redirect_uri": redirect_uri,
+                "state": state,
+            }
+        )
+        return f"https://connect.stripe.com/oauth/authorize?{params}"
+
+    async def handle_stripe_oauth_callback(self, code: str, state: str) -> None:
+        """Exchange authorization code for stripe_user_id and persist it."""
+        user_id = self._verify_stripe_state(state)
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://connect.stripe.com/oauth/token",
+                data={
+                    "client_secret": config.stripe.secret_key,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                },
+            )
+
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Stripe OAuth token exchange failed: {resp.text}",
+            )
+
+        data = resp.json()
+        if "error" in data:
+            raise HTTPException(
+                status_code=400,
+                detail=data.get("error_description", data["error"]),
+            )
+
+        stripe_user_id = data["stripe_user_id"]
+        far_future = (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat()
+        connected_accounts_repo.save_connection(
+            user_id=user_id,
+            provider="stripe",
+            access_token=stripe_user_id,
+            expires_at=far_future,
+        )
+
+    async def get_stripe_connection_status(self, user_id: str) -> dict:
+        """Return whether a valid Stripe connection exists for this user."""
+        record = connected_accounts_repo.get_connection(user_id, "stripe")
+        return {"connected": record is not None}
+
+    def _resolve_stripe_dates(
+        self,
+        date_preset: Optional[str],
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ):
+        """Convert a date preset or explicit dates to (from_d, to_d, gte_unix, lte_unix)."""
+        from datetime import date as date_type
+
+        today = datetime.now(timezone.utc).date()
+
+        if date_preset and date_preset != "custom":
+            if date_preset == "last_7d":
+                from_d, to_d = today - timedelta(days=7), today - timedelta(days=1)
+            elif date_preset == "last_30d":
+                from_d, to_d = today - timedelta(days=30), today - timedelta(days=1)
+            elif date_preset == "last_90d":
+                from_d, to_d = today - timedelta(days=90), today - timedelta(days=1)
+            elif date_preset == "this_month":
+                from_d, to_d = today.replace(day=1), today
+            elif date_preset == "last_month":
+                first_this = today.replace(day=1)
+                last_prev = first_this - timedelta(days=1)
+                from_d, to_d = last_prev.replace(day=1), last_prev
+            else:
+                from_d, to_d = today - timedelta(days=30), today - timedelta(days=1)
+        else:
+            try:
+                from_d = (
+                    datetime.strptime(start_date, "%Y-%m-%d").date()
+                    if start_date
+                    else today - timedelta(days=30)
+                )
+                to_d = (
+                    datetime.strptime(end_date, "%Y-%m-%d").date()
+                    if end_date
+                    else today - timedelta(days=1)
+                )
+            except (ValueError, TypeError):
+                from_d, to_d = today - timedelta(days=30), today - timedelta(days=1)
+
+        gte = int(
+            datetime(from_d.year, from_d.month, from_d.day, tzinfo=timezone.utc).timestamp()
+        )
+        lte = int(
+            datetime(
+                to_d.year, to_d.month, to_d.day, 23, 59, 59, tzinfo=timezone.utc
+            ).timestamp()
+        )
+        return from_d, to_d, gte, lte
+
+    def _ts_to_str(self, ts) -> str:
+        """Convert a Unix timestamp to a UTC datetime string."""
+        if ts is None:
+            return ""
+        return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+    def _fetch_stripe_charges(self, platform_key: str, stripe_account: str, created_filter: dict):
+        """Fetch charges for a connected account and return (rows, headers)."""
+        import stripe as stripe_sdk
+
+        headers = [
+            "id", "amount", "currency", "status", "created",
+            "customer", "description", "failure_code", "refunded", "card_brand",
+        ]
+        rows = []
+        try:
+            for ch in stripe_sdk.Charge.list(
+                created=created_filter,
+                limit=100,
+                api_key=platform_key,
+                stripe_account=stripe_account,
+            ).auto_paging_iter():
+                card_brand = ""
+                pmd = getattr(ch, "payment_method_details", None)
+                if pmd:
+                    card = getattr(pmd, "card", None)
+                    if card:
+                        card_brand = getattr(card, "brand", "") or ""
+                rows.append([
+                    ch.id,
+                    round(ch.amount / 100, 2),
+                    (ch.currency or "").upper(),
+                    ch.status or "",
+                    self._ts_to_str(ch.created),
+                    ch.customer or "",
+                    ch.description or "",
+                    ch.failure_code or "",
+                    ch.refunded,
+                    card_brand,
+                ])
+        except stripe_sdk.error.StripeError as e:
+            raise HTTPException(status_code=500, detail=f"Stripe API error: {str(e)}")
+        return rows, headers
+
+    def _fetch_stripe_subscriptions(self, platform_key: str, stripe_account: str, created_filter: dict):
+        """Fetch subscriptions for a connected account and return (rows, headers)."""
+        import stripe as stripe_sdk
+
+        headers = [
+            "id", "customer", "status", "plan_amount", "plan_interval",
+            "current_period_start", "current_period_end", "created", "canceled_at",
+        ]
+        rows = []
+        try:
+            for sub in stripe_sdk.Subscription.list(
+                created=created_filter,
+                status="all",
+                limit=100,
+                api_key=platform_key,
+                stripe_account=stripe_account,
+            ).auto_paging_iter():
+                plan = getattr(sub, "plan", None)
+                plan_amount = round(plan.amount / 100, 2) if plan and plan.amount is not None else ""
+                plan_interval = plan.interval if plan else ""
+                rows.append([
+                    sub.id,
+                    sub.customer or "",
+                    sub.status or "",
+                    plan_amount,
+                    plan_interval,
+                    self._ts_to_str(sub.current_period_start),
+                    self._ts_to_str(sub.current_period_end),
+                    self._ts_to_str(sub.created),
+                    self._ts_to_str(getattr(sub, "canceled_at", None)),
+                ])
+        except stripe_sdk.error.StripeError as e:
+            raise HTTPException(status_code=500, detail=f"Stripe API error: {str(e)}")
+        return rows, headers
+
+    def _fetch_stripe_customers(self, platform_key: str, stripe_account: str, created_filter: dict):
+        """Fetch customers for a connected account and return (rows, headers)."""
+        import stripe as stripe_sdk
+
+        headers = ["id", "email", "name", "created", "currency", "balance", "description"]
+        rows = []
+        try:
+            for c in stripe_sdk.Customer.list(
+                created=created_filter,
+                limit=100,
+                api_key=platform_key,
+                stripe_account=stripe_account,
+            ).auto_paging_iter():
+                balance = c.balance if c.balance is not None else 0
+                rows.append([
+                    c.id,
+                    c.email or "",
+                    c.name or "",
+                    self._ts_to_str(c.created),
+                    c.currency or "",
+                    round(balance / 100, 2),
+                    c.description or "",
+                ])
+        except stripe_sdk.error.StripeError as e:
+            raise HTTPException(status_code=500, detail=f"Stripe API error: {str(e)}")
+        return rows, headers
+
+    async def fetch_stripe_data(
+        self,
+        user_id: str,
+        report_type: str,
+        project_id: str,
+        date_preset: Optional[str],
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ) -> Dict[str, Any]:
+        """Fetch Stripe data for a connected account and save as a CSV asset."""
+        import stripe as stripe_sdk
+
+        record = connected_accounts_repo.get_connection(user_id, "stripe")
+        if not record:
+            raise HTTPException(status_code=401, detail="Stripe not connected.")
+
+        stripe_account = record["access_token"]
+        platform_key = config.stripe.secret_key
+
+        from_d, to_d, gte, lte = self._resolve_stripe_dates(date_preset, start_date, end_date)
+        created_filter = {"gte": gte, "lte": lte}
+
+        try:
+            if report_type == "charges":
+                rows, headers = self._fetch_stripe_charges(platform_key, stripe_account, created_filter)
+            elif report_type == "subscriptions":
+                rows, headers = self._fetch_stripe_subscriptions(platform_key, stripe_account, created_filter)
+            elif report_type == "customers":
+                rows, headers = self._fetch_stripe_customers(platform_key, stripe_account, created_filter)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unknown report_type: {report_type}")
+        except stripe_sdk.error.PermissionError:
+            connected_accounts_repo.delete_connection(user_id, "stripe")
+            raise HTTPException(
+                status_code=401,
+                detail="Stripe account access revoked. Please reconnect.",
+            )
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+        writer.writerows(rows)
+        csv_bytes = output.getvalue().encode("utf-8")
+
+        row_count = len(rows)
+        column_count = len(headers)
+        filename = f"stripe_{report_type}_{from_d}_{to_d}.csv"
+
+        asset = self._save_integration_asset(
+            user_id=user_id,
+            project_id=project_id,
+            file_content=csv_bytes,
+            filename=filename,
+            asset_type="integration_stripe",
+            extension="csv",
+            row_count=row_count,
+            column_count=column_count,
+        )
+        return {
+            "asset": asset,
+            "row_count": row_count,
+            "column_count": column_count,
+            "message": f"Successfully synced {row_count} rows from Stripe ({report_type}).",
+            "success": True,
+        }
+
+    async def disconnect_stripe(self, user_id: str) -> None:
+        """Remove stored Stripe connection."""
+        connected_accounts_repo.delete_connection(user_id, "stripe")
 
 
 integration_service = IntegrationService()

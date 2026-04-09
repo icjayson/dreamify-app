@@ -780,7 +780,7 @@ export default function ProjectPage() {
           </div>
         </div>
         {/* Publish Modal */}
-        {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} />}
+        {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} isDarkMode={isDashboardDarkMode} />}
 
         {/* Projects Sidebar */}
         <ProjectsSidebar

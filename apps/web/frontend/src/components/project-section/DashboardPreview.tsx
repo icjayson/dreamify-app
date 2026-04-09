@@ -855,63 +855,9 @@ const DashboardPreview = ({
   };
 
   const reformatLayoutForExport = (layout: Layout[]): { reformatted: Layout[], didSplit: boolean } => {
-    if (!layout || layout.length === 0) return { reformatted: layout, didSplit: false };
-
-    // 1. Sort by top-to-bottom, left-to-right to maintain natural flow
-    const sortedLayout = [...layout].sort((a, b) => {
-      if (a.y === b.y) return a.x - b.x;
-      return a.y - b.y;
-    });
-
-    // 2. Calculate the exact total height sum and width of the grid (max Y + H, max X + W)
-    let totalElementHeight = 0;
-    let totalElementWidth = 0;
-    sortedLayout.forEach(item => {
-      if (item.y + item.h > totalElementHeight) {
-        totalElementHeight = item.y + item.h;
-      }
-      if (item.x + item.w > totalElementWidth) {
-        totalElementWidth = item.x + item.w;
-      }
-    });
-    console.log("totalElementHeight", totalElementHeight);
-    console.log("totalElementWidth", totalElementWidth);
-
-    // 3. Find our weight distribution midpoint. 
-    // Only split into two columns if the height is exceptionally long relative to the width.
-    let midPointHeight = totalElementHeight + 1; // Default to no split
-    if (totalElementHeight >= totalElementWidth * 2) {
-      midPointHeight = totalElementHeight / 2;
-    }
-
-    console.log("midPointHeight", midPointHeight);
-    let reachedMidpoint = false;
-    let rightColumnStartY = 0;
-
-    const mappedLayout = sortedLayout.map((item) => {
-      // If we haven't crossed the halfway mark of element heights, keep adding to left column
-      if (!reachedMidpoint) {
-        if (item.y >= midPointHeight) {
-          reachedMidpoint = true;
-          // Capture the Y position of the next item so we can pull the right column up to baseline 0
-        } else {
-          return item;
-        }
-      }
-
-      // We are now in the right column
-      if (rightColumnStartY === 0) {
-        rightColumnStartY = item.y; // Pin the top of the right column to locally parsed Y=0
-      }
-
-      return {
-        ...item,
-        x: item.x + 24, // Shift to the right column block
-        y: Math.max(0, item.y - rightColumnStartY) // Pull it up so the column starts near the top
-      };
-    });
-
-    return { reformatted: mappedLayout, didSplit: reachedMidpoint };
+    // Logic for splitting into 2 columns has been removed.
+    // Return original layout as a single vertical column.
+    return { reformatted: layout, didSplit: false };
   };
 
   const buildLayoutsFromComponents = (components: any[] | undefined | null, isExportingMode: boolean): { layouts: Layouts, didSplit: boolean } => {
@@ -927,10 +873,10 @@ const DashboardPreview = ({
     return {
       layouts: {
         lg: baseLg,
-        md: scaleLayoutForCols(baseLg, isExportingMode ? 48 : 24, 12),
-        sm: scaleLayoutForCols(baseLg, isExportingMode ? 48 : 24, 8),
-        xs: scaleLayoutForCols(baseLg, isExportingMode ? 48 : 24, 4),
-        xxs: scaleLayoutForCols(baseLg, isExportingMode ? 48 : 24, 2)
+        md: scaleLayoutForCols(baseLg, 24, 12),
+        sm: scaleLayoutForCols(baseLg, 24, 8),
+        xs: scaleLayoutForCols(baseLg, 24, 4),
+        xxs: scaleLayoutForCols(baseLg, 24, 2)
       } as Layouts,
       didSplit
     };
@@ -1275,11 +1221,11 @@ const DashboardPreview = ({
                 className="layout"
                 layouts={layouts}
                 breakpoints={breakpoints}
-                cols={{ lg: 48, md: 48, sm: 48, xs: 48, xxs: 48 }} // Force a 48-column grid to hold two 24-col columns side-by-side
+                cols={{ lg: 24, md: 24, sm: 24, xs: 24, xxs: 24 }} // Force a 24-col grid for a single vertical page
                 margin={margin}
                 containerPadding={containerPadding}
                 rowHeight={rowHeight}
-                width={typeof window !== 'undefined' ? Math.max(window.innerWidth * 2, 2400) : 2400} // Double screen width
+                width={typeof window !== 'undefined' ? Math.max(window.innerWidth, 1200) : 1200} // Single screen width
                 isDraggable={false}
                 isResizable={false}
                 preventCollision

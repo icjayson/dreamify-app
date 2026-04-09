@@ -13,13 +13,14 @@ interface PublishModalProps {
   onOpenChange: (open: boolean) => void;
   projectId?: string;
   processedData?: any;
+  isDarkMode?: boolean;
 }
 
 const BASE_DOMAIN = 'dreamify.dev';
 
 const isValidSlug = (s: string) => /^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$/.test(s);
 
-export default function PublishModal({ open, onOpenChange, projectId, processedData }: PublishModalProps) {
+export default function PublishModal({ open, onOpenChange, projectId, processedData, isDarkMode }: PublishModalProps) {
   const [activeTab, setActiveTab] = useState<'share' | 'export'>('share');
   const [slug, setSlug] = useState('dashboard-' + Math.random().toString(16).slice(2, 8));
   const [checking, setChecking] = useState(false);
@@ -366,7 +367,7 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
           position: 'fixed',
           left: 0,
           top: 0,
-          width: typeof window !== 'undefined' ? (exportDidSplit ? Math.max(window.innerWidth * 2 + 50, 2450) : Math.max(window.innerWidth + 50, 1250)) + 'px' : '3200px',
+          width: typeof window !== 'undefined' ? Math.max(window.innerWidth + 50, 1250) + 'px' : '1500px',
           minHeight: '800px',
           backgroundColor: '#000000ff', // Ensures no transparent/black background
           zIndex: -9999,
@@ -376,13 +377,14 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
         aria-hidden="true"
       >
         {(isExportingPdf || isExportingPng) && (
-          <div id="dashboard-export-root" style={{ width: typeof window !== 'undefined' ? (exportDidSplit ? Math.max(window.innerWidth * 2 + 50, 2450) : Math.max(window.innerWidth + 50, 1250)) + 'px' : '3200px', minHeight: '800px', backgroundColor: '#000000ff' }}>
+          <div id="dashboard-export-root" style={{ width: typeof window !== 'undefined' ? Math.max(window.innerWidth + 50, 1250) + 'px' : '1500px', minHeight: '800px', backgroundColor: '#000000ff' }}>
             <DashboardPreview
               dashboardId={undefined} // Prevent internal fetching
               staticConfig={processedData || dashboardState.configuration} // Prefer directly passed data over fetches
               processedData={processedData || uploadedFiles.find(f => f.processedData)?.processedData}
               isExporting={true}
               onExportLayoutChange={setExportDidSplit}
+              isDarkMode={isDarkMode}
             />
           </div>
         )}

@@ -202,6 +202,7 @@ export default function ProjectPage() {
   const selectedDashboardId = useChatStore((s) => s.selectedDashboardId);
   const isDashboardOpen = useChatStore((s) => s.isDashboardOpen);
   const setIsDashboardOpen = useChatStore((s) => s.setIsDashboardOpen);
+  const isDashboardVisible = (shouldShowDashboard && isDashboardOpen) || (activeTab === 'dashboard');
   const isUpdatingDashboard = useChatStore((s) => s.isUpdatingDashboard);
   const currentWorkflowStep = useChatStore((s) => s.currentWorkflowStep);
 
@@ -513,7 +514,7 @@ export default function ProjectPage() {
               )}
 
               {/* Mobile Publish Button */}
-              {isDashboardOpen && (
+              {isDashboardVisible && (
                 <button onClick={() => setIsPublishOpen(true)} className="md:hidden button-gradient h-8 px-4 rounded-md text-sm text-white flex items-center ml-auto shrink-0">
                   <span>Publish</span>
                   <SquareArrowOutUpRight className="w-4 h-4 ml-1.5" />
@@ -521,10 +522,10 @@ export default function ProjectPage() {
               )}
 
             </div>
-            <div className="flex items-center order-2 md:order-3 ml-auto md:ml-0 shrink-0">
+            <div className="flex items-center order-2 md:order-3 ml-auto md:ml-0 shrink-0 gap-2">
               <HeaderCreditBadge creditsRemaining={creditsRemaining} monthlyCreditsUsed={creditUsage?.monthly_credits_used} />
-              {isDashboardOpen && (
-                <div className="relative mr-2" ref={themeDropdownRef}>
+              {isDashboardVisible && (
+                <div className="relative" ref={themeDropdownRef}>
                   <button
                     onClick={() => setIsThemeDropdownOpen(prev => !prev)}
                     className="button-outline h-8 px-2 md:px-3 rounded-md flex items-center gap-1.5"
@@ -611,8 +612,8 @@ export default function ProjectPage() {
               <FeedbackProjectButton />
 
               {/* Desktop Publish Button */}
-              {isDashboardOpen && (
-                <button onClick={() => setIsPublishOpen(true)} className="hidden md:flex button-gradient h-8 px-4 rounded-md text-sm text-white items-center ml-2">
+              {isDashboardVisible && (
+                <button onClick={() => setIsPublishOpen(true)} className="hidden md:flex button-gradient h-8 px-4 rounded-md text-sm text-white items-center">
                   <span>Publish</span>
                   <SquareArrowOutUpRight className="w-4 h-4 ml-1.5" />
                 </button>

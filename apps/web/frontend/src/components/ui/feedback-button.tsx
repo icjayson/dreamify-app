@@ -29,7 +29,7 @@ export function FeedbackProjectButton() {
             href={FEEDBACK_LINK}
             target="_blank"
             rel="noopener noreferrer"
-            className="button-outline h-8 px-2 md:px-4 mr-2 rounded-md text-sm flex items-center gap-2"
+            className="button-outline h-8 px-2 md:px-4 rounded-md text-sm flex items-center gap-2"
         >
             <MessageSquarePlus className="w-4 h-4 md:hidden" />
             <span className="hidden md:inline">Feedback us</span>

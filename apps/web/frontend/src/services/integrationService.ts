@@ -63,14 +63,13 @@ class IntegrationService {
     }
   }
 
-  async syncGoogleSheetData(fileId: string, projectId?: string): Promise<GA4SyncResponse> {
+  async syncGoogleSheetData(fileId: string, projectId?: string, accessToken?: string): Promise<GA4SyncResponse> {
     try {
-      const payload: { file_id: string; project_id?: string } = {
+      const payload: { file_id: string; project_id?: string; access_token?: string } = {
         file_id: fileId
       };
-      if (projectId) {
-        payload.project_id = projectId;
-      }
+      if (projectId) payload.project_id = projectId;
+      if (accessToken) payload.access_token = accessToken;
       const res = await api.post<GA4SyncResponse>(`${this.baseUrl}/google-sheets/sync`, payload);
       if (res.success && res.data) {
         return res.data;

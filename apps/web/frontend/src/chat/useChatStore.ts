@@ -184,7 +184,7 @@ interface ChatState {
   selectDashboard: (dashboardId: string, projectId: string) => Promise<any>;
 
   // Sync actions
-  syncGoogleSheets: (projectId?: string) => Promise<void>;
+  syncGoogleSheets: (projectId?: string, oauthToken?: string) => Promise<void>;
   syncGA4: (propertyId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string, propertyName?: string) => Promise<void>;
   syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string, adsetIds?: string[], campaignIds?: string[]) => Promise<MetaAdsSyncResult>;
   syncAppsFlyer: (appId: string, appName: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<AppsFlyerSyncResult>;
@@ -346,13 +346,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
 
   // Sync actions implementation
-  syncGoogleSheets: async (projectId) => {
+  syncGoogleSheets: async (projectId, oauthToken) => {
     const { googleSheetsFileId, googleSheetsFileName, addFiles, setGoogleSheetsFileId, setGoogleSheetsFileName, setGoogleSheetsModalOpen } = get();
     if (!googleSheetsFileId) return;
 
     try {
       const { integrationService } = await import('@/services/integrationService');
-      const response = await integrationService.syncGoogleSheetData(googleSheetsFileId, projectId);
+      const response = await integrationService.syncGoogleSheetData(googleSheetsFileId, projectId, oauthToken);
 
       if (response.success && response.asset) {
         const newFile = {

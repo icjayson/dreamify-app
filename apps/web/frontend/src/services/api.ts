@@ -72,7 +72,22 @@ class ApiClient {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.detail) {
+            errorMessage = typeof errorData.detail === 'string' 
+              ? errorData.detail 
+              : JSON.stringify(errorData.detail);
+          }
+        } catch (_) {
+          // Fallback to reading text if JSON parse fails
+          try {
+            const errorText = await response.text();
+            if (errorText) errorMessage = errorText;
+          } catch (__) {}
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -157,7 +172,21 @@ class ApiClient {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.detail) {
+            errorMessage = typeof errorData.detail === 'string' 
+              ? errorData.detail 
+              : JSON.stringify(errorData.detail);
+          }
+        } catch (_) {
+          try {
+            const errorText = await response.text();
+            if (errorText) errorMessage = errorText;
+          } catch (__) {}
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

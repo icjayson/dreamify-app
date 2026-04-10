@@ -97,6 +97,7 @@ export default function GoogleSheetsIntegrationModal() {
         .addView(view)
         .setOAuthToken(oauthToken)
         .setDeveloperKey(developerKey)
+        .setAppId("869837791185")
         .setOrigin(window.location.protocol + '//' + window.location.host)
         .setCallback((data: any) => {
           if (data.action === 'picked' || (window.google.picker.Action && data.action === window.google.picker.Action.PICKED)) {
@@ -142,7 +143,7 @@ export default function GoogleSheetsIntegrationModal() {
     setError(null);
 
     try {
-      await syncGoogleSheets(currentProjectId || undefined);
+      await syncGoogleSheets(currentProjectId || undefined, oauthToken || undefined);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to sync Google Sheets');

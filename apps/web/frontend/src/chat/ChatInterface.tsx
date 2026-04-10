@@ -1357,17 +1357,44 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           const isMultiple = sType === 'Multiple';
                           const isGA4 = !isMultiple && (sType.includes('GA4') || sType.includes('Google Analytics') || sType.includes('integration_ga4') || sType.toLowerCase().includes('google_analytics'));
                           const isSheets = !isMultiple && (sType.includes('Google Sheets') || sType.includes('gsheets') || sType.includes('integration_gsheets') || sType.toLowerCase().includes('google_sheet'));
-                          const isMeta = !isMultiple && (sType.includes('Meta') || sType.includes('meta'));
+                          const isMeta = !isMultiple && (sType.includes('Meta Ads') || sType.includes('meta_ads'));
                           const isTikTok = !isMultiple && (sType.includes('TikTok') || sType.includes('tiktok') || sType.includes('integration_tiktok'));
+                          const isGoogleAds = !isMultiple && sType.includes('Google Ads');
+                          const isFirebase = !isMultiple && sType.includes('Firebase');
+                          const isAppsFlyer = !isMultiple && (sType.includes('AppsFlyer') || sType.includes('appsflyer'));
+                          const isStripe = !isMultiple && sType.includes('Stripe');
 
-                          const displayName = isMultiple ? "Multiple Data Sources" : isGA4 ? "Google Analytics 4" : isSheets ? "Google Sheets" : isMeta ? "Meta Ads" : isTikTok ? "TikTok Ads" : "Attached Data";
-                          const logoBg = isMultiple ? "bg-indigo-500/10" : isGA4 ? "bg-orange-500/10" : isSheets ? "bg-green-500/10" : isMeta ? "bg-blue-500/10" : isTikTok ? "bg-zinc-900/10" : "bg-white/10";
+                          const displayName = isMultiple ? "Multiple Data Sources"
+                            : isGA4 ? "Google Analytics 4"
+                            : isSheets ? "Google Sheets"
+                            : isMeta ? "Meta Ads"
+                            : isTikTok ? "TikTok Ads"
+                            : isGoogleAds ? "Google Ads"
+                            : isFirebase ? "Firebase"
+                            : isAppsFlyer ? "AppsFlyer"
+                            : isStripe ? "Stripe"
+                            : "Attached Data";
+
+                          const logoBg = isMultiple ? "bg-indigo-500/10"
+                            : isGA4 ? "bg-orange-500/10"
+                            : isSheets ? "bg-green-500/10"
+                            : isMeta ? "bg-blue-500/10"
+                            : isTikTok ? "bg-black/20"
+                            : isGoogleAds ? "bg-[#4285F4]/10"
+                            : isFirebase ? "bg-[#FFA000]/10"
+                            : isAppsFlyer ? "bg-white/5"
+                            : isStripe ? "bg-[#6772E5]/10"
+                            : "bg-white/10";
 
                           const connector = isMultiple ? undefined : CONNECTORS.find(c => {
                             if (isGA4 && c.name === 'GA4') return true;
                             if (isSheets && c.name === 'Google Sheets') return true;
-                            if (isMeta && c.name === 'Meta') return true;
-                            if (isTikTok && c.name === 'TikTok') return true;
+                            if (isMeta && c.name === 'Meta Ads') return true;
+                            if (isTikTok && c.name === 'TikTok Ads') return true;
+                            if (isGoogleAds && c.name === 'Google Ads') return true;
+                            if (isFirebase && c.name === 'Firebase') return true;
+                            if (isAppsFlyer && c.name === 'AppsFlyer') return true;
+                            if (isStripe && c.name === 'Stripe') return true;
                             return false;
                           });
                           const icon = connector?.icon;

@@ -13,9 +13,12 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
   const isGA4 = sType.includes('GA4') || sType.includes('Google Analytics') || sType.includes('integration_ga4');
   const isSheets = sType.includes('Sheets') || sType.includes('gsheets') || sType.includes('integration_gsheets');
   const isMeta = sType.includes('Meta Ads') || sType.includes('meta_ads');
+  const isTikTok = sType.includes('TikTok') || sType.includes('tiktok') || sType.includes('integration_tiktok');
   const isGoogleAds = sType.includes('Google Ads');
   const isFirebase = sType.includes('Firebase');
-  const isIntegration = isGA4 || isSheets || isMeta || isGoogleAds || isFirebase;
+  const isAppsFlyer = sType.includes('AppsFlyer') || sType.includes('appsflyer');
+  const isStripe = sType.includes('Stripe');
+  const isIntegration = isGA4 || isSheets || isMeta || isTikTok || isGoogleAds || isFirebase || isAppsFlyer || isStripe;
 
 
   // Render the "Live Status" group: App Logo (always prioritized)
@@ -30,10 +33,16 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
             <img src="/google-sheet.png" alt="Sheets" className="w-4 h-4 object-contain" />
           ) : isMeta ? (
             <img src="/meta.png" alt="Meta" className="w-4 h-4 object-contain" />
+          ) : isTikTok ? (
+            <img src="/tiktok.png" alt="TikTok" className="w-4 h-4 object-contain" />
           ) : isGoogleAds ? (
             <img src="/google-ads.svg" alt="Google Ads" className="w-4 h-4 object-contain" />
           ) : isFirebase ? (
             <img src="/firebase.svg" alt="Firebase" className="w-4 h-4 object-contain" />
+          ) : isAppsFlyer ? (
+            <img src="/appsflyer.png" alt="AppsFlyer" className="w-4 h-4 object-contain" />
+          ) : isStripe ? (
+            <img src="/stripe.jpeg" alt="Stripe" className="w-4 h-4 object-contain rounded-sm" />
           ) : null}
         </div>
       );
@@ -57,8 +66,11 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
     if (isGA4) return "GA4";
     if (isSheets) return "Sheets";
     if (isMeta) return "Meta";
+    if (isTikTok) return "TikTok";
     if (isGoogleAds) return "Google Ads";
     if (isFirebase) return "Firebase";
+    if (isAppsFlyer) return "AppsFlyer";
+    if (isStripe) return "Stripe";
     return "";
   };
 
@@ -66,8 +78,11 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
     if (isGA4) return file.propertyName || file.filename;
     if (isSheets) return file.filename.replace(/\.[^/.]+$/, "");
     if (isMeta) return file.propertyName || file.accountName || file.filename;
+    if (isTikTok) return file.accountName || file.filename;
     if (isGoogleAds) return file.accountName || file.filename;
     if (isFirebase) return file.accountName || file.filename;
+    if (isAppsFlyer) return file.accountName || file.filename;
+    if (isStripe) return file.accountName || file.filename;
     return file.filename;
   };
 

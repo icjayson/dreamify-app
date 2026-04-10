@@ -510,6 +510,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setTikTokModalOpen,
     setAppsFlyerModalOpen,
     setStripeModalOpen,
+    setGoogleAdsModalOpen,
+    setFirebaseModalOpen,
     isDashboardOpen,
     selectedModel,
     setSelectedModel,
@@ -1206,6 +1208,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     if (connector.name === 'Stripe') {
       setDropdownOpen(false);
       setTimeout(() => setStripeModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Google Ads') {
+      setDropdownOpen(false);
+      setTimeout(() => setGoogleAdsModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Firebase') {
+      setDropdownOpen(false);
+      setTimeout(() => setFirebaseModalOpen(true), 0);
       return;
     }
     if (connector.isActive) {

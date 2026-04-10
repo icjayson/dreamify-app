@@ -7,7 +7,6 @@ import { Loader2, AlertCircle, CalendarIcon } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useClerk } from '@clerk/clerk-react';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
 
@@ -23,7 +22,8 @@ export default function GA4IntegrationModal() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOAuthError, setIsOAuthError] = useState(false);
-  const { openUserProfile } = useClerk();
+  const openAccountCenter = () =>
+    window.dispatchEvent(new CustomEvent('dreamify:open-account-center', { detail: { tab: 'account' } }));
 
   const [accounts, setAccounts] = useState<GA4Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
@@ -146,7 +146,7 @@ export default function GA4IntegrationModal() {
                   <li className="flex gap-2"><span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">4</span><span>Come back and click <strong className="text-white">Connect Google Analytics</strong> again</span></li>
                 </ol>
                 <Button
-                  onClick={() => { onClose(); openUserProfile(); }}
+                  onClick={() => { onClose(); openAccountCenter(); }}
                   className="bg-white text-black hover:bg-gray-100 text-sm font-medium w-full"
                 >
                   Go to Account Settings →

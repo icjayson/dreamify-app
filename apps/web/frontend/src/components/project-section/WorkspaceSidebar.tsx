@@ -76,6 +76,16 @@ export default function WorkspaceSidebar({
     };
   }, [userMenuOpen]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tab = (e as CustomEvent).detail?.tab ?? 'account';
+      setAccountCenterTab(tab);
+      setAccountCenterOpen(true);
+    };
+    window.addEventListener('dreamify:open-account-center', handler);
+    return () => window.removeEventListener('dreamify:open-account-center', handler);
+  }, []);
+
   const toggleUserMenu = () => setUserMenuOpen(prev => !prev);
 
   const handleManageAccount = () => {

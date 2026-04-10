@@ -116,6 +116,8 @@ interface ChatState {
   isTikTokModalOpen: boolean;
   isAppsFlyerModalOpen: boolean;
   isStripeModalOpen: boolean;
+  isGoogleAdsModalOpen: boolean;
+  isFirebaseModalOpen: boolean;
   googleSheetsFileId: string | null;
   googleSheetsFileName: string | null;
 
@@ -167,6 +169,8 @@ interface ChatState {
   setTikTokModalOpen: (open: boolean) => void;
   setAppsFlyerModalOpen: (open: boolean) => void;
   setStripeModalOpen: (open: boolean) => void;
+  setGoogleAdsModalOpen: (open: boolean) => void;
+  setFirebaseModalOpen: (open: boolean) => void;
   setGoogleSheetsFileId: (id: string | null) => void;
   setGoogleSheetsFileName: (name: string | null) => void;
 
@@ -185,6 +189,8 @@ interface ChatState {
   syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string, adsetIds?: string[], campaignIds?: string[]) => Promise<MetaAdsSyncResult>;
   syncAppsFlyer: (appId: string, appName: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<AppsFlyerSyncResult>;
   syncStripe: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
+  syncGoogleAds: (adAccountId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<StripeSyncResult>;
+  syncFirebase: (firebaseProjectId: string, projectName: string, projectId?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
 }
 
 /** Result of AppsFlyer sync API */
@@ -262,6 +268,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isTikTokModalOpen: false,
   isAppsFlyerModalOpen: false,
   isStripeModalOpen: false,
+  isGoogleAdsModalOpen: false,
+  isFirebaseModalOpen: false,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
   selectedModel: 'pro',
@@ -325,6 +333,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setTikTokModalOpen: (open) => set({ isTikTokModalOpen: open }),
   setAppsFlyerModalOpen: (open) => set({ isAppsFlyerModalOpen: open }),
   setStripeModalOpen: (open) => set({ isStripeModalOpen: open }),
+  setGoogleAdsModalOpen: (open) => set({ isGoogleAdsModalOpen: open }),
+  setFirebaseModalOpen: (open) => set({ isFirebaseModalOpen: open }),
   setGoogleSheetsFileId: (id) => {
     console.log('Store: setting googleSheetsFileId:', id);
     set({ googleSheetsFileId: id });
@@ -517,6 +527,60 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync Stripe');
     } catch (err) {
       console.error('Sync Stripe error:', err);
+      throw err;
+    }
+  },
+
+  syncGoogleAds: async (adAccountId, projectId, startDate, endDate, accountName) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncGoogleAdsData({
+        ad_account_id: adAccountId,
+        ...(projectId && { project_id: projectId }),
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+        ...(accountName && { account_name: accountName }),
+      });
+
+      if (response.success && response.asset) {
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Google Ads');
+    } catch (err) {
+      console.error('Sync Google Ads error:', err);
+      throw err;
+    }
+  },
+
+  syncFirebase: async (firebaseProjectId, projectName, projectId, startDate, endDate) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncFirebaseData({
+        firebase_project_id: firebaseProjectId,
+        app_name: projectName,
+        ...(projectId && { project_id: projectId }),
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+      });
+
+      if (response.success && response.asset) {
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Firebase data');
+    } catch (err) {
+      console.error('Sync Firebase error:', err);
       throw err;
     }
   },

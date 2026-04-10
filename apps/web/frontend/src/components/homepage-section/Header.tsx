@@ -37,6 +37,16 @@ const Header = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tab = (e as CustomEvent).detail?.tab ?? 'account';
+      setAccountCenterTab(tab);
+      setAccountCenterOpen(true);
+    };
+    window.addEventListener('dreamify:open-account-center', handler);
+    return () => window.removeEventListener('dreamify:open-account-center', handler);
+  }, []);
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

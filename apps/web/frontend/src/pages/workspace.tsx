@@ -121,6 +121,8 @@ export default function WorkspacePage() {
     setTikTokModalOpen,
     setAppsFlyerModalOpen,
     setStripeModalOpen,
+    setGoogleAdsModalOpen,
+    setFirebaseModalOpen,
   } = useChatStore();
 
   const handleIntegrationClick = (connectorName: string) => {
@@ -136,6 +138,10 @@ export default function WorkspacePage() {
       setAppsFlyerModalOpen(true);
     } else if (connectorName === 'Stripe') {
       setStripeModalOpen(true);
+    } else if (connectorName === 'Google Ads') {
+      setGoogleAdsModalOpen(true);
+    } else if (connectorName === 'Firebase') {
+      setFirebaseModalOpen(true);
     }
   };
 

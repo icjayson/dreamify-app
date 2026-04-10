@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- Firebase flame icon -->
+  <path d="M8 37L11.5 8.5L21 19L24.5 4L38 26.5L36.5 37H8Z" fill="#FFA000"/>
+  <path d="M8 37L11.5 8.5L21 19L14 37H8Z" fill="#F57F17"/>
+  <path d="M24.5 4L21 19L28 27L38 26.5L24.5 4Z" fill="#FFCA28"/>
+  <path d="M8 37H36.5L30 43H14L8 37Z" fill="#FFA000" opacity="0.7"/>
+</svg>

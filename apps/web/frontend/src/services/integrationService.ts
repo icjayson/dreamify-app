@@ -331,8 +331,44 @@ class IntegrationService {
     }
   }
 
-  async disconnectStripe(): Promise<void> {
-    await api.delete(`${this.baseUrl}/stripe/disconnect`);
+  async fetchGoogleAdsAccounts(): Promise<GoogleAdsAccountsResponse> {
+    try {
+      const res = await api.get<GoogleAdsAccountsResponse>(`${this.baseUrl}/google-ads/accounts`);
+      if (res.success && res.data) return res.data;
+      return { success: false, ad_accounts: [], error: res.error || 'Failed to fetch Google Ads accounts' };
+    } catch (error) {
+      return { success: false, ad_accounts: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncGoogleAdsData(req: GoogleAdsSyncRequest): Promise<GA4SyncResponse> {
+    try {
+      const res = await api.post<GA4SyncResponse>(`${this.baseUrl}/google-ads/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Google Ads data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchFirebaseProjects(): Promise<FirebaseProjectsResponse> {
+    try {
+      const res = await api.get<FirebaseProjectsResponse>(`${this.baseUrl}/firebase/projects`);
+      if (res.success && res.data) return res.data;
+      return { success: false, projects: [], error: res.error || 'Failed to fetch Firebase projects' };
+    } catch (error) {
+      return { success: false, projects: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncFirebaseData(req: FirebaseSyncRequest): Promise<GA4SyncResponse> {
+    try {
+      const res = await api.post<GA4SyncResponse>(`${this.baseUrl}/firebase/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Firebase data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
 }
 
@@ -480,6 +516,49 @@ export interface StripeSyncResponse {
   row_count?: number;
   column_count?: number;
   error?: string;
+}
+
+export interface GoogleAdsAccount {
+  id: string;
+  name: string;
+  account_status: string;
+  currency: string;
+  timezone_name: string;
+  source_type: string;
+}
+
+export interface GoogleAdsAccountsResponse {
+  success: boolean;
+  ad_accounts: GoogleAdsAccount[];
+  error?: string;
+}
+
+export interface GoogleAdsSyncRequest {
+  ad_account_id: string;
+  project_id?: string;
+  start_date?: string;
+  end_date?: string;
+  account_name?: string;
+}
+
+export interface FirebaseProject {
+  id: string;
+  name: string;
+  source_type: string;
+}
+
+export interface FirebaseProjectsResponse {
+  success: boolean;
+  projects: FirebaseProject[];
+  error?: string;
+}
+
+export interface FirebaseSyncRequest {
+  firebase_project_id: string;
+  app_name: string;
+  project_id?: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 export const integrationService = new IntegrationService();

@@ -950,3 +950,167 @@ async def stripe_disconnect(user_id: str = Depends(require_user)):
     except Exception as e:
         logger.error(f"Stripe disconnect error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ── Google Ads ───────────────────────────────────────────────────────────────
+
+class GoogleAdsAccount(BaseModel):
+    id: str
+    name: str
+    account_status: str
+    currency: str
+    timezone_name: str
+    source_type: str = "standard"
+
+class GoogleAdsAccountsResponse(BaseModel):
+    success: bool
+    ad_accounts: list[GoogleAdsAccount] = []
+    error: Optional[str] = None
+
+class GoogleAdsSyncRequest(BaseModel):
+    ad_account_id: str
+    project_id: Optional[str] = None
+    start_date: str = "30daysAgo"
+    end_date: str = "today"
+    account_name: str = ""
+
+class GoogleAdsSyncResponse(BaseModel):
+    success: bool
+    message: str
+    asset: Optional[AssetResponse] = None
+    row_count: int = 0
+    column_count: int = 0
+
+@router.get("/integration/google-ads/accounts", response_model=GoogleAdsAccountsResponse)
+async def get_google_ads_accounts(
+    user_id: str = Depends(require_user),
+):
+    """Get all Google Ads accounts the user has access to."""
+    try:
+        result = await integration_service.fetch_google_ads_accounts(user_id=user_id)
+        return GoogleAdsAccountsResponse(
+            success=result.get("success", False),
+            ad_accounts=result.get("ad_accounts", []),
+            error=result.get("error"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch Google Ads accounts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/integration/google-ads/sync", response_model=GoogleAdsSyncResponse)
+async def sync_google_ads_data(
+    request: GoogleAdsSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    """Sync Google Ads insights data and save it as a CSV asset."""
+    try:
+        if not request.ad_account_id:
+            raise HTTPException(status_code=400, detail="ad_account_id is required")
+
+        project = _ensure_project(user_id, request.project_id)
+
+        result = await integration_service.fetch_google_ads_data(
+            user_id=user_id,
+            ad_account_id=request.ad_account_id,
+            project_id=project["project_id"],
+            start_date=request.start_date,
+            end_date=request.end_date,
+            account_name=request.account_name,
+        )
+
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+
+        return GoogleAdsSyncResponse(
+            success=result["success"],
+            message=result["message"],
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+    except Exception as e:
+        logger.error(f"Failed to sync Google Ads data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Firebase ─────────────────────────────────────────────────────────────────
+
+class FirebaseProject(BaseModel):
+    id: str
+    name: str
+    source_type: str = "project"
+
+class FirebaseProjectsResponse(BaseModel):
+    success: bool
+    projects: list[FirebaseProject] = []
+    error: Optional[str] = None
+
+class FirebaseSyncRequest(BaseModel):
+    firebase_project_id: str
+    app_name: str
+    project_id: Optional[str] = None
+    start_date: str = "30daysAgo"
+    end_date: str = "today"
+
+class FirebaseSyncResponse(BaseModel):
+    success: bool
+    message: str
+    asset: Optional[AssetResponse] = None
+    row_count: int = 0
+    column_count: int = 0
+
+@router.get("/integration/firebase/projects", response_model=FirebaseProjectsResponse)
+async def get_firebase_projects(
+    user_id: str = Depends(require_user),
+):
+    """Get all Firebase projects the user has access to."""
+    try:
+        result = await integration_service.fetch_firebase_projects(user_id=user_id)
+        return FirebaseProjectsResponse(
+            success=result.get("success", False),
+            projects=result.get("projects", []),
+            error=result.get("error"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch Firebase projects: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/integration/firebase/sync", response_model=FirebaseSyncResponse)
+async def sync_firebase_data(
+    request: FirebaseSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    """Sync Firebase Analytics data and save it as a CSV asset."""
+    try:
+        if not request.firebase_project_id:
+            raise HTTPException(status_code=400, detail="firebase_project_id is required")
+
+        project = _ensure_project(user_id, request.project_id)
+
+        result = await integration_service.fetch_firebase_data(
+            user_id=user_id,
+            firebase_project_id=request.firebase_project_id,
+            project_id=project["project_id"],
+            start_date=request.start_date,
+            end_date=request.end_date,
+            expected_app_name=request.app_name,
+        )
+
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+
+        return FirebaseSyncResponse(
+            success=result["success"],
+            message=result["message"],
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+    except Exception as e:
+        logger.error(f"Failed to sync Firebase data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

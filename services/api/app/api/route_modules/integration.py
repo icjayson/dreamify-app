@@ -53,6 +53,7 @@ class GoogleAnalyticsPropertiesResponse(BaseModel):
 class GoogleSheetSyncRequest(BaseModel):
     file_id: str
     project_id: Optional[str] = None
+    access_token: Optional[str] = None
 
 
 class GoogleSheetSyncResponse(BaseModel):
@@ -161,7 +162,10 @@ async def sync_google_sheet_data(
         project = _ensure_project(user_id, request.project_id)
 
         result = await integration_service.fetch_google_sheet_data(
-            user_id=user_id, file_id=request.file_id, project_id=project["project_id"]
+            user_id=user_id,
+            file_id=request.file_id,
+            project_id=project["project_id"],
+            access_token=request.access_token,
         )
 
         # Map the created asset to the standard AssetResponse

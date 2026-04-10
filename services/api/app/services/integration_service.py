@@ -372,80 +372,72 @@ class IntegrationService:
         )
 
     async def fetch_google_sheet_data(
-        self, user_id: str, file_id: str, project_id: str
+        self, user_id: str, file_id: str, project_id: str, access_token: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Fetch Google Sheet data via the Sheets API and save it as a CSV asset."""
-        access_token = await self._get_google_access_token(user_id)
+        """Fetch Google Sheet data via the Drive API and save it as a CSV asset."""
+        if not access_token:
+            access_token = await self._get_google_access_token(user_id)
         if not access_token:
             raise ValueError(
                 "Google OAuth token not found for user. Please connect your Google account."
             )
 
         try:
-            from google.oauth2.credentials import Credentials
-            from googleapiclient.discovery import build
-            import io
-            import csv
-
-            credentials = Credentials(token=access_token)
-
-            # Use Sheets API (works with spreadsheets.readonly scope)
-            # instead of Drive API (which requires drive or drive.file scope)
-            sheets_service = build("sheets", "v4", credentials=credentials)
-
-            # Get spreadsheet metadata (title) and all values from the first sheet
-            spreadsheet = (
-                sheets_service.spreadsheets()
-                .get(
-                    spreadsheetId=file_id,
-                    fields="properties.title,sheets.properties.title",
+            async with httpx.AsyncClient() as client:
+                # Get spreadsheet name from Drive API
+                meta_resp = await client.get(
+                    f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                    params={
+                        "fields": "name", 
+                        "supportsAllDrives": "true",
+                        "includeItemsFromAllDrives": "true"
+                    },
+                    headers={"Authorization": f"Bearer {access_token}"},
                 )
-                .execute()
-            )
+                if meta_resp.status_code == 403:
+                    raise ValueError(
+                        "Google Drive access denied. Please re-open the spreadsheet via the Google Sheets picker or reconnect your account with the required permissions."
+                    )
+                if meta_resp.status_code == 404:
+                    raise ValueError(
+                        f"Google Sheet file not found (ID: {file_id}). Ensure the file exists and has not been deleted or moved."
+                    )
+                meta_resp.raise_for_status()
+                filename = meta_resp.json().get("name", "google_sheet")
+                if not filename.endswith(".csv"):
+                    filename += ".csv"
 
-            filename = spreadsheet.get("properties", {}).get("title", "google_sheet")
-            if not filename.endswith(".csv"):
-                filename += ".csv"
-
-            # Read data from all sheets
-            sheets = spreadsheet.get("sheets", [])
-            sheet_titles = (
-                [s["properties"]["title"] for s in sheets] if sheets else ["Sheet1"]
-            )
-
-            all_rows = []
-            headers = []
-
-            for sheet_title in sheet_titles:
-                result = (
-                    sheets_service.spreadsheets()
-                    .values()
-                    .get(spreadsheetId=file_id, range=sheet_title)
-                    .execute()
+                # Export first sheet as CSV via Drive API export endpoint
+                export_resp = await client.get(
+                    f"https://www.googleapis.com/drive/v3/files/{file_id}/export",
+                    params={
+                        "mimeType": "text/csv", 
+                        "supportsAllDrives": "true"
+                    },
+                    headers={"Authorization": f"Bearer {access_token}"},
                 )
+                if export_resp.status_code == 403:
+                    raise ValueError(
+                        "Export access denied. You may need 'Editor' permissions on the spreadsheet to export it as CSV."
+                    )
+                export_resp.raise_for_status()
+                csv_content = export_resp.content
 
-                values = result.get("values", [])
-                if not values:
-                    continue
+            # Parse the CSV to get row/column counts
+            try:
+                reader = csv.reader(io.StringIO(csv_content.decode("utf-8-sig"))) # Handle BOM if present
+                rows = list(reader)
+            except UnicodeDecodeError:
+                # Fallback for other encodings if UTF-8 fails
+                reader = csv.reader(io.StringIO(csv_content.decode("latin-1")))
+                rows = list(reader)
 
-                if not headers:
-                    # Use the first sheet's header row as the CSV header
-                    headers = values[0]
-                    all_rows.append(values[0])
+            headers = rows[0] if rows else []
+            row_count = max(len(rows) - 1, 0)  # exclude header row
+            column_count = len(headers)
 
-                # Add data rows (skip header row of each sheet)
-                all_rows.extend(values[1:])
-
-            if not all_rows:
+            if not rows:
                 raise Exception("The Google Sheet is empty")
-
-            # Convert to CSV bytes
-            output = io.StringIO()
-            writer = csv.writer(output)
-            writer.writerows(all_rows)
-            csv_content = output.getvalue().encode("utf-8")
-
-            row_count = len(all_rows) - 1  # exclude header row
 
             asset_info = self._save_integration_asset(
                 user_id=user_id,
@@ -455,7 +447,7 @@ class IntegrationService:
                 asset_type="integration_gsheets",
                 extension="csv",
                 row_count=row_count,
-                column_count=len(headers),
+                column_count=column_count,
             )
 
             return {
@@ -463,11 +455,15 @@ class IntegrationService:
                 "message": "Google Sheet data synced successfully",
                 "asset": asset_info,
                 "row_count": row_count,
-                "column_count": len(headers),
+                "column_count": column_count,
             }
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Google API error ({e.response.status_code}): {e.response.text}"
+            logger.error(f"Failed to fetch Google Sheet data: {error_msg}")
+            raise Exception(error_msg)
         except Exception as e:
             logger.error(f"Failed to fetch Google Sheet data: {e}")
-            raise Exception(f"Failed to fetch Google Sheet data: {str(e)}")
+            raise Exception(str(e))
 
     # ── Meta OAuth helpers ────────────────────────────────────────────────────
 

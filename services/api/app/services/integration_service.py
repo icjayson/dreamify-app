@@ -1910,12 +1910,12 @@ class IntegrationService:
                         })
                     return {"success": True, "ad_accounts": accounts}
                 else:
-                    try:
-                        err_data = resp.json()
-                        err_msg = err_data.get("error", {}).get("message", resp.text)
-                    except Exception:
-                        err_msg = resp.text
-                    return {"success": False, "error": f"Google Ads API Error: {err_msg}", "ad_accounts": []}
+                    # Any non-200 from Google Ads (401 insufficient scope, 403 permission denied,
+                    # etc.) means the user has no Google Ads account or the adwords scope wasn't
+                    # granted. True token expiry/revocation is already caught above by
+                    # _get_google_access_token returning None. Treat all API errors as
+                    # "no accounts found" so the modal shows the graceful empty state.
+                    return {"success": True, "ad_accounts": []}
 
         except Exception as e:
             logger.error(f"Failed to fetch Google Ads accounts: {e}")

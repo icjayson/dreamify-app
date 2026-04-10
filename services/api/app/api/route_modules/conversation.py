@@ -347,11 +347,6 @@ async def conversation_chat(
     # Small delay to help with S3 eventual consistency
     await asyncio.sleep(0.5)
 
-    model_alias = request.model or "fast"
-    credit_cost = credit_service_instance.get_model_cost(model_alias)
-    credit_service_instance.consume_credits(user_id, credit_cost)
-    resolved_model = MODEL_ID_MAP.get(model_alias, MODEL_ID_MAP["fast"])
-
     morpheus_payload = {
         "conversation_id": conversation_id,
         "conversation_uri": f"s3://{conversation_bucket}/{conversation_keys['primary']}",
@@ -373,6 +368,10 @@ async def conversation_chat(
             ),
         )
         response.raise_for_status()
+        # Deduct credits only after Morpheus responds successfully so failures
+        # don't silently drain the user's monthly allowance.
+        credit_cost = credit_service_instance.get_model_cost(model_alias)
+        credit_service_instance.consume_credits(user_id, credit_cost)
         workflow_status = response.json()
     except requests.exceptions.ConnectionError:
         raise HTTPException(status_code=503, detail="Morpheus service unavailable")

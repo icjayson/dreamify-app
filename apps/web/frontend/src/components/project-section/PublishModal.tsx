@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { X, Check, Copy, Mail, Globe, Shield, Loader2, Download, SquareArrowOutUpRight } from 'lucide-react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { X, Check, Copy, Mail, Globe, Shield, Loader2, Download, SquareArrowOutUpRight, UserPlus, Trash2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { exportDashboardAsPdf, exportDashboardAsPng, downloadBlob } from '@/utils/exportUtils';
 import { useChatStore } from '@/chat/useChatStore';
-import { projectService } from '@/services/projectService';
+import { projectService, type AllowedUser } from '@/services/projectService';
+import { userService, type UserLookupResult } from '@/services/userService';
 import { useDashboard } from '@/hooks/useDashboard';
 import DashboardPreview from './DashboardPreview';
 
@@ -35,6 +36,18 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
   const [isPreviewPublic, setIsPreviewPublic] = useState(false);
   const [isUpdatingPublic, setIsUpdatingPublic] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Private sharing state
+  const [lookupEmail, setLookupEmail] = useState('');
+  const [lookupResult, setLookupResult] = useState<UserLookupResult | null>(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [showLookupPopup, setShowLookupPopup] = useState(false);
+  const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
+  const [isUpdatingAllowed, setIsUpdatingAllowed] = useState(false);
+  const lookupContainerRef = useRef<HTMLDivElement>(null);
+  const allowedUsersRef = useRef<AllowedUser[]>([]);
+
   const originalFileBlob = useChatStore(s => s.originalFileBlob);
   const originalFileName = useChatStore(s => s.originalFileName);
   const uploadedFiles = useChatStore(s => s.uploadedFiles);
@@ -74,7 +87,7 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
     setActiveTab('share');
   }, [open]);
 
-  // Load current is_preview_public value when modal opens
+  // Load current is_preview_public value and allowed users when modal opens
   useEffect(() => {
     if (!open || !projectId) return;
 
@@ -83,6 +96,9 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
         const response = await projectService.getProject(projectId);
         if (response.success && response.project) {
           setIsPreviewPublic(response.project.is_preview_public || false);
+          // Backend now returns full AllowedUser objects directly
+          const allowedList = response.project.allowed || [];
+          setAllowedUsers(allowedList);
         }
       } catch (error) {
         console.error('Failed to load project settings:', error);
@@ -91,6 +107,153 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
 
     loadProjectSettings();
   }, [open, projectId]);
+
+  // Close lookup popup when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (lookupContainerRef.current && !lookupContainerRef.current.contains(e.target as Node)) {
+        setShowLookupPopup(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Email validation helper — requires TLD of at least 2 chars to avoid
+  // premature API calls for incomplete emails like "user@domain.e"
+  const isValidEmail = useCallback((email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(email);
+  }, []);
+
+  // Keep a ref of allowedUsers in sync so the lookup effect can read
+  // the latest list without having it as a dependency (which would
+  // restart the debounce timer every time the list changes).
+  useEffect(() => {
+    allowedUsersRef.current = allowedUsers;
+  }, [allowedUsers]);
+
+  // Debounced user lookup — only depends on lookupEmail so changing
+  // the allowed list doesn't restart the debounce timer.
+  useEffect(() => {
+    const abortController = new AbortController();
+
+    setLookupError(null);
+
+    if (!lookupEmail) {
+      setShowLookupPopup(false);
+      setLookupResult(null);
+      setIsLookingUp(false);
+      return;
+    }
+
+    // Wait 600ms after user stops typing before doing anything
+    const timeoutId = setTimeout(async () => {
+      // 1. Validate email format (strict — needs ≥2 char TLD)
+      if (!isValidEmail(lookupEmail)) {
+        setShowLookupPopup(false);
+        return;
+      }
+
+      // 2. Read the latest allowed list via ref (no stale closure)
+      const currentAllowed = allowedUsersRef.current;
+      const alreadyAdded = currentAllowed.some(u => u.email === lookupEmail);
+      if (alreadyAdded) {
+        setLookupError('This user already has access');
+        setShowLookupPopup(true);
+        setLookupResult(null);
+        return;
+      }
+
+      // 3. All client-side checks passed — call the API
+      setIsLookingUp(true);
+      setShowLookupPopup(true);
+      setLookupResult(null);
+
+      try {
+        const result = await userService.lookupUserByEmail(lookupEmail, abortController.signal);
+
+        if (abortController.signal.aborted) return;
+
+        if (result.success && result.user_id) {
+          const alreadyInList = currentAllowed.some(u => u.user_id === result.user_id);
+          if (alreadyInList) {
+            setLookupError('This user already has access');
+            setLookupResult(null);
+          } else {
+            setLookupResult(result);
+          }
+        } else {
+          setLookupError('User not found');
+          setLookupResult(null);
+        }
+      } catch (err) {
+        if (abortController.signal.aborted) return;
+        setLookupError('User not found');
+        setLookupResult(null);
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsLookingUp(false);
+        }
+      }
+    }, 600);
+
+    return () => {
+      clearTimeout(timeoutId);
+      abortController.abort();
+    };
+  }, [lookupEmail]);
+
+  // Add user to allowed list
+  const handleAddAllowedUser = async (user: UserLookupResult) => {
+    if (!projectId || !user.user_id || isUpdatingAllowed) return;
+
+    setIsUpdatingAllowed(true);
+    try {
+      const newAllowedUser: AllowedUser = {
+        user_id: user.user_id,
+        name: user.name || undefined,
+        email: user.email || undefined,
+        image_url: user.image_url || undefined,
+      };
+
+      const updatedAllowed = [...allowedUsers, newAllowedUser];
+
+      const response = await projectService.updateProject(projectId, undefined, undefined, undefined, updatedAllowed);
+      if (response.success) {
+        setAllowedUsers(updatedAllowed);
+        setLookupEmail('');
+        setShowLookupPopup(false);
+        setLookupResult(null);
+      } else {
+        console.error('Failed to update allowed users:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to update allowed users:', error);
+    } finally {
+      setIsUpdatingAllowed(false);
+    }
+  };
+
+  // Remove user from allowed list
+  const handleRemoveAllowedUser = async (userId: string) => {
+    if (!projectId || isUpdatingAllowed) return;
+
+    setIsUpdatingAllowed(true);
+    try {
+      const updatedAllowed = allowedUsers.filter(u => u.user_id !== userId);
+
+      const response = await projectService.updateProject(projectId, undefined, undefined, undefined, updatedAllowed);
+      if (response.success) {
+        setAllowedUsers(updatedAllowed);
+      } else {
+        console.error('Failed to remove allowed user:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to remove allowed user:', error);
+    } finally {
+      setIsUpdatingAllowed(false);
+    }
+  };
 
   // Mock slug availability check
   useEffect(() => {
@@ -270,7 +433,7 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
                     <div>
                       <div className="text-sm font-medium">Preview Visibility</div>
                       <div className="text-xs text-muted-foreground">
-                        {isPreviewPublic ? 'Public - Anyone with the link can view' : 'Private - Only you can view'}
+                        {isPreviewPublic ? 'Public - Anyone with the link can view' : 'Private - Only you and allowed users can view'}
                       </div>
                     </div>
                   </div>
@@ -286,6 +449,138 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
                     />
                   </button>
                 </div>
+
+                {/* Private sharing - email lookup */}
+                {!isPreviewPublic && (
+                  <div className="space-y-3 pt-2">
+                    <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <UserPlus className="w-3.5 h-3.5" />
+                      Share with specific people
+                    </div>
+
+                    {/* Email input with lookup popup */}
+                    <div className="relative" ref={lookupContainerRef}>
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/40 border border-white/10 focus-within:border-white/20 transition-colors duration-200">
+                        <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <input
+                          type="email"
+                          value={lookupEmail}
+                          onChange={(e) => setLookupEmail(e.target.value.trim())}
+                          placeholder="Enter email to invite..."
+                          className="flex-1 bg-transparent text-sm text-white placeholder:text-muted-foreground outline-none"
+                        />
+                        {isLookingUp && (
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
+                        )}
+                      </div>
+
+                      {/* Lookup result popup */}
+                      {showLookupPopup && (lookupResult || lookupError || isLookingUp) && (
+                        <div className="absolute z-50 left-0 right-0 mt-1.5 rounded-lg bg-[#1a1a2e] border border-white/10 shadow-xl shadow-black/40 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                          {isLookingUp ? (
+                            <div className="flex items-center gap-3 px-3 py-3">
+                              <div className="w-8 h-8 rounded-full bg-white/10 animate-pulse flex-shrink-0" />
+                              <div className="flex-1 space-y-1.5">
+                                <div className="h-3 w-24 rounded bg-white/10 animate-pulse" />
+                                <div className="h-2.5 w-36 rounded bg-white/5 animate-pulse" />
+                              </div>
+                            </div>
+                          ) : lookupError ? (
+                            <div className="flex items-center gap-3 px-3 py-3">
+                              <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                                <X className="w-4 h-4 text-red-400" />
+                              </div>
+                              <span className="text-sm text-red-400">{lookupError}</span>
+                            </div>
+                          ) : lookupResult ? (
+                            <button
+                              onClick={() => handleAddAllowedUser(lookupResult)}
+                              disabled={isUpdatingAllowed}
+                              className="w-full flex items-center gap-3 px-3 py-3 hover:bg-white/5 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                            >
+                              {lookupResult.image_url ? (
+                                <img
+                                  src={lookupResult.image_url}
+                                  alt={lookupResult.name || 'User'}
+                                  className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold">
+                                  {(lookupResult.name || lookupResult.email || '?').charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-white truncate">
+                                  {lookupResult.name || 'Unknown'}
+                                </div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {lookupResult.email}
+                                </div>
+                              </div>
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
+                                {isUpdatingAllowed ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <>
+                                    <UserPlus className="w-3.5 h-3.5" />
+                                    Add
+                                  </>
+                                )}
+                              </div>
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Allowed users list */}
+                    {allowedUsers.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="text-xs text-muted-foreground">
+                          {allowedUsers.length} {allowedUsers.length === 1 ? 'person' : 'people'} with access
+                        </div>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {allowedUsers.map((user) => (
+                            <div
+                              key={user.user_id}
+                              className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md bg-white/5 group hover:bg-white/8 transition-colors duration-150"
+                            >
+                              {user.image_url ? (
+                                <img
+                                  src={user.image_url}
+                                  alt={user.name || 'User'}
+                                  className="w-6 h-6 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10"
+                                />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-white text-[10px] font-semibold">
+                                  {(user.name || user.email || user.user_id || '?').charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-medium text-white truncate">
+                                  {user.name || user.email || user.user_id}
+                                </div>
+                                {user.name && user.email && (
+                                  <div className="text-[10px] text-muted-foreground truncate">
+                                    {user.email}
+                                  </div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleRemoveAllowedUser(user.user_id)}
+                                disabled={isUpdatingAllowed}
+                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all duration-150 disabled:opacity-50 cursor-pointer"
+                                title="Remove access"
+                              >
+                                <Trash2 className="w-3 h-3 text-red-400" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

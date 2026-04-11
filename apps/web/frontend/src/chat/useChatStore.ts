@@ -923,6 +923,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                         sourceFileName: get().uploadedFiles[0]?.filename || 'dashboard',
                         dashboardId: dashboardId,
                         dashboardTitle: latestDashboard?.title || undefined,
+                        accountName: get().uploadedFiles[0]?.accountName,
+                        sourceType: get().uploadedFiles[0]?.sourceType,
                       },
                       timestamp: new Date(),
                     });
@@ -941,7 +943,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     content: "",
                     dashboardCard: {
                       sourceFileName: get().uploadedFiles[0]?.filename || "dashboard",
-                      dashboardId: ""
+                      dashboardId: "",
+                      accountName: get().uploadedFiles[0]?.accountName,
+                      sourceType: get().uploadedFiles[0]?.sourceType,
                     },
                     timestamp: new Date(),
                   }
@@ -1260,6 +1264,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
               const currentFiles = get().uploadedFiles;
               const restoredMessages = conversationNodesToMessages(conversation, {
                 sourceFileName: currentFiles[0]?.filename ?? 'dashboard',
+                lastUserMessageAttachment: currentFiles[0] ? {
+                  kind: 'csv',
+                  name: currentFiles[0].filename,
+                  sourceType: currentFiles[0].sourceType,
+                  accountName: currentFiles[0].accountName,
+                  propertyName: currentFiles[0].propertyName,
+                } : undefined,
               });
               if (restoredMessages.length) {
                 get().setMessages(restoredMessages);
@@ -1279,7 +1290,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   content: "",
                   dashboardCard: {
                     sourceFileName: get().uploadedFiles[0]?.filename ?? "dashboard",
-                    dashboardId: ""
+                    dashboardId: "",
+                    accountName: get().uploadedFiles[0]?.accountName,
+                    sourceType: get().uploadedFiles[0]?.sourceType,
                   },
                   timestamp: new Date(),
                 }

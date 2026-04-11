@@ -30,6 +30,8 @@ export interface Message {
     sourceFileName: string;
     dashboardId: string;
     dashboardTitle?: string;
+    accountName?: string;
+    sourceType?: string;
   };
   todoTasks?: Array<{
     id: string;

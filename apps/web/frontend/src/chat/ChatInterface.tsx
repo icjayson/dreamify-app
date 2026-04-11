@@ -1402,8 +1402,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           let secondaryText = "";
                           if (isMultiple) {
                             secondaryText = message.attachment.name;
+                          } else if (isGA4) {
+                            secondaryText = message.attachment.propertyName || message.attachment.accountName || message.attachment.name.replace(/\.[^/.]+$/, "");
+                          } else if (isSheets) {
+                            secondaryText = message.attachment.name.replace(/\.[^/.]+$/, "");
+                          } else if (isMeta || isTikTok || isGoogleAds || isFirebase || isAppsFlyer || isStripe) {
+                            secondaryText = message.attachment.accountName || message.attachment.name.replace(/\.[^/.]+$/, "");
                           } else {
-                            secondaryText = (message.attachment.name).replace(/\.[^/.]+$/, "");
+                            secondaryText = message.attachment.name.replace(/\.[^/.]+$/, "");
                           }
                           return (
                             <Tooltip>
@@ -1580,10 +1586,19 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     {/* Render dashboard card if present */}
                     {message.role === 'assistant' && message.dashboardCard && (() => {
                       const sourceLabel = (() => {
-                        const source = message.dashboardCard.sourceFileName || '';
-                        if (source.toLowerCase().includes('google_analytics') || source.toLowerCase().includes('ga4')) return 'GA4 Data';
-                        if (source.toLowerCase().includes('google_sheet') || source.toLowerCase().includes('gsheet')) return 'Google Sheets Data';
-                        return source.replace(/\.[^/.]+$/, "");
+                        const accountName = message.dashboardCard.accountName;
+                        if (accountName) return accountName;
+                        const source = (message.dashboardCard.sourceType || message.dashboardCard.sourceFileName || '').toLowerCase();
+                        const filename = (message.dashboardCard.sourceFileName || '').toLowerCase();
+                        if (source.includes('ga4') || source.includes('google_analytics') || source.includes('google analytics') || filename.includes('ga4') || filename.includes('google_analytics')) return 'GA4 Data';
+                        if (source.includes('sheet') || source.includes('google sheets') || filename.includes('google_sheet') || filename.includes('gsheet')) return 'Google Sheets Data';
+                        if (source.includes('google ads') || source.includes('google_ads') || filename.includes('google_ads')) return 'Google Ads Data';
+                        if (source.includes('firebase') || filename.includes('firebase')) return 'Firebase Data';
+                        if (source.includes('tiktok') || filename.includes('tiktok')) return 'TikTok Data';
+                        if (source.includes('appsflyer') || filename.includes('appsflyer')) return 'AppsFlyer Data';
+                        if (source.includes('stripe') || filename.includes('stripe')) return 'Stripe Data';
+                        if (source.includes('meta') || filename.includes('meta_ads')) return 'Meta Ads Data';
+                        return message.dashboardCard.sourceFileName.replace(/\.[^/.]+$/, "");
                       })();
 
                       return (

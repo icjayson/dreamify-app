@@ -23,8 +23,10 @@ export function conversationNodesToMessages(
   const nodes = conversation?.nodes ?? [];
   const dashboards = conversation?.dashboards ?? [];
 
-  // Asset name will track the most recent asset encountered in the flow
+  // Asset name / account info will track the most recent asset encountered in the flow
   let currentAssetName = options?.sourceFileName ?? 'dashboard';
+  let currentAccountName: string | undefined = options?.lastUserMessageAttachment?.accountName;
+  let currentSourceType: string | undefined = options?.lastUserMessageAttachment?.sourceType;
 
   const restoredMessages: Message[] = nodes
     .filter((node: any) => {
@@ -72,9 +74,12 @@ export function conversationNodesToMessages(
         (c: any) => c?.type === 'chart_mention'
       ) ?? [];
 
-      // Update the current asset name if this node brings a new asset
+      // Update the current asset name/account info if this node brings a new asset
       if (assetContent?.data?.filename) {
         currentAssetName = assetContent.data.filename;
+      }
+      if (assetContent?.data?.accountName) {
+        currentAccountName = assetContent.data.accountName;
       }
       const normalized: Message = {
         id: node?.node_id || crypto.randomUUID(),
@@ -91,6 +96,8 @@ export function conversationNodesToMessages(
           sourceFileName: currentAssetName,
           dashboardId: dashboardId,
           dashboardTitle: dashboardMetadata?.title || undefined,
+          accountName: currentAccountName,
+          sourceType: currentSourceType,
         };
       }
       if (todoTasksContent?.data?.tasks && Array.isArray(todoTasksContent.data.tasks)) {
@@ -119,13 +126,28 @@ export function conversationNodesToMessages(
           sourceType = 'Google Sheets';
         } else if (lowerAssetType.includes('meta') || lowerAssetType.includes('meta_ads')) {
           sourceType = 'Meta Ads';
+        } else if (lowerAssetType.includes('tiktok') || lowerAssetType.includes('tik_tok')) {
+          sourceType = 'TikTok';
+        } else if (lowerAssetType.includes('google ads') || lowerAssetType.includes('google_ads')) {
+          sourceType = 'Google Ads';
+        } else if (lowerAssetType.includes('firebase')) {
+          sourceType = 'Firebase';
+        } else if (lowerAssetType.includes('appsflyer')) {
+          sourceType = 'AppsFlyer';
+        } else if (lowerAssetType.includes('stripe')) {
+          sourceType = 'Stripe';
         }
+
+        // Track current sourceType for dashboard cards
+        if (sourceType) currentSourceType = sourceType;
 
         normalized.attachment = {
           kind: assetContent?.data?.kind === 'file' ? 'file' : 'csv',
           name: assetContents.length > 1 ? `${assetContents.length} files` : firstName,
           mime: assetContent?.data?.mime,
           sourceType,
+          accountName: assetContent?.data?.accountName,
+          propertyName: assetContent?.data?.propertyName,
         };
       } else if (isLastUser && options?.lastUserMessageAttachment) {
         normalized.attachment = options.lastUserMessageAttachment;

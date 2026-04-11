@@ -1,5 +1,6 @@
-// Public Project Service - for accessing projects without authentication
-import { API_CONFIG } from '@/api/config';
+// Public Project Service - for accessing projects with optional authentication
+// Uses api.get to automatically attach Bearer token when available
+import { api } from './api';
 
 export interface PublicProjectRecord {
   id: string;
@@ -25,30 +26,25 @@ export interface PublicDashboardDataResponse {
 }
 
 class PublicProjectService {
-  private baseURL = API_CONFIG.BASE_URL;
+  private baseUrl = '/api/v1/public';
 
   async getPublicProject(projectId: string): Promise<PublicProjectResponse> {
     try {
-      const url = `${this.baseURL}/api/v1/public/project/${projectId}`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const res = await api.get<PublicProjectRecord>(`${this.baseUrl}/project/${projectId}`);
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          return { success: false, error: 'Project not found' };
-        }
-        if (response.status === 403) {
-          return { success: false, error: 'Project preview is not public' };
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (res.success && res.data) {
+        return { success: true, project: res.data };
       }
 
-      const data = await response.json();
-      return { success: true, project: data };
+      // Map common error messages
+      const errorMsg = res.error || 'Failed to load project';
+      if (errorMsg.includes('404')) {
+        return { success: false, error: 'Project not found' };
+      }
+      if (errorMsg.includes('403')) {
+        return { success: false, error: 'Project preview is not public' };
+      }
+      return { success: false, error: errorMsg };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load project';
       return { success: false, error: errorMessage };
@@ -57,26 +53,15 @@ class PublicProjectService {
 
   async getPublicDashboardData(conversationId: string, projectId: string): Promise<PublicDashboardDataResponse | null> {
     try {
-      const url = `${this.baseURL}/api/v1/public/conversation/${conversationId}/dashboard?project_id=${encodeURIComponent(projectId)}`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const res = await api.get<PublicDashboardDataResponse>(
+        `${this.baseUrl}/conversation/${conversationId}/dashboard?project_id=${encodeURIComponent(projectId)}`
+      );
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null;
-        }
-        if (response.status === 403) {
-          return null;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (res.success && res.data) {
+        return res.data;
       }
 
-      const data = await response.json();
-      return data;
+      return null;
     } catch (error) {
       console.error('Failed to get public dashboard data:', error);
       return null;
@@ -85,4 +70,3 @@ class PublicProjectService {
 }
 
 export const publicProjectService = new PublicProjectService();
-

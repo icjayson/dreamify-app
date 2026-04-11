@@ -5,8 +5,6 @@ import { Shield, Lock, ArrowLeft } from "lucide-react";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
 import { useChatStore } from "@/chat/useChatStore";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
-import { projectService } from "@/services/projectService";
-import { conversationService } from "@/services/conversationService";
 import { publicProjectService } from "@/services/publicProjectService";
 
 export default function PreviewPage() {
@@ -48,6 +46,9 @@ export default function PreviewPage() {
   }, []);
 
   // Load project data using projectId from URL
+  // Always uses the public endpoint — api.get attaches the Bearer token
+  // automatically when signed in, so the backend optional_user dependency
+  // can grant access to private projects for owners and allowed users.
   useEffect(() => {
     if (!projectId) return;
 
@@ -58,25 +59,14 @@ export default function PreviewPage() {
       setLoadError(null);
 
       try {
-        // Use authenticated or public service based on auth status
-        let response;
-        if (isSignedIn) {
-          response = await projectService.getProject(projectId);
-        } else {
-          response = await publicProjectService.getPublicProject(projectId);
-        }
+        const response = await publicProjectService.getPublicProject(projectId);
         
         if (cancelled) return;
 
         if (response.success && response.project) {
           const latestConversationId = response.project.latest_conversation_id;
           if (latestConversationId) {
-            let dashboardResponse;
-            if (isSignedIn) {
-              dashboardResponse = await conversationService.getDashboardData(latestConversationId, projectId);
-            } else {
-              dashboardResponse = await publicProjectService.getPublicDashboardData(latestConversationId, projectId);
-            }
+            const dashboardResponse = await publicProjectService.getPublicDashboardData(latestConversationId, projectId);
             
             if (cancelled) return;
 
@@ -103,7 +93,7 @@ export default function PreviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, isSignedIn]);
+  }, [projectId]);
 
   return (
     <div className="min-h-screen bg-muted">
@@ -125,13 +115,13 @@ export default function PreviewPage() {
                     <div className="space-y-2">
                       <h2 className="text-2xl font-semibold text-white">Private Preview</h2>
                       <p className="text-muted-foreground">
-                        This dashboard preview is set to private. Only the project owner can view it.
+                        This dashboard preview is private. Only the owner and people they've shared it with can view it.
                       </p>
                     </div>
                     {!isSignedIn && (
                       <div className="pt-4 space-y-3">
                         <p className="text-sm text-muted-foreground">
-                          Sign in to access your private dashboards
+                          Sign in to check if you have access to this dashboard
                         </p>
                         <button
                           onClick={() => navigate('/login')}
@@ -139,6 +129,13 @@ export default function PreviewPage() {
                         >
                           Sign In
                         </button>
+                      </div>
+                    )}
+                    {isSignedIn && (
+                      <div className="pt-2">
+                        <p className="text-sm text-muted-foreground">
+                          You don't have access to this dashboard. Ask the owner to share it with you.
+                        </p>
                       </div>
                     )}
                     <button

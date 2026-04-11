@@ -1,5 +1,12 @@
 import { api } from './api';
 
+export interface AllowedUser {
+  user_id: string;
+  email?: string;
+  name?: string;
+  image_url?: string;
+}
+
 export interface ProjectRecord {
   id: string;
   name: string;
@@ -10,6 +17,7 @@ export interface ProjectRecord {
   latest_dashboard_id?: string | null;
   dashboard_title?: string | null;
   is_preview_public?: boolean;
+  allowed?: AllowedUser[];
 }
 
 export interface ProjectResponse {
@@ -54,11 +62,12 @@ class ProjectService {
     return { success: false, error: res.error || 'Failed to load project' };
   }
 
-  async updateProject(projectId: string, name?: string, description?: string, is_preview_public?: boolean): Promise<ProjectResponse> {
+  async updateProject(projectId: string, name?: string, description?: string, is_preview_public?: boolean, allowed?: AllowedUser[]): Promise<ProjectResponse> {
     const res = await api.put<ProjectRecord>(`${this.baseUrl}/${projectId}`, {
       name,
       description,
       is_preview_public,
+      allowed,
     });
     if (res.success && res.data) {
       return { success: true, project: res.data };

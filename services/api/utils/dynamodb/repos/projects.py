@@ -18,7 +18,7 @@ def _now_iso() -> str:
     return datetime.now().isoformat()
 
 
-def create_project(user_id: str, name: str, description: Optional[str] = None) -> Dict:
+def create_project(user_id: str, name: str, description: Optional[str] = None, allowed: Optional[List[Dict]] = None) -> Dict:
     table = get_table(tables.projects)
     project_id = str(uuid.uuid4())
     item = {
@@ -32,6 +32,7 @@ def create_project(user_id: str, name: str, description: Optional[str] = None) -
         "latest_dashboard_id": None,
         "dashboard_title": None,
         "is_preview_public": False,
+        "allowed": allowed or [],
     }
     table.put_item(Item=item)
     return item
@@ -94,6 +95,7 @@ def update_project(
     latest_dashboard_id: Optional[str] = None,
     dashboard_title: Optional[str] = None,
     is_preview_public: Optional[bool] = None,
+    allowed: Optional[List[Dict]] = None,
 ) -> Optional[Dict]:
     logger.info(f"Updating project {project_id} for user {user_id}: name={name}, dashboard_title={dashboard_title}, conversation_id={latest_conversation_id}")
     table = get_table(tables.projects)
@@ -124,6 +126,10 @@ def update_project(
         expr.append("#is_preview_public = :is_preview_public")
         names["#is_preview_public"] = "is_preview_public"
         values[":is_preview_public"] = is_preview_public
+    if allowed is not None:
+        expr.append("#allowed = :allowed")
+        names["#allowed"] = "allowed"
+        values[":allowed"] = allowed
     if not expr:
         logger.info(f"No fields to update for project {project_id}")
         return get_project(user_id, project_id)

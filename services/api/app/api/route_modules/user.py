@@ -1,6 +1,7 @@
 """
 User-scoped project and asset APIs.
 """
+import asyncio
 import logging
 import os
 import uuid
@@ -23,8 +24,72 @@ from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import projects as projects_repo
 from utils.s3.client import compute_sha256_checksum, upload_bytes, delete_object, download_bytes
 from utils.s3.paths import build_asset_key
+from clerk_backend_api import Clerk
 
 router = APIRouter(tags=["user"])
+
+# Initialize Clerk client for user lookups
+_clerk_client = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
+
+
+class UserLookupResponse(BaseModel):
+    """Response model for user lookup by email."""
+    success: bool
+    user_id: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+@router.get("/user/lookup", response_model=UserLookupResponse)
+async def lookup_user_by_email(
+    email: str = Query(..., description="Email address to look up"),
+    _: str = Depends(require_user),
+):
+    """
+    Look up a user's profile information by email address via Clerk.
+
+    Returns the user's ID, name, email, and profile image URL.
+    """
+    try:
+        users = await asyncio.to_thread(
+            _clerk_client.users.list,
+            request={"email_address": [email], "limit": 1},
+        )
+        user_list = list(users)
+
+        if not user_list:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user = user_list[0]
+        name_parts = filter(None, [user.first_name, user.last_name])
+        full_name = " ".join(name_parts) or user.username or None
+
+        # Get primary email
+        primary_email = None
+        if user.email_addresses:
+            primary_email = user.email_addresses[0].email_address
+
+        return UserLookupResponse(
+            success=True,
+            user_id=user.id,
+            email=primary_email,
+            name=full_name,
+            image_url=user.image_url,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error looking up user by email: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to look up user: {str(e)}")
+
+
+class AllowedUser(BaseModel):
+    """A user granted access to a private project."""
+    user_id: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class ProjectCreateRequest(BaseModel):
@@ -39,6 +104,7 @@ class ProjectUpdateRequest(BaseModel):
     latest_dashboard_id: Optional[str] = None
     dashboard_title: Optional[str] = None
     is_preview_public: Optional[bool] = None
+    allowed: Optional[List[AllowedUser]] = None
 
 
 class ProjectResponse(BaseModel):
@@ -51,6 +117,7 @@ class ProjectResponse(BaseModel):
     latest_dashboard_id: Optional[str] = None
     dashboard_title: Optional[str] = None
     is_preview_public: Optional[bool] = None
+    allowed: Optional[List[AllowedUser]] = None
 
 
 class ProjectListResponse(BaseModel):
@@ -112,6 +179,7 @@ def _map_project(item: dict) -> ProjectResponse:
         latest_dashboard_id=item.get("latest_dashboard_id"),
         dashboard_title=item.get("dashboard_title"),
         is_preview_public=item.get("is_preview_public", False),
+        allowed=item.get("allowed", []),
     )
 
 
@@ -221,6 +289,7 @@ async def update_project_endpoint(
         latest_dashboard_id=request.latest_dashboard_id,
         dashboard_title=request.dashboard_title,
         is_preview_public=request.is_preview_public,
+        allowed=[u.model_dump() for u in request.allowed] if request.allowed is not None else None,
     )
     if not updated_project:
         raise HTTPException(status_code=404, detail="Project not found")

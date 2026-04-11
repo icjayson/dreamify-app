@@ -4,10 +4,11 @@ Public endpoints for preview access without authentication.
 import json
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.api.route_modules.user import ProjectResponse, _map_project
 from app.api.route_modules.conversation import DashboardDataResponse
+from app.dependencies.auth import optional_user
 from utils.dynamodb.repos import projects as projects_repo
 from utils.dynamodb.repos import conversations as conversations_repo
 from utils.s3.conversations import load_conversation
@@ -19,9 +20,12 @@ router = APIRouter(tags=["public"])
 
 
 @router.get("/public/project/{project_id}", response_model=ProjectResponse)
-async def get_public_project(project_id: str):
-    """Get project data for public preview (no authentication required)."""
-    logger.info(f"Public project access request: project_id={project_id}")
+async def get_public_project(
+    project_id: str,
+    user_id: Optional[str] = Depends(optional_user),
+):
+    """Get project data for public preview or allowed users."""
+    logger.info(f"Public project access request: project_id={project_id}, user_id={user_id}")
     
     # Get project by project_id
     project = projects_repo.get_project_by_id(project_id)
@@ -29,13 +33,17 @@ async def get_public_project(project_id: str):
         logger.warning(f"Project not found for public access: project_id={project_id}")
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check if project is public
+    # Check if project is public or user is allowed
     is_preview_public = project.get("is_preview_public", False)
     if not is_preview_public:
-        logger.warning(
-            f"Attempted public access to private project: project_id={project_id}"
-        )
-        raise HTTPException(status_code=403, detail="Project preview is not public")
+        allowed = project.get("allowed", [])
+        allowed_user_ids = [u.get("user_id") for u in allowed if isinstance(u, dict)]
+        owner_id = project.get("user_id")
+        if not user_id or (user_id != owner_id and user_id not in allowed_user_ids):
+            logger.warning(
+                f"Attempted public access to private project without permission: project_id={project_id}, user_id={user_id}"
+            )
+            raise HTTPException(status_code=403, detail="Project preview is not public")
     
     # Map project to response
     return _map_project(project)
@@ -46,13 +54,14 @@ async def get_public_conversation_dashboard(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID"),
     dashboard_id: Optional[str] = Query(None, description="Specific dashboard ID to fetch"),
+    user_id: Optional[str] = Depends(optional_user),
 ):
-    """Get dashboard data for public preview (no authentication required)."""
+    """Get dashboard data for public preview or allowed users."""
     logger.info(
-        f"Public dashboard access request: project_id={project_id}, conversation_id={conversation_id}, dashboard_id={dashboard_id}"
+        f"Public dashboard access request: project_id={project_id}, conversation_id={conversation_id}, dashboard_id={dashboard_id}, user_id={user_id}"
     )
     
-    # First verify project is public
+    # Verify project exists
     project = projects_repo.get_project_by_id(project_id)
     if not project:
         logger.warning(f"Project not found for public dashboard access: project_id={project_id}")
@@ -60,10 +69,14 @@ async def get_public_conversation_dashboard(
     
     is_preview_public = project.get("is_preview_public", False)
     if not is_preview_public:
-        logger.warning(
-            f"Attempted public dashboard access to private project: project_id={project_id}"
-        )
-        raise HTTPException(status_code=403, detail="Project preview is not public")
+        allowed = project.get("allowed", [])
+        allowed_user_ids = [u.get("user_id") for u in allowed if isinstance(u, dict)]
+        owner_id = project.get("user_id")
+        if not user_id or (user_id != owner_id and user_id not in allowed_user_ids):
+            logger.warning(
+                f"Attempted dashboard access to private project without permission: project_id={project_id}, user_id={user_id}"
+            )
+            raise HTTPException(status_code=403, detail="Project preview is not public")
     
     # Get conversation metadata
     conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)

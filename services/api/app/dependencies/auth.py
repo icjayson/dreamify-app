@@ -35,6 +35,21 @@ def require_user(request: Request) -> str:
     return user_id
 
 
+def optional_user(request: Request) -> str | None:
+    """
+    FastAPI dependency for optional authentication.
+    
+    Returns Clerk user ID if a valid Bearer token is present, None otherwise.
+    Never raises — suitable for endpoints that serve both public and authenticated users.
+    """
+    try:
+        payload = clerk_auth_jwt(request)
+        return payload.get('sub')
+    except Exception:
+        # If there's no auth header, invalid token, etc., we gracefully return None
+        return None
+
+
 def require_admin(request: Request) -> dict:
     """
     FastAPI dependency to require admin authentication via Clerk SDK JWT claims.

@@ -136,6 +136,48 @@ class ApiClient {
     });
   }
 
+  // POST with FormData (multipart — browser sets Content-Type + boundary)
+  async postFormData<T>(endpoint: string, formData: FormData, options?: RequestInit): Promise<ApiResponse<T>> {
+    const url = `${this.baseURL}${endpoint}`;
+    try {
+      const headers: Record<string, string> = {};
+      try {
+        if (this.authTokenProvider) {
+          const token = await this.authTokenProvider();
+          if (token) headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (_) { }
+
+      const response = await fetch(url, {
+        method: HTTP_METHODS.POST,
+        body: formData,
+        headers,
+        ...(options || {}),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData?.detail) {
+            errorMessage = typeof errorData.detail === 'string'
+              ? errorData.detail
+              : JSON.stringify(errorData.detail);
+          }
+        } catch (_) {
+          try { const t = await response.text(); if (t) errorMessage = t; } catch (__) {}
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      return { success: false, error: errorMessage };
+    }
+  }
+
   // File upload
   async uploadFile<T>(
     endpoint: string,
@@ -207,6 +249,8 @@ export const api = {
   post: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.post<T>(endpoint, data, options),
   put: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.put<T>(endpoint, data, options),
   delete: <T>(endpoint: string, options?: RequestInit) => apiClient.delete<T>(endpoint, options),
+  postFormData: <T>(endpoint: string, formData: FormData, options?: RequestInit) =>
+    apiClient.postFormData<T>(endpoint, formData, options),
   uploadFile: <T>(endpoint: string, file: File, options?: RequestInit, extraFields?: Record<string, string>) =>
     apiClient.uploadFile<T>(endpoint, file, options, extraFields),
   uploadAnalyticsFile: (file: File, options?: RequestInit) =>

@@ -278,7 +278,7 @@ export default function StripeIntegrationModal() {
               <DialogHeader>
                 <div className="flex items-center gap-3 mb-1">
                   <div className="w-8 h-8 flex items-center justify-center overflow-hidden rounded">
-                    <img src="/stripe.jpeg" alt="Stripe" className="w-8 h-8 rounded object-cover" />
+                    <img src="/stripe.png" alt="Stripe" className="w-8 h-8 rounded object-cover" />
                   </div>
                   <DialogTitle className="text-xl font-semibold">Connect Stripe</DialogTitle>
                 </div>

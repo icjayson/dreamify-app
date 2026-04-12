@@ -36,13 +36,13 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
           ) : isTikTok ? (
             <img src="/tiktok.png" alt="TikTok" className="w-4 h-4 object-contain" />
           ) : isGoogleAds ? (
-            <img src="/google-ads.svg" alt="Google Ads" className="w-4 h-4 object-contain" />
+            <img src="/google-ads.png" alt="Google Ads" className="w-4 h-4 object-contain" />
           ) : isFirebase ? (
-            <img src="/firebase.svg" alt="Firebase" className="w-4 h-4 object-contain" />
+            <img src="/firebase.png" alt="Firebase" className="w-4 h-4 object-contain" />
           ) : isAppsFlyer ? (
             <img src="/appsflyer.png" alt="AppsFlyer" className="w-4 h-4 object-contain" />
           ) : isStripe ? (
-            <img src="/stripe.jpeg" alt="Stripe" className="w-4 h-4 object-contain rounded-sm" />
+            <img src="/stripe.png" alt="Stripe" className="w-4 h-4 object-contain rounded-sm" />
           ) : null}
         </div>
       );

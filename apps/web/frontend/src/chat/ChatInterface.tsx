@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap } from "lucide-react";
-import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
+import { CONNECTORS, CONNECTOR_CATEGORIES, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
@@ -674,8 +674,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       const cls = level === 1
         ? 'text-base font-bold mt-3 mb-1'
         : level === 2
-        ? 'text-sm font-bold mt-2 mb-1'
-        : 'text-sm font-semibold mt-2 mb-0.5';
+          ? 'text-sm font-bold mt-2 mb-1'
+          : 'text-sm font-semibold mt-2 mb-0.5';
       return `<p class="${cls}">${text}</p>`;
     });
     // <https://example.com>
@@ -1366,25 +1366,25 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
                           const displayName = isMultiple ? "Multiple Data Sources"
                             : isGA4 ? "Google Analytics 4"
-                            : isSheets ? "Google Sheets"
-                            : isMeta ? "Meta Ads"
-                            : isTikTok ? "TikTok Ads"
-                            : isGoogleAds ? "Google Ads"
-                            : isFirebase ? "Firebase"
-                            : isAppsFlyer ? "AppsFlyer"
-                            : isStripe ? "Stripe"
-                            : "Attached Data";
+                              : isSheets ? "Google Sheets"
+                                : isMeta ? "Meta Ads"
+                                  : isTikTok ? "TikTok Ads"
+                                    : isGoogleAds ? "Google Ads"
+                                      : isFirebase ? "Firebase"
+                                        : isAppsFlyer ? "AppsFlyer"
+                                          : isStripe ? "Stripe"
+                                            : "Attached Data";
 
                           const logoBg = isMultiple ? "bg-indigo-500/10"
                             : isGA4 ? "bg-orange-500/10"
-                            : isSheets ? "bg-green-500/10"
-                            : isMeta ? "bg-blue-500/10"
-                            : isTikTok ? "bg-black/20"
-                            : isGoogleAds ? "bg-[#4285F4]/10"
-                            : isFirebase ? "bg-[#FFA000]/10"
-                            : isAppsFlyer ? "bg-white/5"
-                            : isStripe ? "bg-[#6772E5]/10"
-                            : "bg-white/10";
+                              : isSheets ? "bg-green-500/10"
+                                : isMeta ? "bg-blue-500/10"
+                                  : isTikTok ? "bg-black/20"
+                                    : isGoogleAds ? "bg-[#4285F4]/10"
+                                      : isFirebase ? "bg-[#FFA000]/10"
+                                        : isAppsFlyer ? "bg-white/5"
+                                          : isStripe ? "bg-[#6772E5]/10"
+                                            : "bg-white/10";
 
                           const connector = isMultiple ? undefined : CONNECTORS.find(c => {
                             if (isGA4 && c.name === 'GA4') return true;
@@ -1613,15 +1613,27 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                               className={`group relative flex w-full max-w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-sm outline-none transition-all select-none hover:border-white/20 hover:bg-white/[0.06] ${message.content ? 'mt-3' : ''}`}
                             >
                               <div className="flex min-w-0 flex-1 items-center gap-3.5">
-                                <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-primary/25 via-blue-500/15 to-indigo-500/20 transition-all duration-300 group-hover:from-primary/35 group-hover:via-blue-500/25 group-hover:to-indigo-500/30">
+                                <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-violet-500/20 via-blue-500/15 to-cyan-500/10 transition-all duration-300 group-hover:from-violet-500/30 group-hover:via-blue-500/25 group-hover:to-cyan-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
+                                  <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/10 group-hover:ring-white/15 transition-all duration-300" />
                                   <svg viewBox="0 0 40 40" className="h-full w-full" aria-hidden="true">
-                                    <path d="M5 14 L11 10 L17 16 L23 8 L29 12 L35 6" stroke="hsl(142 76% 56%)" fill="none" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-                                    <rect x="5" y="24" width="4.5" height="12" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.5" />
-                                    <rect x="11.5" y="20" width="4.5" height="16" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.7" />
-                                    <rect x="18" y="26" width="4.5" height="10" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.45" />
-                                    <rect x="24.5" y="22" width="4.5" height="14" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.85" />
-                                    <rect x="31" y="28" width="4.5" height="8" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.55" />
-                                    <circle cx="23" cy="8" r="1.8" fill="hsl(142 76% 56%)" opacity="0.8" />
+                                    <defs>
+                                      <linearGradient id="chatBarGrad1" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="hsl(221 83% 70%)" stopOpacity="1" />
+                                        <stop offset="100%" stopColor="hsl(260 80% 60%)" stopOpacity="0.6" />
+                                      </linearGradient>
+                                      <linearGradient id="chatBarGrad2" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="hsl(175 80% 60%)" stopOpacity="0.9" />
+                                        <stop offset="100%" stopColor="hsl(221 83% 60%)" stopOpacity="0.5" />
+                                      </linearGradient>
+                                    </defs>
+                                    <path d="M4 15 L10 11 L16 14 L22 7 L28 10 L36 5" stroke="hsl(142 76% 60%)" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.75" />
+                                    <rect x="4" y="23" width="5" height="13" rx="1.5" fill="url(#chatBarGrad1)" opacity="0.5" />
+                                    <rect x="11" y="19" width="5" height="17" rx="1.5" fill="url(#chatBarGrad1)" opacity="0.8" />
+                                    <rect x="18" y="25" width="5" height="11" rx="1.5" fill="url(#chatBarGrad2)" opacity="0.55" />
+                                    <rect x="25" y="21" width="5" height="15" rx="1.5" fill="url(#chatBarGrad1)" opacity="0.9" />
+                                    <rect x="32" y="27" width="5" height="9" rx="1.5" fill="url(#chatBarGrad2)" opacity="0.6" />
+                                    <circle cx="22" cy="7" r="2.2" fill="hsl(142 76% 60%)" opacity="0.9" />
+                                    <circle cx="22" cy="7" r="3.5" fill="hsl(142 76% 60%)" opacity="0.2" />
                                   </svg>
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -2000,25 +2012,139 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   </button>
 
                   {dropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-1 w-56 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
-                      <div className="py-1">
-                        {CONNECTORS.map((connector) => (
-                          <button
-                            key={connector.name}
-                            onClick={() => handleIntegrationClick(connector)}
-                            className="w-full px-3 py-2 text-left text-sm flex items-center hover:bg-white/10 rounded-md transition-colors duration-200 cursor-pointer"
-                          >
-                            <img
-                              src={connector.icon}
-                              alt={connector.name}
-                              className={`w-4 h-4 object-cover ${connector.name}`}
-                            />
-                            {connector.name && <span className="pl-2">{connector.name}</span>}
-                            {!connector.isActive && <span className="text-xs text-white/30 pl-1">(SOON)</span>}
-                          </button>
-                        ))}
+                    <>
+                      {/* ── Desktop: 4-column grid (lg+) ── */}
+                      <div className="hidden lg:block absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-3">
+                        <div className="flex gap-6">
+                          {/* Col 1: Advertising Platform */}
+                          <div>
+                            <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Advertising</p>
+                            {CONNECTORS.filter(c => c.category === "Advertising Platform").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Col 2: Operations & Database */}
+                          <div>
+                            <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Operations & Database</p>
+                            {CONNECTORS.filter(c => c.category === "Operations & Database").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Col 3: Analytics + Payment & Finance */}
+                          <div>
+                            <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Analytics</p>
+                            {CONNECTORS.filter(c => c.category === "Analytics Platform").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                            <p className="px-1 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Payment & Finance</p>
+                            {CONNECTORS.filter(c => c.category === "Payment & Finance").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Col 4: E-commerce */}
+                          <div>
+                            <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">E-commerce</p>
+                            {CONNECTORS.filter(c => c.category === "E-commerce").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+
+                      {/* ── Tablet md (2-col) ── */}
+                      <div className="hidden md:block lg:hidden absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-3">
+                        <div className="flex gap-6">
+                          {/* Left col: Advertising + Analytics & Payment */}
+                          <div>
+                            <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Advertising</p>
+                            {CONNECTORS.filter(c => c.category === "Advertising Platform").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                            <p className="px-1 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Analytics</p>
+                            {CONNECTORS.filter(c => c.category === "Analytics Platform").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                            <p className="px-1 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Payment & Finance</p>
+                            {CONNECTORS.filter(c => c.category === "Payment & Finance").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Right col: Operations & Database + E-commerce */}
+                          <div>
+                            <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Operations & Database</p>
+                            {CONNECTORS.filter(c => c.category === "Operations & Database").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                            <p className="px-1 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">E-commerce</p>
+                            {CONNECTORS.filter(c => c.category === "E-commerce").map(con => (
+                              <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
+                                <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                                <span className="text-white/90">{con.name}</span>
+                                {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── Mobile: vertical scrollable list (< md) ── */}
+                      <div className="md:hidden absolute bottom-full left-0 mb-1 w-64 max-h-[70vh] overflow-y-auto bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
+                        <div className="py-1">
+                          {CONNECTOR_CATEGORIES.map((category) => {
+                            const cats = CONNECTORS.filter(c => c.category === category);
+                            if (cats.length === 0) return null;
+                            return (
+                              <div key={category}>
+                                <div className="px-3 pt-2 pb-1"><span className="text-[10px] font-semibold uppercase tracking-widest text-white/25">{category}</span></div>
+                                {cats.map(con => (
+                                  <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-3 py-1.5 text-left text-sm flex items-center hover:bg-white/10 rounded-md transition-colors cursor-pointer">
+                                    <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain" />
+                                    {con.name && <span className="pl-2">{con.name}</span>}
+                                    {!con.isActive && <span className="text-xs text-white/30 pl-1">(SOON)</span>}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

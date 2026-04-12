@@ -297,3 +297,88 @@ export async function exportDashboardAsPng() {
   link.click();
   console.log('PNG saved successfully');
 }
+
+/**
+ * Capture the live dashboard as a WebP Blob WITHOUT downloading it.
+ * Used for auto-generating dashboard preview thumbnails.
+ *
+ * @param elementId - ID of the dashboard root element (defaults to 'dashboard-preview-root')
+ * @returns WebP Blob or null if capture failed
+ */
+export async function captureDashboardAsWebpBlob(
+  elementId: string = 'dashboard-preview-root',
+): Promise<Blob | null> {
+  const dashboardEl = document.getElementById(elementId);
+  if (!dashboardEl) {
+    console.warn(`captureDashboardAsPngBlob: element #${elementId} not found`);
+    return null;
+  }
+
+  const scrollWidth = dashboardEl.scrollWidth;
+  const scrollHeight = dashboardEl.scrollHeight;
+
+  if (scrollWidth === 0 || scrollHeight === 0) {
+    console.warn('captureDashboardAsWebpBlob: element has no dimensions');
+    return null;
+  }
+
+  // Allow charts to finish rendering
+  window.dispatchEvent(new Event('resize'));
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  window.dispatchEvent(new Event('resize'));
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  try {
+    const html2canvas = (await import('html2canvas')).default;
+
+    const bgColor = window.getComputedStyle(dashboardEl).backgroundColor;
+    const finalBgColor =
+      bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent' ? '#0a0a0f' : bgColor;
+
+    const canvas = await html2canvas(dashboardEl, {
+      scale: 1.5,  // Slightly lower than export (2x) for smaller file size
+      backgroundColor: finalBgColor,
+      useCORS: true,
+      logging: false,
+      allowTaint: true,
+      foreignObjectRendering: true,
+      width: scrollWidth,
+      height: scrollHeight,
+      windowWidth: scrollWidth,
+      windowHeight: scrollHeight,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
+      onclone: (clonedDoc) => {
+        const el = clonedDoc.getElementById(elementId);
+        if (el) {
+          el.style.position = 'fixed';
+          el.style.top = '0';
+          el.style.left = '0';
+          el.style.width = scrollWidth + 'px';
+          el.style.height = scrollHeight + 'px';
+          el.style.overflow = 'visible';
+          el.style.maxHeight = 'none';
+          el.style.transform = 'none';
+        }
+      },
+    });
+
+    if (canvas.width === 0 || canvas.height === 0) {
+      console.warn('captureDashboardAsWebpBlob: captured canvas is empty');
+      return null;
+    }
+
+    return new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(
+        (blob) => resolve(blob),
+        'image/webp',
+        0.5,
+      );
+    });
+  } catch (error) {
+    console.warn('captureDashboardAsWebpBlob: capture failed:', error);
+    return null;
+  }
+}

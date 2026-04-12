@@ -17,10 +17,11 @@ import { useUser } from "@clerk/clerk-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import WorkspaceSidebar from "@/components/project-section/WorkspaceSidebar";
+import HiddenDashboardCapturer from "@/components/workspace/HiddenDashboardCapturer";
 import { useProjects } from "@/hooks/useProjects";
 import { projectService, type ProjectRecord } from "@/services/projectService";
 import { integrationService } from "@/services/integrationService";
-import { CONNECTORS } from "@/constants/connectors";
+import { CONNECTORS, CONNECTOR_CATEGORIES } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -91,12 +92,28 @@ export default function WorkspacePage() {
   // ── Dashboard data ───────────────────────────────────────────────────────────
   const [allProjects, setAllProjects] = useState<ProjectRecord[]>([]);
   const [dashboardsLoading, setDashboardsLoading] = useState(false);
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
   const fetchAllProjects = useCallback(async () => {
     setDashboardsLoading(true);
     try {
       const res = await projectService.listProjects();
-      if (res.success) setAllProjects(res.projects);
+      if (res.success) {
+        setAllProjects(res.projects);
+        // Fetch presigned preview URLs for projects that have a preview
+        const projectsWithPreview = res.projects.filter(
+          (p) => p.latest_dashboard_id && p.dashboard_preview_key
+        );
+        // Fire URL fetches in parallel, non-blocking
+        Promise.allSettled(
+          projectsWithPreview.map(async (p) => {
+            const result = await projectService.getDashboardPreviewUrl(p.id);
+            if (result.url) {
+              setPreviewUrls((prev) => ({ ...prev, [p.id]: result.url! }));
+            }
+          })
+        );
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -109,6 +126,20 @@ export default function WorkspacePage() {
   }, [activeTab, fetchAllProjects]);
 
   const dashboardProjects = allProjects.filter((p) => p.latest_dashboard_id);
+
+  const handlePreviewGenerated = useCallback((projectId: string, url: string) => {
+    setPreviewUrls((prev) => ({ ...prev, [projectId]: url }));
+    // Update local state so we don't try to capture it again this session
+    setAllProjects((prev) =>
+      prev.map((p) =>
+        p.id === projectId ? { ...p, dashboard_preview_key: "generated_preview_in_session" } : p
+      )
+    );
+  }, []);
+
+  const projectsNeedingPreview = allProjects.filter(
+    (p) => p.latest_dashboard_id && p.latest_conversation_id && !p.dashboard_preview_key
+  );
 
   // ── Connector status ─────────────────────────────────────────────────────────
   const [connectorStatus, setConnectorStatus] = useState<Record<string, ConnectorStatus>>({});
@@ -430,55 +461,66 @@ export default function WorkspacePage() {
                   ))}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {CONNECTORS.map((connector) => {
-                    const status = connectorStatus[connector.name];
-                    const isConnected = status?.connected ?? false;
-                    const isSoon = !connector.isActive;
-
+                <div className="space-y-8">
+                  {CONNECTOR_CATEGORIES.map((category) => {
+                    const categoryConnectors = CONNECTORS.filter(c => c.category === category);
+                    if (categoryConnectors.length === 0) return null;
                     return (
-                      <Card
-                        key={connector.name}
-                        onClick={() => !isSoon && handleIntegrationClick(connector.name)}
-                        className={`p-4 transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40 cursor-pointer"}`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/5 flex items-center justify-center flex-shrink-0">
-                              <img
-                                src={connector.icon}
-                                alt={connector.name}
-                                className={`w-7 h-7 object-contain ${connector.name === 'TikTok' ? 'scale-125' : ''}`}
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                              />
-                            </div>
-                            <div>
-                              <h3 className="font-medium text-sm text-white">{connector.name}</h3>
-                              {isSoon ? (
-                                <span className="text-xs text-white/30">Coming soon</span>
-                              ) : isConnected ? (
-                                <span className="text-xs text-emerald-400">
-                                  Connected account: {status?.info ? status.info.replace(/^Account:\s*/i, "").replace(" connected", "") : connector.name}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-white/40">Not connected</span>
-                              )}
-                            </div>
-                          </div>
-                          {!isSoon && (
-                            isConnected ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-2" />
-                            ) : (
-                              <button
-                                onClick={() => handleIntegrationClick(connector.name)}
-                                className="w-fit px-4 py-1.5 button-outline text-xs rounded-md inline-flex items-center justify-center mt-1"
+                      <div key={category}>
+                        <h3 className="text-xs font-semibold uppercase tracking-widest text-white/30 mb-3">{category}</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {categoryConnectors.map((connector) => {
+                            const status = connectorStatus[connector.name];
+                            const isConnected = status?.connected ?? false;
+                            const isSoon = !connector.isActive;
+
+                            return (
+                              <Card
+                                key={connector.name}
+                                onClick={() => !isSoon && handleIntegrationClick(connector.name)}
+                                className={`p-4 transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40 cursor-pointer"}`}
                               >
-                                Connect
-                              </button>
-                            )
-                          )}
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/5 flex items-center justify-center flex-shrink-0">
+                                      <img
+                                        src={connector.icon}
+                                        alt={connector.name}
+                                        className={`w-7 h-7 object-contain ${connector.name === 'TikTok' ? 'scale-125' : ''}`}
+                                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <h3 className="font-medium text-sm text-white">{connector.name}</h3>
+                                      {isSoon ? (
+                                        <span className="text-xs text-white/30">Coming soon</span>
+                                      ) : isConnected ? (
+                                        <span className="text-xs text-emerald-400">
+                                          Connected account: {status?.info ? status.info.replace(/^Account:\s*/i, "").replace(" connected", "") : connector.name}
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-white/40">Not connected</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {!isSoon && (
+                                    isConnected ? (
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-2" />
+                                    ) : (
+                                      <button
+                                        onClick={() => handleIntegrationClick(connector.name)}
+                                        className="w-fit px-4 py-1.5 button-outline text-xs rounded-md inline-flex items-center justify-center mt-1"
+                                      >
+                                        Connect
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+                              </Card>
+                            );
+                          })}
                         </div>
-                      </Card>
+                      </div>
                     );
                   })}
                 </div>
@@ -486,23 +528,28 @@ export default function WorkspacePage() {
             </div>
           )}
 
+
           {/* ════ MY DASHBOARDS TAB ════ */}
           {activeTab === "dashboards" && (
             <div>
+              <HiddenDashboardCapturer
+                projectsNeedingPreview={projectsNeedingPreview}
+                onPreviewGenerated={handlePreviewGenerated}
+              />
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-white mb-1">My Dashboards</h2>
                 <p className="text-sm text-muted-foreground">All dashboards you have created across your projects.</p>
               </div>
               {dashboardsLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="animate-pulse flex items-center gap-3 p-4 border border-white/10 rounded-xl bg-white/[0.03]">
-                      <div className="w-10 h-10 bg-white/5 rounded-xl" />
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-white/10 rounded w-1/2" />
-                        <div className="h-3 bg-white/5 rounded w-1/4" />
-                      </div>
-                    </div>
+                    <Card key={i} className="animate-pulse overflow-hidden">
+                      <div className="w-full aspect-video bg-white/5" />
+                      <CardContent className="p-4">
+                        <div className="h-4 bg-white/10 rounded mb-2 w-3/4" />
+                        <div className="h-3 bg-white/5 rounded w-1/2" />
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
               ) : dashboardProjects.length === 0 ? (
@@ -521,45 +568,97 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {dashboardProjects.map((project) => {
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {[...dashboardProjects]
+                    .sort((a, b) => {
+                      const tA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+                      const tB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+                      return tB - tA; // newest first
+                    })
+                    .map((project) => {
                     const title = project.dashboard_title || project.name || "Untitled Dashboard";
                     const source = inferSource(title);
+                    const previewUrl = previewUrls[project.id];
+                    const createdAt = project.updated_at
+                      ? new Date(project.updated_at).toLocaleDateString(undefined, {
+                          month: 'short', day: 'numeric', year: 'numeric',
+                        })
+                      : null;
 
                     return (
-                      <div
+                      <Card
                         key={project.id}
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Open dashboard"
                         onClick={() => navigate(`/workspace/project?projectId=${project.id}`)}
-                        className="group relative flex w-full max-w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-sm outline-none transition-all select-none hover:border-white/20 hover:bg-white/[0.06]"
+                        className="overflow-hidden hover:border-primary/40 cursor-pointer transition-all group"
                       >
-                        <div className="flex min-w-0 flex-1 items-center gap-3.5">
-                          <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-primary/25 via-blue-500/15 to-indigo-500/20 transition-all duration-300 group-hover:from-primary/35 group-hover:via-blue-500/25 group-hover:to-indigo-500/30">
-                            <svg viewBox="0 0 40 40" className="h-full w-full" aria-hidden="true">
-                              <path d="M5 14 L11 10 L17 16 L23 8 L29 12 L35 6" stroke="hsl(142 76% 56%)" fill="none" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-                              <rect x="5" y="24" width="4.5" height="12" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.5" />
-                              <rect x="11.5" y="20" width="4.5" height="16" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.7" />
-                              <rect x="18" y="26" width="4.5" height="10" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.45" />
-                              <rect x="24.5" y="22" width="4.5" height="14" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.85" />
-                              <rect x="31" y="28" width="4.5" height="8" rx="1.2" fill="hsl(221 83% 53%)" opacity="0.55" />
-                              <circle cx="23" cy="8" r="1.8" fill="hsl(142 76% 56%)" opacity="0.8" />
+                        {/* 16:9 preview area */}
+                        <div className="w-full aspect-video overflow-hidden relative bg-gradient-to-br from-violet-500/10 via-blue-500/8 to-cyan-500/5">
+                          {previewUrl ? (
+                            <img
+                              src={previewUrl}
+                              alt={`${title} preview`}
+                              className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.03]"
+                              onError={(e) => {
+                                const img = e.target as HTMLImageElement;
+                                img.style.display = 'none';
+                                const fallback = img.parentElement?.querySelector('[data-fallback]') as HTMLElement | null;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+
+                          {/* SVG Fallback — fills the full 16:9 frame */}
+                          <div
+                            data-fallback
+                            className="absolute inset-0 items-center justify-center"
+                            style={{ display: previewUrl ? 'none' : 'flex' }}
+                          >
+                            <svg
+                              viewBox="0 0 160 90"
+                              className="w-full h-full"
+                              preserveAspectRatio="xMidYMid meet"
+                              aria-hidden="true"
+                            >
+                              <defs>
+                                <linearGradient id={`dbG1-${project.id}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="hsl(221 83% 70%)" stopOpacity="0.9" />
+                                  <stop offset="100%" stopColor="hsl(260 80% 60%)" stopOpacity="0.5" />
+                                </linearGradient>
+                                <linearGradient id={`dbG2-${project.id}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="hsl(175 80% 60%)" stopOpacity="0.8" />
+                                  <stop offset="100%" stopColor="hsl(221 83% 60%)" stopOpacity="0.4" />
+                                </linearGradient>
+                              </defs>
+                              {/* Trend line */}
+                              <path d="M16 55 L38 42 L62 50 L84 28 L108 38 L140 18" stroke="hsl(142 76% 60%)" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.75" />
+                              {/* Bars */}
+                              <rect x="16"  y="62" width="16" height="20" rx="3" fill={`url(#dbG1-${project.id})`} opacity="0.5" />
+                              <rect x="40"  y="54" width="16" height="28" rx="3" fill={`url(#dbG1-${project.id})`} opacity="0.75" />
+                              <rect x="64"  y="66" width="16" height="16" rx="3" fill={`url(#dbG2-${project.id})`} opacity="0.55" />
+                              <rect x="88"  y="58" width="16" height="24" rx="3" fill={`url(#dbG1-${project.id})`} opacity="0.85" />
+                              <rect x="112" y="70" width="16" height="12" rx="3" fill={`url(#dbG2-${project.id})`} opacity="0.6" />
+                              <rect x="136" y="50" width="14" height="32" rx="3" fill={`url(#dbG1-${project.id})`} opacity="0.7" />
+                              {/* Peak dot */}
+                              <circle cx="84" cy="28" r="4" fill="hsl(142 76% 60%)" opacity="0.9" />
+                              <circle cx="84" cy="28" r="7" fill="hsl(142 76% 60%)" opacity="0.2" />
                             </svg>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-md truncate font-medium text-white">
-                              {title}
-                            </div>
-                            <div className="mt-0.5 flex flex-wrap gap-x-2 truncate text-sm text-white/50">
-                              <span className="truncate">Source: {source}</span>
-                            </div>
-                          </div>
+
+                          {/* Hover overlay */}
+                          <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/5 transition-colors duration-300 pointer-events-none" />
                         </div>
-                        <button type="button" className="button-gradient ml-4 flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-medium text-white transition-all opacity-0 group-hover:opacity-100 hidden sm:flex">
-                          Open
-                        </button>
-                      </div>
+
+                        {/* Card info */}
+                        <CardContent className="p-4">
+                          <h3 className="font-medium text-sm mb-1.5 truncate text-white">{title}</h3>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs text-muted-foreground truncate">Source: {source}</p>
+                            {createdAt && (
+                              <p className="text-xs text-white/30 whitespace-nowrap flex-shrink-0">{createdAt}</p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
                     );
                   })}
                 </div>

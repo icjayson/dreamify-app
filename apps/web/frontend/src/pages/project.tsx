@@ -460,7 +460,7 @@ export default function ProjectPage() {
               >
                 <PanelRightClose className="w-4 h-4" />
               </button>
-              <button aria-label="Go back" onClick={() => navigate('/')} className="button-outline h-8 px-2 md:px-4 rounded-md text-sm flex items-center gap-2">
+              <button aria-label="Go back" onClick={() => navigate('/workspace?tab=connectors')} className="button-outline h-8 px-2 md:px-4 rounded-md text-sm flex items-center gap-2">
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden md:inline">Back</span>
               </button>

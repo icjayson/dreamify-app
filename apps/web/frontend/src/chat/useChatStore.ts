@@ -878,6 +878,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   if (onProcessedDataChange) {
                     onProcessedDataChange(finalResult.data.dashboard_data);
                   }
+
+                  // Auto-capture PNG preview (fire-and-forget, non-blocking)
+                  const _captureProjectId = projectId;
+                  const _captureDashboardId = dashboardId;
+                  setTimeout(async () => {
+                    try {
+                      const { captureDashboardAsWebpBlob } = await import('@/utils/exportUtils');
+                      const blob = await captureDashboardAsWebpBlob('dashboard-preview-root');
+                      if (blob && _captureProjectId && _captureDashboardId) {
+                        const { projectService } = await import('@/services/projectService');
+                        await projectService.uploadDashboardPreview(_captureProjectId, _captureDashboardId, blob);
+                        console.log('Dashboard preview captured and uploaded for project', _captureProjectId);
+                      }
+                    } catch (e) {
+                      console.warn('Dashboard preview capture failed (non-critical):', e);
+                    }
+                  }, 4000);
                 }
 
                 const firstFile = get().uploadedFiles[0];
@@ -1259,6 +1276,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 if (onProcessedDataChange) {
                   onProcessedDataChange(finalResult.data.dashboard_data);
                 }
+
+                // Auto-capture PNG preview (fire-and-forget, non-blocking)
+                const _captureProjectId2 = projectId;
+                const _captureDashboardId2 = dashboardId;
+                setTimeout(async () => {
+                  try {
+                    const { captureDashboardAsWebpBlob } = await import('@/utils/exportUtils');
+                    const blob = await captureDashboardAsWebpBlob('dashboard-preview-root');
+                    if (blob && _captureProjectId2 && _captureDashboardId2) {
+                      const { projectService } = await import('@/services/projectService');
+                      await projectService.uploadDashboardPreview(_captureProjectId2, _captureDashboardId2, blob);
+                      console.log('Dashboard preview captured and uploaded for project', _captureProjectId2);
+                    }
+                  } catch (e) {
+                    console.warn('Dashboard preview capture failed (non-critical):', e);
+                  }
+                }, 4000);
               }
 
               const currentFiles = get().uploadedFiles;

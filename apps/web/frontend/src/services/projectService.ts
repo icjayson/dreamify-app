@@ -16,6 +16,7 @@ export interface ProjectRecord {
   latest_conversation_id?: string | null;
   latest_dashboard_id?: string | null;
   dashboard_title?: string | null;
+  dashboard_preview_key?: string | null;
   is_preview_public?: boolean;
   allowed?: AllowedUser[];
 }
@@ -81,6 +82,45 @@ class ProjectService {
       return { success: true };
     }
     return { success: false, error: res.error || 'Failed to delete project' };
+  }
+
+  async uploadDashboardPreview(
+    projectId: string,
+    dashboardId: string,
+    previewBlob: Blob,
+  ): Promise<{ success: boolean; s3_key?: string; error?: string }> {
+    try {
+      const formData = new FormData();
+      formData.append('dashboard_id', dashboardId);
+      formData.append('file', previewBlob, 'dashboard_preview.webp');
+
+      const res = await api.postFormData<{ success: boolean; s3_key?: string }>(
+        `${this.baseUrl}/${projectId}/dashboard-preview`,
+        formData,
+      );
+      if (res.success && res.data) {
+        return { success: true, s3_key: res.data.s3_key };
+      }
+      return { success: false, error: res.error || 'Failed to upload dashboard preview' };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Upload failed' };
+    }
+  }
+
+  async getDashboardPreviewUrl(
+    projectId: string,
+  ): Promise<{ url?: string; error?: string }> {
+    try {
+      const res = await api.get<{ url: string; expires_in: number }>(
+        `${this.baseUrl}/${projectId}/dashboard-preview-url`,
+      );
+      if (res.success && res.data?.url) {
+        return { url: res.data.url };
+      }
+      return { error: 'No preview URL available' };
+    } catch (e: any) {
+      return { error: e?.message || 'Failed to get preview URL' };
+    }
   }
 }
 

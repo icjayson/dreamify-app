@@ -144,3 +144,28 @@ def compute_sha256_checksum(data: bytes) -> str:
     """Compute SHA-256 checksum of data."""
     return hashlib.sha256(data).hexdigest()
 
+
+def generate_presigned_url(bucket: str, key: str, expires_in: int = 3600) -> str:
+    """
+    Generate a presigned URL for an S3 object.
+
+    Args:
+        bucket: S3 bucket name
+        key: S3 object key
+        expires_in: URL expiration time in seconds (default 1 hour)
+
+    Returns:
+        Presigned URL string
+    """
+    s3_client = get_s3_client()
+    try:
+        url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": key},
+            ExpiresIn=expires_in,
+        )
+        return url
+    except ClientError as e:
+        logger.error(f"S3 presigned URL error: {str(e)}")
+        raise
+

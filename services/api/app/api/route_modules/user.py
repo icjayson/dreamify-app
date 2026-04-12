@@ -22,7 +22,7 @@ from utils.config import config
 from utils.logger import logger
 from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import projects as projects_repo
-from utils.s3.client import compute_sha256_checksum, upload_bytes, delete_object, download_bytes
+from utils.s3.client import compute_sha256_checksum, upload_bytes, delete_object, download_bytes, generate_presigned_url
 from utils.s3.paths import build_asset_key
 from clerk_backend_api import Clerk
 
@@ -103,6 +103,7 @@ class ProjectUpdateRequest(BaseModel):
     latest_conversation_id: Optional[str] = None
     latest_dashboard_id: Optional[str] = None
     dashboard_title: Optional[str] = None
+    dashboard_preview_key: Optional[str] = None
     is_preview_public: Optional[bool] = None
     allowed: Optional[List[AllowedUser]] = None
 
@@ -116,6 +117,7 @@ class ProjectResponse(BaseModel):
     latest_conversation_id: Optional[str] = None
     latest_dashboard_id: Optional[str] = None
     dashboard_title: Optional[str] = None
+    dashboard_preview_key: Optional[str] = None
     is_preview_public: Optional[bool] = None
     allowed: Optional[List[AllowedUser]] = None
 
@@ -178,6 +180,7 @@ def _map_project(item: dict) -> ProjectResponse:
         latest_conversation_id=item.get("latest_conversation_id"),
         latest_dashboard_id=item.get("latest_dashboard_id"),
         dashboard_title=item.get("dashboard_title"),
+        dashboard_preview_key=item.get("dashboard_preview_key"),
         is_preview_public=item.get("is_preview_public", False),
         allowed=item.get("allowed", []),
     )
@@ -288,6 +291,7 @@ async def update_project_endpoint(
         latest_conversation_id=request.latest_conversation_id,
         latest_dashboard_id=request.latest_dashboard_id,
         dashboard_title=request.dashboard_title,
+        dashboard_preview_key=request.dashboard_preview_key,
         is_preview_public=request.is_preview_public,
         allowed=[u.model_dump() for u in request.allowed] if request.allowed is not None else None,
     )
@@ -322,6 +326,99 @@ async def delete_project_endpoint(
     _get_project_or_404(user_id, project_id)
     projects_repo.delete_project(user_id, project_id)
     return ProjectDeleteResponse(success=True)
+
+
+class DashboardPreviewUploadResponse(BaseModel):
+    success: bool
+    s3_key: Optional[str] = None
+    error: Optional[str] = None
+
+
+class DashboardPreviewUrlResponse(BaseModel):
+    url: str
+    expires_in: int = 3600
+
+
+@router.post("/user/project/{project_id}/dashboard-preview", response_model=DashboardPreviewUploadResponse)
+async def upload_dashboard_preview(
+    project_id: str,
+    dashboard_id: str = Form(..., description="Dashboard ID this preview belongs to"),
+    file: UploadFile = File(..., description="PNG image file"),
+    user_id: str = Depends(require_user),
+):
+    """
+    Upload a PNG preview image for a dashboard.
+    Saves to S3 at: users/{user_id}/projects/{project_id}/dashboards/preview/{dashboard_id}.png
+    Updates project's dashboard_preview_key in DynamoDB.
+    """
+    _get_project_or_404(user_id, project_id)
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    ext = "png"
+    content_type = "image/png"
+    if file.filename and file.filename.lower().endswith(".webp"):
+        ext = "webp"
+        content_type = "image/webp"
+
+    bucket = config.aws.s3.USER_ASSETS_BUCKET
+    s3_key = f"users/{user_id}/projects/{project_id}/dashboards/preview/{dashboard_id}.{ext}"
+
+    try:
+        upload_bytes(
+            bucket=bucket,
+            key=s3_key,
+            data=data,
+            content_type=content_type,
+        )
+    except Exception as e:
+        logger.error(f"Failed to upload dashboard preview for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload preview: {str(e)}")
+
+    try:
+        projects_repo.update_project(
+            user_id=user_id,
+            project_id=project_id,
+            dashboard_preview_key=s3_key,
+        )
+    except Exception as e:
+        logger.error(f"Failed to update project dashboard_preview_key for {project_id}: {e}")
+        # Not fatal — image is uploaded, just metadata save failed
+        return DashboardPreviewUploadResponse(success=True, s3_key=s3_key)
+
+    logger.info(f"Dashboard preview uploaded for project {project_id}, dashboard {dashboard_id}: {s3_key}")
+    return DashboardPreviewUploadResponse(success=True, s3_key=s3_key)
+
+
+@router.get("/user/project/{project_id}/dashboard-preview-url", response_model=DashboardPreviewUrlResponse)
+async def get_dashboard_preview_url(
+    project_id: str,
+    user_id: str = Depends(require_user),
+    expires_in: int = Query(3600, ge=60, le=86400, description="URL expiration in seconds"),
+):
+    """
+    Generate a presigned URL for the project's dashboard preview image.
+    """
+    project = _get_project_or_404(user_id, project_id)
+    s3_key = project.get("dashboard_preview_key")
+
+    if not s3_key:
+        raise HTTPException(status_code=404, detail="No dashboard preview found for this project")
+
+    bucket = config.aws.s3.USER_ASSETS_BUCKET
+
+    try:
+        url = generate_presigned_url(bucket=bucket, key=s3_key, expires_in=expires_in)
+    except Exception as e:
+        logger.error(f"Failed to generate presigned URL for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate preview URL")
+
+    return DashboardPreviewUrlResponse(url=url, expires_in=expires_in)
 
 
 @router.post("/user/asset/upload", response_model=AssetResponse)

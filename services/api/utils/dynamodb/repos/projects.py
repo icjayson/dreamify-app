@@ -31,6 +31,7 @@ def create_project(user_id: str, name: str, description: Optional[str] = None, a
         "latest_conversation_id": None,
         "latest_dashboard_id": None,
         "dashboard_title": None,
+        "dashboard_preview_key": None,
         "is_preview_public": False,
         "allowed": allowed or [],
     }
@@ -94,6 +95,7 @@ def update_project(
     latest_conversation_id: Optional[str] = None,
     latest_dashboard_id: Optional[str] = None,
     dashboard_title: Optional[str] = None,
+    dashboard_preview_key: Optional[str] = None,
     is_preview_public: Optional[bool] = None,
     allowed: Optional[List[Dict]] = None,
 ) -> Optional[Dict]:
@@ -122,6 +124,10 @@ def update_project(
         expr.append("#dashboard_title = :dashboard_title")
         names["#dashboard_title"] = "dashboard_title"
         values[":dashboard_title"] = dashboard_title
+    if dashboard_preview_key is not None:
+        expr.append("#dashboard_preview_key = :dashboard_preview_key")
+        names["#dashboard_preview_key"] = "dashboard_preview_key"
+        values[":dashboard_preview_key"] = dashboard_preview_key
     if is_preview_public is not None:
         expr.append("#is_preview_public = :is_preview_public")
         names["#is_preview_public"] = "is_preview_public"

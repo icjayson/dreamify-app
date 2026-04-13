@@ -1784,9 +1784,34 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               />
             )}
 
-            {/* Active File & Chart Correlations */}
-            {(stagedFiles.length > 0 || mentionedCharts.length > 0) && (
+            {/* Active File, Chart & Template Correlations */}
+            {(stagedFiles.length > 0 || mentionedCharts.length > 0 || selectedTemplate) && (
               <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                {/* Template Selection Pill */}
+                {selectedTemplate && (
+                  <div className="flex-shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
+                    <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-2 transition-all hover:border-accent/40 outline-none">
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <LayoutTemplate className="w-4 h-4 text-accent" />
+                      </div>
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
+                        <span className="flex-shrink-0 font-semibold text-accent">
+                          Template:
+                        </span>
+                        <span className="truncate font-medium text-white/90">
+                          {selectedTemplate.title}
+                        </span>
+                      </div>
+                      <button
+                        onClick={handleTemplateRemove}
+                        className="group -mr-1 flex h-5 w-5 items-center justify-center rounded-full transition-colors hover:bg-white/10 active:scale-95"
+                      >
+                        <X className="h-3 w-3 text-white/40 transition-colors group-hover:text-white/60" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {mentionedCharts.map(chart => (
                   <ChartPreviewChip
                     key={`chart-${chart.componentId}`}

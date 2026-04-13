@@ -1300,6 +1300,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     console.warn('Dashboard preview capture failed (non-critical):', e);
                   }
                 }, 4000);
+
+                // Clear template state after successful dashboard generation
+                try { localStorage.removeItem('dreamify_selected_template'); } catch { }
+                set({ selectedTemplate: null });
               }
 
               const currentFiles = get().uploadedFiles;
@@ -1578,24 +1582,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  resetChat: () => set({
-    inputValue: "",
-    isTyping: false,
-    messages: initialMessages,
-    uploadedFiles: [],
-    currentConversationId: null,
-    isProcessing: false,
-    currentWorkflowStep: null,
-    priorWorkflowSteps: [],
-    dropdownOpen: false,
-    selectedDataSource: "",
-    isListening: false,
-    transcript: "",
-    detectedLanguage: null,
-    selectedDashboardId: null,
-    // We explicitly DO NOT clear integration modal states here
-    // to preserve them across navigation/reloads during picking.
-  }),
+  resetChat: (preserveTemplate = false) => {
+    if (!preserveTemplate) {
+      try { localStorage.removeItem('dreamify_selected_template'); } catch {}
+    }
+    set({
+      inputValue: "",
+      isTyping: false,
+      messages: initialMessages,
+      uploadedFiles: [],
+      currentConversationId: null,
+      isProcessing: false,
+      currentWorkflowStep: null,
+      priorWorkflowSteps: [],
+      dropdownOpen: false,
+      selectedDataSource: "",
+      isListening: false,
+      transcript: "",
+      detectedLanguage: null,
+      selectedDashboardId: null,
+      selectedTemplate: preserveTemplate ? get().selectedTemplate : null,
+      // We explicitly DO NOT clear integration modal states here
+      // to preserve them across navigation/reloads during picking.
+    });
+  },
 
   selectDashboard: async (dashboardId: string, projectId: string): Promise<any> => {
     const { currentConversationId, updateFile } = get();
@@ -1610,7 +1620,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
 
       if (response?.dashboard_data) {
-        set({ selectedDashboardId: dashboardId });
+        // Clear template when switching to an existing dashboard
+        try { localStorage.removeItem('dreamify_selected_template'); } catch { }
+        set({ selectedDashboardId: dashboardId, selectedTemplate: null });
         // Update file only if one exists in store
         const files = get().uploadedFiles;
         if (files.length > 0) {

@@ -65,9 +65,8 @@ interface DashboardPreviewProps {
   /** Card ⋮ menu (Fix in chat, …). Only enabled on project workspace; keep false for public preview & exports. */
   showCardActionsMenu?: boolean;
   /** Controlled dark/light mode — when provided, overrides internal state */
-  isDarkMode?: boolean;
-  /** Callback when user toggles dark/light mode from within the dashboard (legacy, now handled externally) */
-  onThemeModeChange?: (isDarkMode: boolean) => void;
+  /** projectId is used to uniquely store layouts for chat-generated (processed) dashboards without a real ID */
+  projectId?: string;
 }
 
 const DashboardPreview = ({
@@ -81,6 +80,7 @@ const DashboardPreview = ({
   onExportLayoutChange,
   showCardActionsMenu = false,
   isDarkMode: isDarkModeProp,
+  projectId,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -422,16 +422,14 @@ const DashboardPreview = ({
   };
 
   const normalizeChartDataPoints = (dataPoints: any[], chartType: string): any[] => {
-    if (chartType === 'pie' || chartType === 'donut') {
-      return dataPoints.map(point => ({
-        ...point,
-        label: point.label ?? point.name ?? inferLabelFromPoint(point),
-        value: point.value !== undefined && point.value !== null
-          ? (typeof point.value === 'number' ? point.value : parseFloat(String(point.value)) || 0)
-          : inferValueFromPoint(point)
-      }));
-    }
-    return dataPoints;
+    // For all chart types, ensure we have label and value keys
+    return dataPoints.map(point => ({
+      ...point,
+      label: point.label ?? point.name ?? inferLabelFromPoint(point),
+      value: point.value !== undefined && point.value !== null
+        ? (typeof point.value === 'number' ? point.value : parseFloat(String(point.value)) || 0)
+        : inferValueFromPoint(point)
+    }));
   };
 
   const normalizeChartDatasets = (datasets: any[], chartType: string, config: any): any[] => {
@@ -464,11 +462,11 @@ const DashboardPreview = ({
         }
       }
 
-      // Handle pie/donut: normalize data points (existing logic)
-      if (chartType === 'pie' || chartType === 'donut') {
+      // Normalize data points for all chart types that have a data array
+      if (Array.isArray(dataset.data)) {
         return {
           ...dataset,
-          data: normalizeChartDataPoints(dataset.data || [], chartType)
+          data: normalizeChartDataPoints(dataset.data, chartType)
         };
       }
 
@@ -918,7 +916,12 @@ const DashboardPreview = ({
 
   // Bump version when grid behavior changes (e.g. compactType) so we don't reuse
   // layouts saved under older compaction logic.
-  const storageKey = useMemo(() => `dashboard_layout_${activeDashboard?.id || 'processed_dashboard'}_v4`, [activeDashboard?.id]);
+  const storageKey = useMemo(() => {
+    const baseId = activeDashboard?.id || 'processed_dashboard';
+    // Append projectId for "processed_dashboard" to prevent layout collisions between different projects
+    const suffix = (baseId === 'processed_dashboard' && projectId) ? `_${projectId}` : '';
+    return `dashboard_layout_${baseId}${suffix}_v5`;
+  }, [activeDashboard?.id, projectId]);
 
   const [layouts, setLayouts] = useState<Layouts>({ lg: [], md: [], sm: [], xs: [], xxs: [] });
   const [isLayoutReady, setIsLayoutReady] = useState(false);

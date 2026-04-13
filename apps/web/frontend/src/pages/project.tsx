@@ -321,7 +321,9 @@ export default function ProjectPage() {
     // Only reset if it's a DIFFERENT project
     if (projectRef.current !== projectId) {
       console.log('Project ID changed, resetting chat state:', projectId);
-      useChatStore.getState().resetChat();
+      const pendingAction = useChatStore.getState().pendingAction;
+      const shouldPreserveTemplate = pendingAction && pendingAction.projectId === projectId;
+      useChatStore.getState().resetChat(shouldPreserveTemplate);
       useFileStore.getState().resetFileState();
       useChatStore.getState().setCurrentProjectId(projectId);
       projectRef.current = projectId;
@@ -740,7 +742,14 @@ export default function ProjectPage() {
                 isProjectLoading ? (
                   <DashboardLoading title="Restoring your dashboard..." description="Wait a few seconds" durationSec={5} />
                 ) : processedData ? (
-                  <DashboardPreview dashboardId={selectedDashboardId || undefined} processedData={processedData} className="h-full overflow-y-auto" showCardActionsMenu isDarkMode={isDashboardDarkMode} />
+                  <DashboardPreview 
+                    dashboardId={selectedDashboardId || undefined} 
+                    projectId={projectId || undefined}
+                    processedData={processedData} 
+                    className="h-full overflow-y-auto" 
+                    showCardActionsMenu 
+                    isDarkMode={isDashboardDarkMode} 
+                  />
                 ) : (
                   <div className="flex items-center justify-center h-full bg-black/5">
                     <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/70 border border-white/15 shadow-lg backdrop-blur-md">

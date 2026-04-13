@@ -390,8 +390,8 @@ const DashboardPreview = ({
     if (selectedTemplate?.suggestedTheme) {
       return getDefaultChartStyling(selectedTemplate.suggestedTheme as ChartPresetTheme);
     }
-    
-    return undefined;
+
+    return getDefaultChartStyling(CHART_PRESET_THEMES.DEFAULT);
   };
 
   // Common key aliases for label (category/name) and value (numeric)
@@ -764,8 +764,15 @@ const DashboardPreview = ({
     //     dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.CHALK]['bg-dashboard-color']
     //   };
     // }
+    // Static config preview (template gallery) — derive theme from config components
+    if (staticConfig && !processedData) {
+      const configTheme = (staticConfig.components[0]?.component_config as any)?.styling?.presetTheme;
+      if (configTheme && CHART_THEME_COLORS[configTheme as ChartPresetTheme]) {
+        return getDefaultChartStyling(configTheme as ChartPresetTheme);
+      }
+    }
     return base;
-  }, [isDarkMode, dashboardStylingForContainer]);
+  }, [isDarkMode, dashboardStylingForContainer, staticConfig, processedData]);
 
   useEffect(() => {
     if (containerRef.current && effectiveStyling) {
@@ -810,8 +817,13 @@ const DashboardPreview = ({
 
   const displayComponents = useMemo(() => {
     if (!activeDashboard?.components) return [];
+    // Static config already has theme applied per-component via applyVisualSpec — don't override
+    if (staticConfig && !processedData) return activeDashboard.components;
     const theme = effectiveStyling?.presetTheme;
     if (!theme) return activeDashboard.components;
+    // Derive a fresh palette from the current theme so stored palettes from old/different
+    // themes (e.g. light-gray colors from the old dark default) don't become invisible.
+    const palette = getColorPalette(theme as ChartPresetTheme, 10);
     return activeDashboard.components.map((comp: any) => ({
       ...comp,
       component_config: {
@@ -819,10 +831,11 @@ const DashboardPreview = ({
         styling: {
           ...comp.component_config?.styling,
           presetTheme: theme,
+          colorPalette: palette,
         }
       }
     }));
-  }, [activeDashboard?.components, effectiveStyling]);
+  }, [activeDashboard?.components, effectiveStyling, staticConfig, processedData]);
 
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {

@@ -14,7 +14,7 @@ interface TemplatePreviewProps {
 
 export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ template, onClose, onSelect }) => {
   const [visual, setVisual] = useState<VisualSelection>({
-    theme: CHART_PRESET_THEMES.CARBON,
+    theme: CHART_PRESET_THEMES.DEFAULT,
     chartStyle: 'rounded',
     density: 'comfortable'
   });
@@ -22,7 +22,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ template, onCl
   if (!template) return null;
 
   const styledConfig = applyVisualSpec(template.sample_config, visual);
-  const isLightTheme = visual.theme === 'chalk' || visual.theme === 'warm';
+  const isLightTheme = visual.theme === 'default' || visual.theme === 'chalk' || visual.theme === 'warm';
 
   return (
     <Dialog open={!!template} onOpenChange={() => onClose()}>

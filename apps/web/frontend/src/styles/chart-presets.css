@@ -13,16 +13,16 @@
 
 /* DEFAULT - Classic monochrome, neutral gray accent, works with any data */
 .chart-theme-default {
-  --highlight-color: #f0f0f0;
-  --bg-dashboard-color: #2d2d2d;
-  --bg-card-color: #3d3d3d;
-  --border-card-color: #505050;
-  --title-color: #f0f0f0;
-  --description-color: #a0a0a0;
-  --element-color: #707070;
+  --highlight-color: #1e3a5f;
+  --bg-dashboard-color: #f0f2f5;
+  --bg-card-color: #ffffff;
+  --border-card-color: #e2e8f0;
+  --title-color: #0f172a;
+  --description-color: #64748b;
+  --element-color: #94a3b8;
 
-  --highlight-color-rgb: 240, 240, 240;
-  --element-color-rgb: 112, 112, 112;
+  --highlight-color-rgb: 30, 58, 95;
+  --element-color-rgb: 148, 163, 184;
 
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -251,15 +251,15 @@
 
 /* monochrome → default */
 .chart-theme-monochrome {
-  --highlight-color: #f0f0f0;
-  --bg-dashboard-color: #2d2d2d;
-  --bg-card-color: #3d3d3d;
-  --border-card-color: #505050;
-  --title-color: #f0f0f0;
-  --description-color: #a0a0a0;
-  --element-color: #707070;
-  --highlight-color-rgb: 240, 240, 240;
-  --element-color-rgb: 112, 112, 112;
+  --highlight-color: #1e3a5f;
+  --bg-dashboard-color: #f0f2f5;
+  --bg-card-color: #ffffff;
+  --border-card-color: #e2e8f0;
+  --title-color: #0f172a;
+  --description-color: #64748b;
+  --element-color: #94a3b8;
+  --highlight-color-rgb: 30, 58, 95;
+  --element-color-rgb: 148, 163, 184;
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --chart-hover-scale: 1.02;

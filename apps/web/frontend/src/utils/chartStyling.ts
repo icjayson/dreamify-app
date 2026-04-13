@@ -34,14 +34,14 @@ export interface ThemeColorSet {
 // Chart theme color definitions
 export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
   default: {
-    'highlight-color': '#f0f0f0',
-    'bg-dashboard-color': '#2d2d2d',
-    'bg-card-color': '#3d3d3d',
-    'border-card-color': '#505050',
-    'title-color': '#f0f0f0',
-    'description-color': '#a0a0a0',
-    'element-color': '#707070',
-    'data-colors': ['#f0f0f0', '#c8c8c8', '#a0a0a0', '#d8d8d8', '#b0c4d8', '#8899aa']
+    'highlight-color': '#1e3a5f',
+    'bg-dashboard-color': '#f0f2f5',
+    'bg-card-color': '#ffffff',
+    'border-card-color': '#e2e8f0',
+    'title-color': '#0f172a',
+    'description-color': '#64748b',
+    'element-color': '#94a3b8',
+    'data-colors': ['#1e3a5f', '#0d9488', '#d97706', '#dc2626', '#7c3aed', '#0891b2']
   },
   carbon: {
     'highlight-color': '#3b82f6',
@@ -143,7 +143,7 @@ export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> =
   rounded: {
     containerBorderRadius: 8,
     containerBoxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-    containerHasBorder: true,
+    containerHasBorder: false,
     containerHasBackground: true,
     barBorderRadius: [6, 6, 0, 0],
     lineStrokeWidth: 2.5,
@@ -157,7 +157,7 @@ export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> =
     containerBorderRadius: 0,
     containerBoxShadow: 'none',
     containerHasBorder: true,
-    containerHasBackground: true,
+    containerHasBackground: false,
     barBorderRadius: [0, 0, 0, 0],
     lineStrokeWidth: 1.5,
     lineType: 'linear',
@@ -169,8 +169,8 @@ export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> =
   minimal: {
     containerBorderRadius: 0,
     containerBoxShadow: 'none',
-    containerHasBorder: true,
-    containerHasBackground: true,
+    containerHasBorder: false,
+    containerHasBackground: false,
     barBorderRadius: [3, 3, 0, 0],
     lineStrokeWidth: 1.5,
     lineType: 'monotone',

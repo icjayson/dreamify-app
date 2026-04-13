@@ -363,12 +363,35 @@ const DashboardPreview = ({
     return filtered;
   };
 
+  const selectedTemplate = useChatStore((s) => s.selectedTemplate);
+
   // Normalize incoming data (Morpheus-first format)
   const getDashboardStyling = (data: any) => {
-    if (!data?.styling_recommendations) return undefined;
-    const converted = convertLLMStylingToChartStyling(data.styling_recommendations);
-    const validation = validateChartStyling(converted);
-    return validation.isValid ? converted : getDefaultChartStyling();
+    if (data?.styling_recommendations) {
+      // If AI didn't provide a theme, prefer the template's theme over 'default'
+      if (!data.styling_recommendations.theme && selectedTemplate?.suggestedTheme) {
+        data.styling_recommendations.theme = selectedTemplate.suggestedTheme;
+      }
+      
+      const converted = convertLLMStylingToChartStyling(data.styling_recommendations);
+      const validation = validateChartStyling(converted);
+      
+      if (validation.isValid) {
+        // Ensure background matches the theme if AI didn't explicitly provide one
+        if (!data.styling_recommendations.dashboardBackground && selectedTemplate?.suggestedTheme) {
+          const bg = CHART_THEME_COLORS[selectedTemplate.suggestedTheme as ChartPresetTheme]?.['bg-dashboard-color'];
+          if (bg) converted.dashboardBackground = bg;
+        }
+        return converted;
+      }
+    }
+    
+    // Fallback to selected template's theme if AI didn't return one or it's invalid
+    if (selectedTemplate?.suggestedTheme) {
+      return getDefaultChartStyling(selectedTemplate.suggestedTheme as ChartPresetTheme);
+    }
+    
+    return undefined;
   };
 
   // Common key aliases for label (category/name) and value (numeric)
@@ -734,13 +757,13 @@ const DashboardPreview = ({
 
   const effectiveStyling = useMemo(() => {
     const base = dashboardStylingForContainer || getDefaultChartStyling();
-    if (!isDarkMode) {
-      return {
-        ...base,
-        presetTheme: CHART_PRESET_THEMES.CHALK,
-        dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.CHALK]['bg-dashboard-color']
-      };
-    }
+    // if (!isDarkMode) {
+    //   return {
+    //     ...base,
+    //     presetTheme: CHART_PRESET_THEMES.CHALK,
+    //     dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.CHALK]['bg-dashboard-color']
+    //   };
+    // }
     return base;
   }, [isDarkMode, dashboardStylingForContainer]);
 
@@ -787,21 +810,19 @@ const DashboardPreview = ({
 
   const displayComponents = useMemo(() => {
     if (!activeDashboard?.components) return [];
-    if (isDarkMode) return activeDashboard.components;
-    const lightPalette = getColorPalette(CHART_PRESET_THEMES.CHALK, 10);
+    const theme = effectiveStyling?.presetTheme;
+    if (!theme) return activeDashboard.components;
     return activeDashboard.components.map((comp: any) => ({
       ...comp,
       component_config: {
         ...comp.component_config,
         styling: {
           ...comp.component_config?.styling,
-          presetTheme: CHART_PRESET_THEMES.CHALK,
-          colorPalette: lightPalette,
-          dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.CHALK]['bg-dashboard-color']
+          presetTheme: theme,
         }
       }
     }));
-  }, [activeDashboard?.components, isDarkMode]);
+  }, [activeDashboard?.components, effectiveStyling]);
 
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {

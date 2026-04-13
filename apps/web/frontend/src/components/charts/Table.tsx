@@ -74,9 +74,6 @@ const Table = ({
   const titleColor = 'var(--title-color)';
   const descriptionColor = 'var(--description-color)';
   const tileStyle = {
-    borderRadius: tile.borderRadius ?? variantProps.cardBorderRadius,
-    backgroundColor: variantProps.containerHasBackground ? 'var(--bg-card-color)' : 'transparent',
-    boxShadow: variantProps.cardBoxShadow,
     color: titleColor
   } as React.CSSProperties;
 
@@ -123,7 +120,7 @@ const Table = ({
   };
 
   return (
-    <div className={`rounded-md animate-fade-in h-full ${className}`} style={{ ...tileStyle, ...style, display: 'flex', flexDirection: 'column' }}>
+    <div className={`animate-fade-in h-full ${className}`} style={{ ...tileStyle, ...style, display: 'flex', flexDirection: 'column' }}>
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-1" style={{ color: titleColor }}>{title}</h3>
         {description && (

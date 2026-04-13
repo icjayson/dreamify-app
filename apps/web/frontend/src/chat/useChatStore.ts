@@ -104,7 +104,7 @@ interface ChatState {
   originalFileName?: string | null;
 
   // Template state
-  selectedTemplate: { id: string; title: string; description: string; image: string; category: string } | null;
+  selectedTemplate: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string } | null;
 
   // Abort controller for stopping generation
   abortController: AbortController | null;
@@ -157,7 +157,7 @@ interface ChatState {
   setDashboardThumbnail: (dashboardId: string, thumbnailUrl: string) => void;
   setSelectedDashboardId: (dashboardId: string | null) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
-  setSelectedTemplate: (template: { id: string; title: string; description: string; image: string; category: string } | null) => void;
+  setSelectedTemplate: (template: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string } | null) => void;
   setCurrentProjectId: (id: string | null) => void;
   setPendingAction: (action: PendingAction | null) => void;
   setSelectedModel: (model: 'pro' | 'fast') => void;
@@ -259,7 +259,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   selectedDashboardId: null,
   originalFileBlob: null,
   originalFileName: null,
-  selectedTemplate: null,
+  selectedTemplate: (() => { try { const s = localStorage.getItem('dreamify_selected_template'); return s ? JSON.parse(s) : null; } catch { return null; } })(),
   abortController: null,
   pendingAction: null,
   isGoogleSheetsModalOpen: false,
@@ -324,7 +324,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   })),
   setSelectedDashboardId: (dashboardId) => set({ selectedDashboardId: dashboardId }),
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
-  setSelectedTemplate: (template) => set({ selectedTemplate: template }),
+  setSelectedTemplate: (template) => {
+    try {
+      if (template) localStorage.setItem('dreamify_selected_template', JSON.stringify(template));
+      else localStorage.removeItem('dreamify_selected_template');
+    } catch { /* ignore */ }
+    set({ selectedTemplate: template });
+  },
   setPendingAction: (action) => set({ pendingAction: action }),
   setSelectedModel: (model) => set({ selectedModel: model }),
   setGoogleSheetsModalOpen: (open) => set({ isGoogleSheetsModalOpen: open }),

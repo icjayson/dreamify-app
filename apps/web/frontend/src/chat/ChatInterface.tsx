@@ -1235,7 +1235,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setTemplateModalOpen(true);
   };
 
-  const handleTemplateSelect = (template: { id: string; title: string; description: string; image: string; category: string }) => {
+  const handleTemplateSelect = (template: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string }) => {
     setSelectedTemplate(template);
     setInputValue(`Use ${template.title} template to make `);
     console.log('Template selected:', template);

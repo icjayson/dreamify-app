@@ -143,7 +143,7 @@ export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> =
   rounded: {
     containerBorderRadius: 8,
     containerBoxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-    containerHasBorder: false,
+    containerHasBorder: true,
     containerHasBackground: true,
     barBorderRadius: [6, 6, 0, 0],
     lineStrokeWidth: 2.5,
@@ -157,7 +157,7 @@ export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> =
     containerBorderRadius: 0,
     containerBoxShadow: 'none',
     containerHasBorder: true,
-    containerHasBackground: false,
+    containerHasBackground: true,
     barBorderRadius: [0, 0, 0, 0],
     lineStrokeWidth: 1.5,
     lineType: 'linear',
@@ -169,8 +169,8 @@ export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> =
   minimal: {
     containerBorderRadius: 0,
     containerBoxShadow: 'none',
-    containerHasBorder: false,
-    containerHasBackground: false,
+    containerHasBorder: true,
+    containerHasBackground: true,
     barBorderRadius: [3, 3, 0, 0],
     lineStrokeWidth: 1.5,
     lineType: 'monotone',

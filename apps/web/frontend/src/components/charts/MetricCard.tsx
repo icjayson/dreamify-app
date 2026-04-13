@@ -72,8 +72,8 @@ const MetricCard = ({
   }));
 
   return (
-    <div className={`rounded-md animate-fade-in h-full ${className}`}
-      style={{ borderRadius, backgroundColor: background, boxShadow: variantProps.cardBoxShadow, ...style }}>
+    <div className={`animate-fade-in h-full ${className}`}
+      style={{ ...style }}>
       <div className="flex items-stretch h-full">
         {/* Left Side: Text Content */}
         <div className="flex-1 flex flex-col justify-between pr-2 min-w-0">

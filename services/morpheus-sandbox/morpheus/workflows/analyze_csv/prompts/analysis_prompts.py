@@ -160,19 +160,20 @@ Use these semantic tokens in ALL styling objects:
 - border-card-color: for card borders
 
 Available Themes (choose ONE):
-- monochrome: Basic monochrome, minimal
-- light: Clean white/light-gray, professional, corporate, high readability
-- ocean: Vibrant blue, professional
-- forest: Emerald green, natural
-- sunset: Amber, warm
-- midnight: Purple, sleek
-- sakura: Pink, elegant
+- default: Clean monochrome, white accent — works with any data (DEFAULT)
+- carbon: Very dark, blue accent — high-end dark dashboard
+- slate: Dark blue-gray, cool blue — technical, data-heavy
+- chalk: Pure white/light, dark ink text — report-style, executive
+- warm: Warm off-white, rust accent — editorial, brand
+- ash: Mid gray, neutral white accent — ultra-minimal
+- sage: Desaturated dark green, muted sage — calm, financial
+- ink: Near-black warm tint, amber/gold — premium, media
 
 CRITICAL THEME REQUIREMENT:
 1. Choose ONE theme for the entire dashboard output
 2. EVERY metric, chart, and table styling object MUST include "theme" field with the chosen theme
 3. ALL cards in the same output MUST use the SAME theme value
-4. Example: If you choose "monochrome", every styling object should start with: {"theme": "monochrome", "title": "title-color", ...}
+4. Example: If you choose "carbon", every styling object should start with: {"theme": "carbon", "title": "title-color", ...}
 
 ================================================================================
 OUTPUT FORMAT (Dashboard Mode Only)
@@ -206,7 +207,7 @@ When generating a dashboard, output a JSON code block with this structure:
         "percentage_change": 12.27
       },
       "styling": {
-        "theme": "monochrome",
+        "theme": "carbon",
         "title": "title-color",
         "value": "highlight-color",
         "trendUp": "hsl(142 76% 36%)",
@@ -238,7 +239,7 @@ When generating a dashboard, output a JSON code block with this structure:
       ],
       "config": {"animation": true, "showGrid": true, "showLegend": true},
       "styling": {
-        "theme": "monochrome",
+        "theme": "carbon",
         "title": "title-color",
         "description": "description-color",
         "cartesianGrid": "element-color/75",
@@ -271,7 +272,7 @@ When generating a dashboard, output a JSON code block with this structure:
         {"col1": "ORD-002", "col2": 2345.67}
       ],
       "styling": {
-        "theme": "monochrome",
+        "theme": "carbon",
         "title": "title-color",
         "description": "description-color",
         "headerBackground": "highlight-color/10",
@@ -312,3 +313,20 @@ REMEMBER:
 - For dashboard requests: Output structured JSON as shown above
 - Let the user's intent guide your response format
 """
+
+
+def get_dashboard_prompt_with_template(template_spec=None) -> str:
+    """Return the system prompt, optionally with template constraint block prepended."""
+    if template_spec is None:
+        return UNIFIED_SYSTEM_PROMPT
+
+    from morpheus.templates.builtin_templates import build_template_constraint_block
+    constraint_block = build_template_constraint_block(template_spec)
+    insertion_marker = "================================================================================\nDASHBOARD MODE (JSON RESPONSE)"
+    if insertion_marker in UNIFIED_SYSTEM_PROMPT:
+        return UNIFIED_SYSTEM_PROMPT.replace(
+            insertion_marker,
+            f"{constraint_block}{insertion_marker}",
+            1
+        )
+    return constraint_block + UNIFIED_SYSTEM_PROMPT

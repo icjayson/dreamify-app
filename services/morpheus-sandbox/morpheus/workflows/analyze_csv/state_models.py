@@ -128,6 +128,9 @@ class AgentState(BaseModel):
 
     # Chart modification context (from @chart mentions)
     chart_mentions: List[Dict[str, Any]] = Field(default_factory=list, description="Charts referenced by user for targeted modification")
+
+    # Template guidance
+    template_spec: Optional[Dict[str, Any]] = Field(default=None, description="Active template content spec for guided generation")
     
     @property
     def file_path(self) -> Optional[str]:

@@ -1912,9 +1912,43 @@ It's better to have fewer charts with REAL data than more charts with FAKE data.
         validation_result = _validate_qa_response(state.output.get("content"))
     else:
         validation_result = {"valid": False, "error": f"Unknown output type: {output_type}"}
-    
+
+    # Template compliance check
+    if state.template_spec and state.working_memory.dashboard_json:
+        dashboard_json = state.working_memory.dashboard_json
+        required_keywords = state.template_spec.get("required_metric_keywords", [])
+
+        if required_keywords:
+            metric_titles = [
+                (m.get("title") or m.get("name") or "").lower()
+                for m in dashboard_json.get("metrics", [])
+            ]
+            all_metrics_text = " ".join(metric_titles)
+
+            matched = sum(
+                1 for kw in required_keywords
+                if kw.lower() in all_metrics_text
+            )
+            match_ratio = matched / len(required_keywords)
+
+            if match_ratio < 0.3:
+                logger.warning(
+                    f"Template compliance low: {matched}/{len(required_keywords)} keywords found. "
+                    f"Template: {state.template_spec.get('name')}"
+                )
+                state.working_memory.errors.append({
+                    "node": "node_validation",
+                    "type": "template_compliance",
+                    "message": (
+                        f"Dashboard does not contain expected metrics for template "
+                        f"'{state.template_spec.get('name')}'. "
+                        f"Found {matched}/{len(required_keywords)} required metric keywords."
+                    ),
+                    "retry_suggested": True
+                })
+
     state.working_memory.tool_outputs["validation"] = validation_result
-    
+
     if not validation_result.get("valid"):
         error_msg = validation_result.get("error", "Validation failed")
         logger.error(f"Validation failed: {error_msg}")

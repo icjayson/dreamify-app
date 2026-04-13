@@ -45,6 +45,7 @@ class RunRequest(BaseModel):
     project_id: str
     user_id: str
     model: Optional[str] = None
+    template_id: Optional[str] = None
 
 
 class StatusRequest(BaseModel):
@@ -615,6 +616,7 @@ def _process_conversation_background(
     user_id: str,
     wait_for_previous: bool = False,
     model_override: Optional[str] = None,
+    template_id: Optional[str] = None,
 ):
     """Background processing function for workflow execution."""
     temp_file_path = None
@@ -775,7 +777,7 @@ def _process_conversation_background(
         # Store primary_asset for later use in error handling and completion
         primary_asset = assets[0] if assets else None
 
-        workflow = StatefulAnalyzeCSVWorkflow(model_override=model_override)
+        workflow = StatefulAnalyzeCSVWorkflow(model_override=model_override, template_id=template_id)
         _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
 
         # Extract user prompt and chart_mention context from latest user node
@@ -1347,6 +1349,7 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
             request.user_id,
             is_previous_running,
             request.model,
+            request.template_id,
         )
 
         return {

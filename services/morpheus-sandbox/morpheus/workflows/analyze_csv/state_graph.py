@@ -38,7 +38,7 @@ class StatefulAnalyzeCSVWorkflow:
     transitions between nodes based on state and execution results.
     """
 
-    def __init__(self, model_override=None):
+    def __init__(self, model_override=None, template_id: Optional[str] = None):
         """Initialize workflow with model, tools, and node registry."""
         self.config = load_config()
         self.model = get_model_for_agent(model_override=model_override)
@@ -46,6 +46,18 @@ class StatefulAnalyzeCSVWorkflow:
         self.python_tool = PythonREPLTool()
         self.tools = [self.python_tool, get_available_chart_types]
         self.model_with_tools = self.model.bind_tools(self.tools)
+
+        self.template_spec = None
+        if template_id:
+            try:
+                from morpheus.templates.builtin_templates import get_template
+                self.template_spec = get_template(template_id)
+                if self.template_spec:
+                    logger.info(f"Template '{template_id}' loaded: {self.template_spec['name']}")
+                else:
+                    logger.warning(f"Template '{template_id}' not found, ignoring")
+            except Exception as e:
+                logger.warning(f"Failed to load template '{template_id}': {e}")
 
         # Detect reasoning strategy based on model type
         # OpenAI models (with Responses API) → internal reasoning loop
@@ -712,6 +724,7 @@ class StatefulAnalyzeCSVWorkflow:
             project_id=conversation.get("project_id"),
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
+            template_spec=self.template_spec,
         )
 
         logger.info(

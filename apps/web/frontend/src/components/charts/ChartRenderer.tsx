@@ -14,7 +14,7 @@ import {
 } from '@/types/dashboard';
 import { createChart, validateChartConfig } from './ChartFactory';
 import ErrorBoundary from '@/components/charts/ErrorBoundary';
-import { getChartStylingClasses, resolveColorToken, convertLLMStylingToChartStyling } from '@/utils/chartStyling';
+import { getChartStylingClasses, resolveColorToken, convertLLMStylingToChartStyling, getStyleVariantProps } from '@/utils/chartStyling';
 
 interface ChartRendererProps {
   component: DashboardComponent;
@@ -194,18 +194,24 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
 
   // Compute tile styles from styling
   const tile = (chartConfig as any)?.styling?.tile || {};
-  
+
   // Resolve semantic color tokens to CSS variables
   const borderColor = tile.borderColor ? resolveColorToken(tile.borderColor) : 'var(--border-card-color)';
   const backgroundColor = tile.background ? resolveColorToken(tile.background) : 'var(--bg-card-color)';
-  
+
   // Get insight from config
   const insight = (chartConfig as any).insight || '';
-  
+
+  const chartStyle = (chartConfig as any)?.styling?.chartStyle || 'rounded'; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const variantProps = getStyleVariantProps(chartStyle);
+
   const containerStyle: React.CSSProperties = {
-    border: `${(tile.borderWidth ?? 1)}px solid ${borderColor}`,
-    borderRadius: (tile.borderRadius ?? 12) as number,
-    backgroundColor: backgroundColor,
+    border: variantProps.containerHasBorder
+      ? `1px solid ${borderColor}`
+      : tile.borderWidth !== undefined ? `${tile.borderWidth}px solid ${borderColor}` : 'none',
+    borderRadius: variantProps.cardBorderRadius,
+    backgroundColor: variantProps.containerHasBackground ? backgroundColor : 'transparent',
+    boxShadow: variantProps.cardBoxShadow,
     height: '100%',
     display: 'flex',
     flexDirection: 'column',

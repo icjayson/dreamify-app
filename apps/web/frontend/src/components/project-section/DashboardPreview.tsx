@@ -737,8 +737,8 @@ const DashboardPreview = ({
     if (!isDarkMode) {
       return {
         ...base,
-        presetTheme: CHART_PRESET_THEMES.LIGHT,
-        dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.LIGHT]['bg-dashboard-color']
+        presetTheme: CHART_PRESET_THEMES.CHALK,
+        dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.CHALK]['bg-dashboard-color']
       };
     }
     return base;
@@ -788,16 +788,16 @@ const DashboardPreview = ({
   const displayComponents = useMemo(() => {
     if (!activeDashboard?.components) return [];
     if (isDarkMode) return activeDashboard.components;
-    const lightPalette = getColorPalette(CHART_PRESET_THEMES.LIGHT, 10);
+    const lightPalette = getColorPalette(CHART_PRESET_THEMES.CHALK, 10);
     return activeDashboard.components.map((comp: any) => ({
       ...comp,
       component_config: {
         ...comp.component_config,
         styling: {
           ...comp.component_config?.styling,
-          presetTheme: CHART_PRESET_THEMES.LIGHT,
+          presetTheme: CHART_PRESET_THEMES.CHALK,
           colorPalette: lightPalette,
-          dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.LIGHT]['bg-dashboard-color']
+          dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.CHALK]['bg-dashboard-color']
         }
       }
     }));

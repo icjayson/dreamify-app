@@ -54,6 +54,7 @@ export interface ChartStyling {
   gridVisible: boolean;
   legendPosition: 'top' | 'bottom' | 'right' | 'none';
   dashboardBackground?: string;
+  chartStyle?: 'rounded' | 'sharp' | 'minimal';
 }
 
 export interface ChartConfiguration {

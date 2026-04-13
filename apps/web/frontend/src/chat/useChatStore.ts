@@ -802,7 +802,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           currentConversationId || undefined,  // Use existing conversation if available
           assetContents,
           userNodeMetadata,
-          model
+          model,
+          get().selectedTemplate?.id
         );
 
         console.log('Q&A processing result:', startResult);

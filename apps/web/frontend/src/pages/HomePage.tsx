@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn, TrendingUp, AlertCircle, LayoutDashboard } from "lucide-react";
+import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn, TrendingUp, AlertCircle, LayoutDashboard, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, useAuth, useUser } from "@clerk/clerk-react";
@@ -786,9 +786,42 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                 </div>
               )}
 
-              {/* File Context Chips - horizontal scroll when files are attached */}
-              {uploadedFiles.length > 0 && (
+              {/* Selection Chips Area - vertical scroll for both files and templates */}
+              {(uploadedFiles.length > 0 || selectedTemplate) && (
                 <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  {/* Template Selection Pill */}
+                  {selectedTemplate && (
+                    <div className="flex-shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
+                      <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-2 transition-all hover:border-accent/40 outline-none">
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <LayoutTemplate className="w-4 h-4 text-accent" />
+                        </div>
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
+                          <span className="flex-shrink-0 font-semibold text-accent">
+                            Template
+                          </span>
+                          <span className="flex-shrink-0 font-light text-accent/30">•</span>
+                          <span className="min-w-0 flex-1 truncate text-white" title={selectedTemplate.title}>
+                            {selectedTemplate.title}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTemplate(null);
+                            setInputValue('');
+                          }}
+                          className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-accent/50 transition-colors hover:text-white"
+                          aria-label="Remove template"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* File Chips */}
                   {uploadedFiles.map((file) => (
                     <div key={file.fileID} className="flex-shrink-0">
                       <FilePreviewChip

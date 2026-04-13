@@ -24,7 +24,8 @@ class ProcessingService {
     conversationId?: string,
     additionalContents?: ConversationChatRequest['user_node_contents'],
     userNodeMetadata?: ConversationChatRequest['user_node_metadata'],
-    model?: 'pro' | 'fast'
+    model?: 'pro' | 'fast',
+    templateId?: string
   ): Promise<ProcessingResponse> {
     try {
       const textContent: ConversationChatRequest['user_node_contents'][number] = {
@@ -43,6 +44,7 @@ class ProcessingService {
         ],
         user_node_metadata: userNodeMetadata,
         ...(model ? { model } : {}),
+        template_id: templateId,
       };
       const response = await conversationService.sendChatMessage(request);
       return {

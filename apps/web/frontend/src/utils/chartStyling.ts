@@ -3,17 +3,18 @@
  * Color Component Prefix System with opacity cascade
  */
 
-import { ChartStyling } from '@/types/dashboard';
+import { ChartStyling, DashboardConfiguration } from '@/types/dashboard';
 
 // Available preset themes
 export const CHART_PRESET_THEMES = {
-  OCEAN: 'ocean',
-  FOREST: 'forest',
-  SUNSET: 'sunset',
-  MIDNIGHT: 'midnight',
-  SAKURA: 'sakura',
-  MONOCHROME: 'monochrome',
-  LIGHT: 'light'
+  DEFAULT: 'default',
+  CARBON: 'carbon',
+  SLATE: 'slate',
+  CHALK: 'chalk',
+  WARM: 'warm',
+  ASH: 'ash',
+  SAGE: 'sage',
+  INK: 'ink'
 } as const;
 
 export type ChartPresetTheme = typeof CHART_PRESET_THEMES[keyof typeof CHART_PRESET_THEMES];
@@ -27,74 +28,162 @@ export interface ThemeColorSet {
   'title-color': string;
   'description-color': string;
   'element-color': string;
+  'data-colors': string[];
 }
 
-// Chart theme color definitions (matching CSS)
+// Chart theme color definitions
 export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
-  [CHART_PRESET_THEMES.OCEAN]: {
-    'highlight-color': '#3b82f6',
-    'bg-dashboard-color': '#0f172a',
-    'bg-card-color': '#a5a5a5',
-    'border-card-color': '#ffffff',
-    'title-color': '#000000',
-    'description-color': '#4e4e4e',
-    'element-color': '#2b2e32'
-  },
-  [CHART_PRESET_THEMES.FOREST]: {
-    'highlight-color': '#10b981',
-    'bg-dashboard-color': '#064e3b',
-    'bg-card-color': '#065f46',
-    'border-card-color': '#047857',
-    'title-color': '#f0fdf4',
-    'description-color': '#d1fae5',
-    'element-color': '#6ee7b7'
-  },
-  [CHART_PRESET_THEMES.SUNSET]: {
-    'highlight-color': '#f59e0b',
-    'bg-dashboard-color': '#431407',
-    'bg-card-color': '#7c2d12',
-    'border-card-color': '#9a3412',
-    'title-color': '#fffbeb',
-    'description-color': '#fef3c7',
-    'element-color': '#fbbf24'
-  },
-  [CHART_PRESET_THEMES.MIDNIGHT]: {
-    'highlight-color': '#8b5cf6',
-    'bg-dashboard-color': '#0c0a09',
-    'bg-card-color': '#1c1917',
-    'border-card-color': '#292524',
-    'title-color': '#fafaf9',
-    'description-color': '#d6d3d1',
-    'element-color': '#78716c'
-  },
-  [CHART_PRESET_THEMES.SAKURA]: {
-    'highlight-color': '#ec4899',
-    'bg-dashboard-color': '#4a044e',
-    'bg-card-color': '#701a75',
-    'border-card-color': '#86198f',
-    'title-color': '#fdf4ff',
-    'description-color': '#f5d0fe',
-    'element-color': '#e879f9'
-  },
-  [CHART_PRESET_THEMES.MONOCHROME]: {
-    'highlight-color': '#ffffff',
-    'bg-dashboard-color': '#1a1a1a',
-    'bg-card-color': '#2a2a2a',
-    'border-card-color': '#404040',
-    'title-color': '#ffffff',
+  default: {
+    'highlight-color': '#f0f0f0',
+    'bg-dashboard-color': '#2d2d2d',
+    'bg-card-color': '#3d3d3d',
+    'border-card-color': '#505050',
+    'title-color': '#f0f0f0',
     'description-color': '#a0a0a0',
-    'element-color': '#6b7280'
+    'element-color': '#707070',
+    'data-colors': ['#f0f0f0', '#c8c8c8', '#a0a0a0', '#d8d8d8', '#b0c4d8', '#8899aa']
   },
-  [CHART_PRESET_THEMES.LIGHT]: {
-    'highlight-color': '#1e3a5f',
-    'bg-dashboard-color': '#f0f2f5',
-    'bg-card-color': '#ffffff',
+  carbon: {
+    'highlight-color': '#3b82f6',
+    'bg-dashboard-color': '#0d0d0d',
+    'bg-card-color': '#1a1a1a',
+    'border-card-color': '#2d2d2d',
+    'title-color': '#e5e5e5',
+    'description-color': '#a0a0a0',
+    'element-color': '#6b7280',
+    'data-colors': ['#3b82f6', '#60a5fa', '#93c5fd', '#34d399', '#f59e0b', '#a78bfa']
+  },
+  slate: {
+    'highlight-color': '#60a5fa',
+    'bg-dashboard-color': '#0f1923',
+    'bg-card-color': '#1e2d3d',
+    'border-card-color': '#2d4157',
+    'title-color': '#e2e8f0',
+    'description-color': '#94a3b8',
+    'element-color': '#64748b',
+    'data-colors': ['#60a5fa', '#38bdf8', '#34d399', '#a78bfa', '#fb923c', '#fbbf24']
+  },
+  chalk: {
+    'highlight-color': '#1e40af',
+    'bg-dashboard-color': '#ffffff',
+    'bg-card-color': '#f8f9fa',
     'border-card-color': '#e2e8f0',
-    'title-color': '#0f172a',
-    'description-color': '#64748b',
-    'element-color': '#94a3b8'
+    'title-color': '#1a1a2e',
+    'description-color': '#475569',
+    'element-color': '#94a3b8',
+    'data-colors': ['#1e40af', '#0d9488', '#d97706', '#dc2626', '#7c3aed', '#0891b2']
+  },
+  warm: {
+    'highlight-color': '#b45309',
+    'bg-dashboard-color': '#fafaf8',
+    'bg-card-color': '#f5f0eb',
+    'border-card-color': '#d4c5b0',
+    'title-color': '#1c1005',
+    'description-color': '#6b5344',
+    'element-color': '#9c8170',
+    'data-colors': ['#b45309', '#0d9488', '#7c3aed', '#1d4ed8', '#dc2626', '#047857']
+  },
+  ash: {
+    'highlight-color': '#f0f0f0',
+    'bg-dashboard-color': '#2d2d2d',
+    'bg-card-color': '#3d3d3d',
+    'border-card-color': '#505050',
+    'title-color': '#f0f0f0',
+    'description-color': '#a0a0a0',
+    'element-color': '#707070',
+    'data-colors': ['#f0f0f0', '#b0c4de', '#c4b5a0', '#f5c842', '#cc8844', '#8b8b8b']
+  },
+  sage: {
+    'highlight-color': '#6ee7b7',
+    'bg-dashboard-color': '#0d1a14',
+    'bg-card-color': '#1a2e22',
+    'border-card-color': '#243d2e',
+    'title-color': '#d1fae5',
+    'description-color': '#6ee7b7',
+    'element-color': '#4ade80',
+    'data-colors': ['#6ee7b7', '#34d399', '#10b981', '#60a5fa', '#a78bfa', '#fbbf24']
+  },
+  ink: {
+    'highlight-color': '#f59e0b',
+    'bg-dashboard-color': '#12100e',
+    'bg-card-color': '#1c1915',
+    'border-card-color': '#2e2a26',
+    'title-color': '#fdf4e7',
+    'description-color': '#d6b896',
+    'element-color': '#8b7355',
+    'data-colors': ['#f59e0b', '#fbbf24', '#f97316', '#ef4444', '#a78bfa', '#60a5fa']
   }
 };
+
+// ─── Chart Style Variants ────────────────────────────────────────────────────
+
+export const CHART_STYLE_VARIANTS = {
+  ROUNDED: 'rounded',
+  SHARP: 'sharp',
+  MINIMAL: 'minimal'
+} as const;
+
+export type ChartStyleVariant = typeof CHART_STYLE_VARIANTS[keyof typeof CHART_STYLE_VARIANTS];
+
+export interface StyleVariantProps {
+  containerBorderRadius: number;
+  containerBoxShadow: string;
+  containerHasBorder: boolean;
+  containerHasBackground: boolean;
+  barBorderRadius: [number, number, number, number];
+  lineStrokeWidth: number;
+  lineType: 'monotone' | 'linear';
+  lineDot: boolean;
+  gridOpacity: number;
+  cardBorderRadius: number;
+  cardBoxShadow: string;
+}
+
+export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> = {
+  rounded: {
+    containerBorderRadius: 8,
+    containerBoxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+    containerHasBorder: false,
+    containerHasBackground: true,
+    barBorderRadius: [6, 6, 0, 0],
+    lineStrokeWidth: 2.5,
+    lineType: 'monotone',
+    lineDot: true,
+    gridOpacity: 0.3,
+    cardBorderRadius: 12,
+    cardBoxShadow: '0 2px 8px rgba(0,0,0,0.12)'
+  },
+  sharp: {
+    containerBorderRadius: 0,
+    containerBoxShadow: 'none',
+    containerHasBorder: true,
+    containerHasBackground: false,
+    barBorderRadius: [0, 0, 0, 0],
+    lineStrokeWidth: 1.5,
+    lineType: 'linear',
+    lineDot: false,
+    gridOpacity: 0.4,
+    cardBorderRadius: 2,
+    cardBoxShadow: 'none'
+  },
+  minimal: {
+    containerBorderRadius: 0,
+    containerBoxShadow: 'none',
+    containerHasBorder: false,
+    containerHasBackground: false,
+    barBorderRadius: [3, 3, 0, 0],
+    lineStrokeWidth: 1.5,
+    lineType: 'monotone',
+    lineDot: false,
+    gridOpacity: 0.1,
+    cardBorderRadius: 0,
+    cardBoxShadow: 'none'
+  }
+};
+
+export function getStyleVariantProps(chartStyle?: ChartStyleVariant): StyleVariantProps {
+  return CHART_STYLE_CONFIGS[chartStyle || 'rounded'];
+}
 
 /**
  * Convert hex color to RGB components
@@ -106,67 +195,6 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
     g: parseInt(result[2], 16),
     b: parseInt(result[3], 16)
   } : null;
-}
-
-/**
- * Get monochrome color palette from CSS variables
- * Reads CSS variables from the document root or a specific element
- * Falls back to minimal inline values if CSS variables are not available
- * @param element - Optional element to read CSS variables from (defaults to document.documentElement)
- * @returns Array of 10 color strings
- */
-function getMonochromePaletteFromCSS(element?: HTMLElement): string[] {
-  const targetElement = element || document.documentElement;
-  const computedStyle = window.getComputedStyle(targetElement);
-  
-  const colors: string[] = [];
-  for (let i = 0; i < 10; i++) {
-    const cssVar = `--monochrome-color-${i}`;
-    const color = computedStyle.getPropertyValue(cssVar).trim();
-    
-    if (color) {
-      colors.push(color);
-    } else {
-      // CSS variable not found - this should not happen in normal operation
-      // Return minimal inline fallback for critical error handling
-      console.error(`CSS variable ${cssVar} not found. Using minimal fallback.`);
-      return [
-        "#ffffff", "#38BDF8", "#FBBF24", "#2DD4BF", "#F472B6",
-        "#A78BFA", "#94A3B8", "#E2E8F0", "#FB923C", "#4ADE80"
-      ];
-    }
-  }
-  
-  return colors;
-}
-
-/**
- * Get light color palette from CSS variables
- * Reads CSS variables from the document root or a specific element
- * Falls back to minimal inline values if CSS variables are not available
- * @param element - Optional element to read CSS variables from (defaults to document.documentElement)
- * @returns Array of 10 color strings
- */
-function getLightPaletteFromCSS(element?: HTMLElement): string[] {
-  const targetElement = element || document.documentElement;
-  const computedStyle = window.getComputedStyle(targetElement);
-
-  const colors: string[] = [];
-  for (let i = 0; i < 10; i++) {
-    const cssVar = `--light-color-${i}`;
-    const color = computedStyle.getPropertyValue(cssVar).trim();
-
-    if (color) {
-      colors.push(color);
-    } else {
-      // CSS variable not found - this should not happen in normal operation
-      // Return minimal inline fallback for critical error handling
-      console.error(`CSS variable ${cssVar} not found. Using minimal fallback.`);
-      return ["#1e3a5f", "#0d9488", "#d97706", "#e11d48", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#9333ea", "#0284c7"];
-    }
-  }
-
-  return colors;
 }
 
 /**
@@ -183,7 +211,6 @@ export function generateOpacityCascade(
 ): string[] {
   const rgb = hexToRgb(baseColor);
   if (!rgb) {
-    console.warn(`Invalid color: ${baseColor}, using fallback`);
     return Array(count).fill('rgba(59, 130, 246, 1)');
   }
 
@@ -205,14 +232,14 @@ export function generateOpacityCascade(
  */
 export function resolveColorToken(token: string): string {
   if (!token) return 'var(--title-color)';
-  
+
   // Handle opacity syntax: "element-color/75"
   if (token.includes('/')) {
     const [colorVar, opacityStr] = token.split('/');
     const opacity = parseInt(opacityStr) / 100;
     return `rgba(var(--${colorVar}-rgb), ${opacity})`;
   }
-  
+
   return `var(--${token})`;
 }
 
@@ -221,8 +248,8 @@ export function resolveColorToken(token: string): string {
  */
 export function getDashboardBackgroundStyle(styling: ChartStyling): React.CSSProperties {
   const theme = styling.presetTheme as ChartPresetTheme;
-  const bgColor = CHART_THEME_COLORS[theme]?.['bg-dashboard-color'] || CHART_THEME_COLORS[CHART_PRESET_THEMES.MONOCHROME]['bg-dashboard-color'];
-  
+  const bgColor = CHART_THEME_COLORS[theme]?.['bg-dashboard-color'] || CHART_THEME_COLORS[CHART_PRESET_THEMES.DEFAULT]['bg-dashboard-color'];
+
   return {
     backgroundColor: styling.dashboardBackground || bgColor,
     border: 'none',
@@ -263,65 +290,18 @@ export function applyChartStyling(
 }
 
 /**
- * Get color palette for a theme using opacity cascade
+ * Get color palette for a theme using data-colors
  */
 export function getColorPalette(
   theme: ChartPresetTheme,
   datasetCount: number = 5
 ): string[] {
-  // Special handling for MONOCHROME theme: use solid colors instead of opacity cascade
-  if (theme === CHART_PRESET_THEMES.MONOCHROME) {
-    // Try to read from CSS variables first, fallback to minimal inline array
-    let palette: string[];
-    try {
-      // Check if we're in a browser environment
-      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-        palette = getMonochromePaletteFromCSS();
-      } else {
-        // Client-side only app - this should never happen
-        // Minimal inline fallback for edge cases
-        console.warn('Browser environment not available. Using minimal fallback.');
-        palette = [
-          "#ffffff", "#38BDF8", "#FBBF24", "#2DD4BF", "#F472B6",
-          "#A78BFA", "#94A3B8", "#E2E8F0", "#FB923C", "#4ADE80"
-        ];
-      }
-    } catch (error) {
-      // Critical error fallback - minimal inline array
-      console.error('Failed to read monochrome palette from CSS variables, using minimal fallback:', error);
-      palette = [
-        "#ffffff", "#38BDF8", "#FBBF24", "#2DD4BF", "#F472B6",
-        "#A78BFA", "#94A3B8", "#E2E8F0", "#FB923C", "#4ADE80"
-      ];
-    }
-    
-    return Array.from({ length: datasetCount }, (_, i) =>
-      palette[i % palette.length]
-    );
-  }
-
-  if (theme === CHART_PRESET_THEMES.LIGHT) {
-    let palette: string[];
-    try {
-      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-        palette = getLightPaletteFromCSS();
-      } else {
-        console.warn('Browser environment not available. Using minimal fallback.');
-        palette = ["#1e3a5f", "#0d9488", "#d97706", "#e11d48", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#9333ea", "#0284c7"];
-      }
-    } catch (error) {
-      console.error('Failed to read light palette from CSS variables, using minimal fallback:', error);
-      palette = ["#1e3a5f", "#0d9488", "#d97706", "#e11d48", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#9333ea", "#0284c7"];
-    }
-    return Array.from({ length: datasetCount }, (_, i) => palette[i % palette.length]);
-  }
-
   const themeColors = CHART_THEME_COLORS[theme];
   if (!themeColors) {
-    return generateOpacityCascade(CHART_THEME_COLORS[CHART_PRESET_THEMES.MONOCHROME]['highlight-color'], datasetCount);
+    return generateOpacityCascade(CHART_THEME_COLORS[CHART_PRESET_THEMES.DEFAULT]['highlight-color'], datasetCount);
   }
-  
-  return generateOpacityCascade(themeColors['highlight-color'], datasetCount);
+  const palette = themeColors['data-colors'];
+  return Array.from({ length: datasetCount }, (_, i) => palette[i % palette.length]);
 }
 
 /**
@@ -335,7 +315,7 @@ export function assignDatasetColors(
     styling.presetTheme as ChartPresetTheme,
     datasets.length
   );
-  
+
   return datasets.map((dataset, index) => ({
     ...dataset,
     color: dataset.color || colorPalette[index] || colorPalette[0]
@@ -347,11 +327,11 @@ export function assignDatasetColors(
  */
 export function getChartStylingClasses(styling: ChartStyling): string {
   const classes = [`chart-theme-${styling.presetTheme}`];
-  
+
   if (styling.animationEnabled) {
     classes.push('chart-animate-fade-in');
   }
-  
+
   return classes.join(' ');
 }
 
@@ -368,34 +348,38 @@ export function convertLLMStylingToChartStyling(
     dashboardBackground?: string;
   }
 ): ChartStyling {
-  // Map old theme names to new ones for backward compatibility
-  // Note: 'ocean' is mapped to MONOCHROME to migrate existing dashboards to the monochrome default
   const themeMap: Record<string, ChartPresetTheme> = {
-    'corporate': CHART_PRESET_THEMES.MONOCHROME,
-    'vibrant': CHART_PRESET_THEMES.SAKURA,
-    'minimal': CHART_PRESET_THEMES.MIDNIGHT,
-    'dark': CHART_PRESET_THEMES.MIDNIGHT,
-    'colorful': CHART_PRESET_THEMES.FOREST,
-    'ocean': CHART_PRESET_THEMES.MONOCHROME,
-    'forest': CHART_PRESET_THEMES.FOREST,
-    'sunset': CHART_PRESET_THEMES.SUNSET,
-    'midnight': CHART_PRESET_THEMES.MIDNIGHT,
-    'sakura': CHART_PRESET_THEMES.SAKURA,
-    'monochrome': CHART_PRESET_THEMES.MONOCHROME,
-    'light': CHART_PRESET_THEMES.LIGHT
+    // old names → new equivalents
+    'ocean': CHART_PRESET_THEMES.SLATE,
+    'forest': CHART_PRESET_THEMES.SAGE,
+    'sunset': CHART_PRESET_THEMES.INK,
+    'midnight': CHART_PRESET_THEMES.CARBON,
+    'sakura': CHART_PRESET_THEMES.WARM,
+    'monochrome': CHART_PRESET_THEMES.DEFAULT,
+    'default': CHART_PRESET_THEMES.DEFAULT,
+    'light': CHART_PRESET_THEMES.CHALK,
+    // new names map to themselves
+    'carbon': CHART_PRESET_THEMES.CARBON,
+    'slate': CHART_PRESET_THEMES.SLATE,
+    'chalk': CHART_PRESET_THEMES.CHALK,
+    'warm': CHART_PRESET_THEMES.WARM,
+    'ash': CHART_PRESET_THEMES.ASH,
+    'sage': CHART_PRESET_THEMES.SAGE,
+    'ink': CHART_PRESET_THEMES.INK,
+    // legacy
+    'corporate': CHART_PRESET_THEMES.CHALK,
+    'vibrant': CHART_PRESET_THEMES.SLATE,
+    'minimal': CHART_PRESET_THEMES.ASH,
+    'dark': CHART_PRESET_THEMES.CARBON,
+    'colorful': CHART_PRESET_THEMES.SLATE,
   };
-  
-  const theme = themeMap[llmStyling.theme?.toLowerCase() || ''] || CHART_PRESET_THEMES.MONOCHROME;
+
+  const theme = themeMap[llmStyling.theme?.toLowerCase() || ''] || CHART_PRESET_THEMES.DEFAULT;
   const themeColors = CHART_THEME_COLORS[theme];
-  
-  // Special handling for MONOCHROME and LIGHT themes: use solid colors instead of opacity cascade
-  const colorPalette = (theme === CHART_PRESET_THEMES.MONOCHROME || theme === CHART_PRESET_THEMES.LIGHT)
-    ? getColorPalette(theme, 10)
-    : generateOpacityCascade(themeColors['highlight-color'], 10);
 
   return {
     presetTheme: theme,
-    colorPalette: colorPalette,
+    colorPalette: getColorPalette(theme, 10),
     animationEnabled: llmStyling.animation !== 'none',
     gridVisible: llmStyling.grid !== 'hidden',
     legendPosition: (llmStyling.legend as 'top' | 'bottom' | 'right' | 'none') || 'top',
@@ -411,19 +395,19 @@ export function validateChartStyling(styling: ChartStyling): {
   errors: string[];
 } {
   const errors: string[] = [];
-  
+
   if (!styling.presetTheme) {
     errors.push('Preset theme is required');
   }
-  
+
   if (!Object.values(CHART_PRESET_THEMES).includes(styling.presetTheme as ChartPresetTheme)) {
     errors.push(`Invalid preset theme: ${styling.presetTheme}`);
   }
-  
+
   if (styling.legendPosition && !['top', 'bottom', 'right', 'none'].includes(styling.legendPosition)) {
     errors.push(`Invalid legend position: ${styling.legendPosition}`);
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors
@@ -433,17 +417,12 @@ export function validateChartStyling(styling: ChartStyling): {
 /**
  * Get default chart styling for a theme
  */
-export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_THEMES.MONOCHROME): ChartStyling {
+export function getDefaultChartStyling(theme: ChartPresetTheme = CHART_PRESET_THEMES.DEFAULT): ChartStyling {
   const themeColors = CHART_THEME_COLORS[theme];
-  
-  // Special handling for MONOCHROME and LIGHT themes: use solid colors instead of opacity cascade
-  const colorPalette = (theme === CHART_PRESET_THEMES.MONOCHROME || theme === CHART_PRESET_THEMES.LIGHT)
-    ? getColorPalette(theme, 10)
-    : generateOpacityCascade(themeColors['highlight-color'], 10);
 
   return {
     presetTheme: theme,
-    colorPalette: colorPalette,
+    colorPalette: getColorPalette(theme, 10),
     animationEnabled: true,
     gridVisible: true,
     legendPosition: 'top',
@@ -467,4 +446,37 @@ export function mergeChartStyling(
     legendPosition: customStyling.legendPosition || defaultStyling.legendPosition,
     dashboardBackground: customStyling.dashboardBackground || defaultStyling.dashboardBackground
   };
+}
+
+// ─── Visual Spec ─────────────────────────────────────────────────────────────
+
+export interface VisualSpec {
+  theme: ChartPresetTheme;
+  chartStyle: ChartStyleVariant;
+  density: 'compact' | 'comfortable' | 'spacious';
+}
+
+export function applyVisualSpec(
+  config: DashboardConfiguration,
+  visual: VisualSpec
+): DashboardConfiguration {
+  const updated = JSON.parse(JSON.stringify(config)) as DashboardConfiguration;
+  const themeColors = CHART_THEME_COLORS[visual.theme];
+
+  for (const component of updated.components) {
+    // component_config is a union without a shared styling field; any cast is required to write it dynamically
+    const cfg = component.component_config as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (cfg) {
+      if (!cfg.styling) cfg.styling = {};
+      cfg.styling.presetTheme = visual.theme;
+      cfg.styling.chartStyle = visual.chartStyle;
+      cfg.styling.theme = visual.theme;
+      if (themeColors) {
+        cfg.styling.colorPalette = getColorPalette(visual.theme, 6);
+        cfg.styling.dashboardBackground = themeColors['bg-dashboard-color'];
+      }
+    }
+  }
+
+  return updated;
 }

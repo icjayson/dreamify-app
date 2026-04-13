@@ -26,6 +26,7 @@ import CancelPage from "./pages/CancelPage";
 import SuccessPage from "./pages/SuccessPage";
 import AdminPage from "./pages/admin";
 import AdminConversationPage from "./pages/admin/conversation";
+import TemplateGalleryPage from "./pages/TemplateGalleryPage";
 import { useChatStore } from "./chat/useChatStore";
 import GA4IntegrationModal from "./components/chat/GA4IntegrationModal";
 import GoogleSheetsIntegrationModal from "./components/chat/GoogleSheetsIntegrationModal";
@@ -89,6 +90,7 @@ const AppContent = () => {
         <Route path="/success" element={<SuccessPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/admin/conversation/:conversationId" element={<AdminConversationPage />} />
+        <Route path="/templates" element={<TemplateGalleryPage />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

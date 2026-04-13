@@ -1,6 +1,6 @@
-import { Card } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
+import { getStyleVariantProps, type ChartStyleVariant } from "@/utils/chartStyling";
 
 interface MetricCardProps {
   title: string;
@@ -16,6 +16,7 @@ interface MetricCardProps {
     trendUpColor?: string;
     trendDownColor?: string;
     text?: string;
+    chartStyle?: ChartStyleVariant;
   };
   timeComparison?: {
     period?: 'mom' | 'yoy' | 'wow' | string;
@@ -41,10 +42,11 @@ const MetricCard = ({
   style = {}
 }: MetricCardProps) => {
   // Use CSS variables for all colors with semantic tokens as fallback
+  const variantProps = getStyleVariantProps(styling?.chartStyle || 'rounded');
   const borderColor = 'var(--border-card-color)';
   const borderWidth = styling?.tile?.borderWidth ?? 1;
-  const borderRadius = styling?.tile?.borderRadius ?? 12;
-  const background = 'var(--bg-card-color)'; // Always use CSS variable for card background
+  const borderRadius = styling?.tile?.borderRadius ?? variantProps.cardBorderRadius;
+  const background = variantProps.containerHasBackground ? 'var(--bg-card-color)' : 'transparent';
   const valueColor = 'var(--highlight-color)';
   const trendUp = styling?.trendUpColor || 'hsl(142 76% 36%)';
   const trendDown = styling?.trendDownColor || 'hsl(0 84% 60%)';
@@ -71,7 +73,7 @@ const MetricCard = ({
 
   return (
     <div className={`rounded-md animate-fade-in h-full ${className}`}
-      style={{ borderRadius, backgroundColor: background, ...style }}>
+      style={{ borderRadius, backgroundColor: background, boxShadow: variantProps.cardBoxShadow, ...style }}>
       <div className="flex items-stretch h-full">
         {/* Left Side: Text Content */}
         <div className="flex-1 flex flex-col justify-between pr-2 min-w-0">

@@ -1,160 +1,84 @@
 /**
  * Chart Theme Presets - CSS Custom Properties for Dynamic Chart Styling
- * Color Component Prefix System with 8 curated themes
+ * Color Component Prefix System with 7 curated neutral-first themes
+ *
+ * Theme names: carbon, slate, chalk, warm, ash, sage, ink
+ * Old names (ocean, forest, sunset, midnight, sakura, monochrome, light)
+ * are kept as aliases for backward compatibility with stored dashboards.
  */
 
-/* OCEAN Theme - Vibrant blue, professional */
-.chart-theme-ocean {
-  --highlight-color: #3b82f6;
-  --bg-dashboard-color: #0f172a;
-  --bg-card-color: #a5a5a5;
-  --border-card-color: #ffffff;
-  --title-color: #000000;
-  --description-color: #4e4e4e;
-  --element-color: #2b2e32;
-    
-    /* RGB variants for opacity manipulation */
-    --highlight-color-rgb: 59, 130, 246;
-    --element-color-rgb: 100, 116, 139;
-    
-    --chart-animation-duration: 0.8s;
-    --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
-    --chart-hover-scale: 1.02;
-  }
+/* ═══════════════════════════════════════════════════════════════════════════
+   NEW THEMES
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-/* FOREST Theme - Emerald green, natural */
-.chart-theme-forest {
-    --highlight-color: #10b981;
-    --bg-dashboard-color: #064e3b;
-    --bg-card-color: #065f46;
-    --border-card-color: #047857;
-    --title-color: #f0fdf4;
-    --description-color: #d1fae5;
-    --element-color: #6ee7b7;
-    
-    /* RGB variants for opacity manipulation */
-    --highlight-color-rgb: 16, 185, 129;
-    --element-color-rgb: 110, 231, 183;
-    
-    --chart-animation-duration: 0.8s;
-    --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
-    --chart-hover-scale: 1.02;
-  }
-
-/* SUNSET Theme - Amber, warm */
-.chart-theme-sunset {
-    --highlight-color: #f59e0b;
-    --bg-dashboard-color: #431407;
-    --bg-card-color: #7c2d12;
-    --border-card-color: #9a3412;
-    --title-color: #fffbeb;
-    --description-color: #fef3c7;
-    --element-color: #fbbf24;
-    
-    /* RGB variants for opacity manipulation */
-    --highlight-color-rgb: 245, 158, 11;
-    --element-color-rgb: 251, 191, 36;
-    
-    --chart-animation-duration: 0.8s;
-    --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
-    --chart-hover-scale: 1.02;
-  }
-
-/* MIDNIGHT Theme - Purple, sleek */
-.chart-theme-midnight {
-    --highlight-color: #8b5cf6;
-    --bg-dashboard-color: #0c0a09;
-    --bg-card-color: #1c1917;
-    --border-card-color: #292524;
-    --title-color: #fafaf9;
-    --description-color: #d6d3d1;
-    --element-color: #78716c;
-    
-    /* RGB variants for opacity manipulation */
-    --highlight-color-rgb: 139, 92, 246;
-    --element-color-rgb: 120, 113, 108;
-    
-    --chart-animation-duration: 1s;
-    --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
-    --chart-hover-scale: 1.03;
-  }
-
-/* SAKURA Theme - Pink, elegant */
-.chart-theme-sakura {
-    --highlight-color: #ec4899;
-    --bg-dashboard-color: #4a044e;
-    --bg-card-color: #701a75;
-    --border-card-color: #86198f;
-    --title-color: #fdf4ff;
-    --description-color: #f5d0fe;
-    --element-color: #e879f9;
-    
-    /* RGB variants for opacity manipulation */
-    --highlight-color-rgb: 236, 72, 153;
-    --element-color-rgb: 232, 121, 249;
-    
-    --chart-animation-duration: 1.2s;
-    --chart-animation-easing: cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    --chart-hover-scale: 1.05;
-  }
-
-/* MONOCHROME Theme - Basic monochrome, minimal */
-.chart-theme-monochrome {
-  --highlight-color: #ffffff;
-  --bg-dashboard-color: #1a1a1a;
-  --bg-card-color: #2a2a2a;
-  --border-card-color: #404040;
-  --title-color: #ffffff;
+/* DEFAULT - Classic monochrome, neutral gray accent, works with any data */
+.chart-theme-default {
+  --highlight-color: #f0f0f0;
+  --bg-dashboard-color: #2d2d2d;
+  --bg-card-color: #3d3d3d;
+  --border-card-color: #505050;
+  --title-color: #f0f0f0;
   --description-color: #a0a0a0;
-  --element-color: #6b7280;
-    
-  /* RGB variants for opacity manipulation */
-  --highlight-color-rgb: 255, 255, 255;
-  --element-color-rgb: 107, 114, 128;
-  
-  /* Monochrome color palette - 10 distinct colors for datasets */
-  --monochrome-color-0: #ffffff;
-  --monochrome-color-1: #38BDF8;
-  --monochrome-color-2: #FBBF24;
-  --monochrome-color-3: #2DD4BF;
-  --monochrome-color-4: #F472B6;
-  --monochrome-color-5: #A78BFA;
-  --monochrome-color-6: #94A3B8;
-  --monochrome-color-7: #E2E8F0;
-  --monochrome-color-8: #FB923C;
-  --monochrome-color-9: #64748B;
-    
+  --element-color: #707070;
+
+  --highlight-color-rgb: 240, 240, 240;
+  --element-color-rgb: 112, 112, 112;
+
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --chart-hover-scale: 1.02;
 }
 
-/* LIGHT Theme - Clean white, professional, corporate */
-.chart-theme-light {
-  --highlight-color: #1e3a5f;
-  --bg-dashboard-color: #f0f2f5;
-  --bg-card-color: #ffffff;
+/* CARBON - Very dark, blue accent, high-end dark dashboard */
+.chart-theme-carbon {
+  --highlight-color: #3b82f6;
+  --bg-dashboard-color: #0d0d0d;
+  --bg-card-color: #1a1a1a;
+  --border-card-color: #2d2d2d;
+  --title-color: #e5e5e5;
+  --description-color: #a0a0a0;
+  --element-color: #6b7280;
+
+  --highlight-color-rgb: 59, 130, 246;
+  --element-color-rgb: 107, 114, 128;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* SLATE - Dark blue-gray, cool blue accent, technical/engineering */
+.chart-theme-slate {
+  --highlight-color: #60a5fa;
+  --bg-dashboard-color: #0f1923;
+  --bg-card-color: #1e2d3d;
+  --border-card-color: #2d4157;
+  --title-color: #e2e8f0;
+  --description-color: #94a3b8;
+  --element-color: #64748b;
+
+  --highlight-color-rgb: 96, 165, 250;
+  --element-color-rgb: 100, 116, 139;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* CHALK - Pure white/light, dark ink text, report-style */
+.chart-theme-chalk {
+  --highlight-color: #1e40af;
+  --bg-dashboard-color: #ffffff;
+  --bg-card-color: #f8f9fa;
   --border-card-color: #e2e8f0;
-  --title-color: #0f172a;
-  --description-color: #64748b;
+  --title-color: #1a1a2e;
+  --description-color: #475569;
   --element-color: #94a3b8;
 
-  --highlight-color-rgb: 30, 58, 95;
+  --highlight-color-rgb: 30, 64, 175;
   --element-color-rgb: 148, 163, 184;
 
-  /* 10 distinct colors visible on white backgrounds */
-  --light-color-0: #1e3a5f;
-  --light-color-1: #0d9488;
-  --light-color-2: #d97706;
-  --light-color-3: #e11d48;
-  --light-color-4: #7c3aed;
-  --light-color-5: #0891b2;
-  --light-color-6: #16a34a;
-  --light-color-7: #ea580c;
-  --light-color-8: #9333ea;
-  --light-color-9: #0284c7;
-
-  /* Table header — subtle slate on white, not the full navy accent */
+  /* Table header — subtle slate on white */
   --table-header-bg: #f1f5f9;
   --table-header-text: #0f172a;
 
@@ -162,6 +86,206 @@
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --chart-hover-scale: 1.02;
 }
+
+/* WARM - Warm off-white, rust accent, editorial */
+.chart-theme-warm {
+  --highlight-color: #b45309;
+  --bg-dashboard-color: #fafaf8;
+  --bg-card-color: #f5f0eb;
+  --border-card-color: #d4c5b0;
+  --title-color: #1c1005;
+  --description-color: #6b5344;
+  --element-color: #9c8170;
+
+  --highlight-color-rgb: 180, 83, 9;
+  --element-color-rgb: 156, 129, 112;
+
+  /* Table header — warm neutral */
+  --table-header-bg: #ede5da;
+  --table-header-text: #1c1005;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* ASH - Mid gray, neutral white accent, ultra-minimal */
+.chart-theme-ash {
+  --highlight-color: #f0f0f0;
+  --bg-dashboard-color: #2d2d2d;
+  --bg-card-color: #3d3d3d;
+  --border-card-color: #505050;
+  --title-color: #f0f0f0;
+  --description-color: #a0a0a0;
+  --element-color: #707070;
+
+  --highlight-color-rgb: 240, 240, 240;
+  --element-color-rgb: 112, 112, 112;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* SAGE - Desaturated dark green, muted sage accent, calm/financial */
+.chart-theme-sage {
+  --highlight-color: #6ee7b7;
+  --bg-dashboard-color: #0d1a14;
+  --bg-card-color: #1a2e22;
+  --border-card-color: #243d2e;
+  --title-color: #d1fae5;
+  --description-color: #6ee7b7;
+  --element-color: #4ade80;
+
+  --highlight-color-rgb: 110, 231, 183;
+  --element-color-rgb: 74, 222, 128;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* INK - Near-black warm tint, amber/gold accent, premium */
+.chart-theme-ink {
+  --highlight-color: #f59e0b;
+  --bg-dashboard-color: #12100e;
+  --bg-card-color: #1c1915;
+  --border-card-color: #2e2a26;
+  --title-color: #fdf4e7;
+  --description-color: #d6b896;
+  --element-color: #8b7355;
+
+  --highlight-color-rgb: 245, 158, 11;
+  --element-color-rgb: 139, 115, 85;
+
+  --chart-animation-duration: 1s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.03;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BACKWARD COMPATIBILITY ALIASES
+   Old theme names map to new equivalents so dashboards stored in S3
+   with old theme names continue to render correctly.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ocean → slate */
+.chart-theme-ocean {
+  --highlight-color: #60a5fa;
+  --bg-dashboard-color: #0f1923;
+  --bg-card-color: #1e2d3d;
+  --border-card-color: #2d4157;
+  --title-color: #e2e8f0;
+  --description-color: #94a3b8;
+  --element-color: #64748b;
+  --highlight-color-rgb: 96, 165, 250;
+  --element-color-rgb: 100, 116, 139;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* forest → sage */
+.chart-theme-forest {
+  --highlight-color: #6ee7b7;
+  --bg-dashboard-color: #0d1a14;
+  --bg-card-color: #1a2e22;
+  --border-card-color: #243d2e;
+  --title-color: #d1fae5;
+  --description-color: #6ee7b7;
+  --element-color: #4ade80;
+  --highlight-color-rgb: 110, 231, 183;
+  --element-color-rgb: 74, 222, 128;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* sunset → ink */
+.chart-theme-sunset {
+  --highlight-color: #f59e0b;
+  --bg-dashboard-color: #12100e;
+  --bg-card-color: #1c1915;
+  --border-card-color: #2e2a26;
+  --title-color: #fdf4e7;
+  --description-color: #d6b896;
+  --element-color: #8b7355;
+  --highlight-color-rgb: 245, 158, 11;
+  --element-color-rgb: 139, 115, 85;
+  --chart-animation-duration: 1s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.03;
+}
+
+/* midnight → carbon */
+.chart-theme-midnight {
+  --highlight-color: #3b82f6;
+  --bg-dashboard-color: #0d0d0d;
+  --bg-card-color: #1a1a1a;
+  --border-card-color: #2d2d2d;
+  --title-color: #e5e5e5;
+  --description-color: #a0a0a0;
+  --element-color: #6b7280;
+  --highlight-color-rgb: 59, 130, 246;
+  --element-color-rgb: 107, 114, 128;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* sakura → warm */
+.chart-theme-sakura {
+  --highlight-color: #b45309;
+  --bg-dashboard-color: #fafaf8;
+  --bg-card-color: #f5f0eb;
+  --border-card-color: #d4c5b0;
+  --title-color: #1c1005;
+  --description-color: #6b5344;
+  --element-color: #9c8170;
+  --highlight-color-rgb: 180, 83, 9;
+  --element-color-rgb: 156, 129, 112;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* monochrome → default */
+.chart-theme-monochrome {
+  --highlight-color: #f0f0f0;
+  --bg-dashboard-color: #2d2d2d;
+  --bg-card-color: #3d3d3d;
+  --border-card-color: #505050;
+  --title-color: #f0f0f0;
+  --description-color: #a0a0a0;
+  --element-color: #707070;
+  --highlight-color-rgb: 240, 240, 240;
+  --element-color-rgb: 112, 112, 112;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* light → chalk */
+.chart-theme-light {
+  --highlight-color: #1e40af;
+  --bg-dashboard-color: #ffffff;
+  --bg-card-color: #f8f9fa;
+  --border-card-color: #e2e8f0;
+  --title-color: #1a1a2e;
+  --description-color: #475569;
+  --element-color: #94a3b8;
+  --highlight-color-rgb: 30, 64, 175;
+  --element-color-rgb: 148, 163, 184;
+  --table-header-bg: #f1f5f9;
+  --table-header-text: #0f172a;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COMPONENT CLASSES
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 @layer components {
   /* Chart Animation Classes */
@@ -231,11 +355,11 @@
       font-size: 10px;
       padding: 6px 8px;
     }
-    
+
     .chart-legend {
       font-size: 10px;
     }
-    
+
     .chart-axis {
       font-size: 9px;
     }
@@ -243,34 +367,18 @@
 
   /* Animation Keyframes */
   @keyframes chartFadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   @keyframes chartScaleIn {
-    from {
-      opacity: 0;
-      transform: scale(0.8);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
   }
 
   @keyframes chartSlideUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   /* Accessibility: Respect reduced motion preference */
@@ -282,11 +390,11 @@
       opacity: 1;
       transform: none;
     }
-    
+
     .chart-hover-effect {
       transition: none;
     }
-    
+
     .chart-hover-effect:hover {
       transform: none;
     }

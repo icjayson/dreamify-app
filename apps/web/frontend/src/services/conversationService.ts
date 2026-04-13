@@ -14,6 +14,7 @@ export interface ConversationChatRequest {
     selected_asset_ids?: string[];
   };
   model?: 'pro' | 'fast';
+  template_id?: string;
 }
 
 export interface ConversationChatResponse {

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { BUILTIN_TEMPLATES } from "@/constants/builtinTemplates";
+import TemplateColorPreview from "@/components/templates/TemplateColorPreview";
 
 interface TemplateModalProps {
   open: boolean;
@@ -11,7 +13,7 @@ interface Template {
   id: string;
   title: string;
   description: string;
-  image: string;
+  suggestedTheme: string;
   category: string;
 }
 
@@ -87,72 +89,14 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { }
   };
 
-  // Hardcoded template data
-  const templates: Template[] = [
-    {
-      id: "1",
-      title: "Sales Dashboard",
-      description: "Track sales performance, revenue trends, and conversion metrics",
-      image: "/template-demo-1.png",
-      category: "Sales"
-    },
-    {
-      id: "2",
-      title: "Marketing Analytics",
-      description: "Monitor campaign performance, user acquisition, and engagement",
-      image: "/template-demo-2.png",
-      category: "Marketing"
-    },
-    {
-      id: "3",
-      title: "Financial Overview",
-      description: "Analyze revenue, expenses, and financial health indicators",
-      image: "/template-demo-3.png",
-      category: "Finance"
-    },
-    {
-      id: "4",
-      title: "Customer Insights",
-      description: "Understand customer behavior, satisfaction, and retention",
-      image: "/template-demo-4.jpeg",
-      category: "Customer"
-    },
-    {
-      id: "5",
-      title: "Operations Metrics",
-      description: "Monitor operational efficiency and key performance indicators",
-      image: "/template-demo-5.png",
-      category: "Operations"
-    },
-    {
-      id: "6",
-      title: "Product Analytics",
-      description: "Track product usage, feature adoption, and user engagement",
-      image: "/template-demo-6.jpeg",
-      category: "Product"
-    },
-    {
-      id: "7",
-      title: "Revenue Tracking",
-      description: "Monitor revenue streams, growth rates, and profitability",
-      image: "/template-demo-7.jpeg",
-      category: "Revenue"
-    },
-    {
-      id: "8",
-      title: "User Engagement",
-      description: "Analyze user activity, session data, and engagement patterns",
-      image: "/template-demo-8.jpeg",
-      category: "Engagement"
-    },
-    {
-      id: "9",
-      title: "Performance Monitor",
-      description: "Track system performance, uptime, and technical metrics",
-      image: "/template-demo-9.jpg",
-      category: "Performance"
-    }
-  ];
+  // Map builtin templates to internal Template interface with theme previews
+  const templates: Template[] = BUILTIN_TEMPLATES.map((t) => ({
+    id: t.id,
+    title: t.name,
+    description: t.description,
+    suggestedTheme: t.suggested_theme,
+    category: t.category
+  }));
 
   const handleTemplateClick = (template: Template) => {
     if (selectedTemplate?.id === template.id) {
@@ -208,19 +152,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
                           className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer hover:scale-[102%] transition-all duration-300 group ${selectedTemplate?.id === template.id ? 'ring-2 ring-primary' : ''
                             }`}
                         >
-                          <img
-                            src={template.image}
-                            alt={template.title}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
-                              if (nextElement) nextElement.style.display = 'flex';
-                            }}
-                          />
-                          <div className="w-full h-full bg-primary/20 flex items-center justify-center text-primary text-4xl font-medium" style={{ display: 'none' }}>
-                            {template.category.charAt(0)}
-                          </div>
+                          <TemplateColorPreview theme={template.suggestedTheme} className="w-full h-full" />
 
                           {/* Selected badge */}
                           {selectedTemplate?.id === template.id && (
@@ -268,11 +200,6 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
                         </div>
                       ))}
                     </div>
-                  </div>
-                  {/* Coming Soon Overlay */}
-                  <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex flex-col gap-4 items-center justify-center">
-                    <img src="/logo-watermark.png" alt="Dreamify" className="w-32 h-32 object-contain" />
-                    <p className="text-2xl font-bold text-white tracking-wide">Template is coming soon</p>
                   </div>
                 </div>
 
@@ -326,19 +253,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
                     className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer hover:scale-[102%] transition-all duration-300 group ${selectedTemplate?.id === template.id ? 'ring-2 ring-primary' : ''
                       }`}
                   >
-                    <img
-                      src={template.image}
-                      alt={template.title}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
-                        if (nextElement) nextElement.style.display = 'flex';
-                      }}
-                    />
-                    <div className="w-full h-full bg-primary/20 flex items-center justify-center text-primary text-6xl font-medium" style={{ display: 'none' }}>
-                      {template.category.charAt(0)}
-                    </div>
+                    <TemplateColorPreview theme={template.suggestedTheme} className="w-full h-full" />
 
                     {/* Selected badge */}
                     {selectedTemplate?.id === template.id && (
@@ -386,11 +301,6 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
                   </div>
                 ))}
               </div>
-            </div>
-            {/* Coming Soon Overlay */}
-            <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex flex-col gap-4 items-center justify-center">
-              <img src="/logo-watermark.png" alt="Dreamify" className="w-32 h-32 object-contain" />
-              <p className="text-3xl font-bold text-white tracking-wide">Template is coming soon</p>
             </div>
           </div>
 

@@ -1,5 +1,6 @@
 import { TableColumn } from "@/types/dashboard";
 import { useState, useMemo } from "react";
+import { getStyleVariantProps, type ChartStyleVariant } from "@/utils/chartStyling";
 
 interface TopProductsTableProps {
   title: string;
@@ -15,6 +16,7 @@ interface TopProductsTableProps {
     rowBg?: string;
     rowAltBg?: string;
     borderColor?: string;
+    chartStyle?: ChartStyleVariant;
   };
   className?: string;
   style?: React.CSSProperties;
@@ -68,11 +70,13 @@ const Table = ({
   const hasStructure = Array.isArray(columns) && columns.length > 0;
   const hasData = Array.isArray(data) && data.length > 0;
   const tile = styling?.tile || {};
+  const variantProps = getStyleVariantProps(styling?.chartStyle || 'rounded');
   const titleColor = 'var(--title-color)';
   const descriptionColor = 'var(--description-color)';
   const tileStyle = {
-    borderRadius: tile.borderRadius ?? 12,
-    backgroundColor: 'var(--bg-card-color)',
+    borderRadius: tile.borderRadius ?? variantProps.cardBorderRadius,
+    backgroundColor: variantProps.containerHasBackground ? 'var(--bg-card-color)' : 'transparent',
+    boxShadow: variantProps.cardBoxShadow,
     color: titleColor
   } as React.CSSProperties;
 

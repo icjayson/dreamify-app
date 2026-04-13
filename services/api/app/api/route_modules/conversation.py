@@ -57,6 +57,7 @@ class ConversationChatRequest(BaseModel):
     # Metadata for user node - used for selective asset processing
     user_node_metadata: Optional[Dict[str, Any]] = None
     model: Optional[str] = "fast"
+    template_id: Optional[str] = None
 
 
 class ConversationChatResponse(BaseModel):
@@ -354,6 +355,7 @@ async def conversation_chat(
         "project_id": request.project_id,
         "user_id": user_id,
         "model": resolved_model,
+        "template_id": request.template_id,
     }
 
     try:

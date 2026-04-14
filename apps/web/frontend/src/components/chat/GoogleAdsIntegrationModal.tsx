@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { integrationService, GoogleAdsAccount } from '@/services/integrationService';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, CalendarIcon, Link2 } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, Link2, ShieldCheck } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -11,6 +11,9 @@ import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
 import { fileService } from '@/services/fileService';
 import type { AssetRecord } from '@/services/fileService';
+import { useGoogleConnectorAuth } from '@/hooks/useGoogleConnectorAuth';
+import { GOOGLE_CONNECTOR_SCOPES } from '@/constants/googleScopes';
+import { sanitizeConnectorError, isOAuthScopeError } from '@/utils/connectorErrors';
 
 const DATE_PRESETS = [
   { value: 'last_7d', label: 'Last 7 days' },
@@ -21,7 +24,7 @@ const DATE_PRESETS = [
   { value: 'custom', label: 'Custom range' },
 ];
 
-type ModalState = 'checking' | 'disconnected' | 'connected';
+type ModalState = 'checking' | 'needs_scopes' | 'connected';
 
 export default function GoogleAdsIntegrationModal() {
   const {
@@ -32,8 +35,13 @@ export default function GoogleAdsIntegrationModal() {
     addFiles,
   } = useChatStore();
 
-  const openAccountCenter = () =>
-    window.dispatchEvent(new CustomEvent('dreamify:open-account-center', { detail: { tab: 'account' } }));
+  const {
+    isGoogleLinked,
+    isAuthorizing,
+    error: authError,
+    requestScopes,
+    clearError: clearAuthError,
+  } = useGoogleConnectorAuth({ connectorKey: 'google-ads' });
 
   // Connection state machine
   const [modalState, setModalState] = useState<ModalState>('checking');
@@ -60,7 +68,7 @@ export default function GoogleAdsIntegrationModal() {
 
   useEffect(() => {
     if (isOpen) {
-      checkConnectionStatus();
+      initModal();
     } else {
       resetState();
     }
@@ -76,6 +84,13 @@ export default function GoogleAdsIntegrationModal() {
     setError(null);
     setEmptyRowsDialog(null);
     setDiscardingEmpty(false);
+    clearAuthError();
+  };
+
+  const initModal = async () => {
+    // Try loading data immediately (optimistic)
+    // If backend says token is bad, we'll show the grant button
+    await checkConnectionStatus();
   };
 
   const checkConnectionStatus = async () => {
@@ -90,27 +105,27 @@ export default function GoogleAdsIntegrationModal() {
         }
         setModalState('connected');
       } else {
-        const errMsg = response.error || 'Failed to fetch Google Ads accounts.';
-        setError(errMsg);
-        // Detect OAuth/token issues
-        const isDeveloperTokenError = errMsg.toLowerCase().includes('developer token') || errMsg.toLowerCase().includes('developer-token');
-        const isTokenError = !isDeveloperTokenError && (
-          errMsg.toLowerCase().includes('expired') || 
-          errMsg.toLowerCase().includes('reconnect') ||
-          errMsg.toLowerCase().includes('oauth') ||
-          errMsg.toLowerCase().includes('permissions')
-        );
-          
-        if (isTokenError) {
-          setModalState('disconnected');
+        const rawErr = response.error || 'Failed to fetch Google Ads accounts.';
+        // Developer token errors are config issues, not user scope issues
+        const isDeveloperTokenError = /developer.token/i.test(rawErr);
+        if (!isDeveloperTokenError && isOAuthScopeError(rawErr)) {
+          setError(sanitizeConnectorError(rawErr, 'Google Ads'));
+          setModalState('needs_scopes');
         } else {
-          setModalState('connected'); // we stay in connected to show the specific error
+          setError(sanitizeConnectorError(rawErr, 'Google Ads'));
+          setModalState('connected');
         }
       }
     } catch (err) {
-      setError('An unexpected error occurred while fetching accounts.');
+      setError('Something went wrong while connecting to Google Ads. Please try again.');
       setModalState('connected');
     }
+  };
+
+  const handleGrantAccess = async () => {
+    await requestScopes(GOOGLE_CONNECTOR_SCOPES['Google Ads']);
+    // If requestScopes redirected, we won't reach here.
+    await checkConnectionStatus();
   };
 
   const handleSync = async () => {
@@ -160,11 +175,11 @@ export default function GoogleAdsIntegrationModal() {
         columnCount: result.column_count,
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'An unexpected error occurred during sync.';
-      if (message.toLowerCase().includes('reconnect') || message.toLowerCase().includes('revoked')) {
-        setModalState('disconnected');
+      const rawMsg = err instanceof Error ? err.message : 'An unexpected error occurred during sync.';
+      if (isOAuthScopeError(rawMsg)) {
+        setModalState('needs_scopes');
       }
-      setError(message);
+      setError(sanitizeConnectorError(rawMsg, 'Google Ads'));
     } finally {
       setSyncing(false);
     }
@@ -207,6 +222,8 @@ export default function GoogleAdsIntegrationModal() {
     setOpen(false);
   };
 
+  const displayError = authError || error;
+
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -215,7 +232,7 @@ export default function GoogleAdsIntegrationModal() {
             <>
               <DialogHeader>
                 <div className="flex items-center gap-3 mb-1">
-                  <img src="/google-ads.svg" alt="Google Ads Logo" className="w-8 h-8 object-contain" />
+                  <img src="/google-ads.png" alt="Google Ads Logo" className="w-8 h-8 object-contain" />
                   <DialogTitle className="text-xl font-semibold">Connect Google Ads</DialogTitle>
                 </div>
                 <DialogDescription className="text-gray-400 text-sm">
@@ -224,47 +241,42 @@ export default function GoogleAdsIntegrationModal() {
               </DialogHeader>
 
               <div className="py-6 space-y-4">
-                {modalState === 'checking' && (
+                {(modalState === 'checking' || isAuthorizing) && (
                   <div className="flex flex-col items-center justify-center py-8 text-gray-400">
                     <Loader2 className="w-8 h-8 animate-spin mb-2 text-[#4285F4]" />
-                    <p className="text-sm">Checking connection…</p>
+                    <p className="text-sm">
+                      {isAuthorizing ? 'Requesting Google Ads access…' : 'Checking connection…'}
+                    </p>
                   </div>
                 )}
 
-                {modalState === 'disconnected' && (
-                  <div className="space-y-4">
-                    <div className="p-5 bg-[#4285F4]/10 border border-[#4285F4]/20 rounded-lg flex flex-col gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#4285F4]/20 flex items-center justify-center shrink-0">
-                          <AlertCircle className="w-4 h-4 text-[#4285F4]" />
-                        </div>
-                        <p className="text-sm font-medium text-blue-300">Google Ads access required</p>
+                {modalState === 'needs_scopes' && !isAuthorizing && (
+                  <div className="p-5 bg-[#4285F4]/10 border border-[#4285F4]/20 rounded-lg flex flex-col gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#4285F4]/20 flex items-center justify-center shrink-0">
+                        <ShieldCheck className="w-4 h-4 text-[#4285F4]" />
                       </div>
-                      <ol className="space-y-2 text-xs text-gray-300 list-none">
-                        <li className="flex gap-2">
-                          <span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">1</span>
-                          <span>Click <strong className="text-white">"Go to Account Settings"</strong> below</span>
-                        </li>
-                        <li className="flex gap-2">
-                          <span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">2</span>
-                          <span>Under <strong className="text-white">Connected accounts</strong>, click <strong className="text-white">···</strong> next to Google → <strong className="text-white">Disconnect</strong></span>
-                        </li>
-                        <li className="flex gap-2">
-                          <span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">3</span>
-                          <span>Reconnect your Google account and <strong className="text-white">allow Google Ads access</strong> when prompted</span>
-                        </li>
-                        <li className="flex gap-2">
-                          <span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">4</span>
-                          <span>Come back and click <strong className="text-white">Connect Google Ads</strong> again</span>
-                        </li>
-                      </ol>
-                      <Button
-                        onClick={() => { onClose(); openAccountCenter(); }}
-                        className="bg-white text-black hover:bg-gray-100 text-sm font-medium w-full"
-                      >
-                        Go to Account Settings →
-                      </Button>
+                      <div>
+                        <p className="text-sm font-medium text-blue-300">Google Ads access required</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {isGoogleLinked
+                            ? 'Grant Ads permission to your connected Google account.'
+                            : 'Connect your Google account and grant Ads permission.'}
+                        </p>
+                      </div>
                     </div>
+                    {displayError && (
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>{displayError}</span>
+                      </div>
+                    )}
+                    <Button
+                      onClick={handleGrantAccess}
+                      className="bg-white text-black hover:bg-gray-100 text-sm font-medium w-full"
+                    >
+                      {isGoogleLinked ? 'Grant Ads Access' : 'Connect Google Account'}
+                    </Button>
                   </div>
                 )}
 
@@ -277,15 +289,6 @@ export default function GoogleAdsIntegrationModal() {
                         </div>
                         <span className="text-sm font-medium truncate text-white">Google account connected</span>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-gray-400 hover:text-white hover:bg-white/10 px-2"
-                        onClick={() => { onClose(); openAccountCenter(); }}
-                      >
-                        Manage
-                      </Button>
                     </div>
 
                     {error ? (

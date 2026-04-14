@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { integrationService } from '@/services/integrationService';
-import { Loader2, AlertCircle, RotateCcw, FileSpreadsheet, X, RefreshCw, Plus } from 'lucide-react';
+import { Loader2, AlertCircle, FileSpreadsheet, RefreshCw, Plus, ShieldCheck } from 'lucide-react';
 import { useChatStore } from '@/chat/useChatStore';
 import { cn } from '@/lib/utils';
+import { useGoogleConnectorAuth } from '@/hooks/useGoogleConnectorAuth';
+import { GOOGLE_CONNECTOR_SCOPES } from '@/constants/googleScopes';
+import { sanitizeConnectorError, isOAuthScopeError } from '@/utils/connectorErrors';
 
 declare global {
   interface Window {
@@ -25,17 +28,27 @@ export default function GoogleSheetsIntegrationModal() {
     currentProjectId
   } = useChatStore();
 
+  const {
+    isGoogleLinked,
+    isAuthorizing,
+    error: authError,
+    requestScopes,
+    hasScopes,
+    clearError: clearAuthError,
+  } = useGoogleConnectorAuth({ connectorKey: 'google-sheets' });
+
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oauthToken, setOAuthToken] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
+  const [needsScopes, setNeedsScopes] = useState(false);
 
   const onClose = () => setOpen(false);
 
   useEffect(() => {
-    console.log('GoogleSheetsModal Effect - isOpen:', isOpen, 'hasToken:', !!oauthToken, 'hasFile:', !!selectedFileName);
     if (isOpen) {
+      // Load Google Picker API
       if (!window.google) {
         const script = document.createElement('script');
         script.src = 'https://apis.google.com/js/api.js';
@@ -47,31 +60,59 @@ export default function GoogleSheetsIntegrationModal() {
         window.gapi.load('picker', { callback: () => console.log('Picker loaded') });
       }
 
-      // Only load token if we don't have one and don't have a file selected yet
+      // Pre-check: Picker API needs drive.file scope client-side.
+      // If scope is missing, show grant button immediately.
+      const requiredScopes = GOOGLE_CONNECTOR_SCOPES['Google Sheets'];
+      if (!isGoogleLinked || !hasScopes(requiredScopes)) {
+        setNeedsScopes(true);
+        setError(
+          isGoogleLinked
+            ? 'Google Drive file access is required to browse your spreadsheets.'
+            : 'Connect your Google account to browse your spreadsheets.'
+        );
+        return;
+      }
+
+      // Scopes look good — load the token
       if (!oauthToken && !selectedFileName && !loading) {
         loadToken();
       }
     } else {
       setOAuthToken(null);
       setError(null);
+      setNeedsScopes(false);
+      clearAuthError();
     }
-  }, [isOpen, selectedFileName]); // oauthToken intentionally left out to avoid loops, loading as well
+  }, [isOpen, selectedFileName, isGoogleLinked, hasScopes]);
 
   const loadToken = async () => {
     setLoading(true);
     setError(null);
+    setNeedsScopes(false);
     try {
       const response = await integrationService.getGoogleOAuthToken();
       if (response.success && response.token) {
         setOAuthToken(response.token);
       } else {
-        setError(response.error || 'Failed to authenticate with Google.');
+        const rawErr = response.error || 'Failed to authenticate with Google.';
+        if (isOAuthScopeError(rawErr)) {
+          setError(sanitizeConnectorError(rawErr, 'Google Sheets'));
+          setNeedsScopes(true);
+        } else {
+          setError(sanitizeConnectorError(rawErr, 'Google Sheets'));
+        }
       }
     } catch (err) {
-      setError('An unexpected error occurred.');
+      setError('Something went wrong while connecting to Google Sheets. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGrantAccess = async () => {
+    await requestScopes(GOOGLE_CONNECTOR_SCOPES['Google Sheets']);
+    // If requestScopes redirected, we won't reach here.
+    await loadToken();
   };
 
   const handleOpenPicker = () => {
@@ -106,8 +147,6 @@ export default function GoogleSheetsIntegrationModal() {
             setIsPicking(false);
             setOpen(true); 
             
-            // SIGNIFICANT timeout ensures the Picker UI is gone and focus is back 
-            // before we trigger a React paint, making it more reliable.
             setTimeout(() => {
               console.log('Picker data received, updating state:', doc.name, doc.id);
               setGoogleSheetsFileId(doc.id);
@@ -118,7 +157,6 @@ export default function GoogleSheetsIntegrationModal() {
           } else if (data.action === 'cancel' || data.action === 'close' || (window.google.picker.Action && (data.action === window.google.picker.Action.CANCEL))) {
             console.log('Picker cancelled or closed');
             setIsPicking(false);
-            // Re-open/ensure open after picker closes
             setTimeout(() => setOpen(true), 100);
           } else {
             console.log('Picker action:', data.action);
@@ -152,10 +190,10 @@ export default function GoogleSheetsIntegrationModal() {
     }
   };
 
+  const displayError = authError || error;
+
   return (
     <Dialog modal={!isPicking} open={isOpen} onOpenChange={(open) => {
-      console.log('Modal onOpenChange:', open, 'isPicking:', isPicking);
-      // Do NOT close if we are in picking mode (unless it's an explicit close we want to allow)
       if (!open && isPicking) return;
       if (!open) onClose();
     }}>
@@ -173,10 +211,42 @@ export default function GoogleSheetsIntegrationModal() {
         </DialogHeader>
 
         <div className="py-6">
-          {loading ? (
+          {/* Loading / Authorizing state */}
+          {(loading || isAuthorizing) ? (
             <div className="flex flex-col items-center justify-center py-8 text-gray-400">
               <Loader2 className="w-8 h-8 animate-spin mb-2 text-green-500" />
-              <p className="text-sm">Authenticating...</p>
+              <p className="text-sm">
+                {isAuthorizing ? 'Requesting Google Drive access…' : 'Authenticating...'}
+              </p>
+            </div>
+          ) : needsScopes ? (
+            /* Backend says token is bad — show Grant Access button */
+            <div className="p-5 bg-green-500/10 border border-green-500/20 rounded-lg flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-green-300">Google Drive access required</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {isGoogleLinked
+                      ? 'Grant Drive file permission to your connected Google account.'
+                      : 'Connect your Google account and grant Drive file permission.'}
+                  </p>
+                </div>
+              </div>
+              {displayError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>{displayError}</span>
+                </div>
+              )}
+              <Button
+                onClick={handleGrantAccess}
+                className="bg-white text-black hover:bg-gray-100 text-sm font-medium w-full"
+              >
+                {isGoogleLinked ? 'Grant Drive Access' : 'Connect Google Account'}
+              </Button>
             </div>
           ) : (
             <div className="space-y-4">
@@ -223,10 +293,10 @@ export default function GoogleSheetsIntegrationModal() {
                 </div>
               )}
 
-              {error && (
+              {displayError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm mt-2">
                   <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                  <p>{error}</p>
+                  <p>{displayError}</p>
                 </div>
               )}
             </div>
@@ -246,7 +316,7 @@ export default function GoogleSheetsIntegrationModal() {
           <Button
             type="button"
             onClick={handleSync}
-            disabled={!selectedFileId || syncing}
+            disabled={!selectedFileId || syncing || needsScopes}
             className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-md transition-colors"
           >
             {syncing ? (

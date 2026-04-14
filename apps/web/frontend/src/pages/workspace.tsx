@@ -261,6 +261,31 @@ export default function WorkspacePage() {
 
   const displayName = user?.fullName || user?.firstName || "My Workspace";
 
+  // ── Post-redirect: auto-open connector modal after OAuth consent ────────────
+  useEffect(() => {
+    const connectorParam = searchParams.get('connector');
+    if (!connectorParam) return;
+
+    const CONNECTOR_MODAL_MAP: Record<string, (open: boolean) => void> = {
+      'ga4': setGA4ModalOpen,
+      'google-sheets': setGoogleSheetsModalOpen,
+      'google-ads': setGoogleAdsModalOpen,
+      'firebase': setFirebaseModalOpen,
+    };
+
+    const openModal = CONNECTOR_MODAL_MAP[connectorParam];
+    if (openModal) {
+      setTimeout(() => openModal(true), 500);
+    }
+
+    // Clean up the query param from URL
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('connector');
+    const remaining = newParams.toString();
+    const newUrl = `${window.location.pathname}${remaining ? '?' + remaining : ''}`;
+    window.history.replaceState({}, '', newUrl);
+  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen]);
+
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="h-screen h-[100dvh] overflow-hidden bg-muted flex">

@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, useLocation } from "react-router-dom";
-import { SignedIn, SignedOut } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
 import { PolarProvider } from "./contexts/PolarContext";
 import ReactGA from "react-ga4";
 import { useEffect } from "react";
@@ -92,6 +92,7 @@ const AppContent = () => {
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/admin/conversation/:conversationId" element={<AdminConversationPage />} />
         <Route path="/templates" element={<TemplateGalleryPage />} />
+        <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -3,12 +3,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { integrationService, GA4Account } from '@/services/integrationService';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, CalendarIcon } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, ShieldCheck } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
+import { useGoogleConnectorAuth } from '@/hooks/useGoogleConnectorAuth';
+import { GOOGLE_CONNECTOR_SCOPES } from '@/constants/googleScopes';
+import { sanitizeConnectorError, isOAuthScopeError } from '@/utils/connectorErrors';
 
 export default function GA4IntegrationModal() {
   const { 
@@ -18,12 +21,18 @@ export default function GA4IntegrationModal() {
     syncGA4 
   } = useChatStore();
 
+  const {
+    isGoogleLinked,
+    isAuthorizing,
+    error: authError,
+    requestScopes,
+    clearError: clearAuthError,
+  } = useGoogleConnectorAuth({ connectorKey: 'ga4' });
+
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isOAuthError, setIsOAuthError] = useState(false);
-  const openAccountCenter = () =>
-    window.dispatchEvent(new CustomEvent('dreamify:open-account-center', { detail: { tab: 'account' } }));
+  const [needsScopes, setNeedsScopes] = useState(false);
 
   const [accounts, setAccounts] = useState<GA4Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
@@ -38,43 +47,49 @@ export default function GA4IntegrationModal() {
     if (isOpen) {
       loadProperties();
     } else {
-      // Reset state on close
       setAccounts([]);
       setSelectedAccountId('');
       setSelectedPropertyId('');
       setStartDate(subDays(new Date(), 30));
       setEndDate(new Date());
       setError(null);
-      setIsOAuthError(false);
+      setNeedsScopes(false);
+      clearAuthError();
     }
   }, [isOpen]);
 
   const loadProperties = async () => {
     setLoading(true);
     setError(null);
+    setNeedsScopes(false);
     try {
       const response = await integrationService.fetchGoogleAnalyticsProperties();
       if (response.success) {
         setAccounts(response.accounts || []);
-        setIsOAuthError(false);
         if (response.accounts && response.accounts.length > 0) {
           setSelectedAccountId(response.accounts[0].account_id);
         }
       } else {
-        const errMsg = response.error || 'Failed to fetch Google Analytics properties.';
-        setError(errMsg);
-        // Detect OAuth/token issues
-        const isTokenError = errMsg.toLowerCase().includes('expired') || 
-          errMsg.toLowerCase().includes('not found') ||
-          errMsg.toLowerCase().includes('reconnect') ||
-          errMsg.toLowerCase().includes('oauth');
-        setIsOAuthError(isTokenError);
+        const rawErr = response.error || 'Failed to fetch Google Analytics properties.';
+        if (isOAuthScopeError(rawErr)) {
+          setError(sanitizeConnectorError(rawErr, 'Google Analytics'));
+          setNeedsScopes(true);
+        } else {
+          setError(sanitizeConnectorError(rawErr, 'Google Analytics'));
+        }
       }
     } catch (err) {
-      setError('An unexpected error occurred while fetching properties.');
+      setError('Something went wrong while connecting to Google Analytics. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGrantAccess = async () => {
+    await requestScopes(GOOGLE_CONNECTOR_SCOPES.GA4);
+    // If requestScopes redirected, we won't reach here.
+    // If it resolved without redirect (rare), retry loading.
+    await loadProperties();
   };
 
   const handleSync = async () => {
@@ -108,6 +123,7 @@ export default function GA4IntegrationModal() {
 
   const selectedAccount = accounts.find(a => a.account_id === selectedAccountId);
   const availableProperties = selectedAccount?.properties || [];
+  const displayError = authError || error;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -125,42 +141,46 @@ export default function GA4IntegrationModal() {
         </DialogHeader>
 
         <div className="py-6 space-y-4">
-          {loading ? (
+          {/* Loading / Authorizing state */}
+          {(loading || isAuthorizing) ? (
             <div className="flex flex-col items-center justify-center py-8 text-gray-400">
               <Loader2 className="w-8 h-8 animate-spin mb-2 text-orange-500" />
-              <p className="text-sm">Loading accounts and properties...</p>
+              <p className="text-sm">
+                {isAuthorizing ? 'Requesting Google Analytics access…' : 'Loading accounts and properties...'}
+              </p>
             </div>
-          ) : error ? (
-            isOAuthError ? (
-              <div className="p-5 bg-orange-500/10 border border-orange-500/20 rounded-lg flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0">
-                    <AlertCircle className="w-4 h-4 text-orange-400" />
-                  </div>
-                  <p className="text-sm font-medium text-orange-300">Google Analytics access required</p>
+          ) : needsScopes ? (
+            /* Backend says token is bad — show Grant Access button */
+            <div className="p-5 bg-orange-500/10 border border-orange-500/20 rounded-lg flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4 text-orange-400" />
                 </div>
-                <ol className="space-y-2 text-xs text-gray-300 list-none">
-                  <li className="flex gap-2"><span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">1</span><span>Click <strong className="text-white">"Go to Account Settings"</strong> below</span></li>
-                  <li className="flex gap-2"><span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">2</span><span>Under <strong className="text-white">Connected accounts</strong>, click <strong className="text-white">···</strong> next to Google → <strong className="text-white">Disconnect</strong></span></li>
-                  <li className="flex gap-2"><span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">3</span><span>Reconnect your Google account and <strong className="text-white">allow Analytics access</strong> when prompted</span></li>
-                  <li className="flex gap-2"><span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 text-[10px] font-bold">4</span><span>Come back and click <strong className="text-white">Connect Google Analytics</strong> again</span></li>
-                </ol>
-                <Button
-                  onClick={() => { onClose(); openAccountCenter(); }}
-                  className="bg-white text-black hover:bg-gray-100 text-sm font-medium w-full"
-                >
-                  Go to Account Settings →
-                </Button>
+                <div>
+                  <p className="text-sm font-medium text-orange-300">Google Analytics access required</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {isGoogleLinked
+                      ? 'Grant Analytics permission to your connected Google account.'
+                      : 'Connect your Google account and grant Analytics permission.'}
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3 text-red-400">
-                <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 text-sm">{error}</div>
-              </div>
-            )
+              {displayError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>{displayError}</span>
+                </div>
+              )}
+              <Button
+                onClick={handleGrantAccess}
+                className="bg-white text-black hover:bg-gray-100 text-sm font-medium w-full"
+              >
+                {isGoogleLinked ? 'Grant Analytics Access' : 'Connect Google Account'}
+              </Button>
+            </div>
           ) : accounts.length === 0 ? (
             <div className="text-center py-6 text-gray-400 text-sm border border-white/10 rounded-lg bg-white/5">
-              No Google Analytics accounts found. Please make sure you have connected a Google account with GA4 access.
+              No Google Analytics accounts found. Make sure your Google account has GA4 access.
             </div>
           ) : (
             <>
@@ -269,6 +289,14 @@ export default function GA4IntegrationModal() {
               </div>
             </>
           )}
+
+          {/* Show non-token errors inline when data loaded but had issues */}
+          {!needsScopes && !loading && displayError && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3 text-red-400">
+              <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 text-sm">{displayError}</div>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="sm:justify-end gap-2">
@@ -284,7 +312,7 @@ export default function GA4IntegrationModal() {
           <Button
             type="button"
             onClick={handleSync}
-            disabled={loading || syncing || !selectedPropertyId || accounts.length === 0}
+            disabled={loading || syncing || !selectedPropertyId || accounts.length === 0 || needsScopes}
             className="bg-orange-500 hover:bg-orange-600 text-white font-medium px-4 py-2 rounded-md transition-colors"
           >
             {syncing ? (

@@ -4,6 +4,50 @@ import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService } from '@/services/processingService';
 import { ConversationChatRequest } from '@/services/conversationService';
 import type { AssetRecord } from '@/services/fileService';
+import { BUILTIN_TEMPLATES } from '@/constants/builtinTemplates';
+
+// ---------------------------------------------------------------------------
+// Per-dashboard template persistence
+// Each dashboard's template ID is stored in a map so it survives page refresh.
+// ---------------------------------------------------------------------------
+const DASHBOARD_TEMPLATE_MAP_KEY = 'dreamify_dashboard_template_map';
+
+type SelectedTemplate = { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string };
+
+function getDashboardTemplateMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_TEMPLATE_MAP_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveDashboardTemplateId(dashboardId: string, templateId: string): void {
+  try {
+    const map = getDashboardTemplateMap();
+    map[dashboardId] = templateId;
+    localStorage.setItem(DASHBOARD_TEMPLATE_MAP_KEY, JSON.stringify(map));
+  } catch { /* ignore */ }
+}
+
+function getTemplateIdForDashboard(dashboardId: string): string | null {
+  try {
+    return getDashboardTemplateMap()[dashboardId] ?? null;
+  } catch { return null; }
+}
+
+/** Resolve a stored template ID back to the full template object using the canonical list. */
+function resolveTemplate(templateId: string | null): SelectedTemplate | null {
+  if (!templateId) return null;
+  const found = BUILTIN_TEMPLATES.find((t) => t.id === templateId);
+  if (!found) return null;
+  return {
+    id: found.id,
+    title: found.name,
+    description: found.description,
+    category: found.category,
+    suggestedTheme: found.suggested_theme,
+  };
+}
 
 
 export interface UploadedFile {
@@ -105,6 +149,8 @@ interface ChatState {
 
   // Template state
   selectedTemplate: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string } | null;
+  /** True only when the user explicitly chose a template before submitting. False when template is restored from a saved dashboard. */
+  isTemplatePending: boolean;
 
   // Abort controller for stopping generation
   abortController: AbortController | null;
@@ -260,6 +306,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   originalFileBlob: null,
   originalFileName: null,
   selectedTemplate: (() => { try { const s = localStorage.getItem('dreamify_selected_template'); return s ? JSON.parse(s) : null; } catch { return null; } })(),
+  isTemplatePending: (() => { try { return !!localStorage.getItem('dreamify_selected_template'); } catch { return false; } })(),
   abortController: null,
   pendingAction: null,
   isGoogleSheetsModalOpen: false,
@@ -322,14 +369,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setDashboardThumbnail: (dashboardId, thumbnailUrl) => set((state) => ({
     dashboardThumbnails: { ...state.dashboardThumbnails, [dashboardId]: thumbnailUrl }
   })),
-  setSelectedDashboardId: (dashboardId) => set({ selectedDashboardId: dashboardId }),
+  setSelectedDashboardId: (dashboardId) => {
+    const restoredTemplate = dashboardId ? resolveTemplate(getTemplateIdForDashboard(dashboardId)) : null;
+    set({ selectedDashboardId: dashboardId, selectedTemplate: restoredTemplate });
+  },
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template) => {
     try {
       if (template) localStorage.setItem('dreamify_selected_template', JSON.stringify(template));
       else localStorage.removeItem('dreamify_selected_template');
     } catch { /* ignore */ }
-    set({ selectedTemplate: template });
+    set({ selectedTemplate: template, isTemplatePending: !!template });
   },
   setPendingAction: (action) => set({ pendingAction: action }),
   setSelectedModel: (model) => set({ selectedModel: model }),
@@ -875,6 +925,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 // Set the latest dashboard as selected and update processedData
                 if (dashboardId) {
                   set({ selectedDashboardId: dashboardId, isDashboardOpen: true });
+                  // Persist template association for this dashboard
+                  const currentTemplate = get().selectedTemplate;
+                  if (currentTemplate?.id) {
+                    saveDashboardTemplateId(dashboardId, currentTemplate.id);
+                  }
                   // Update processedData with the new dashboard data (first file for display)
                   const firstFile = get().uploadedFiles[0];
                   if (firstFile) {
@@ -1301,7 +1356,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   }
                 }, 4000);
 
-                // Clear template state after successful dashboard generation
+                // Persist template association for this dashboard, then clear the transient "pending" key
+                const currentTemplate = get().selectedTemplate;
+                if (dashboardId && currentTemplate?.id) {
+                  saveDashboardTemplateId(dashboardId, currentTemplate.id);
+                }
                 try { localStorage.removeItem('dreamify_selected_template'); } catch { }
                 set({ selectedTemplate: null });
               }
@@ -1536,7 +1595,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const lastMsg = restoredMessages[restoredMessages.length - 1];
         const dashId = lastMsg?.dashboardCard?.dashboardId;
         if (dashId) {
-          set({ selectedDashboardId: dashId, isDashboardOpen: true, hasShownInitialDashboard: true, isInitialLoading: false });
+          const restoredTemplateOnResume = resolveTemplate(getTemplateIdForDashboard(dashId));
+          set({ selectedDashboardId: dashId, isDashboardOpen: true, hasShownInitialDashboard: true, isInitialLoading: false, selectedTemplate: restoredTemplateOnResume });
           get().selectDashboard(dashId, projectId).then((data) => {
             if (data && onProcessedDataChange) onProcessedDataChange(data);
           });
@@ -1620,9 +1680,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
 
       if (response?.dashboard_data) {
-        // Clear template when switching to an existing dashboard
+        // Restore the template that was used when this dashboard was generated
+        const restoredTemplate = resolveTemplate(getTemplateIdForDashboard(dashboardId));
         try { localStorage.removeItem('dreamify_selected_template'); } catch { }
-        set({ selectedDashboardId: dashboardId, selectedTemplate: null });
+        set({ selectedDashboardId: dashboardId, selectedTemplate: restoredTemplate });
         // Update file only if one exists in store
         const files = get().uploadedFiles;
         if (files.length > 0) {

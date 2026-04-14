@@ -203,6 +203,7 @@ export default function ProjectPage() {
   const isDashboardOpen = useChatStore((s) => s.isDashboardOpen);
   const setIsDashboardOpen = useChatStore((s) => s.setIsDashboardOpen);
   const isDashboardVisible = (shouldShowDashboard && isDashboardOpen) || (activeTab === 'dashboard');
+  const selectedTemplate = useChatStore((s) => s.selectedTemplate);
   const isUpdatingDashboard = useChatStore((s) => s.isUpdatingDashboard);
   const currentWorkflowStep = useChatStore((s) => s.currentWorkflowStep);
 
@@ -526,7 +527,7 @@ export default function ProjectPage() {
             </div>
             <div className="flex items-center order-2 md:order-3 ml-auto md:ml-0 shrink-0 gap-2">
               <HeaderCreditBadge creditsRemaining={creditsRemaining} monthlyCreditsUsed={creditUsage?.monthly_credits_used} />
-              {isDashboardVisible && (
+              {isDashboardVisible && !selectedTemplate && (
                 <div className="relative" ref={themeDropdownRef}>
                   <button
                     onClick={() => setIsThemeDropdownOpen(prev => !prev)}

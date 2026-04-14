@@ -488,6 +488,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     isListening,
     detectedLanguage,
     selectedTemplate,
+    isTemplatePending,
     currentWorkflowStep,
     priorWorkflowSteps,
     setInputValue,
@@ -1785,10 +1786,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
             )}
 
             {/* Active File, Chart & Template Correlations */}
-            {(stagedFiles.length > 0 || mentionedCharts.length > 0 || selectedTemplate) && (
+            {(stagedFiles.length > 0 || mentionedCharts.length > 0 || (selectedTemplate && isTemplatePending)) && (
               <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                 {/* Template Selection Pill */}
-                {selectedTemplate && (
+                {selectedTemplate && isTemplatePending && (
                   <div className="flex-shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
                     <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-2 transition-all hover:border-accent/40 outline-none">
                       <div className="flex items-center gap-1.5 flex-shrink-0">

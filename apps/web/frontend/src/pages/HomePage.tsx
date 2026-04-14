@@ -957,140 +957,47 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     </Button>
 
                     {dropdownOpen && (
-                      <>
-                        {/* ── Desktop: 4-column grid (lg+) ── */}
-                        <div className="hidden lg:block absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-3">
-                          <div className="flex gap-6">
-                            {/* Col 1: Advertising */}
-                            <div>
-                              <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Advertising</p>
-                              {CONNECTORS.filter(c => c.category === "Advertising Platform").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className={`w-4 h-4 object-contain flex-shrink-0 ${con.name === 'TikTok' ? 'scale-125' : ''}`} />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                            </div>
-                            {/* Col 2: Operations & Database */}
-                            <div>
-                              <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Operations & Database</p>
-                              {CONNECTORS.filter(c => c.category === "Operations & Database").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                            </div>
-                            {/* Col 3: Analytics + Payment & Finance */}
-                            <div>
-                              <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Analytics</p>
-                              {CONNECTORS.filter(c => c.category === "Analytics Platform").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                              <p className="px-1 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Payment & Finance</p>
-                              {CONNECTORS.filter(c => c.category === "Payment & Finance").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                            </div>
-                            {/* Col 4: E-commerce */}
-                            <div>
-                              <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">E-commerce</p>
-                              {CONNECTORS.filter(c => c.category === "E-commerce").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+                      <div className="absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-2 w-52">
+                        <p className="px-2 pt-1 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-white/25">Popular</p>
 
-                        {/* ── Tablet md (2-col) ── */}
-                        <div className="hidden md:block lg:hidden absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-3">
-                          <div className="flex gap-6">
-                            {/* Left col: Advertising + Analytics + Payment */}
-                            <div>
-                              <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Advertising</p>
-                              {CONNECTORS.filter(c => c.category === "Advertising Platform").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                              <p className="px-1 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Analytics</p>
-                              {CONNECTORS.filter(c => c.category === "Analytics Platform").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                              <p className="px-1 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Payment & Finance</p>
-                              {CONNECTORS.filter(c => c.category === "Payment & Finance").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                            </div>
-                            {/* Right col: Operations & Database + E-commerce */}
-                            <div>
-                              <p className="px-1 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Operations & Database</p>
-                              {CONNECTORS.filter(c => c.category === "Operations & Database").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                              <p className="px-1 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">E-commerce</p>
-                              {CONNECTORS.filter(c => c.category === "E-commerce").map(con => (
-                                <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer whitespace-nowrap">
-                                  <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                                  <span className="text-white/90">{con.name}</span>
-                                  {!con.isActive && <span className="text-[10px] text-white/30">(SOON)</span>}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+                        {/* Active connectors */}
+                        {CONNECTORS.filter(c => ['GA4', 'Google Ads', 'Firebase', 'Google Sheets'].includes(c.name)).map(con => (
+                          <button
+                            key={con.name}
+                            onClick={() => handleIntegrationClick(con)}
+                            className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                          >
+                            <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                            <span className="text-white/90">{con.name}</span>
+                          </button>
+                        ))}
 
-                        {/* ── Mobile: vertical scrollable list (< md) ── */}
-                        <div className="md:hidden absolute bottom-full left-0 mb-1 w-64 max-h-80 overflow-y-auto bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg z-10">
-                          <div className="py-1">
-                            {CONNECTOR_CATEGORIES.map((category) => {
-                              const cats = CONNECTORS.filter(c => c.category === category);
-                              if (cats.length === 0) return null;
-                              return (
-                                <div key={category}>
-                                  <div className="px-3 pt-2 pb-1"><span className="text-[10px] font-semibold uppercase tracking-widest text-white/25">{category}</span></div>
-                                  {cats.map(con => (
-                                    <button key={con.name} onClick={() => handleIntegrationClick(con)} className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 rounded-md transition-colors flex items-center cursor-pointer">
-                                      <img src={con.icon} alt={con.name} className={`w-4 h-4 object-cover ${con.name === 'TikTok' ? 'scale-125' : ''}`} />
-                                      {con.name && <span className="pl-2">{con.name}</span>}
-                                      {!con.isActive && <span className="text-xs text-white/30 pl-1">(SOON)</span>}
-                                    </button>
-                                  ))}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
+                        {/* SOON connectors — disabled, toast only */}
+                        {([
+                          { name: 'Meta Ads', icon: '/meta.png', category: 'Advertising Platform' as const },
+                          { name: 'TikTok Ads', icon: '/tiktok.png', category: 'Advertising Platform' as const },
+                        ] as const).map(con => (
+                          <button
+                            key={con.name}
+                            onClick={() => handleIntegrationClick(con)}
+                            className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                          >
+                            <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0 opacity-50" />
+                            <span className="text-white/50">{con.name}</span>
+                            <span className="ml-auto text-[9px] text-white/30">SOON</span>
+                          </button>
+                        ))}
 
-                      </>
+                        <div className="border-t border-white/10 mt-1.5 pt-1.5">
+                          <button
+                            onClick={() => { setDropdownOpen(false); navigate('/workspace?tab=connectors'); }}
+                            className="w-full px-2 py-1.5 text-left text-xs text-white/50 hover:text-white flex items-center gap-1.5 rounded-md hover:bg-white/10 transition-colors"
+                          >
+                            Browse all connectors
+                            <ChevronRight className="w-3 h-3 ml-auto" />
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
 

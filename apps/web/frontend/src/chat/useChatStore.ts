@@ -164,6 +164,7 @@ interface ChatState {
   isStripeModalOpen: boolean;
   isGoogleAdsModalOpen: boolean;
   isFirebaseModalOpen: boolean;
+  isAllConnectorsModalOpen: boolean;
   googleSheetsFileId: string | null;
   googleSheetsFileName: string | null;
 
@@ -217,6 +218,7 @@ interface ChatState {
   setStripeModalOpen: (open: boolean) => void;
   setGoogleAdsModalOpen: (open: boolean) => void;
   setFirebaseModalOpen: (open: boolean) => void;
+  setAllConnectorsModalOpen: (open: boolean) => void;
   setGoogleSheetsFileId: (id: string | null) => void;
   setGoogleSheetsFileName: (name: string | null) => void;
 
@@ -317,6 +319,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isStripeModalOpen: false,
   isGoogleAdsModalOpen: false,
   isFirebaseModalOpen: false,
+  isAllConnectorsModalOpen: false,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
   selectedModel: 'pro',
@@ -391,6 +394,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setStripeModalOpen: (open) => set({ isStripeModalOpen: open }),
   setGoogleAdsModalOpen: (open) => set({ isGoogleAdsModalOpen: open }),
   setFirebaseModalOpen: (open) => set({ isFirebaseModalOpen: open }),
+  setAllConnectorsModalOpen: (open) => set({ isAllConnectorsModalOpen: open }),
   setGoogleSheetsFileId: (id) => {
     console.log('Store: setting googleSheetsFileId:', id);
     set({ googleSheetsFileId: id });

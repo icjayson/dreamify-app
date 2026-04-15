@@ -5,7 +5,7 @@
 import React from 'react';
 import { Treemap, Tooltip, ResponsiveContainer } from 'recharts';
 import { useChartTheme } from '@/hooks/useChartTheme';
-import { CHART_PRESET_THEMES } from '@/utils/chartStyling';
+import { isLightBackground } from '@/utils/chartStyling';
 
 interface RechartsTreemapChartProps {
   title?: string;
@@ -79,9 +79,9 @@ const RechartsTreemapChart: React.FC<RechartsTreemapChartProps> = ({
     return null;
   };
 
-  const isLightTheme = styling?.presetTheme === CHART_PRESET_THEMES.LIGHT;
-  const strokeColor = isLightTheme ? '#e2e8f0' : '#fff';
-  const textColor = isLightTheme ? '#0f172a' : '#fff';
+  const isLight = isLightBackground(styling?.presetTheme);
+  const strokeColor = isLight ? 'var(--border-card-color)' : '#fff';
+  const textColor = isLight ? 'var(--title-color)' : '#fff';
 
   const colorFn = (node: any) => palette[(node.index || 0) % palette.length];
 

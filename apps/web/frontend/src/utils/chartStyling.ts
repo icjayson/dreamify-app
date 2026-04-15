@@ -19,6 +19,14 @@ export const CHART_PRESET_THEMES = {
 
 export type ChartPresetTheme = typeof CHART_PRESET_THEMES[keyof typeof CHART_PRESET_THEMES];
 
+/** Themes whose backgrounds are light-colored — require dark text/labels for contrast. */
+export const LIGHT_BACKGROUND_THEMES = new Set<string>(['default', 'chalk', 'warm']);
+
+/** True when the given theme has a light dashboard/card background. */
+export function isLightBackground(theme: string | undefined): boolean {
+  return LIGHT_BACKGROUND_THEMES.has(theme ?? '');
+}
+
 // Theme color set interface
 export interface ThemeColorSet {
   'highlight-color': string;
@@ -40,7 +48,7 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'border-card-color': '#e2e8f0',
     'title-color': '#0f172a',
     'description-color': '#64748b',
-    'element-color': '#94a3b8',
+    'element-color': '#64748b',
     'data-colors': ['#1e3a5f', '#0d9488', '#d97706', '#dc2626', '#7c3aed', '#0891b2']
   },
   carbon: {
@@ -70,7 +78,7 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'border-card-color': '#e2e8f0',
     'title-color': '#1a1a2e',
     'description-color': '#475569',
-    'element-color': '#94a3b8',
+    'element-color': '#64748b',
     'data-colors': ['#1e40af', '#0d9488', '#d97706', '#dc2626', '#7c3aed', '#0891b2']
   },
   warm: {
@@ -80,7 +88,7 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'border-card-color': '#d4c5b0',
     'title-color': '#1c1005',
     'description-color': '#6b5344',
-    'element-color': '#9c8170',
+    'element-color': '#5c4033',
     'data-colors': ['#b45309', '#0d9488', '#7c3aed', '#1d4ed8', '#dc2626', '#047857']
   },
   ash: {

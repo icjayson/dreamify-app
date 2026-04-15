@@ -5,7 +5,7 @@
 import React from 'react';
 import { Sankey, Tooltip, ResponsiveContainer } from 'recharts';
 import { useChartTheme } from '@/hooks/useChartTheme';
-import { CHART_PRESET_THEMES } from '@/utils/chartStyling';
+import { isLightBackground } from '@/utils/chartStyling';
 
 // Rename to avoid clashing with recharts' internal SankeyData type
 interface SankeyGraph {
@@ -58,8 +58,7 @@ const RechartsSankeyChart: React.FC<RechartsSankeyChartProps> = ({
       : ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
   }, [styling?.colorPalette]);
 
-  const isLightTheme = styling?.presetTheme === CHART_PRESET_THEMES.LIGHT;
-  const nodeStrokeColor = isLightTheme ? '#e2e8f0' : '#fff';
+  const nodeStrokeColor = isLightBackground(styling?.presetTheme) ? 'var(--border-card-color)' : '#fff';
 
   // Normalize config.data: allow string references for source/target
   const sankeyData = React.useMemo(() => {

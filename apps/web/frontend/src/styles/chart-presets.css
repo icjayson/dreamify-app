@@ -19,10 +19,10 @@
   --border-card-color: #e2e8f0;
   --title-color: #0f172a;
   --description-color: #64748b;
-  --element-color: #94a3b8;
+  --element-color: #64748b;
 
   --highlight-color-rgb: 30, 58, 95;
-  --element-color-rgb: 148, 163, 184;
+  --element-color-rgb: 100, 116, 139;
 
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -73,10 +73,10 @@
   --border-card-color: #e2e8f0;
   --title-color: #1a1a2e;
   --description-color: #475569;
-  --element-color: #94a3b8;
+  --element-color: #64748b;
 
   --highlight-color-rgb: 30, 64, 175;
-  --element-color-rgb: 148, 163, 184;
+  --element-color-rgb: 100, 116, 139;
 
   /* Table header — subtle slate on white */
   --table-header-bg: #f1f5f9;
@@ -95,10 +95,10 @@
   --border-card-color: #d4c5b0;
   --title-color: #1c1005;
   --description-color: #6b5344;
-  --element-color: #9c8170;
+  --element-color: #5c4033;
 
   --highlight-color-rgb: 180, 83, 9;
-  --element-color-rgb: 156, 129, 112;
+  --element-color-rgb: 92, 64, 51;
 
   /* Table header — warm neutral */
   --table-header-bg: #ede5da;

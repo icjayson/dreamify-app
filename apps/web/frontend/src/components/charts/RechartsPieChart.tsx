@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { ChartConfiguration } from '@/types/dashboard';
 import { useChartTheme } from '@/hooks/useChartTheme';
-import { assignDatasetColors, CHART_PRESET_THEMES } from '@/utils/chartStyling';
+import { assignDatasetColors, isLightBackground } from '@/utils/chartStyling';
 
 interface RechartsPieChartProps {
   title?: string;
@@ -94,8 +94,7 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
 
   // Get styling classes
   const stylingClasses = getStylingClasses();
-  const isLightTheme = styling?.presetTheme === CHART_PRESET_THEMES.LIGHT;
-  const labelFillColor = isLightTheme ? '#0f172a' : '#fff';
+  const labelFillColor = isLightBackground(styling?.presetTheme) ? 'var(--title-color)' : '#fff';
 
   // Custom tooltip component
   const CustomTooltip = ({ active, payload }: any) => {

@@ -395,6 +395,32 @@ export default function ProjectPage() {
     };
   }, [projectId, hydrateConversation, toast]);
 
+  // ── Post-redirect: auto-open connector modal after OAuth consent ────────────
+  useEffect(() => {
+    const connectorParam = searchParams.get('connector');
+    if (!connectorParam) return;
+
+    const store = useChatStore.getState();
+    const CONNECTOR_MODAL_MAP: Record<string, (open: boolean) => void> = {
+      'ga4': store.setGA4ModalOpen,
+      'google-sheets': store.setGoogleSheetsModalOpen,
+      'google-ads': store.setGoogleAdsModalOpen,
+      'firebase': store.setFirebaseModalOpen,
+    };
+
+    const openModal = CONNECTOR_MODAL_MAP[connectorParam];
+    if (openModal) {
+      // Small delay to ensure Clerk user data is loaded after redirect
+      setTimeout(() => openModal(true), 500);
+    }
+
+    // Clean up the query param from URL
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('connector');
+    const newUrl = `${window.location.pathname}${newParams.toString() ? '?' + newParams.toString() : ''}`;
+    window.history.replaceState({}, '', newUrl);
+  }, [searchParams]);
+
   // Sync processedData from store to local state
   useEffect(() => {
     const processedFile = uploadedFiles.find(f => f.processedData);

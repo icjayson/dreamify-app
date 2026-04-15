@@ -14,14 +14,13 @@ interface PublishModalProps {
   onOpenChange: (open: boolean) => void;
   projectId?: string;
   processedData?: any;
-  isDarkMode?: boolean;
 }
 
 const BASE_DOMAIN = 'dreamify.dev';
 
 const isValidSlug = (s: string) => /^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$/.test(s);
 
-export default function PublishModal({ open, onOpenChange, projectId, processedData, isDarkMode }: PublishModalProps) {
+export default function PublishModal({ open, onOpenChange, projectId, processedData }: PublishModalProps) {
   const [activeTab, setActiveTab] = useState<'share' | 'export'>('share');
   const [slug, setSlug] = useState('dashboard-' + Math.random().toString(16).slice(2, 8));
   const [checking, setChecking] = useState(false);
@@ -679,7 +678,6 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
               processedData={processedData || uploadedFiles.find(f => f.processedData)?.processedData}
               isExporting={true}
               onExportLayoutChange={setExportDidSplit}
-              isDarkMode={isDarkMode}
             />
           </div>
         )}

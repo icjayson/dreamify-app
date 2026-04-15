@@ -1656,6 +1656,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: initialMessages,
       uploadedFiles: [],
       currentConversationId: null,
+      currentProjectId: null,
       isProcessing: false,
       currentWorkflowStep: null,
       priorWorkflowSteps: [],

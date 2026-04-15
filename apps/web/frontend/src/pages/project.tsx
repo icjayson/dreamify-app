@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Download, Pencil, Sparkles, SquareArrowOutUpRight, X, Sun, Moon, ChevronDown } from "lucide-react";
+import { ArrowLeft, Download, Pencil, Sparkles, SquareArrowOutUpRight, X } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
@@ -21,8 +21,6 @@ import { useProjects } from "@/hooks/useProjects";
 import ProjectsSidebar from "@/components/homepage-section/ProjectsSidebar";
 import { PanelRightClose } from "lucide-react";
 
-const grainBg = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E")`;
-
 export default function ProjectPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -36,24 +34,6 @@ export default function ProjectPage() {
   const [renameValue, setRenameValue] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const [isDashboardDarkMode, setIsDashboardDarkMode] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(`dashboard_theme_mode_${projectId || 'default'}`);
-      return saved !== null ? saved === 'true' : false;
-    } catch { return false; }
-  });
-
-  const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
-  const themeDropdownRef = useRef<HTMLDivElement>(null);
-
-  const handleThemeModeSelect = (dark: boolean) => {
-    setIsDashboardDarkMode(dark);
-    setIsThemeDropdownOpen(false);
-    try {
-      localStorage.setItem(`dashboard_theme_mode_${projectId || 'default'}`, String(dark));
-    } catch { /* ignore */ }
-  };
 
   const {
     projects,
@@ -70,25 +50,6 @@ export default function ProjectPage() {
       document.title = "Dreamify";
     };
   }, [projectTitle]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (themeDropdownRef.current && !themeDropdownRef.current.contains(e.target as Node)) {
-        setIsThemeDropdownOpen(false);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsThemeDropdownOpen(false);
-    };
-    if (isThemeDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscape);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isThemeDropdownOpen]);
 
   const startEditingTitle = () => {
     setRenameValue(projectTitle);
@@ -527,91 +488,6 @@ export default function ProjectPage() {
             </div>
             <div className="flex items-center order-2 md:order-3 ml-auto md:ml-0 shrink-0 gap-2">
               <HeaderCreditBadge creditsRemaining={creditsRemaining} monthlyCreditsUsed={creditUsage?.monthly_credits_used} />
-              {isDashboardVisible && !selectedTemplate && (
-                <div className="relative" ref={themeDropdownRef}>
-                  <button
-                    onClick={() => setIsThemeDropdownOpen(prev => !prev)}
-                    className="button-outline h-8 px-2 md:px-3 rounded-md flex items-center gap-1.5"
-                    aria-haspopup="true"
-                    aria-expanded={isThemeDropdownOpen}
-                    aria-label="Theme mode"
-                  >
-                    {isDashboardDarkMode ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
-                    <span className="text-xs text-white/80 hidden md:inline">{isDashboardDarkMode ? 'Dark' : 'Light'}</span>
-                    <ChevronDown
-                      className="w-3 h-3 text-white/50 transition-transform duration-200"
-                      style={{ transform: isThemeDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
-                    />
-                  </button>
-
-                  {isThemeDropdownOpen && (
-                    <div
-                      className="absolute right-0 top-full mt-2 z-[300] glass-panel rounded-xl p-2 flex gap-2"
-                      style={{
-                        minWidth: '220px',
-                        backdropFilter: 'blur(16px)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)',
-                        animation: 'themeDropdownIn 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
-                      }}
-                      role="menu"
-                    >
-                      {/* Dark card — 8:6 landscape rectangle */}
-                      <button
-                        onClick={() => handleThemeModeSelect(true)}
-                        role="menuitem"
-                        aria-pressed={isDashboardDarkMode}
-                        className="relative rounded-lg overflow-hidden flex flex-col items-start p-3 gap-2 transition-all duration-200 focus-visible:outline-none"
-                        style={{
-                          width: '112px',
-                          height: '84px',
-                          background: 'linear-gradient(135deg, hsl(221 78% 12%), hsl(240 30% 6%))',
-                          border: isDashboardDarkMode ? '1px solid hsl(221 78% 55% / 0.8)' : '1px solid rgba(255,255,255,0.08)',
-                          boxShadow: isDashboardDarkMode ? '0 0 16px hsl(221 78% 43% / 0.3), inset 0 1px 0 rgba(255,255,255,0.1)' : 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                        }}
-                      >
-                        <div className="absolute inset-0 rounded-lg pointer-events-none opacity-[0.07]"
-                          style={{ backgroundImage: grainBg, backgroundSize: '200px 200px' }} />
-                        <div className="w-full h-5 rounded-md opacity-30"
-                          style={{ background: 'linear-gradient(90deg, hsl(221 78% 43%), hsl(193 100% 50% / 0.4))' }} />
-                        <div className="flex items-center gap-1.5 mt-auto">
-                          <Moon className="w-3.5 h-3.5 text-white/70" />
-                          <span className="text-xs font-medium text-white/80">Dark</span>
-                        </div>
-                        {isDashboardDarkMode && (
-                          <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-primary" />
-                        )}
-                      </button>
-
-                      {/* Light card — 8:6 landscape rectangle */}
-                      <button
-                        onClick={() => handleThemeModeSelect(false)}
-                        role="menuitem"
-                        aria-pressed={!isDashboardDarkMode}
-                        className="relative rounded-lg overflow-hidden flex flex-col items-start p-3 gap-2 transition-all duration-200 focus-visible:outline-none"
-                        style={{
-                          width: '112px',
-                          height: '84px',
-                          background: 'linear-gradient(135deg, hsl(220 20% 85%), hsl(210 30% 96%))',
-                          border: !isDashboardDarkMode ? '1px solid hsl(221 78% 55% / 0.8)' : '1px solid rgba(255,255,255,0.08)',
-                          boxShadow: !isDashboardDarkMode ? '0 0 16px hsl(221 78% 43% / 0.3), inset 0 1px 0 rgba(255,255,255,0.5)' : 'inset 0 1px 0 rgba(255,255,255,0.3)',
-                        }}
-                      >
-                        <div className="absolute inset-0 rounded-lg pointer-events-none opacity-[0.05]"
-                          style={{ backgroundImage: grainBg, backgroundSize: '200px 200px' }} />
-                        <div className="w-full h-5 rounded-md opacity-40"
-                          style={{ background: 'linear-gradient(90deg, hsl(221 78% 70%), hsl(193 100% 70% / 0.6))' }} />
-                        <div className="flex items-center gap-1.5 mt-auto">
-                          <Sun className="w-3.5 h-3.5 text-slate-600" />
-                          <span className="text-xs font-medium text-slate-600">Light</span>
-                        </div>
-                        {!isDashboardDarkMode && (
-                          <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-primary" />
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
               <FeedbackProjectButton />
 
               {/* Desktop Publish Button */}
@@ -743,13 +619,12 @@ export default function ProjectPage() {
                 isProjectLoading ? (
                   <DashboardLoading title="Restoring your dashboard..." description="Wait a few seconds" durationSec={5} />
                 ) : processedData ? (
-                  <DashboardPreview 
-                    dashboardId={selectedDashboardId || undefined} 
+                  <DashboardPreview
+                    dashboardId={selectedDashboardId || undefined}
                     projectId={projectId || undefined}
-                    processedData={processedData} 
-                    className="h-full overflow-y-auto" 
-                    showCardActionsMenu 
-                    isDarkMode={isDashboardDarkMode} 
+                    processedData={processedData}
+                    className="h-full overflow-y-auto"
+                    showCardActionsMenu
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full bg-black/5">
@@ -790,7 +665,7 @@ export default function ProjectPage() {
           </div>
         </div>
         {/* Publish Modal */}
-        {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} isDarkMode={isDashboardDarkMode} />}
+        {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} />}
 
         {/* Projects Sidebar */}
         <ProjectsSidebar

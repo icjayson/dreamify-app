@@ -22,8 +22,6 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ template, onCl
   if (!template) return null;
 
   const styledConfig = applyVisualSpec(template.sample_config, visual);
-  const isLightTheme = visual.theme === 'default' || visual.theme === 'chalk' || visual.theme === 'warm';
-
   return (
     <Dialog open={!!template} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
@@ -38,7 +36,6 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ template, onCl
               staticConfig={styledConfig}
               className="w-full"
               showCardActionsMenu={false}
-              isDarkMode={!isLightTheme}
             />
           </div>
 

@@ -64,7 +64,6 @@ interface DashboardPreviewProps {
   onExportLayoutChange?: (didSplit: boolean) => void;
   /** Card ⋮ menu (Fix in chat, …). Only enabled on project workspace; keep false for public preview & exports. */
   showCardActionsMenu?: boolean;
-  /** Controlled dark/light mode — when provided, overrides internal state */
   /** projectId is used to uniquely store layouts for chat-generated (processed) dashboards without a real ID */
   projectId?: string;
 }
@@ -79,7 +78,6 @@ const DashboardPreview = ({
   isExporting = false,
   onExportLayoutChange,
   showCardActionsMenu = false,
-  isDarkMode: isDarkModeProp,
   projectId,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
@@ -88,18 +86,6 @@ const DashboardPreview = ({
   // Pass undefined to useDashboard if staticConfig or processedData exists so it doesn't try to fetch
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(staticConfig || processedData ? undefined : dashboardId);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const themeModeStorageKey = `dashboard_theme_mode_${dashboardId || 'default'}`;
-
-  const [isDarkModeInternal, setIsDarkModeInternal] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(`dashboard_theme_mode_${dashboardId || 'default'}`);
-      return saved !== null ? saved === 'true' : true;
-    } catch { return true; }
-  });
-
-  // Use controlled prop if provided, otherwise fall back to internal state
-  const isDarkMode = isDarkModeProp !== undefined ? isDarkModeProp : isDarkModeInternal;
 
   // Edit feedback loop state from store
   const changedComponentIds = useChatStore((s) => s.changedComponentIds);
@@ -368,8 +354,10 @@ const DashboardPreview = ({
   // Normalize incoming data (Morpheus-first format)
   const getDashboardStyling = (data: any) => {
     if (data?.styling_recommendations) {
-      // If AI didn't provide a theme, prefer the template's theme over 'default'
-      if (!data.styling_recommendations.theme && selectedTemplate?.suggestedTheme) {
+      // Template theme always takes precedence — the AI may return a generic/default
+      // theme when processing @chart updates (no template context in that prompt),
+      // so we enforce the chosen template's theme on every render.
+      if (selectedTemplate?.suggestedTheme) {
         data.styling_recommendations.theme = selectedTemplate.suggestedTheme;
       }
       
@@ -751,17 +739,11 @@ const DashboardPreview = ({
   };
 
   // Apply dashboard-level styling to container
-  const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData, selectedTemplate]);
 
   const effectiveStyling = useMemo(() => {
     const base = dashboardStylingForContainer || getDefaultChartStyling();
-    // if (!isDarkMode) {
-    //   return {
-    //     ...base,
-    //     presetTheme: CHART_PRESET_THEMES.CHALK,
-    //     dashboardBackground: CHART_THEME_COLORS[CHART_PRESET_THEMES.CHALK]['bg-dashboard-color']
-    //   };
-    // }
     // Static config preview (template gallery) — derive theme from config components
     if (staticConfig && !processedData) {
       const configTheme = (staticConfig.components[0]?.component_config as any)?.styling?.presetTheme;
@@ -770,7 +752,7 @@ const DashboardPreview = ({
       }
     }
     return base;
-  }, [isDarkMode, dashboardStylingForContainer, staticConfig, processedData]);
+  }, [dashboardStylingForContainer, staticConfig, processedData]);
 
   useEffect(() => {
     if (containerRef.current && effectiveStyling) {

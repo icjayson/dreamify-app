@@ -173,7 +173,6 @@ export default function HiddenDashboardCapturer({
       <DashboardPreview
         dashboardId={currentTask.dashboardId}
         processedData={dashboardData}
-        isDarkMode={true}
         showCardActionsMenu={false}
       />
     </div>

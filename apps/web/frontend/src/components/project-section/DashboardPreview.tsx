@@ -821,7 +821,7 @@ const DashboardPreview = ({
   const getMinSizeForType = (type: string) => {
     if (type === 'metric') return { minW: 2, minH: 2 };
     if (type === 'table') return { minW: 12, minH: 8 };
-    return { minW: 4, minH: 4 }; // default for charts
+    return { minW: 4, minH: 8 }; // default for charts
   };
 
   const componentsToBaseLayout = (components: any[]): Layout[] => {
@@ -833,7 +833,7 @@ const DashboardPreview = ({
       const w = Number.isFinite(src.w) ? src.w : (Number.isFinite(c.position?.width) ? c.position.width : 4);
 
       // Calculate dynamic height for tables if not explicitly provided
-      let h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 4);
+      let h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 10);
 
       if (c.type === 'table' && c.component_config?.data) {
         const rowCount = Array.isArray(c.component_config.data) ? c.component_config.data.length : 0;

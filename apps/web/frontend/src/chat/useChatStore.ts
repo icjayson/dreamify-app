@@ -165,6 +165,8 @@ interface ChatState {
   isGoogleAdsModalOpen: boolean;
   isFirebaseModalOpen: boolean;
   isAllConnectorsModalOpen: boolean;
+  isTemplateModalOpen: boolean;
+  templateModalSource: 'toolbar' | 'header';
   googleSheetsFileId: string | null;
   googleSheetsFileName: string | null;
 
@@ -204,7 +206,7 @@ interface ChatState {
   setDashboardThumbnail: (dashboardId: string, thumbnailUrl: string) => void;
   setSelectedDashboardId: (dashboardId: string | null) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
-  setSelectedTemplate: (template: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string } | null) => void;
+  setSelectedTemplate: (template: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string } | null, pending?: boolean) => void;
   setCurrentProjectId: (id: string | null) => void;
   setPendingAction: (action: PendingAction | null) => void;
   setSelectedModel: (model: 'pro' | 'fast') => void;
@@ -219,6 +221,7 @@ interface ChatState {
   setGoogleAdsModalOpen: (open: boolean) => void;
   setFirebaseModalOpen: (open: boolean) => void;
   setAllConnectorsModalOpen: (open: boolean) => void;
+  setTemplateModalOpen: (open: boolean, source?: 'toolbar' | 'header') => void;
   setGoogleSheetsFileId: (id: string | null) => void;
   setGoogleSheetsFileName: (name: string | null) => void;
 
@@ -320,6 +323,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isGoogleAdsModalOpen: false,
   isFirebaseModalOpen: false,
   isAllConnectorsModalOpen: false,
+  isTemplateModalOpen: false,
+  templateModalSource: 'toolbar' as const,
   googleSheetsFileId: null,
   googleSheetsFileName: null,
   selectedModel: 'pro',
@@ -374,15 +379,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   })),
   setSelectedDashboardId: (dashboardId) => {
     const restoredTemplate = dashboardId ? resolveTemplate(getTemplateIdForDashboard(dashboardId)) : null;
-    set({ selectedDashboardId: dashboardId, selectedTemplate: restoredTemplate });
+    set({ selectedDashboardId: dashboardId, selectedTemplate: restoredTemplate, isTemplatePending: false });
   },
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
-  setSelectedTemplate: (template) => {
+  setSelectedTemplate: (template, pending = true) => {
     try {
       if (template) localStorage.setItem('dreamify_selected_template', JSON.stringify(template));
       else localStorage.removeItem('dreamify_selected_template');
     } catch { /* ignore */ }
-    set({ selectedTemplate: template, isTemplatePending: !!template });
+    set({ selectedTemplate: template, isTemplatePending: pending && !!template });
   },
   setPendingAction: (action) => set({ pendingAction: action }),
   setSelectedModel: (model) => set({ selectedModel: model }),
@@ -395,6 +400,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setGoogleAdsModalOpen: (open) => set({ isGoogleAdsModalOpen: open }),
   setFirebaseModalOpen: (open) => set({ isFirebaseModalOpen: open }),
   setAllConnectorsModalOpen: (open) => set({ isAllConnectorsModalOpen: open }),
+  setTemplateModalOpen: (open, source = 'toolbar') => set({ isTemplateModalOpen: open, templateModalSource: source }),
   setGoogleSheetsFileId: (id) => {
     console.log('Store: setting googleSheetsFileId:', id);
     set({ googleSheetsFileId: id });
@@ -1366,7 +1372,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   saveDashboardTemplateId(dashboardId, currentTemplate.id);
                 }
                 try { localStorage.removeItem('dreamify_selected_template'); } catch { }
-                set({ selectedTemplate: null });
+                set({ selectedTemplate: null, isTemplatePending: false });
               }
 
               const currentFiles = get().uploadedFiles;
@@ -1688,7 +1694,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Restore the template that was used when this dashboard was generated
         const restoredTemplate = resolveTemplate(getTemplateIdForDashboard(dashboardId));
         try { localStorage.removeItem('dreamify_selected_template'); } catch { }
-        set({ selectedDashboardId: dashboardId, selectedTemplate: restoredTemplate });
+        set({ selectedDashboardId: dashboardId, selectedTemplate: restoredTemplate, isTemplatePending: false });
         // Update file only if one exists in store
         const files = get().uploadedFiles;
         if (files.length > 0) {

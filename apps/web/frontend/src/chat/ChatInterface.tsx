@@ -448,8 +448,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const { creditsRemaining, creditUsage, subscription, refreshSubscription, upgradeToPro } = useSubscription();
   const tierLimit = 1000; // All users have Pro access (1000 credits/month)
 
-  // Template state
-  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  // Template state (controlled via store so project header can also trigger it)
   const [dragOver, setDragOver] = useState(false);
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -514,6 +513,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setAllConnectorsModalOpen,
+    isTemplateModalOpen,
+    setTemplateModalOpen,
+    templateModalSource,
     isDashboardOpen,
     selectedModel,
     setSelectedModel,
@@ -1238,9 +1240,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   };
 
   const handleTemplateSelect = (template: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string }) => {
+    if (templateModalSource === 'header') {
+      // Header entry point: store the template for next generation but don't
+      // show the chip or pre-fill the input (no pre-submit flow needed).
+      setSelectedTemplate(template, false);
+      return;
+    }
+    // Toolbar entry point: pre-submit flow — show chip + pre-fill input.
     setSelectedTemplate(template);
     setInputValue(`Use ${template.title} template to make `);
-    console.log('Template selected:', template);
   };
 
   const handleTemplateRemove = () => {
@@ -2160,7 +2168,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
       {/* Template Modal */}
       <TemplateModal
-        open={templateModalOpen}
+        open={isTemplateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
         onTemplateSelect={handleTemplateSelect}
       />

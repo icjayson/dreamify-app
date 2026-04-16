@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Download, Pencil, Sparkles, SquareArrowOutUpRight, X } from "lucide-react";
+import { ArrowLeft, Download, LayoutTemplate, Pencil, Sparkles, SquareArrowOutUpRight, X } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
@@ -165,6 +165,7 @@ export default function ProjectPage() {
   const setIsDashboardOpen = useChatStore((s) => s.setIsDashboardOpen);
   const isDashboardVisible = (shouldShowDashboard && isDashboardOpen) || (activeTab === 'dashboard');
   const selectedTemplate = useChatStore((s) => s.selectedTemplate);
+  const setTemplateModalOpen = useChatStore((s) => s.setTemplateModalOpen);
   const isUpdatingDashboard = useChatStore((s) => s.isUpdatingDashboard);
   const currentWorkflowStep = useChatStore((s) => s.currentWorkflowStep);
 
@@ -514,6 +515,15 @@ export default function ProjectPage() {
             </div>
             <div className="flex items-center order-2 md:order-3 ml-auto md:ml-0 shrink-0 gap-2">
               <HeaderCreditBadge creditsRemaining={creditsRemaining} monthlyCreditsUsed={creditUsage?.monthly_credits_used} />
+              <button
+                onClick={() => setTemplateModalOpen(true, 'header')}
+                className="button-outline h-8 px-2 md:px-4 rounded-md text-sm flex items-center gap-2"
+                title="Choose template"
+                aria-label="Choose template"
+              >
+                <LayoutTemplate className="w-4 h-4 md:hidden" />
+                <span className="hidden md:inline">Template</span>
+              </button>
               <FeedbackProjectButton />
 
               {/* Desktop Publish Button */}

@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Eye, Calendar, User, Folder } from 'lucide-react';
+import { Eye, Calendar, User, Folder, LayoutTemplate } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { ConversationListItem } from '@/services/adminService';
 
@@ -65,6 +65,12 @@ export function ConversationCard({ conversation }: ConversationCardProps) {
             {conversation.chat_mode && (
               <span className="text-[10px] font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase">
                 {conversation.chat_mode}
+              </span>
+            )}
+            {conversation.template_id && (
+              <span className="text-[10px] font-medium bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded flex items-center gap-1">
+                <LayoutTemplate className="h-2.5 w-2.5" />
+                {conversation.template_id}
               </span>
             )}
             {conversation.model && (

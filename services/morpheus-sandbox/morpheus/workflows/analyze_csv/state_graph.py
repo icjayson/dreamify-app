@@ -798,6 +798,13 @@ class StatefulAnalyzeCSVWorkflow:
             tool_msg = ToolMessage(content=tool_content, tool_call_id=tool_call_id)
             workflow_output.add_message(tool_msg, tool_call_id=tool_call_id)
 
+        # === ATTACH TOKEN USAGE ===
+        # Attach cumulative token usage to the last message so server.py can report it
+        if state.working_memory.total_tokens > 0 and workflow_output.messages:
+            workflow_output.messages[-1].usage_metadata = {
+                "total_tokens": state.working_memory.total_tokens
+            }
+
         # Add workflow history as metadata
         workflow_output.metadata["workflow_history"] = [
             {

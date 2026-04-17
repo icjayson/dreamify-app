@@ -41,6 +41,7 @@ class WorkingMemory(BaseModel):
     dataframe_profile: Optional[Dict[str, Any]] = Field(default=None, description="DataFrame structure and statistics")
     column_analysis: Optional[Dict[str, Any]] = Field(default=None, description="Per-column analysis results")
     available_chart_types: Optional[str] = Field(default=None, description="Available chart types from knowledge base")
+    total_tokens: int = Field(default=0, description="Total tokens used in this workflow execution")
     
     # Intermediate results
     current_query: Optional[str] = Field(default=None, description="Current query being processed")

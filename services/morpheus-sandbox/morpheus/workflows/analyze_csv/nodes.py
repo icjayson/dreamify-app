@@ -48,8 +48,16 @@ def _llm_invoke(model_fn: Callable, messages, label: str = "LLM"):
         logger.info(f"[LLM] {label} — completed OK")
         return result
     except _futures.TimeoutError:
-        logger.error(f"[Timeout] {label} exceeded {timeout}s — aborting call")
-        raise TimeoutError(f"{label} timed out after {timeout}s")
+        logger.error(f"[Timeout] {label} exceeded 60s — aborting call")
+        raise TimeoutError(f"{label} timed out after 60s")
+
+
+def _update_usage(state: AgentState, response: Any):
+    """Update accumulated token usage from LLM response."""
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        tokens = response.usage_metadata.get("total_tokens", 0)
+        state.working_memory.total_tokens += tokens
+        logger.info(f"[Usage] {tokens} tokens (total: {state.working_memory.total_tokens})")
 
 # Import system prompts from original workflow
 # These will be refactored into separate prompts module later if needed
@@ -666,6 +674,7 @@ Ensure the format is clear and actionable for the next reasoning agent."""
         tool_executed = False
         for turn in range(max_turns):
             response = _llm_invoke(model_with_tools.invoke, messages, label=f"Data Profiler turn {turn + 1}")
+            _update_usage(state, response)
             if isinstance(response.content, list):
                 response.content = "\n".join(
                     item.get("text", "") if isinstance(item, dict) else str(item)
@@ -799,12 +808,14 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
         try:
             router_model = model.with_structured_output(RouteDecision)
             route_decision = _llm_invoke(router_model.invoke, router_messages, label="Router structured output")
+            _update_usage(state, route_decision)
             next_step = route_decision.next_step
             reasoning = route_decision.reasoning
         except Exception as e:
             logger.warning(f"Structured output failed, using fallback: {str(e)}")
             # Fallback: parse from response
             response = _llm_invoke(model.invoke, router_messages, label="Router fallback")
+            _update_usage(state, response)
             content = str(response.content) if response.content else ""
             
             # Try to extract decision from content
@@ -1030,6 +1041,7 @@ REMINDER: When you generate your dashboard JSON:
     # Call LLM
     try:
         response = _llm_invoke(model_with_tools.invoke, messages, label="Reasoning node")
+        _update_usage(state, response)
         # Normalize response.content to string (Gemini returns a list)
         if isinstance(response.content, list):
             response.content = "\n".join(
@@ -1516,6 +1528,7 @@ Output ONLY the modified chart in "charts" array."""
                 model_with_tools.invoke, messages,
                 label=f"Internal reasoning turn {turn + 1}"
             )
+            _update_usage(state, response)
 
             # Normalize content (Gemini returns list)
             if isinstance(response.content, list):
@@ -2091,6 +2104,7 @@ Write a conversational summary explaining what the dashboard shows and key insig
 
     from langchain_core.messages import HumanMessage
     response = _llm_invoke(model.invoke, [HumanMessage(content=prompt)], label="Dashboard summary")
+    _update_usage(state, response)
     
     if response and response.content and isinstance(response.content, list):
         return str(response.content[0]['text'].strip())

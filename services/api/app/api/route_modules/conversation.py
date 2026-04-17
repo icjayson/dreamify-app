@@ -284,7 +284,14 @@ async def conversation_chat(
             dynamo_metadata = existing_meta.get("metadata", {})
             dynamo_metadata["chat_mode"] = model_alias
             dynamo_metadata["resolved_model"] = resolved_model
+            if request.template_id:
+                dynamo_metadata["template_id"] = request.template_id
             conversations_repo.update_conversation_metadata(request.project_id, conversation_id, dynamo_metadata)
+            
+            # Also update conversation object to persist template_id in S3
+            conversation["metadata"]["template_id"] = request.template_id or conversation["metadata"].get("template_id")
+            conversation["metadata"]["chat_mode"] = model_alias
+            conversation["metadata"]["resolved_model"] = resolved_model
     else:
         # Create new conversation
         is_new_conversation = True
@@ -310,7 +317,10 @@ async def conversation_chat(
             "conversation_id": conversation_id,
             "created_at": now_iso,
             "updated_at": now_iso,
-            "metadata": metadata,
+            "metadata": {
+                **metadata,
+                "template_id": request.template_id,
+            },
             "nodes": [greeting_node, user_node],
             "dashboards": [],
         }

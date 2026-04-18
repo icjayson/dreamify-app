@@ -19,7 +19,7 @@ export default {
     	},
 	    	extend: {
 	    			fontFamily: {
-	    				outfit: ['Outfit', 'Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'sans-serif'],
+	    				outfit: ['Outfit', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'sans-serif'],
 							'instrument-serif': ['Instrument Serif', 'serif']
 	    			},
     		colors: {

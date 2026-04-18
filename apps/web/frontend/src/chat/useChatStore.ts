@@ -384,8 +384,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setOriginalFile: (file) => set({ originalFileBlob: file?.blob ?? null, originalFileName: file?.name ?? null }),
   setSelectedTemplate: (template, pending = true) => {
     try {
-      if (template) localStorage.setItem('dreamify_selected_template', JSON.stringify(template));
-      else localStorage.removeItem('dreamify_selected_template');
+      if (template) {
+        localStorage.setItem('dreamify_selected_template', JSON.stringify(template));
+        // If an existing dashboard is active (post-workflow template change),
+        // persist the new choice so it survives page refresh.
+        const currentDashboardId = get().selectedDashboardId;
+        if (currentDashboardId) {
+          saveDashboardTemplateId(currentDashboardId, template.id);
+        }
+      } else {
+        localStorage.removeItem('dreamify_selected_template');
+      }
     } catch { /* ignore */ }
     set({ selectedTemplate: template, isTemplatePending: pending && !!template });
   },

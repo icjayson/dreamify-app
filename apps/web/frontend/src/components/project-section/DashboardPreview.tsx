@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon, Menu, MessageSquare, ImageDown } from "lucide-react";
+import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
@@ -93,6 +104,8 @@ const DashboardPreview = ({
   // Track highlight fade-out timer
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
   const [exportingIds, setExportingIds] = useState<Set<string>>(new Set());
+  const [removedComponentIds, setRemovedComponentIds] = useState<Set<string>>(new Set());
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   useEffect(() => {
     if (changedComponentIds.size > 0) {
       setHighlightedIds(new Set(changedComponentIds));
@@ -103,6 +116,14 @@ const DashboardPreview = ({
       return () => clearTimeout(timer);
     }
   }, [changedComponentIds]);
+
+  useEffect(() => {
+    if (removedComponentIds.size === 0) return;
+    setLayouts(prev => {
+      const filterOut = (items: Layout[]) => items.filter(i => !removedComponentIds.has(i.i));
+      return { lg: filterOut(prev.lg), md: filterOut(prev.md), sm: filterOut(prev.sm), xs: filterOut(prev.xs), xxs: filterOut(prev.xxs) };
+    });
+  }, [removedComponentIds]);
 
 
   // Determine which configuration to use (static from parent vs fetched from state)
@@ -798,24 +819,28 @@ const DashboardPreview = ({
   const displayComponents = useMemo(() => {
     if (!activeDashboard?.components) return [];
     // Static config already has theme applied per-component via applyVisualSpec — don't override
-    if (staticConfig && !processedData) return activeDashboard.components;
-    const theme = effectiveStyling?.presetTheme;
-    if (!theme) return activeDashboard.components;
-    // Derive a fresh palette from the current theme so stored palettes from old/different
-    // themes (e.g. light-gray colors from the old dark default) don't become invisible.
-    const palette = getColorPalette(theme as ChartPresetTheme, 10);
-    return activeDashboard.components.map((comp: any) => ({
-      ...comp,
-      component_config: {
-        ...comp.component_config,
-        styling: {
-          ...comp.component_config?.styling,
-          presetTheme: theme,
-          colorPalette: palette,
-        }
-      }
-    }));
-  }, [activeDashboard?.components, effectiveStyling, staticConfig, processedData]);
+    const base = (staticConfig && !processedData)
+      ? activeDashboard.components
+      : (() => {
+          const theme = effectiveStyling?.presetTheme;
+          if (!theme) return activeDashboard.components;
+          // Derive a fresh palette from the current theme so stored palettes from old/different
+          // themes (e.g. light-gray colors from the old dark default) don't become invisible.
+          const palette = getColorPalette(theme as ChartPresetTheme, 10);
+          return activeDashboard.components.map((comp: any) => ({
+            ...comp,
+            component_config: {
+              ...comp.component_config,
+              styling: {
+                ...comp.component_config?.styling,
+                presetTheme: theme,
+                colorPalette: palette,
+              }
+            }
+          }));
+        })();
+    return base.filter((c: any) => !removedComponentIds.has(String(c.id)));
+  }, [activeDashboard?.components, effectiveStyling, staticConfig, processedData, removedComponentIds]);
 
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {
@@ -1287,10 +1312,18 @@ const DashboardPreview = ({
                   const cellKey = String(component.id);
                   return (
                     <div key={cellKey} className={`animate-fade-in h-full min-h-0 ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
-                      <div className="relative h-full min-h-0 rounded-md" data-chart-id={cellKey}>
+                      <div className="relative h-full min-h-0 rounded-md group/card transition-shadow duration-200 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.25)]" data-chart-id={cellKey}>
                         {showCardActionsMenu && (
                           <div
-                            className="dashboard-card-menu-trigger absolute right-2 top-2 z-20"
+                            className="absolute left-2 top-2 z-20 opacity-0 group-hover/card:opacity-40 transition-opacity duration-150 pointer-events-none"
+                            aria-hidden="true"
+                          >
+                            <GripVertical className="h-3.5 w-3.5 text-white" strokeWidth={2} />
+                          </div>
+                        )}
+                        {showCardActionsMenu && (
+                          <div
+                            className="dashboard-card-menu-trigger absolute right-2 top-2 z-20 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150"
                             onPointerDown={(e) => e.stopPropagation()}
                             onMouseDown={(e) => e.stopPropagation()}
                           >
@@ -1299,18 +1332,18 @@ const DashboardPreview = ({
                                 <button
                                   type="button"
                                   aria-label="Card actions"
-                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/90 shadow-sm backdrop-blur-sm outline-none transition-colors hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white/30"
+                                  className="flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/30 text-white/80 backdrop-blur-sm outline-none transition-colors hover:bg-black/55 hover:text-white focus-visible:ring-2 focus-visible:ring-white/30"
                                 >
-                                  <Menu className="h-4 w-4" strokeWidth={2} />
+                                  <MoreVertical className="h-3.5 w-3.5" strokeWidth={2} />
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
                                 align="end"
                                 sideOffset={6}
-                                className="min-w-[11rem] border-white/15 bg-[#1a1a1a] text-white shadow-lg"
+                                className="min-w-[11rem] rounded-xl border-white/10 bg-[#161616]/95 backdrop-blur-md text-white shadow-xl"
                               >
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 focus:bg-white/10 focus:text-white"
+                                  className="cursor-pointer gap-2 py-2 focus:bg-white/10 focus:text-white"
                                   onSelect={() => {
                                     window.dispatchEvent(
                                       new CustomEvent(SELECT_CHART_CONTEXT_EVENT, {
@@ -1323,7 +1356,7 @@ const DashboardPreview = ({
                                   Fix in chat
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 focus:bg-white/10 focus:text-white"
+                                  className="cursor-pointer gap-2 py-2 focus:bg-white/10 focus:text-white"
                                   disabled={exportingIds.has(cellKey)}
                                   onSelect={async () => {
                                     const cardEl = document.querySelector<HTMLElement>(
@@ -1347,6 +1380,14 @@ const DashboardPreview = ({
                                     ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-400" />
                                     : <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />}
                                   Export to PNG
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-white/10" />
+                                <DropdownMenuItem
+                                  className="cursor-pointer gap-2 py-2 text-red-400 focus:bg-red-500/15 focus:text-red-400"
+                                  onSelect={() => setConfirmRemoveId(cellKey)}
+                                >
+                                  <Trash2 className="h-4 w-4 shrink-0" />
+                                  Remove chart
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -1376,6 +1417,32 @@ const DashboardPreview = ({
           </div>
         )}
       </div>
+      <AlertDialog open={confirmRemoveId !== null} onOpenChange={(open) => { if (!open) setConfirmRemoveId(null); }}>
+        <AlertDialogContent className="border-white/15 bg-[#1a1a1a] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove chart?</AlertDialogTitle>
+            <AlertDialogDescription className="text-white/60">
+              This chart will be removed from the dashboard. This cannot be undone in the current session.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/15 bg-transparent text-white hover:bg-white/10">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={() => {
+                if (confirmRemoveId) {
+                  setRemovedComponentIds(prev => new Set(prev).add(confirmRemoveId));
+                  setConfirmRemoveId(null);
+                }
+              }}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

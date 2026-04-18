@@ -58,7 +58,7 @@ const Login = () => {
                   baseTheme: dark,
                   elements: {
                     formButtonPrimary: "w-full button-gradient",
-                    fontFamily: "Inter",
+                    fontFamily: "Outfit",
                     card: "bg-transparent shadow-none border-none",
                     headerTitle: "hidden",
                     headerSubtitle: "hidden",

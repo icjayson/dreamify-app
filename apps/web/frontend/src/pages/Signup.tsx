@@ -63,7 +63,7 @@ const Signup = () => {
                     headerSubtitle: "hidden",
                     socialButtonsBlockButton: "w-full button-gradient mb-4",
                     dividerLine: "bg-border",
-                    fontFamily: "Inter",
+                    fontFamily: "Outfit",
                     dividerText: "text-xs text-muted-foreground",
                     formFieldInput: "bg-input border-border text-foreground",
                     formFieldLabel: "text-sm font-medium text-foreground",

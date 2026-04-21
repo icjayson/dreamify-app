@@ -386,11 +386,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       if (template) {
         localStorage.setItem('dreamify_selected_template', JSON.stringify(template));
-        // If an existing dashboard is active (post-workflow template change),
-        // persist the new choice so it survives page refresh.
-        const currentDashboardId = get().selectedDashboardId;
-        if (currentDashboardId) {
-          saveDashboardTemplateId(currentDashboardId, template.id);
+        const { selectedDashboardId, currentConversationId, currentProjectId } = get();
+        if (selectedDashboardId) {
+          saveDashboardTemplateId(selectedDashboardId, template.id);
+          // Persist to backend only when changing template on an existing dashboard
+          // (pending=false = post-run change from dashboard header).
+          // Skip when pending=true: that means a pre-run toolbar pick for the NEXT
+          // generation — it must NOT overwrite the current dashboard in S3.
+          if (!pending && currentConversationId && currentProjectId) {
+            import('@/services/conversationService').then(({ conversationService }) => {
+              conversationService.updateDashboardTemplate(
+                currentConversationId,
+                selectedDashboardId,
+                currentProjectId,
+                template.id,
+              );
+            });
+          }
         }
       } else {
         localStorage.removeItem('dreamify_selected_template');
@@ -1700,8 +1712,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
 
       if (response?.dashboard_data) {
-        // Restore the template that was used when this dashboard was generated
-        const restoredTemplate = resolveTemplate(getTemplateIdForDashboard(dashboardId));
+        // Prefer template_id baked into the dashboard JSON (server source of truth),
+        // fall back to the localStorage mapping for dashboards generated before this change.
+        const serverTemplateId = response.dashboard_data.template_id as string | undefined;
+        const resolvedId = serverTemplateId ?? getTemplateIdForDashboard(dashboardId);
+        if (serverTemplateId) saveDashboardTemplateId(dashboardId, serverTemplateId);
+        const restoredTemplate = resolveTemplate(resolvedId ?? null);
         try { localStorage.removeItem('dreamify_selected_template'); } catch { }
         set({ selectedDashboardId: dashboardId, selectedTemplate: restoredTemplate, isTemplatePending: false });
         // Update file only if one exists in store

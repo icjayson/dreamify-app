@@ -371,33 +371,44 @@ const DashboardPreview = ({
   };
 
   const selectedTemplate = useChatStore((s) => s.selectedTemplate);
+  const isTemplatePending = useChatStore((s) => s.isTemplatePending);
 
   // Normalize incoming data (Morpheus-first format)
   const getDashboardStyling = (data: any) => {
+    // A pending template is queued for the NEXT generation (toolbar pre-run pick).
+    // It must NOT affect the current dashboard's visual theme — only a post-run
+    // template change (isTemplatePending=false) should override the theme here.
+    const effectiveTemplate = isTemplatePending ? null : selectedTemplate;
+
+    // Materialise styling_recommendations if absent so template override is never silently lost.
+    // This covers dashboards generated before styling_recommendations became required.
+    if (data && !data.styling_recommendations) {
+      data.styling_recommendations = { theme: effectiveTemplate?.suggestedTheme ?? 'monochrome' };
+    }
     if (data?.styling_recommendations) {
       // Template theme always takes precedence — the AI may return a generic/default
       // theme when processing @chart updates (no template context in that prompt),
       // so we enforce the chosen template's theme on every render.
-      if (selectedTemplate?.suggestedTheme) {
-        data.styling_recommendations.theme = selectedTemplate.suggestedTheme;
+      if (effectiveTemplate?.suggestedTheme) {
+        data.styling_recommendations.theme = effectiveTemplate.suggestedTheme;
       }
-      
+
       const converted = convertLLMStylingToChartStyling(data.styling_recommendations);
       const validation = validateChartStyling(converted);
-      
+
       if (validation.isValid) {
         // Ensure background matches the theme if AI didn't explicitly provide one
-        if (!data.styling_recommendations.dashboardBackground && selectedTemplate?.suggestedTheme) {
-          const bg = CHART_THEME_COLORS[selectedTemplate.suggestedTheme as ChartPresetTheme]?.['bg-dashboard-color'];
+        if (!data.styling_recommendations.dashboardBackground && effectiveTemplate?.suggestedTheme) {
+          const bg = CHART_THEME_COLORS[effectiveTemplate.suggestedTheme as ChartPresetTheme]?.['bg-dashboard-color'];
           if (bg) converted.dashboardBackground = bg;
         }
         return converted;
       }
     }
-    
-    // Fallback to selected template's theme if AI didn't return one or it's invalid
-    if (selectedTemplate?.suggestedTheme) {
-      return getDefaultChartStyling(selectedTemplate.suggestedTheme as ChartPresetTheme);
+
+    // Fallback to effective template's theme if AI didn't return one or it's invalid
+    if (effectiveTemplate?.suggestedTheme) {
+      return getDefaultChartStyling(effectiveTemplate.suggestedTheme as ChartPresetTheme);
     }
 
     return getDefaultChartStyling(CHART_PRESET_THEMES.DEFAULT);
@@ -492,6 +503,8 @@ const DashboardPreview = ({
     // Dashboard-level styling (light theme from backend)
     const dashboardStyling = getDashboardStyling(data);
     const dashboardTile: any = (dashboardStyling as any)?.tile;
+    // Template always wins — override every component's presetTheme with the dashboard-level value
+    const resolvedPresetTheme: string | undefined = (dashboardStyling as any)?.presetTheme;
 
     // Metrics (Morpheus: name -> title, optional change/trend)
     if (Array.isArray(data.metrics)) {
@@ -582,6 +595,7 @@ const DashboardPreview = ({
             // Convert and merge styling with dashboard defaults
             styling: {
               ...validatedMetricStyling,
+              ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
               tile: {
                 ...(dashboardTile || {}),
                 ...((validatedMetricStyling as any)?.tile || {})
@@ -654,6 +668,7 @@ const DashboardPreview = ({
               data: Array.isArray(c.data) ? c.data : (Array.isArray(c.rows) ? c.rows : []),
               styling: {
                 ...validatedTableStyling,
+                ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
                 tile: {
                   ...(dashboardTile || {}),
                   ...((validatedTableStyling as any)?.tile || {})
@@ -669,9 +684,10 @@ const DashboardPreview = ({
         const validatedChartStyling = chartLevelStyling && validateChartStyling(chartLevelStyling).isValid
           ? chartLevelStyling
           : (dashboardStyling || getDefaultChartStyling());
-        // merge dashboard tile defaults
+        // merge dashboard tile defaults; template presetTheme always wins
         const mergedChartStyling: any = {
           ...validatedChartStyling,
+          ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
           tile: {
             ...(dashboardTile || {}),
             ...((chartLevelStyling as any)?.tile || {})
@@ -737,9 +753,10 @@ const DashboardPreview = ({
             description: t.description || '',
             columns: Array.isArray(t.columns) ? t.columns : [],
             data: Array.isArray(t.data) ? t.data : (Array.isArray(t.rows) ? t.rows : []),
-            // Convert and merge styling with dashboard defaults
+            // Convert and merge styling with dashboard defaults; template presetTheme always wins
             styling: {
               ...validatedTableStyling,
+              ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
               tile: {
                 ...(dashboardTile || {}),
                 ...((validatedTableStyling as any)?.tile || {})

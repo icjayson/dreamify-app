@@ -2171,6 +2171,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         open={isTemplateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
         onTemplateSelect={handleTemplateSelect}
+        source={templateModalSource}
       />
     </div>
   );

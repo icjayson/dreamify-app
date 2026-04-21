@@ -101,6 +101,22 @@ class ConversationService {
     }
   }
 
+  async updateDashboardTemplate(
+    conversationId: string,
+    dashboardId: string,
+    projectId: string,
+    templateId: string | null,
+  ): Promise<void> {
+    try {
+      await api.put(
+        `/api/v1/conversation/${conversationId}/dashboard/${dashboardId}/template`,
+        { project_id: projectId, template_id: templateId },
+      );
+    } catch (error) {
+      console.error('Failed to update dashboard template:', error);
+    }
+  }
+
   async stopWorkflow(conversationId: string, projectId: string): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
       const response = await api.post<{ success: boolean; message: string; conversation_id: string }>(

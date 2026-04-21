@@ -287,7 +287,7 @@ Every component MUST have layout: {x, y, w, h, minW, minH}
 Apply minimum height floors:
 - Charts requiring minH=12: line, area, pie, donut, radial_bar, treemap, sankey
 - Other charts minH=10: bar, scatter, composed, radar, funnel, geographic
-- Tables: minH=8
+- Tables: minH=10
 - Metrics: minH=4
 
 Ensure h >= minH for all components.
@@ -431,6 +431,11 @@ Generate JSON with this EXACT structure:
     "total_records": 128975,
     "completeness": 98.5,
     "duplicates": 12
+  },
+  "styling_recommendations": {
+    "theme": "monochrome",
+    "colorPalette": [],
+    "dashboardBackground": null
   }
 }
 ```
@@ -446,6 +451,19 @@ CRITICAL OUTPUT RULES:
 7. All datasets[].data[] must contain objects with "label" and "value" keys
 8. All numeric values must be actual numbers from your Python computations
 9. Include layout (x, y, w, h, minW, minH) for every metric, chart, and table
+10. Include styling_recommendations at root level with the chosen theme
+
+TIME COMPARISON RULES:
+======================
+- "period" must be exactly one of: "dod" (day-over-day), "wow" (week-over-week),
+  "mom" (month-over-month), "qoq" (quarter-over-quarter), "yoy" (year-over-year)
+- Pick the period that matches what current_value vs previous_value actually compares:
+  today vs yesterday → "dod" | this week vs prior week → "wow" | this month vs prior month → "mom"
+- "value", "current_value", and "previous_value" MUST represent the same KPI at the same
+  aggregation level. If "value" is a period sum, current_value/previous_value must also be
+  period sums — NEVER mix a period total with a single-day figure.
+- "change" MUST be a percentage string "X.XX%" — never use units like "pp", "pts", or custom suffixes.
+  Percentage-point differences are still expressed as "X.XX%".
 
 VALIDATION CHECKLIST (Before Output):
 =====================================
@@ -454,10 +472,13 @@ VALIDATION CHECKLIST (Before Output):
 ✓ tables[] with: id, title, layout, columns, data, styling (with theme)
 ✓ insights[] with at least 3 insight strings
 ✓ data_quality with: total_records, completeness, duplicates
+✓ styling_recommendations with: theme (matches all component styling.theme values)
 ✓ ALL datasets contain actual computed data - NO empty arrays
 ✓ ALL table columns use human-readable names
 ✓ ALL styling objects include "theme" field with SAME value
 ✓ Layout h >= minH for all components
+✓ time_comparison.period is one of: dod, wow, mom, qoq, yoy
+✓ metric value and time_comparison current_value/previous_value use same aggregation level
 
 If ANY field is missing, your response is INCOMPLETE.
 

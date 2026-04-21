@@ -385,7 +385,61 @@ def validate_dashboard_json(data: Dict[str, Any]) -> Dict[str, Any]:
                     "valid": False,
                     "error": f"Chart {idx} dataset {ds_idx} has empty data array"
                 }
-    
+
+    # Require styling_recommendations with a theme value
+    if "styling_recommendations" not in data:
+        return {"valid": False, "error": "Missing required field: styling_recommendations"}
+    sr = data["styling_recommendations"]
+    if not isinstance(sr, dict) or not sr.get("theme"):
+        return {"valid": False, "error": "styling_recommendations.theme is required"}
+
+    # Validate time_comparison periods
+    _VALID_PERIODS = {"dod", "wow", "mom", "qoq", "yoy"}
+    for i, m in enumerate(data.get("metrics", [])):
+        period = (m.get("time_comparison") or {}).get("period")
+        if period and period not in _VALID_PERIODS:
+            return {
+                "valid": False,
+                "error": (
+                    f"metric[{i}] invalid time_comparison.period '{period}'. "
+                    f"Must be one of: {sorted(_VALID_PERIODS)}"
+                ),
+            }
+
+    # Validate chart layout minH floors and h >= minH
+    _MIN_H_FLOORS = {
+        "line": 12, "area": 12, "pie": 12, "donut": 12,
+        "radial_bar": 12, "treemap": 12, "sankey": 12,
+        "bar": 10, "scatter": 10, "composed": 10,
+        "radar": 10, "funnel": 10, "geographic": 10,
+    }
+    for i, c in enumerate(data.get("charts", [])):
+        layout = c.get("layout") or {}
+        chart_type = (c.get("chart_type") or "").lower()
+        floor = _MIN_H_FLOORS.get(chart_type, 10)
+        minh = layout.get("minH", 0)
+        h = layout.get("h", 0)
+        if minh < floor:
+            return {
+                "valid": False,
+                "error": f"chart[{i}] ({chart_type}) minH={minh} < required floor {floor}",
+            }
+        if h < minh:
+            return {
+                "valid": False,
+                "error": f"chart[{i}] ({chart_type}) h={h} < minH={minh}",
+            }
+
+    # Validate table layout minH floor
+    for i, t in enumerate(data.get("tables", [])):
+        layout = t.get("layout") or {}
+        minh = layout.get("minH", 0)
+        if minh < 10:
+            return {
+                "valid": False,
+                "error": f"table[{i}] minH={minh} < required floor 10",
+            }
+
     return {"valid": True}
 
 

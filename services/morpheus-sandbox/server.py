@@ -1070,6 +1070,8 @@ def _process_conversation_background(
         new_dashboard_record = None
         result_data = result.get("data")
         if result_data and isinstance(result_data, dict) and conversation_bucket:
+            if template_id:
+                result_data["template_id"] = template_id
             logger.info(
                 f"Saving dashboard artifact for conversation {conversation_id}, data keys: {list(result_data.keys())}"
             )

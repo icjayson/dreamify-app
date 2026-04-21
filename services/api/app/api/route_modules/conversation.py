@@ -23,7 +23,7 @@ from utils.dynamodb.repos import projects as projects_repo
 from utils.dynamodb.repos import workflow_nodes as workflow_nodes_repo
 from utils.s3.conversations import save_conversation, load_conversation
 from utils.s3.paths import build_conversation_key
-from utils.s3.client import download_bytes
+from utils.s3.client import download_bytes, upload_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -628,6 +628,67 @@ async def get_conversation_dashboard(
         raise HTTPException(
             status_code=500, detail=f"Failed to load dashboard: {str(e)}"
         )
+
+
+class UpdateDashboardTemplateRequest(BaseModel):
+    project_id: str
+    template_id: Optional[str] = None
+
+
+@router.put("/conversation/{conversation_id}/dashboard/{dashboard_id}/template")
+async def update_dashboard_template(
+    conversation_id: str,
+    dashboard_id: str,
+    request: UpdateDashboardTemplateRequest,
+    user_id: str = Depends(require_user),
+):
+    """Update the template_id field inside a saved dashboard JSON in S3."""
+    conversation_meta = conversations_repo.get_conversation(request.project_id, conversation_id)
+    if not conversation_meta:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_meta.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    s3_bucket = conversation_meta["s3_bucket"]
+    s3_key = conversation_meta["s3_key"]
+    conversation = load_conversation(s3_bucket, s3_key)
+
+    dashboards = conversation.get("dashboards", [])
+    target = next((d for d in dashboards if d.get("dashboard_id") == dashboard_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    s3_uri = target.get("s3_uri", "")
+    if not s3_uri.startswith("s3://"):
+        raise HTTPException(status_code=500, detail="Invalid dashboard S3 URI")
+
+    uri_parts = s3_uri[5:].split("/", 1)
+    if len(uri_parts) != 2:
+        raise HTTPException(status_code=500, detail="Invalid dashboard S3 URI")
+
+    bucket = uri_parts[0]
+    key = uri_parts[1].lstrip("/")
+
+    try:
+        dashboard_bytes = download_bytes(bucket, key)
+        dashboard_data = json.loads(dashboard_bytes.decode("utf-8"))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Dashboard data not found in S3")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load dashboard: {str(e)}")
+
+    if request.template_id is not None:
+        dashboard_data["template_id"] = request.template_id
+    else:
+        dashboard_data.pop("template_id", None)
+
+    try:
+        updated_bytes = json.dumps(dashboard_data, ensure_ascii=False, indent=2).encode("utf-8")
+        upload_bytes(bucket, key, updated_bytes, content_type="application/json")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save dashboard: {str(e)}")
+
+    return {"success": True}
 
 
 @router.post(

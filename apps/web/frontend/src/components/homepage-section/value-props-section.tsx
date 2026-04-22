@@ -72,22 +72,22 @@ export const ValuePropsSection = () => {
           {/* Key benefits */}
           <div className={`grid md:grid-cols-3 gap-8 max-w-7xl mx-auto mb-8 ${isVisible ? 'animate-zoom-in' : 'opacity-0'}`} style={{ animationDelay: '0.6s' }}>
             <div className="text-center">
-              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-4">
+              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_0_20px_hsl(var(--primary)/0.3)] ring-1 ring-border mx-auto mb-4">
                 <span className="text-2xl font-bold text-white">5</span>
               </div>
-              <div className="text-foreground font-semibold">Minutes to Results</div>
+              <div className="text-white font-semibold">Minutes to Results</div>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-4">
+              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_0_20px_hsl(var(--primary)/0.3)] ring-1 ring-border mx-auto mb-4">
                 <Sparkles className="w-8 h-8 text-white" />
               </div>
-              <div className="text-foreground font-semibold">AI-Powered Magic</div>
+              <div className="text-white font-semibold">AI-Powered Magic</div>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-4">
+              <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_0_20px_hsl(var(--primary)/0.3)] ring-1 ring-border mx-auto mb-4">
                 <span className="text-xl font-bold text-white">0</span>
               </div>
-              <div className="text-foreground font-semibold">Technical Setup</div>
+              <div className="text-white font-semibold">Technical Setup</div>
             </div>
           </div>
 
@@ -101,7 +101,7 @@ export const ValuePropsSection = () => {
               {/* Icon */}
               <div className="mb-0">
                 <div className="relative">
-                  <div className={`w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] ${
+                  <div className={`w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_0_20px_hsl(var(--primary)/0.3)] ring-1 ring-border ${
                     isVisible ? 'group-hover:scale-110 animate-zoom-in' : 'opacity-0'
                   }`} style={{ animationDelay: `${0.4 + index * 0.2}s` }}>
                     <prop.icon className="w-8 h-8 text-white" />

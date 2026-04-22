@@ -74,14 +74,14 @@ const HeaderCreditBadge: React.FC<HeaderCreditBadgeProps> = ({
         <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center shrink-0">
           <Sparkles className="w-3.5 h-3.5 text-white" />
         </div>
-        <span className="text-sm sm:text-md font-semibold text-white/90 tabular-nums">
+        <span className="text-sm sm:text-md font-semibold text-foreground dark:text-white/90 tabular-nums">
           {creditsRemaining.toLocaleString()}
         </span>
 
         {/* Hover popup */}
         {isHovered && (
           <div
-            className="absolute right-0 top-full mt-2 z-[300] bg-[#1a1a1e]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-2 w-[260px]"
+            className="absolute right-0 top-full mt-2 z-[300] bg-popover/95 backdrop-blur-xl border border-border rounded-2xl shadow-header p-2 w-[260px]"
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
             style={{
@@ -118,22 +118,22 @@ const HeaderCreditBadge: React.FC<HeaderCreditBadgeProps> = ({
                     style={{ transition: "stroke-dashoffset 0.6s ease", transform: "rotate(90deg) scaleX(-1)", transformOrigin: "center" }}
                   />
                 </svg>
-                <span className="relative text-base font-bold text-white leading-none">
+                <span className="relative text-base font-bold text-foreground dark:text-white leading-none">
                   {creditsRemaining}
                 </span>
               </div>
 
               {/* Text content */}
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold tracking-wider text-white/80 uppercase">
+                <p className="text-[11px] font-semibold tracking-wider text-muted-foreground dark:text-white/80 uppercase">
                   Remaining Credits
                 </p>
-                <p className="text-[11px] text-white/40 leading-snug mt-1">
+                <p className="text-[11px] text-muted-foreground/60 dark:text-white/40 leading-snug mt-1">
                   {used.toLocaleString()} / {TIER_LIMIT.toLocaleString()} used this month
                 </p>
                 <button
                   onClick={openPlansModal}
-                  className="text-[11px] text-white/35 underline underline-offset-2 hover:text-white/60 transition-colors mt-0.5 cursor-pointer"
+                  className="text-[11px] text-muted-foreground/50 underline underline-offset-2 hover:text-primary transition-colors mt-0.5 cursor-pointer dark:text-white/35 dark:hover:text-white/60"
                 >
                   Plans & Credits
                 </button>

@@ -13,20 +13,19 @@ precision mediump float;
 
 uniform vec2 iResolution;
 uniform float iTime;
+uniform vec3 iColorBase;
+uniform vec3 iColorScale;
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = (2.0 * fragCoord - iResolution.xy) / min(iResolution.x, iResolution.y);
 
     for(float i = 1.0; i < 8.0; i++) {
-        uv.y += i * 0.1 / i * 
+        uv.y += i * 0.1 / i *
             sin(uv.x * i * i + iTime * 0.5) * sin(uv.y * i * i + iTime * 0.5);
     }
 
-    vec3 col;
-    col.r = uv.y - 0.1;
-    col.g = uv.y + 0.3;
-    col.b = uv.y + 0.95;
-
+    vec3 col = iColorBase + uv.y * iColorScale;
+    col = clamp(col, 0.0, 1.0);
     fragColor = vec4(col, 1.0);
 }
 
@@ -112,8 +111,27 @@ function WaveBackground({
 
     const iResolutionLocation = gl.getUniformLocation(program, "iResolution");
     const iTimeLocation = gl.getUniformLocation(program, "iTime");
+    const iColorBaseLocation = gl.getUniformLocation(program, "iColorBase");
+    const iColorScaleLocation = gl.getUniformLocation(program, "iColorScale");
+
+    const setThemeColors = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      if (isDark) {
+        gl.uniform3f(iColorBaseLocation, -0.1, 0.3, 0.95);
+        gl.uniform3f(iColorScaleLocation, 1.0, 1.0, 1.0);
+      } else {
+        gl.uniform3f(iColorBaseLocation, 0.88, 0.91, 0.97);
+        gl.uniform3f(iColorScaleLocation, 0.06, 0.05, 0.03);
+      }
+    };
+
+    setThemeColors();
+
+    const observer = new MutationObserver(() => setThemeColors());
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
     let startTime = Date.now();
+    let animFrameId: number;
 
     const render = () => {
       const width = canvas.clientWidth;
@@ -128,10 +146,15 @@ function WaveBackground({
       gl.uniform1f(iTimeLocation, currentTime);
 
       gl.drawArrays(gl.TRIANGLES, 0, 6);
-      requestAnimationFrame(render);
+      animFrameId = requestAnimationFrame(render);
     };
 
     render();
+
+    return () => {
+      cancelAnimationFrame(animFrameId);
+      observer.disconnect();
+    };
   }, []);
 
   const finalBlurClass = blurClassMap[backdropBlurAmount] || blurClassMap["sm"];

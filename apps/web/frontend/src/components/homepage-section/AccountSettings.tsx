@@ -69,7 +69,7 @@ const getProviderMeta = (rawProvider: string) => {
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="border-t border-border pt-6 mb-6">
-    <h3 className="text-white text-lg font-semibold mb-4">{title}</h3>
+    <h3 className="text-foreground dark:text-white text-lg font-semibold mb-4">{title}</h3>
     {children}
   </div>
 );
@@ -313,12 +313,12 @@ const AccountSettings: React.FC = () => {
 
   return (
     <div className="px-3 md:px-4 pt-8">
-        <h2 className="text-2xl md:text-3xl font-semibold text-white mb-4">Manage account</h2>
+        <h2 className="text-2xl md:text-3xl font-semibold text-foreground dark:text-white mb-4">Manage account</h2>
 
       <Section title="Profile">
         {/* Avatar uploader */}
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-16 h-16 rounded-full overflow-hidden bg-white/10 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-full overflow-hidden bg-foreground/10 dark:bg-white/10 flex items-center justify-center">
             {avatarPreview ? (
               <img src={avatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />
             ) : (
@@ -326,7 +326,7 @@ const AccountSettings: React.FC = () => {
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <label className="px-3 py-2 text-sm rounded-md text-white button-outline cursor-pointer">
+            <label className="px-3 py-2 text-sm rounded-md text-foreground dark:text-white button-outline cursor-pointer">
               Change avatar
               <input type="file" accept="image/*" className="hidden" onChange={onSelectAvatar} />
             </label>
@@ -336,7 +336,7 @@ const AccountSettings: React.FC = () => {
             {avatarPreview && (
               <button
                 onClick={() => { if (avatarPreview) URL.revokeObjectURL(avatarPreview); setAvatarPreview(null); setAvatarFile(null); }}
-                className="px-3 py-2 text-sm bg-white/10 rounded-md border border-white/20 text-white/80 hover:text-white"
+                className="px-3 py-2 text-sm bg-foreground/10 dark:bg-white/10 rounded-md border border-border dark:border-white/20 text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white"
               >
                 Cancel
               </button>
@@ -346,43 +346,43 @@ const AccountSettings: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm text-white/80 mb-1">First name</label>
+            <label className="block text-sm text-muted-foreground dark:text-white/80 mb-1">First name</label>
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-black/60 border border-border text-white placeholder-white/30 focus:outline-none"
+              className="w-full px-3 py-2 rounded-md bg-background dark:bg-black/60 border border-border text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-white/30 focus:outline-none"
               placeholder="First name"
             />
           </div>
           <div>
-            <label className="block text-sm text-white/80 mb-1">Last name</label>
+            <label className="block text-sm text-muted-foreground dark:text-white/80 mb-1">Last name</label>
             <input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-black/60 border border-border text-white placeholder-white/30 focus:outline-none"
+              className="w-full px-3 py-2 rounded-md bg-background dark:bg-black/60 border border-border text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-white/30 focus:outline-none"
               placeholder="Last name"
             />
           </div>
           <div className="md:col-span-2">
-            <label className="block text-sm text-white/80 mb-1">Email</label>
-            <input value={primaryEmail} disabled className="w-full px-3 py-2 rounded-md bg-black/40 border border-border text-white/80" />
-            <p className="text-xs text-white/50 mt-1">Primary email is managed by Clerk</p>
+            <label className="block text-sm text-muted-foreground dark:text-white/80 mb-1">Email</label>
+            <input value={primaryEmail} disabled className="w-full px-3 py-2 rounded-md bg-muted dark:bg-black/40 border border-border text-muted-foreground dark:text-white/80" />
+            <p className="text-xs text-muted-foreground dark:text-white/50 mt-1">Primary email is managed by Clerk</p>
             {/* Additional emails */}
             <div className="mt-3 space-y-2">
               {(user?.emailAddresses || []).map((ea) => (
-                <div key={ea.id} className="flex items-center justify-between text-sm bg-black/30 border border-white/10 rounded-md px-3 py-2">
+                <div key={ea.id} className="flex items-center justify-between text-sm bg-muted/50 dark:bg-black/30 border border-border dark:border-white/10 rounded-md px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-white/90">{ea.emailAddress}</span>
+                    <span className="text-foreground dark:text-white/90">{ea.emailAddress}</span>
                     {ea.id === user?.primaryEmailAddressId && (
-                      <span className="text-xs text-white/70 bg-white/10 rounded px-1.5 py-0.5">Primary</span>
+                      <span className="text-xs text-foreground/70 dark:text-white/70 bg-foreground/10 dark:bg-white/10 rounded px-1.5 py-0.5">Primary</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     {ea.id !== user?.primaryEmailAddressId && (
-                      <button onClick={() => setPrimaryEmail(ea.id)} className="text-xs text-white/80 hover:text-white underline">Set primary</button>
+                      <button onClick={() => setPrimaryEmail(ea.id)} className="text-xs text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white underline">Set primary</button>
                     )}
                     {ea.id !== user?.primaryEmailAddressId && (
-                      <button onClick={() => removeEmail(ea.id)} className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      <button onClick={() => removeEmail(ea.id)} className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 underline">Remove</button>
                     )}
                   </div>
                 </div>
@@ -392,7 +392,7 @@ const AccountSettings: React.FC = () => {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="Add email address"
-                  className="flex-1 px-3 py-2 rounded-md bg-black/60 border border-border text-white placeholder-white/30 focus:outline-none"
+                  className="flex-1 px-3 py-2 rounded-md bg-background dark:bg-black/60 border border-border text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-white/30 focus:outline-none"
                 />
                 <Button onClick={addEmailAddress} disabled={!newEmail || isAddingEmail} className="button-gradient px-3 py-2 text-sm">
                   {isAddingEmail ? "Adding..." : "Add"}
@@ -410,8 +410,8 @@ const AccountSettings: React.FC = () => {
 
       <Section title="Connected accounts">
         {(user?.externalAccounts ?? []).length === 0 ? (
-          <div className="flex items-center gap-3 p-4 rounded-lg border border-dashed border-white/10 bg-white/[0.02]">
-            <p className="text-sm text-white/40">No connected accounts.</p>
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-dashed border-border dark:border-white/10 bg-muted/50 dark:bg-white/[0.02]">
+            <p className="text-sm text-muted-foreground dark:text-white/40">No connected accounts.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -423,7 +423,7 @@ const AccountSettings: React.FC = () => {
               return (
                 <div
                   key={account.id}
-                  className="group flex items-center justify-between px-4 py-3 rounded-xl border border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15 transition-all duration-200"
+                  className="group flex items-center justify-between px-4 py-3 rounded-xl border border-border/50 dark:border-white/8 bg-muted/30 dark:bg-white/[0.03] hover:bg-muted/70 dark:hover:bg-white/[0.06] hover:border-border dark:hover:border-white/15 transition-all duration-200"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     {/* Brand icon */}
@@ -433,14 +433,14 @@ const AccountSettings: React.FC = () => {
                     {/* Info */}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-white leading-tight">{label}</p>
-                        <span className="flex items-center gap-1 text-[10px] text-green-400 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+                        <p className="text-sm font-semibold text-foreground dark:text-white leading-tight">{label}</p>
+                        <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-400 inline-block" />
                           Connected
                         </span>
                       </div>
                       {email && (
-                        <p className="text-xs text-white/45 truncate mt-0.5">{email}</p>
+                        <p className="text-xs text-muted-foreground dark:text-white/45 truncate mt-0.5">{email}</p>
                       )}
                     </div>
                   </div>
@@ -450,7 +450,7 @@ const AccountSettings: React.FC = () => {
                     size="sm"
                     disabled={isDisconnecting}
                     onClick={() => disconnectExternalAccount(rawProvider, account.id, account.destroy.bind(account))}
-                    className="h-7 text-xs text-white/40 hover:text-red-400 hover:bg-red-500/10 px-2.5 rounded-md transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                    className="h-7 text-xs text-muted-foreground dark:text-white/40 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 px-2.5 rounded-md transition-colors opacity-0 group-hover:opacity-100 shrink-0"
                   >
                     {isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
                   </Button>
@@ -464,13 +464,13 @@ const AccountSettings: React.FC = () => {
       <Section title="Security">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm text-white/80 mb-1">Password</label>
-            <div className="text-sm text-white/80 mb-2">Set password</div>
+            <label className="block text-sm text-muted-foreground dark:text-white/80 mb-1">Password</label>
+            <div className="text-sm text-muted-foreground dark:text-white/80 mb-2">Set password</div>
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3 py-2 rounded-md bg-black/60 border border-border text-white placeholder-white/30 focus:outline-none"
+              className="w-full px-3 py-2 rounded-md bg-background dark:bg-black/60 border border-border text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-white/30 focus:outline-none"
               placeholder="Enter a new password"
             />
             <div className="mt-3">
@@ -481,22 +481,22 @@ const AccountSettings: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm text-white/80 mb-2">Active devices</label>
+            <label className="block text-sm text-muted-foreground dark:text-white/80 mb-2">Active devices</label>
             <div className="space-y-3">
               {/* Current device (rich info) */}
-              <div className="rounded-md border border-white/10 bg-black/30 p-3">
-                <div className="text-base text-white font-medium flex items-center gap-3">
+              <div className="rounded-md border border-border dark:border-white/10 bg-muted/50 dark:bg-black/30 p-3">
+                <div className="text-base text-foreground dark:text-white font-medium flex items-center gap-3">
                   <span className="inline-flex items-center justify-center w-7 h-7 rounded">
-                    {getDeviceType() === 'mobile' ? <Smartphone className="w-5 h-5 text-white/80" /> : getDeviceType() === 'tablet' ? <Tablet className="w-5 h-5 text-white/80" /> : <DeviceThumbnail />}
+                    {getDeviceType() === 'mobile' ? <Smartphone className="w-5 h-5 text-muted-foreground dark:text-white/80" /> : getDeviceType() === 'tablet' ? <Tablet className="w-5 h-5 text-muted-foreground dark:text-white/80" /> : <DeviceThumbnail />}
                   </span>
-                  <span className="text-white text-lg font-semibold">{getDeviceName()}</span>
-                  <span className="text-xs text-white/80 bg-white/10 border border-white/20 rounded-md px-2 py-0.5">This device</span>
+                  <span className="text-foreground dark:text-white text-lg font-semibold">{getDeviceName()}</span>
+                  <span className="text-xs text-muted-foreground dark:text-white/80 bg-foreground/10 dark:bg-white/10 border border-border dark:border-white/20 rounded-md px-2 py-0.5">This device</span>
                 </div>
-                <div className="text-sm text-white/80 mt-1">{getBrowserLabel()}</div>
-                <div className="text-sm text-white/80 mt-1">
+                <div className="text-sm text-muted-foreground dark:text-white/80 mt-1">{getBrowserLabel()}</div>
+                <div className="text-sm text-muted-foreground dark:text-white/80 mt-1">
                   {ipInfo?.ip ? `${ipInfo.ip} ${ipInfo.city ? `(${ipInfo.city}, ${ipInfo.country || ""})` : ""}` : "IP unknown"}
                 </div>
-                <div className="text-sm text-white/80 mt-1">{new Date().toLocaleString()}</div>
+                <div className="text-sm text-muted-foreground dark:text-white/80 mt-1">{new Date().toLocaleString()}</div>
               </div>
 
               {/* Other sessions */}
@@ -505,20 +505,20 @@ const AccountSettings: React.FC = () => {
                 const limit = 3;
                 const list = showAllDevices ? others : others.slice(0, limit);
                 return list.map((s) => (
-                <div key={s.id} className="flex items-start justify-between gap-3 rounded-md border border-border/60 bg-black/30 p-3">
+                <div key={s.id} className="flex items-start justify-between gap-3 rounded-md border border-border dark:border-border/60 bg-muted/50 dark:bg-black/30 p-3">
                   <div>
-                    <div className="text-sm text-white/90 flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center w-5 h-5 bg-white/10 rounded text-white">
+                    <div className="text-sm text-foreground/90 dark:text-white/90 flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center w-5 h-5 bg-foreground/10 dark:bg-white/10 rounded text-foreground dark:text-white">
                         <Monitor className="w-4 h-4" />
                       </span>
-                      <span>Device</span>
+                      <span className="text-foreground dark:text-white">Device</span>
                     </div>
                     {s.lastActiveAt && (
-                      <div className="text-xs text-white/60 mt-1">{new Date(s.lastActiveAt).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground dark:text-white/60 mt-1">{new Date(s.lastActiveAt).toLocaleString()}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => endSession(s.id)} className="text-xs text-white/80 hover:text-white underline">Sign out</button>
+                    <button onClick={() => endSession(s.id)} className="text-xs text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white underline">Sign out</button>
                   </div>
                 </div>
                 ));
@@ -531,7 +531,7 @@ const AccountSettings: React.FC = () => {
                     <div className="pt-1">
                       <button
                         onClick={() => setShowAllDevices((v) => !v)}
-                        className="text-xs text-white/80 hover:text-white underline"
+                        className="text-xs text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white underline"
                       >
                         {showAllDevices ? "Show less devices" : `Show all devices (${othersCount})`}
                       </button>
@@ -545,7 +545,7 @@ const AccountSettings: React.FC = () => {
                   <button onClick={async () => {
                     const others = (sessions || []).filter(s => s.id !== currentSession?.id);
                     for (const s of others) { await endSession(s.id); }
-                  }} className="text-xs text-white/80 hover:text-white underline">
+                  }} className="text-xs text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white underline">
                     Sign out all other devices
                   </button>
                 </div>
@@ -556,7 +556,7 @@ const AccountSettings: React.FC = () => {
 
         <div className="mt-8">
           <div className="flex items-center justify-center">
-            <button onClick={handleDeleteAccount} className="text-sm text-red-400 hover:text-red-300 underline justify-self-start md:justify-self-start">Delete account</button>
+            <button onClick={handleDeleteAccount} className="text-sm text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 underline justify-self-start md:justify-self-start">Delete account</button>
           </div>
         </div>
       </Section>

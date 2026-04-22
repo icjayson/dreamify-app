@@ -52,7 +52,7 @@ const PricingPage = () => {
       />
 
       {/* Fixed overlay for better text readability */}
-      <div className="fixed inset-0 bg-black/70 z-1"></div>
+      <div className="fixed inset-0 bg-white/20 dark:bg-black/70 z-[1]"></div>
 
       <main className="relative z-10">
         <div className="relative z-10">

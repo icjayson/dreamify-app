@@ -82,15 +82,15 @@ export const PricingPlansSection: React.FC<{ className?: string }> = ({ classNam
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
           {/* Sandbox Plan */}
           <div 
-            className={`rounded-2xl border border-white/10 bg-white/5 p-8 h-full flex flex-col transition-all duration-700 ease-out delay-[100ms] ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
+            className={`rounded-2xl border border-border bg-foreground/5 dark:bg-white/5 p-8 h-full flex flex-col transition-all duration-700 ease-out delay-[100ms] ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
           >
-            <h3 className="text-xl font-semibold text-white">Sandbox</h3>
+            <h3 className="text-xl font-semibold text-foreground dark:text-white">Sandbox</h3>
             <div className="mt-4 flex items-baseline gap-1">
-              <span className="text-5xl font-bold text-white">$0</span>
-              <span className="text-white/60 text-sm">/ month</span>
+              <span className="text-5xl font-bold text-foreground dark:text-white">$0</span>
+              <span className="text-muted-foreground text-sm">/ month</span>
             </div>
-            <p className="mt-4 text-white/50 text-sm">Our baseline features, always available for individuals starting out.</p>
-            <ul className="my-8 space-y-4 text-sm text-white/70 flex-1">
+            <p className="mt-4 text-muted-foreground text-sm">Our baseline features, always available for individuals starting out.</p>
+            <ul className="my-8 space-y-4 text-sm text-muted-foreground flex-1">
               <li className="flex items-center gap-2">
                 <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                 100 monthly credits
@@ -106,7 +106,7 @@ export const PricingPlansSection: React.FC<{ className?: string }> = ({ classNam
             </ul>
             <button
               disabled
-              className="mt-auto w-full border border-white/10 bg-white/5 text-white/40 rounded-xl py-3 text-sm font-medium"
+              className="mt-auto w-full border border-border bg-foreground/5 dark:bg-white/5 text-muted-foreground rounded-xl py-3 text-sm font-medium"
             >
               Base Plan
             </button>
@@ -125,15 +125,15 @@ export const PricingPlansSection: React.FC<{ className?: string }> = ({ classNam
             <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-primary text-white text-[10px] font-bold tracking-wider uppercase shadow-lg shadow-primary/20">
               Limited Preview
             </div>
-            <h3 className="text-xl font-semibold text-white">Pro</h3>
+            <h3 className="text-xl font-semibold text-foreground dark:text-white">Pro</h3>
             <div className="mt-4 flex flex-col justify-start items-start gap-1">
-              <span className="text-5xl font-bold text-white tracking-tighter">TBD</span>
+              <span className="text-5xl font-bold text-foreground dark:text-white tracking-tighter">TBD</span>
             </div>
             <p className="mt-6 text-cyan-400 font-bold text-lg leading-tight uppercase tracking-wide">
               Free Access During Preview
             </p>
-            <ul className="my-8 space-y-4 text-sm text-white/80 flex-1">
-              <li className="flex items-center gap-2 font-medium text-white">
+            <ul className="my-8 space-y-4 text-sm text-foreground/80 dark:text-white/80 flex-1">
+              <li className="flex items-center gap-2 font-medium text-foreground dark:text-white">
                 <svg className="w-4 h-4 text-primary font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                 1,000 monthly credits
               </li>
@@ -164,14 +164,14 @@ export const PricingPlansSection: React.FC<{ className?: string }> = ({ classNam
 
           {/* Enterprise Plan */}
           <div 
-            className={`rounded-2xl border border-white/10 bg-white/5 p-8 h-full flex flex-col transition-all duration-700 ease-out delay-[300ms] ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
+            className={`rounded-2xl border border-border bg-foreground/5 dark:bg-white/5 p-8 h-full flex flex-col transition-all duration-700 ease-out delay-[300ms] ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
           >
-            <h3 className="text-xl font-semibold text-white">Enterprise</h3>
+            <h3 className="text-xl font-semibold text-foreground dark:text-white">Enterprise</h3>
             <div className="mt-4 flex items-baseline gap-1">
-              <span className="text-5xl font-bold text-white">Custom</span>
+              <span className="text-5xl font-bold text-foreground dark:text-white">Custom</span>
             </div>
-            <p className="mt-4 text-white/50 text-sm">Tailored solutions for large teams and high-volume data needs.</p>
-            <ul className="my-8 space-y-4 text-sm text-white/70 flex-1">
+            <p className="mt-4 text-muted-foreground text-sm">Tailored solutions for large teams and high-volume data needs.</p>
+            <ul className="my-8 space-y-4 text-sm text-muted-foreground flex-1">
               <li className="flex items-center gap-2">
                 <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                 Custom credit volume

@@ -153,8 +153,8 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
               <div className="relative z-10 w-full h-[calc(80vh-20px)] bg-muted overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-border">
-                  <h2 className="text-xl font-semibold text-white">{copy.title}</h2>
-                  <p className="text-sm text-white/70 mt-1">{copy.subtitle}</p>
+                  <h2 className="text-xl font-semibold text-foreground dark:text-white">{copy.title}</h2>
+                  <p className="text-sm text-muted-foreground dark:text-white/70 mt-1">{copy.subtitle}</p>
                 </div>
 
                 {/* Template Grid */}
@@ -172,8 +172,8 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
 
                           {/* Selected badge */}
                           {selectedTemplate?.id === template.id && (
-                            <div className="absolute top-4 left-4 bg-muted text-white px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1">
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <div className="absolute top-4 left-4 bg-muted text-foreground dark:text-white z-20 shadow-sm border border-border/50 px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1">
+                              <svg className="w-3 h-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                               </svg>
                               Selected
@@ -185,15 +185,15 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
                             {/* Select/Unselect Template button - top right */}
                             <div className="flex justify-end">
                               {selectedTemplate?.id === template.id ? (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedTemplate(null);
-                                  }}
-                                  className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
-                                >
-                                  {copy.btnUnselect}
-                                </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedTemplate(null);
+                                    }}
+                                    className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 text-white border-white/40 hover:bg-white/10"
+                                  >
+                                    {copy.btnUnselect}
+                                  </button>
                               ) : (
                                 <button
                                   onClick={(e) => {
@@ -244,7 +244,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-3 right-3 p-2 rounded-md text-white/70 hover:text-white hover:bg-black transition-colors z-10"
+            className="absolute top-3 right-3 p-2 rounded-md text-muted-foreground hover:text-foreground dark:text-white/70 dark:hover:text-white hover:bg-black/5 dark:hover:bg-black transition-colors z-10"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -254,8 +254,8 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
 
           {/* Header */}
           <div className="px-6 py-4 border-b border-border">
-            <h2 className="text-2xl font-semibold text-white">{copy.title}</h2>
-            <p className="text-sm text-white/70 mt-1">{copy.subtitle}</p>
+            <h2 className="text-2xl font-semibold text-foreground dark:text-white">{copy.title}</h2>
+            <p className="text-sm text-muted-foreground dark:text-white/70 mt-1">{copy.subtitle}</p>
           </div>
 
           {/* Template Grid */}
@@ -273,8 +273,8 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
 
                     {/* Selected badge */}
                     {selectedTemplate?.id === template.id && (
-                      <div className="absolute top-4 left-4 bg-muted text-white px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1">
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <div className="absolute top-4 left-4 bg-background/90 dark:bg-muted text-foreground dark:text-white z-20 shadow-md border border-border px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1">
+                        <svg className="w-3 h-3 text-primary animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                         Selected
@@ -291,7 +291,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
                               e.stopPropagation();
                               setSelectedTemplate(null);
                             }}
-                            className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
+                            className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 text-white border-white/40 hover:bg-white/10 transition-all shadow-sm"
                           >
                             Unselect template
                           </button>

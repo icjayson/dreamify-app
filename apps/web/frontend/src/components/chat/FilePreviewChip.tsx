@@ -52,12 +52,12 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
       if (file.status === 'processing' || file.status === 'accepted') {
         return <Sparkles className="w-4 h-4 text-accent animate-pulse" />;
       }
-      return <Loader2 className="w-4 h-4 text-white/70 animate-spin" />;
+      return <Loader2 className="w-4 h-4 text-muted-foreground dark:text-white/70 animate-spin" />;
     }
 
     return (
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        <FileText className="w-4 h-4 text-white/70" />
+        <FileText className="w-4 h-4 text-muted-foreground dark:text-white/70" />
       </div>
     );
   };
@@ -91,19 +91,19 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-white/10 bg-[#1e1e1e] px-3 py-2 transition-all hover:border-white/20 outline-none">
+        <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-border bg-background dark:bg-[#1e1e1e] px-3 py-2 transition-all hover:bg-muted dark:hover:bg-white/5 outline-none shadow-sm dark:shadow-none">
           {renderLiveStatus()}
 
           <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
             {isIntegration && (
               <>
-                <span className="flex-shrink-0 font-semibold text-white">
+                <span className="flex-shrink-0 font-semibold text-foreground dark:text-white">
                   {getAppShortName()}
                 </span>
-                <span className="flex-shrink-0 font-light text-white/30">•</span>
+                <span className="flex-shrink-0 font-light text-muted-foreground/30">•</span>
               </>
             )}
-            <span className="min-w-0 flex-1 truncate text-gray-400" title={getContextText()}>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground dark:text-gray-400" title={getContextText()}>
               {getContextText()}
             </span>
 
@@ -115,7 +115,7 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
               e.stopPropagation();
               onRemove();
             }}
-            className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-gray-500 transition-colors hover:text-white"
+            className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground dark:hover:text-white"
             aria-label="Remove correlation"
           >
             <X className="h-3 w-3" />
@@ -125,7 +125,7 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
       <TooltipContent
         side="top"
         sideOffset={8}
-        className="max-w-[260px] bg-black/90 text-xs text-white shadow-lg break-words"
+        className="max-w-[260px] bg-popover text-xs text-popover-foreground border border-border shadow-lg break-words"
       >
         {tooltipText}
       </TooltipContent>

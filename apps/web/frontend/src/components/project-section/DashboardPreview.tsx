@@ -1329,7 +1329,7 @@ const DashboardPreview = ({
                   const cellKey = String(component.id);
                   return (
                     <div key={cellKey} className={`animate-fade-in h-full min-h-0 ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
-                      <div className="relative h-full min-h-0 rounded-md group/card transition-shadow duration-200 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.25)]" data-chart-id={cellKey}>
+                      <div className="relative h-full min-h-0 rounded-md group/card transition-all duration-200 hover:shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.25)]" data-chart-id={cellKey}>
                         {showCardActionsMenu && (
                           <div
                             className="absolute left-2 top-2 z-20 opacity-0 group-hover/card:opacity-40 transition-opacity duration-150 pointer-events-none"
@@ -1349,7 +1349,7 @@ const DashboardPreview = ({
                                 <button
                                   type="button"
                                   aria-label="Card actions"
-                                  className="flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/30 text-white/80 backdrop-blur-sm outline-none transition-colors hover:bg-black/55 hover:text-white focus-visible:ring-2 focus-visible:ring-white/30"
+                                  className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background/50 dark:border-white/10 dark:bg-black/30 text-foreground/80 dark:text-white/80 backdrop-blur-sm outline-none transition-colors hover:bg-muted dark:hover:bg-black/55 hover:text-foreground dark:hover:text-white focus-visible:ring-2 focus-visible:ring-primary/30"
                                 >
                                   <MoreVertical className="h-3.5 w-3.5" strokeWidth={2} />
                                 </button>
@@ -1357,10 +1357,10 @@ const DashboardPreview = ({
                               <DropdownMenuContent
                                 align="end"
                                 sideOffset={6}
-                                className="min-w-[11rem] rounded-xl border-white/10 bg-[#161616]/95 backdrop-blur-md text-white shadow-xl"
+                                className="min-w-[11rem] rounded-xl border border-border dark:border-white/10 bg-popover/95 dark:bg-[#161616]/95 backdrop-blur-md text-popover-foreground dark:text-white shadow-xl"
                               >
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 py-2 focus:bg-white/10 focus:text-white"
+                                  className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
                                   onSelect={() => {
                                     window.dispatchEvent(
                                       new CustomEvent(SELECT_CHART_CONTEXT_EVENT, {
@@ -1373,7 +1373,7 @@ const DashboardPreview = ({
                                   Fix in chat
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 py-2 focus:bg-white/10 focus:text-white"
+                                  className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
                                   disabled={exportingIds.has(cellKey)}
                                   onSelect={async () => {
                                     const cardEl = document.querySelector<HTMLElement>(
@@ -1398,7 +1398,7 @@ const DashboardPreview = ({
                                     : <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />}
                                   Export to PNG
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-white/10" />
+                                <DropdownMenuSeparator className="bg-border dark:bg-white/10" />
                                 <DropdownMenuItem
                                   className="cursor-pointer gap-2 py-2 text-red-400 focus:bg-red-500/15 focus:text-red-400"
                                   onSelect={() => setConfirmRemoveId(cellKey)}
@@ -1435,15 +1435,15 @@ const DashboardPreview = ({
         )}
       </div>
       <AlertDialog open={confirmRemoveId !== null} onOpenChange={(open) => { if (!open) setConfirmRemoveId(null); }}>
-        <AlertDialogContent className="border-white/15 bg-[#1a1a1a] text-white">
+        <AlertDialogContent className="border-border dark:border-white/15 bg-background dark:bg-[#1a1a1a] text-foreground dark:text-white">
           <AlertDialogHeader>
             <AlertDialogTitle>Remove chart?</AlertDialogTitle>
-            <AlertDialogDescription className="text-white/60">
+            <AlertDialogDescription className="text-muted-foreground dark:text-white/60">
               This chart will be removed from the dashboard. This cannot be undone in the current session.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-white/15 bg-transparent text-white hover:bg-white/10">
+            <AlertDialogCancel className="border-border dark:border-white/15 bg-transparent text-foreground dark:text-white hover:bg-black/5 dark:hover:bg-white/10 font-medium">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction

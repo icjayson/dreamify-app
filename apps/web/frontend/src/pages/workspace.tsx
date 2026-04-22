@@ -41,11 +41,11 @@ function inferSource(title: string): string {
 }
 
 const SOURCE_COLORS: Record<string, string> = {
-  GA4: "bg-orange-500/20 text-orange-300",
-  "Google Sheets": "bg-green-500/20 text-green-300",
-  "Meta Ads": "bg-blue-500/20 text-blue-300",
-  Stripe: "bg-purple-500/20 text-purple-300",
-  CSV: "bg-white/10 text-white/60",
+  GA4: "bg-orange-500/20 text-orange-600 dark:text-orange-300",
+  "Google Sheets": "bg-green-500/20 text-green-700 dark:text-green-300",
+  "Meta Ads": "bg-blue-500/20 text-blue-700 dark:text-blue-300",
+  Stripe: "bg-purple-500/20 text-purple-700 dark:text-purple-300",
+  CSV: "bg-foreground/10 text-foreground/60",
 };
 
 type Tab = "projects" | "connectors" | "dashboards";
@@ -312,14 +312,14 @@ export default function WorkspacePage() {
           <div className="flex items-center gap-2 text-sm">
             <button
               onClick={() => navigate("/")}
-              className="text-white/40 hover:text-white transition-colors flex items-center justify-center p-1.5 -ml-1.5 rounded-md hover:bg-white/10 mr-1"
+              className="text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center p-1.5 -ml-1.5 rounded-md hover:bg-muted mr-1"
               aria-label="Back to homepage"
             >
               <Home className="w-4 h-4" />
             </button>
-            <span className="hidden md:inline text-white/40">{displayName}</span>
-            <span className="hidden md:inline text-white/20">›</span>
-            <span className="text-white font-medium">
+            <span className="hidden md:inline text-muted-foreground">{displayName}</span>
+            <span className="hidden md:inline text-border">›</span>
+            <span className="text-foreground font-medium">
               {activeTab === "dashboards" ? "My Dashboards" : activeTab === "connectors" ? "Connectors" : "Projects"}
             </span>
           </div>
@@ -336,19 +336,19 @@ export default function WorkspacePage() {
         <div className="md:hidden flex items-center justify-around border-b border-border/30 bg-muted/95 sticky top-0 z-40 backdrop-blur-sm">
           <button
             onClick={() => navigate('/workspace?tab=projects')}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'projects' ? 'border-primary text-white' : 'border-transparent text-white/50'}`}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'projects' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}
           >
             Projects
           </button>
           <button
             onClick={() => navigate('/workspace?tab=connectors')}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'connectors' ? 'border-primary text-white' : 'border-transparent text-white/50'}`}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'connectors' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}
           >
             Connectors
           </button>
           <button
             onClick={() => navigate('/workspace?tab=dashboards')}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'dashboards' ? 'border-primary text-white' : 'border-transparent text-white/50'}`}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'dashboards' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}
           >
             Dashboards
           </button>
@@ -372,17 +372,17 @@ export default function WorkspacePage() {
                   <div className="w-10 h-10 rounded-full border-2 border-dashed border-border/50 group-hover:border-primary/50 flex items-center justify-center transition-colors">
                     <Plus className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
-                  <p className="text-sm text-muted-foreground group-hover:text-white/70 transition-colors">New Project</p>
+                  <p className="text-sm text-muted-foreground group-hover:text-foreground/70 transition-colors">New Project</p>
                 </CardContent>
               </Card>
 
               {projectsLoading
                 ? Array.from({ length: 3 }).map((_, i) => (
                   <Card key={i} className="animate-pulse" style={{ minHeight: "200px" }}>
-                    <div className="w-full aspect-video bg-white/5 rounded-t-lg" />
+                    <div className="w-full aspect-video bg-muted/50 rounded-t-lg" />
                     <CardContent className="p-4">
-                      <div className="h-4 bg-white/10 rounded mb-2 w-3/4" />
-                      <div className="h-3 bg-white/5 rounded w-1/2" />
+                      <div className="h-4 bg-muted rounded mb-2 w-3/4" />
+                      <div className="h-3 bg-muted/50 rounded w-1/2" />
                     </CardContent>
                   </Card>
                 ))
@@ -411,14 +411,14 @@ export default function WorkspacePage() {
               {/* Mobile List View */}
               <div className="md:hidden flex flex-col gap-2">
                 {projectsLoading ? (
-                  <div className="text-center text-white/50 text-sm py-4">Loading your projects...</div>
+                  <div className="text-center text-muted-foreground text-sm py-4">Loading your projects...</div>
                 ) : projects.length === 0 ? (
-                  <div className="text-center text-white/50 text-sm py-4 bg-white/5 rounded-lg border border-white/10">No projects yet</div>
+                  <div className="text-center text-muted-foreground text-sm py-4 bg-muted/30 rounded-lg border border-border/40">No projects yet</div>
                 ) : (
                   projects.map((item) => (
                     <div
                       key={item.id}
-                      className="group relative flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 transition-colors"
+                      className="group relative flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/30 hover:bg-muted transition-colors"
                       onClick={() => openProject(item.id)}
                     >
                       <div className="flex items-center gap-3 min-w-0 pr-10">
@@ -426,25 +426,25 @@ export default function WorkspacePage() {
                           <FolderOpen className="w-4 h-4 text-primary" />
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="text-sm font-medium text-white truncate">{item.title}</span>
-                          {item.updated_at && <span className="text-xs text-white/40">{new Date(item.updated_at).toLocaleDateString()}</span>}
+                          <span className="text-sm font-medium text-foreground truncate">{item.title}</span>
+                          {item.updated_at && <span className="text-xs text-muted-foreground">{new Date(item.updated_at).toLocaleDateString()}</span>}
                         </div>
                       </div>
 
                       <button
-                        className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/10 transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-full hover:bg-muted transition-colors"
                         onClick={(e) => {
                           e.stopPropagation();
                           setOpenMenuId((prev) => (prev === item.id ? null : item.id));
                         }}
                       >
-                        <Ellipsis className="w-5 h-5 text-white/60" />
+                        <Ellipsis className="w-5 h-5 text-muted-foreground" />
                       </button>
 
                       {openMenuId === item.id && (
-                        <div className="absolute right-4 top-10 w-32 bg-[#2a2a2a] border border-white/10 rounded-md shadow-xl py-1 z-50">
+                        <div className="absolute right-4 top-10 w-32 bg-popover border border-border rounded-md shadow-xl py-1 z-50">
                           <button
-                            className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/10"
+                            className="w-full text-left px-3 py-2 text-sm text-foreground/80 hover:bg-muted"
                             onClick={(e) => {
                               e.stopPropagation();
                               setDialog({ open: true, mode: 'rename', itemId: item.id, itemTitle: item.title, value: item.title });
@@ -454,7 +454,7 @@ export default function WorkspacePage() {
                             Rename
                           </button>
                           <button
-                            className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-white/10"
+                            className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-muted"
                             onClick={(e) => {
                               e.stopPropagation();
                               setDialog({ open: true, mode: 'delete', itemId: item.id, itemTitle: item.title, value: '' });
@@ -476,7 +476,7 @@ export default function WorkspacePage() {
           {activeTab === "connectors" && (
             <div>
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-white mb-1">Connectors</h2>
+                <h2 className="text-lg font-semibold text-foreground dark:text-white mb-1">Connectors</h2>
                 <p className="text-sm text-muted-foreground">Connect your data sources to build dashboards faster.</p>
               </div>
               {connectorsLoading ? (
@@ -492,7 +492,7 @@ export default function WorkspacePage() {
                     if (categoryConnectors.length === 0) return null;
                     return (
                       <div key={category}>
-                        <h3 className="text-xs font-semibold uppercase tracking-widest text-white/30 mb-3">{category}</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{category}</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {categoryConnectors.map((connector) => {
                             const status = connectorStatus[connector.name];
@@ -516,15 +516,15 @@ export default function WorkspacePage() {
                                       />
                                     </div>
                                     <div>
-                                      <h3 className="font-medium text-sm text-white">{connector.name}</h3>
+                                      <h3 className="font-medium text-sm text-foreground">{connector.name}</h3>
                                       {isSoon ? (
-                                        <span className="text-xs text-white/30">Coming soon</span>
+                                        <span className="text-xs text-muted-foreground">Coming soon</span>
                                       ) : isConnected ? (
-                                        <span className="text-xs text-emerald-400">
+                                        <span className="text-xs text-emerald-600 dark:text-emerald-400">
                                           Connected account: {status?.info ? status.info.replace(/^Account:\s*/i, "").replace(" connected", "") : connector.name}
                                         </span>
                                       ) : (
-                                        <span className="text-xs text-white/40">Not connected</span>
+                                        <span className="text-xs text-muted-foreground">Not connected</span>
                                       )}
                                     </div>
                                   </div>
@@ -562,25 +562,25 @@ export default function WorkspacePage() {
                 onPreviewGenerated={handlePreviewGenerated}
               />
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-white mb-1">My Dashboards</h2>
+                <h2 className="text-lg font-semibold text-foreground dark:text-white mb-1">My Dashboards</h2>
                 <p className="text-sm text-muted-foreground">All dashboards you have created across your projects.</p>
               </div>
               {dashboardsLoading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <Card key={i} className="animate-pulse overflow-hidden">
-                      <div className="w-full aspect-video bg-white/5" />
+                      <div className="w-full aspect-video bg-muted/50" />
                       <CardContent className="p-4">
-                        <div className="h-4 bg-white/10 rounded mb-2 w-3/4" />
-                        <div className="h-3 bg-white/5 rounded w-1/2" />
+                        <div className="h-4 bg-muted rounded mb-2 w-3/4" />
+                        <div className="h-3 bg-muted/50 rounded w-1/2" />
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               ) : dashboardProjects.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
-                  <LayoutDashboard className="w-12 h-12 text-white/10 mb-4" />
-                  <h3 className="text-white/60 font-medium mb-2">No dashboards yet</h3>
+                  <LayoutDashboard className="w-12 h-12 text-muted-foreground/30 mb-4" />
+                  <h3 className="text-muted-foreground font-medium mb-2">No dashboards yet</h3>
                   <p className="text-sm text-muted-foreground mb-6 max-w-xs">
                     Upload a CSV, connect a data source, and let Dreamify build your first dashboard.
                   </p>
@@ -675,11 +675,11 @@ export default function WorkspacePage() {
 
                         {/* Card info */}
                         <CardContent className="p-4">
-                          <h3 className="font-medium text-sm mb-1.5 truncate text-white">{title}</h3>
+                          <h3 className="font-medium text-sm mb-1.5 truncate text-foreground">{title}</h3>
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-xs text-muted-foreground truncate">Source: {source}</p>
                             {createdAt && (
-                              <p className="text-xs text-white/30 whitespace-nowrap flex-shrink-0">{createdAt}</p>
+                              <p className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{createdAt}</p>
                             )}
                           </div>
                         </CardContent>
@@ -697,19 +697,19 @@ export default function WorkspacePage() {
       {dialog.open && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDialog({ ...dialog, open: false })} />
-          <div className="relative z-[201] w-11/12 max-w-[320px] rounded-xl border border-white/10 bg-muted shadow-2xl p-4">
+          <div className="relative z-[201] w-11/12 max-w-[320px] rounded-xl border border-border bg-muted shadow-2xl p-4">
             {dialog.mode === 'rename' ? (
               <div>
-                <div className="text-base font-medium text-white mb-3">Rename project</div>
+                <div className="text-base font-medium text-foreground mb-3">Rename project</div>
                 <input
                   value={dialog.value}
                   onChange={(e) => setDialog({ ...dialog, value: e.target.value })}
-                  className="w-full px-3 py-2 text-sm rounded-md bg-black/50 border border-white/10 outline-none focus:border-primary/50 text-white"
+                  className="w-full px-3 py-2 text-sm rounded-md bg-background border border-border outline-none focus:border-primary/50 text-foreground"
                   autoFocus
                 />
                 <div className="mt-4 flex justify-end gap-2">
                   <button
-                    className="px-4 py-2 text-sm rounded-md bg-transparent text-white/70 hover:bg-white/5"
+                    className="px-4 py-2 text-sm rounded-md bg-transparent text-foreground/70 hover:bg-muted/80"
                     onClick={() => setDialog({ ...dialog, open: false })}
                   >
                     Cancel
@@ -734,11 +734,11 @@ export default function WorkspacePage() {
               </div>
             ) : (
               <div>
-                <div className="text-base font-medium text-white mb-2">Delete Project</div>
-                <div className="text-sm text-white/70 mb-4">Are you sure you want to delete "{dialog.itemTitle}"? This cannot be undone.</div>
+                <div className="text-base font-medium text-foreground mb-2">Delete Project</div>
+                <div className="text-sm text-foreground/70 mb-4">Are you sure you want to delete "{dialog.itemTitle}"? This cannot be undone.</div>
                 <div className="flex justify-end gap-2">
                   <button
-                    className="px-4 py-2 text-sm rounded-md bg-transparent text-white/70 hover:bg-white/5"
+                    className="px-4 py-2 text-sm rounded-md bg-transparent text-foreground/70 hover:bg-muted/80"
                     onClick={() => setDialog({ ...dialog, open: false })}
                   >
                     Cancel

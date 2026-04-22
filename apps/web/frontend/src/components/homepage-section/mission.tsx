@@ -38,7 +38,7 @@ export function MissionSection({
     <section className={cn("relative min-h-screen w-full flex items-center justify-center", className)}>
       <div ref={rootRef} className="max-w-6xl mx-auto px-6 text-center">
         <h1
-          className={`text-2xl md:text-4xl font-medium tracking-tight transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          className={`text-2xl md:text-4xl font-medium tracking-tight text-foreground dark:text-white transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
             }`}
           style={{ transitionDelay: "0ms" }}
         >
@@ -46,15 +46,15 @@ export function MissionSection({
         </h1>
 
         <h1
-          className={`mt-2 text-5xl md:text-8xl font-medium font-instrument-serif tracking-tight transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          className={`mt-2 text-5xl md:text-8xl font-medium font-instrument-serif tracking-tight text-foreground dark:text-white transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
             }`}
           style={{ transitionDelay: "80ms" }}
         >
-          Dashboard should <span className="line-through decoration-white decoration-8 italic">static</span> motion
+          Dashboard should <span className="line-through decoration-foreground dark:decoration-white decoration-8 italic">static</span> motion
         </h1>
 
         <h2
-          className={`mt-12 text-xl md:text-2xl font-regular text-white/70 transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[120px]"
+          className={`mt-12 text-xl md:text-2xl font-regular text-muted-foreground dark:text-white/70 transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[120px]"
             }`}
           style={{ transitionDelay: "160ms" }}
         >
@@ -62,7 +62,7 @@ export function MissionSection({
         </h2>
 
         <p
-          className={`max-w-3xl mx-auto mt-6 text-base italic md:text-lg leading-relaxed text-white/50 transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[-120px]"
+          className={`max-w-3xl mx-auto mt-6 text-base italic md:text-lg leading-relaxed text-muted-foreground dark:text-white/50 transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[-120px]"
             }`}
           style={{ transitionDelay: "240ms" }}
         >

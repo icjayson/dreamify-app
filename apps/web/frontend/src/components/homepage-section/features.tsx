@@ -78,8 +78,8 @@ export const FeaturesSection = () => {
         <div className={`text-center mb-16 tracking-tight transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
           }`}
           style={{ transitionDelay: "80ms" }}>
-          <h2 className="text-4xl md:text-6xl font-instrument-serif text-white">From chat to cinematic dashboard — all in one interface</h2>
-          <p className="text-md text-white/60 mt-2">Click to explore</p>
+          <h2 className="text-4xl md:text-6xl font-instrument-serif text-foreground dark:text-white">From chat to cinematic dashboard — all in one interface</h2>
+          <p className="text-md text-muted-foreground dark:text-white/60 mt-2">Click to explore</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
@@ -94,30 +94,30 @@ export const FeaturesSection = () => {
                 <button
                   key={step.id}
                   onClick={() => onClick(i)}
-                  className={`group relative w-full text-left px-3 md:px-5 lg:px-6 py-5 rounded-xl transition-all duration-300 border-b border-white/10 ${active ? 'bg-white/5 ring-1 ring-white/40 shadow-[0_0_0_1px_hsl(var(--white)_/_0.2)]' : 'hover:bg-white/5'
+                  className={`group relative w-full text-left px-3 md:px-5 lg:px-6 py-5 rounded-xl transition-all duration-300 border-b border-border ${active ? 'bg-foreground/5 dark:bg-white/5 ring-1 ring-border shadow-[0_0_20px_hsl(var(--primary)/0.3)]' : 'hover:bg-foreground/5 dark:hover:bg-white/5'
                     }`}
                   aria-current={active ? 'step' : undefined}
                 >
                   {/* Active left bar */}
-                  <div className={`absolute left-0 top-0 h-full w-1.5 rounded-l-sm bg-gradient-to-b from-white to-white transition-opacity ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}`} />
+                  <div className={`absolute left-0 top-0 h-full w-1.5 rounded-l-sm bg-gradient-to-b from-foreground to-foreground dark:from-white dark:to-white transition-opacity ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}`} />
 
                   <div className="flex items-start gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 icon-panel shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] rounded-md flex items-center justify-center">
-                        <Icon className="w-5 h-5 text-white" />
+                      <div className="w-9 h-9 icon-panel shadow-[0_0_20px_hsl(var(--primary)/0.3)] ring-1 ring-border rounded-md flex items-center justify-center">
+                        <Icon className="w-5 h-5 text-foreground dark:text-white" />
                       </div>
                     </div>
                     <div className="flex-1">
                       <div
                         className={`h-0.5 w-full mb-3 ${active
-                          ? 'bg-white'
-                          : 'bg-white/40'
+                          ? 'bg-foreground dark:bg-white'
+                          : 'bg-foreground/40 dark:bg-white/40'
                           }`}
                       />
-                      <div className={`text-xl md:text-2xl font-semibold font-instrument-serif ${active ? 'text-white' : 'text-white'}`}>{step.title}</div>
-                      <div className="text-sm text-white/90 mt-2 leading-relaxed">{step.description}</div>
+                      <div className={`text-xl md:text-2xl font-semibold font-instrument-serif text-foreground dark:text-white`}>{step.title}</div>
+                      <div className="text-sm text-foreground/90 dark:text-white/90 mt-2 leading-relaxed">{step.description}</div>
                       <div className={`overflow-hidden transition-all duration-300 ${active ? 'max-h-48 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
-                        <ul className="list-disc pl-6 text-sm text-white/70 space-y-1">
+                        <ul className="list-disc pl-6 text-sm text-muted-foreground dark:text-white/70 space-y-1">
                           {step.bullets.map((b, idx) => (
                             <li key={idx}>{b}</li>
                           ))}
@@ -125,7 +125,7 @@ export const FeaturesSection = () => {
                       </div>
                     </div>
                     <div className={`mt-1 ml-2 transition-transform ${active ? 'rotate-90' : ''}`} aria-hidden>
-                      <ChevronRight className="w-4 h-4 text-white/70" />
+                      <ChevronRight className="w-4 h-4 text-muted-foreground dark:text-white/70" />
                     </div>
                   </div>
                 </button>
@@ -151,7 +151,7 @@ export const FeaturesSection = () => {
                     src={steps[activeIndex]?.videoSrc}
                   />
                 ) : (
-                  <div className="w-full aspect-video flex items-center justify-center text-white/60">
+                  <div className="w-full aspect-video flex items-center justify-center text-muted-foreground dark:text-white/60">
                     Click a step to preview the demo
                   </div>
                 )}
@@ -159,11 +159,11 @@ export const FeaturesSection = () => {
               <div className="mt-4 text-center">
                 {activeIndex >= 0 ? (
                   <>
-                    <div className="text-sm text-white/80 font-medium">{steps[activeIndex]?.title}</div>
-                    <div className="text-xs text-white/60 mt-1">{steps[activeIndex]?.description}</div>
+                    <div className="text-sm text-foreground/80 dark:text-white/80 font-medium">{steps[activeIndex]?.title}</div>
+                    <div className="text-xs text-muted-foreground dark:text-white/60 mt-1">{steps[activeIndex]?.description}</div>
                   </>
                 ) : (
-                  <div className="text-xs text-white/60">Select a step to see details</div>
+                  <div className="text-xs text-muted-foreground dark:text-white/60">Select a step to see details</div>
                 )}
               </div>
             </div>

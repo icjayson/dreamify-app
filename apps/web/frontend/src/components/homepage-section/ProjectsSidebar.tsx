@@ -93,8 +93,8 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
       />
       <div className={`absolute left-0 top-0 h-full w-[280px] max-w-[80vw] ${className || 'bg-muted/80'} border-r border-border p-4 flex flex-col transform transition-transform duration-300 ease-out ${sidebarShown ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between mb-4">
-          <div className="text-white/90 font-medium">My workspace</div>
-          <button onClick={onClose} className="text-white/70 hover:text-white text-sm" aria-label="Close projects">
+          <div className="text-foreground/90 dark:text-white/90 font-medium">My workspace</div>
+          <button onClick={onClose} className="text-muted-foreground dark:text-white/70 hover:text-foreground dark:hover:text-white text-sm" aria-label="Close projects">
             <PanelLeftClose className="w-4 h-4" />
           </button>
         </div>
@@ -102,37 +102,37 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
           className="button-outline w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-2"
           onClick={safeNewProject}
         >
-          <SquarePlus className="w-4 h-4 text-white/70" />
+          <SquarePlus className="w-4 h-4 text-muted-foreground dark:text-white/70" />
           <span>New project</span>
         </button>
         {/* Connectors */}
         <button
-          className="w-full text-left px-3 py-2 mt-2 rounded-md text-sm flex items-center gap-2 hover:bg-black/30 transition-colors text-white/80"
+          className="w-full text-left px-3 py-2 mt-2 rounded-md text-sm flex items-center gap-2 hover:bg-foreground/5 dark:hover:bg-black/30 transition-colors text-foreground/80 dark:text-white/80"
           onClick={() => { onClose(); navigate('/workspace?tab=connectors'); }}
         >
-          <Plug className="w-4 h-4 text-white/60" />
+          <Plug className="w-4 h-4 text-muted-foreground dark:text-white/60" />
           <span>Connectors</span>
         </button>
         {/* My Dashboards */}
         <button
-          className="w-full text-left px-3 py-2 mt-2 rounded-md text-sm flex items-center gap-2 hover:bg-black/30 transition-colors text-white/80"
+          className="w-full text-left px-3 py-2 mt-2 rounded-md text-sm flex items-center gap-2 hover:bg-foreground/5 dark:hover:bg-black/30 transition-colors text-foreground/80 dark:text-white/80"
           onClick={() => { onClose(); navigate('/workspace?tab=dashboards'); }}
         >
-          <LayoutDashboard className="w-4 h-4 text-white/60" />
+          <LayoutDashboard className="w-4 h-4 text-muted-foreground dark:text-white/60" />
           <span>My Dashboards</span>
         </button>
         <div className="flex-1 overflow-y-auto space-y-2">
-          <div className="text-white/50 text-xs mt-4 mb-4">Recent projects</div>
+          <div className="text-muted-foreground dark:text-white/50 text-xs mt-4 mb-4">Recent projects</div>
           {isLoading ? (
-            <div className="text-white/50 text-xs mt-4 text-center flex items-center justify-center gap-2">
-              <div className="w-3 h-3 border-2 border-white/20 border-t-white/80 rounded-full animate-spin"></div>
+            <div className="text-muted-foreground dark:text-white/50 text-xs mt-4 text-center flex items-center justify-center gap-2">
+              <div className="w-3 h-3 border-2 border-border dark:border-white/20 border-t-foreground dark:border-t-white/80 rounded-full animate-spin"></div>
               Loading your projects
             </div>
           ) : hasRecents ? (
             computedRecents.map((item) => (
               <div
                 key={item.id}
-                className="group relative w-full rounded-md hover:bg-black/40 transition-colors"
+                className="group relative w-full rounded-md hover:bg-foreground/5 dark:hover:bg-black/40 transition-colors"
                 onClick={() => safeOpenProject(item.id)}
                 role="button"
                 tabIndex={0}
@@ -152,19 +152,19 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
                     safeOpenProject(item.id);
                   }}
                 >
-                  <SquareArrowOutUpRight className="w-4 h-4 text-white/80" />
+                  <SquareArrowOutUpRight className="w-4 h-4 text-muted-foreground dark:text-white/80" />
                 </button>
 
                 {/* Title row with single-line truncation */}
-                <div className="w-full text-left px-3 py-2 text-white/90 text-sm md:transition-all md:duration-200 md:group-hover:pl-9 md:group-hover:pr-10 truncate whitespace-nowrap overflow-hidden">
+                <div className="w-full text-left px-3 py-2 text-foreground/90 dark:text-white/90 text-sm md:transition-all md:duration-200 md:group-hover:pl-9 md:group-hover:pr-10 truncate whitespace-nowrap overflow-hidden">
                   {item.title}
                 </div>
 
                 {/* Hover tooltip with full title */}
                 <div className="pointer-events-none absolute left-3 bottom-full mb-2 z-[200] opacity-0 group-hover:opacity-100 transition-opacity hidden md:block">
-                  <div className="relative max-w-[240px] px-3 py-1.5 text-xs bg-black/80 text-white rounded-md shadow-lg whitespace-normal break-words">
+                  <div className="relative max-w-[240px] px-3 py-1.5 text-xs bg-background/95 dark:bg-black/80 border border-border dark:border-transparent text-foreground dark:text-white rounded-md shadow-lg whitespace-normal break-words">
                     {item.title}
-                    <div className="absolute -bottom-1 left-4 w-2 h-2 bg-black/80 rotate-45" />
+                    <div className="absolute -bottom-1 left-4 w-2 h-2 bg-background/95 dark:bg-black/80 border-r border-b border-border dark:border-transparent rotate-45" />
                   </div>
                 </div>
 
@@ -179,7 +179,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
                     setOpenMenuId((prev) => (prev === item.id ? null : item.id));
                   }}
                 >
-                  <Ellipsis className="w-4 h-4 text-white/80" />
+                  <Ellipsis className="w-4 h-4 text-muted-foreground dark:text-white/80" />
                 </button>
 
                 {openMenuId === item.id && (
@@ -213,7 +213,7 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
               </div>
             ))
           ) : (
-            <div className="text-white/50 text-xs mt-4 text-center">No projects yet</div>
+            <div className="text-muted-foreground dark:text-white/50 text-xs mt-4 text-center">No projects yet</div>
           )}
         </div>
       </div>
@@ -225,16 +225,16 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
           <div className="relative z-[161] w-[280px] rounded-md border border-border/40 bg-background/95 backdrop-blur-md shadow-xl p-3">
             {dialog.mode === 'rename' ? (
               <div>
-                <div className="text-sm text-white/80 mb-2">Rename project</div>
+                <div className="text-sm text-foreground/80 dark:text-white/80 mb-2">Rename project</div>
                 <input
                   value={dialog.value}
                   onChange={(e) => setDialog({ ...dialog, value: e.target.value })}
-                  className="w-full px-2 py-1.5 text-sm rounded-md bg-muted/50 border border-border/40 outline-none focus:border-primary/60"
+                  className="w-full px-2 py-1.5 text-sm rounded-md bg-transparent dark:bg-muted/50 border border-border/40 outline-none focus:border-primary/60 text-foreground dark:text-white"
                   autoFocus
                 />
                 <div className="mt-3 flex justify-end gap-2">
                   <button
-                    className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
+                    className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-border/40 text-muted-foreground dark:text-white/70 hover:text-foreground dark:hover:text-white"
                     onClick={() => setDialog({ ...dialog, open: false })}
                   >
                     Cancel
@@ -260,10 +260,10 @@ const ProjectsSidebar: React.FC<ProjectsSidebarProps> = ({ open, onClose, onNewP
               </div>
             ) : (
               <div>
-                <div className="text-sm text-white/80 mb-3">Delete "{dialog.itemTitle}"?</div>
+                <div className="text-sm text-foreground/80 dark:text-white/80 mb-4">Are you sure you want to delete "{dialog.itemTitle}"?</div>
                 <div className="flex justify-end gap-2">
                   <button
-                    className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
+                    className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-border/40 text-muted-foreground dark:text-white/70 hover:text-foreground dark:hover:text-white"
                     onClick={() => setDialog({ ...dialog, open: false })}
                   >
                     Cancel

@@ -15,6 +15,7 @@ export interface ConversationListItem {
   s3_key?: string;
   chat_mode?: string;
   model?: string;
+  template_id?: string;
   total_tokens?: number;
 }
 

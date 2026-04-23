@@ -33,6 +33,7 @@ import { MissionSection } from "@/components/homepage-section/mission";
 import { ProblemSection } from "@/components/homepage-section/problem";
 import { FeaturesSection } from "@/components/homepage-section/features";
 import { CTAContainerSection } from "@/components/homepage-section/cta";
+import { useTheme } from "@/hooks/useTheme";
 
 interface HomePageProps {
   onGetStarted: () => void;
@@ -108,6 +109,9 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     selectedModel,
     setSelectedModel,
   } = useChatStore();
+
+  const { resolvedTheme } = useTheme();
+  const logoFullHorizon = resolvedTheme === 'dark' ? "/logo-full-horizon-white.png" : "/logo-full-horizon-dark.png";
 
   const {
     uploadState,
@@ -716,7 +720,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       />
 
       {/* Fixed overlay for better text readability */}
-      <div className="fixed inset-0 bg-black/60 z-1"></div>
+      <div className="fixed inset-0 z-[1] dark:bg-black/60 bg-white/20"></div>
 
       <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-44">
 
@@ -726,14 +730,14 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           <div className="text-center mb-8 animate-slide-up">
             {/* Row 1: The AI Data Analyst with gradient styling */}
             <h1 className="text-5xl md:text-7xl font-bold mb-6 font-instrument-serif">
-              <span className="px-2 py-1 text-transparent bg-clip-text bg-gradient-to-r from-accent via-white to-accent italic">
+              <span className="px-2 py-1 text-transparent bg-clip-text bg-gradient-to-r dark:from-accent dark:via-white dark:to-accent from-primary via-accent to-primary italic">
                 AI-native Data Analyst
               </span>
             </h1>
 
             {/* Row 2: Logo + Build Fancy Dashboard in minutes */}
             <div className="flex items-center justify-center gap-2 flex-wrap">
-              <h2 className="text-xl lg:text-3xl text-white font-inter">
+              <h2 className="text-xl lg:text-3xl text-foreground dark:text-white font-inter">
                 Centralize and visualize your{' '}
                 <span
                   className="inline-flex items-center rounded-lg px-3 py-1 button-outline"
@@ -772,7 +776,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           <div className="max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
             {/* Main Chat Input */}
             <div
-              className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300 relative"
+              className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border rounded-3xl resize-none transition-all duration-300 relative"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
@@ -780,9 +784,9 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
             >
               {/* Drag Overlay */}
               {isDragging && (
-                <div className={`absolute inset-0 rounded-3xl border-2 border-dashed border-white/60 flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-white/10' : ''}`}>
-                  <FileText className="w-10 h-10 text-white mb-3" />
-                  <span className="text-base text-white font-medium">Drop file here to upload</span>
+                <div className={`absolute inset-0 rounded-3xl border-2 border-dashed border-foreground dark:border-white flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-foreground/5 dark:bg-white/10' : ''}`}>
+                  <FileText className="w-10 h-10 text-foreground dark:text-white mb-3" />
+                  <span className="text-base text-foreground dark:text-white font-medium">Drop file here to upload</span>
                 </div>
               )}
 
@@ -792,7 +796,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   {/* Template Selection Pill */}
                   {selectedTemplate && (
                     <div className="flex-shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
-                      <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-2 transition-all hover:border-accent/40 outline-none">
+                      <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent bg-accent/10 px-3 py-2 transition-all hover:border-accent outline-none">
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           <LayoutTemplate className="w-4 h-4 text-accent" />
                         </div>
@@ -841,7 +845,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder={isListening ? 'Listening...' : placeholders[placeholderIndex]}
-                  className="w-full bg-transparent border-none outline-none resize-none text-md placeholder:text-muted-foreground/60"
+                  className="w-full bg-transparent border-none outline-none resize-none text-md text-foreground dark:text-white placeholder:text-muted-foreground/80 dark:placeholder:text-white/60"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -862,7 +866,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
               {selectedTemplate && (
                 <div className="flex justify-start mb-3 lg:hidden">
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-foreground">
                     <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
                       <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
                       <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
@@ -957,18 +961,18 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     </Button>
 
                     {dropdownOpen && (
-                      <div className="absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-2 w-52">
-                        <p className="px-2 pt-1 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-white/25">Popular</p>
+                      <div className="absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border rounded-xl shadow-2xl z-10 p-2 w-52">
+                        <p className="px-2 pt-1 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Popular</p>
 
                         {/* Active connectors */}
                         {CONNECTORS.filter(c => ['GA4', 'Google Ads', 'Firebase', 'Google Sheets'].includes(c.name)).map(con => (
                           <button
                             key={con.name}
                             onClick={() => handleIntegrationClick(con)}
-                            className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                            className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted rounded-md transition-colors cursor-pointer"
                           >
                             <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                            <span className="text-white/90">{con.name}</span>
+                            <span className="text-foreground/90">{con.name}</span>
                           </button>
                         ))}
 
@@ -980,18 +984,18 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                           <button
                             key={con.name}
                             onClick={() => handleIntegrationClick(con)}
-                            className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                            className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted rounded-md transition-colors cursor-pointer"
                           >
                             <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0 opacity-50" />
-                            <span className="text-white/50">{con.name}</span>
-                            <span className="ml-auto text-[9px] text-white/30">SOON</span>
+                            <span className="text-muted-foreground">{con.name}</span>
+                            <span className="ml-auto text-[9px] text-muted-foreground/60">SOON</span>
                           </button>
                         ))}
 
-                        <div className="border-t border-white/10 mt-1.5 pt-1.5">
+                        <div className="border-t border-border mt-1.5 pt-1.5">
                           <button
                             onClick={() => { setDropdownOpen(false); navigate('/workspace?tab=connectors'); }}
-                            className="w-full px-2 py-1.5 text-left text-xs text-white/50 hover:text-white flex items-center gap-1.5 rounded-md hover:bg-white/10 transition-colors"
+                            className="w-full px-2 py-1.5 text-left text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 rounded-md hover:bg-muted transition-colors"
                           >
                             Browse all connectors
                             <ChevronRight className="w-3 h-3 ml-auto" />
@@ -1070,7 +1074,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
             {/* Quick Start Prompts */}
             <div className="flex flex-col gap-2 mt-4 sm:mt-6 animate-fade-in w-full" style={{ animationDelay: '0s' }}>
-              <p className="text-xs text-white/40 text-left ml-1">Quick start prompts:</p>
+              <p className="text-xs text-muted-foreground/70 dark:text-white/40 text-left ml-1">Quick start prompts:</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {[
                   { icon: TrendingUp, text: "Visualize key trends over time in an interactive dashboard." },
@@ -1081,12 +1085,12 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   <button
                     key={index}
                     onClick={() => setInputValue(item.text)}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer group text-left"
+                    className="flex items-center gap-3 p-3 rounded-xl bg-background/80 dark:bg-white/5 border border-border/60 dark:border-white/10 hover:bg-background dark:hover:bg-white/10 hover:border-border dark:hover:border-white/20 transition-all cursor-pointer group text-left"
                   >
-                    <div className="p-2 rounded-lg bg-primary/20 text-primary group-hover:bg-primary/30 transition-colors">
+                    <div className="p-2 rounded-lg bg-primary/10 dark:bg-primary/20 text-primary group-hover:bg-primary/20 dark:group-hover:bg-primary/30 transition-colors">
                       <item.icon className="w-4 h-4" />
                     </div>
-                    <span className="text-xs sm:text-sm text-white/70 group-hover:text-white transition-colors line-clamp-2">
+                    <span className="text-xs sm:text-sm text-foreground/80 dark:text-white/70 group-hover:text-foreground dark:group-hover:text-white transition-colors line-clamp-2">
                       {item.text}
                     </span>
                   </button>

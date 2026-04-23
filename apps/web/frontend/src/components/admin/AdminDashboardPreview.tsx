@@ -45,7 +45,7 @@ export function AdminDashboardPreview({ conversationId, projectId, dashboardId }
             }
         };
 
-        if (dashboardId && conversationId && projectId) {
+        if (conversationId && projectId) {
             fetchDashboard();
         }
     }, [dashboardId, conversationId, projectId, getToken]);
@@ -92,8 +92,8 @@ export function AdminDashboardPreview({ conversationId, projectId, dashboardId }
 
     return (
         <DashboardPreview
-            dashboardId={dashboardId}
-            staticConfig={config}
+            dashboardId={dashboardId || undefined}
+            processedData={config}
         />
     );
 }

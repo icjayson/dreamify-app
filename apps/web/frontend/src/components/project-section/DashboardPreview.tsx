@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon, Menu, MessageSquare, ImageDown } from "lucide-react";
+import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
@@ -93,6 +104,8 @@ const DashboardPreview = ({
   // Track highlight fade-out timer
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
   const [exportingIds, setExportingIds] = useState<Set<string>>(new Set());
+  const [removedComponentIds, setRemovedComponentIds] = useState<Set<string>>(new Set());
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   useEffect(() => {
     if (changedComponentIds.size > 0) {
       setHighlightedIds(new Set(changedComponentIds));
@@ -103,6 +116,14 @@ const DashboardPreview = ({
       return () => clearTimeout(timer);
     }
   }, [changedComponentIds]);
+
+  useEffect(() => {
+    if (removedComponentIds.size === 0) return;
+    setLayouts(prev => {
+      const filterOut = (items: Layout[]) => items.filter(i => !removedComponentIds.has(i.i));
+      return { lg: filterOut(prev.lg), md: filterOut(prev.md), sm: filterOut(prev.sm), xs: filterOut(prev.xs), xxs: filterOut(prev.xxs) };
+    });
+  }, [removedComponentIds]);
 
 
   // Determine which configuration to use (static from parent vs fetched from state)
@@ -350,33 +371,44 @@ const DashboardPreview = ({
   };
 
   const selectedTemplate = useChatStore((s) => s.selectedTemplate);
+  const isTemplatePending = useChatStore((s) => s.isTemplatePending);
 
   // Normalize incoming data (Morpheus-first format)
   const getDashboardStyling = (data: any) => {
+    // A pending template is queued for the NEXT generation (toolbar pre-run pick).
+    // It must NOT affect the current dashboard's visual theme — only a post-run
+    // template change (isTemplatePending=false) should override the theme here.
+    const effectiveTemplate = isTemplatePending ? null : selectedTemplate;
+
+    // Materialise styling_recommendations if absent so template override is never silently lost.
+    // This covers dashboards generated before styling_recommendations became required.
+    if (data && !data.styling_recommendations) {
+      data.styling_recommendations = { theme: effectiveTemplate?.suggestedTheme ?? 'monochrome' };
+    }
     if (data?.styling_recommendations) {
       // Template theme always takes precedence — the AI may return a generic/default
       // theme when processing @chart updates (no template context in that prompt),
       // so we enforce the chosen template's theme on every render.
-      if (selectedTemplate?.suggestedTheme) {
-        data.styling_recommendations.theme = selectedTemplate.suggestedTheme;
+      if (effectiveTemplate?.suggestedTheme) {
+        data.styling_recommendations.theme = effectiveTemplate.suggestedTheme;
       }
-      
+
       const converted = convertLLMStylingToChartStyling(data.styling_recommendations);
       const validation = validateChartStyling(converted);
-      
+
       if (validation.isValid) {
         // Ensure background matches the theme if AI didn't explicitly provide one
-        if (!data.styling_recommendations.dashboardBackground && selectedTemplate?.suggestedTheme) {
-          const bg = CHART_THEME_COLORS[selectedTemplate.suggestedTheme as ChartPresetTheme]?.['bg-dashboard-color'];
+        if (!data.styling_recommendations.dashboardBackground && effectiveTemplate?.suggestedTheme) {
+          const bg = CHART_THEME_COLORS[effectiveTemplate.suggestedTheme as ChartPresetTheme]?.['bg-dashboard-color'];
           if (bg) converted.dashboardBackground = bg;
         }
         return converted;
       }
     }
-    
-    // Fallback to selected template's theme if AI didn't return one or it's invalid
-    if (selectedTemplate?.suggestedTheme) {
-      return getDefaultChartStyling(selectedTemplate.suggestedTheme as ChartPresetTheme);
+
+    // Fallback to effective template's theme if AI didn't return one or it's invalid
+    if (effectiveTemplate?.suggestedTheme) {
+      return getDefaultChartStyling(effectiveTemplate.suggestedTheme as ChartPresetTheme);
     }
 
     return getDefaultChartStyling(CHART_PRESET_THEMES.DEFAULT);
@@ -471,6 +503,8 @@ const DashboardPreview = ({
     // Dashboard-level styling (light theme from backend)
     const dashboardStyling = getDashboardStyling(data);
     const dashboardTile: any = (dashboardStyling as any)?.tile;
+    // Template always wins — override every component's presetTheme with the dashboard-level value
+    const resolvedPresetTheme: string | undefined = (dashboardStyling as any)?.presetTheme;
 
     // Metrics (Morpheus: name -> title, optional change/trend)
     if (Array.isArray(data.metrics)) {
@@ -561,6 +595,7 @@ const DashboardPreview = ({
             // Convert and merge styling with dashboard defaults
             styling: {
               ...validatedMetricStyling,
+              ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
               tile: {
                 ...(dashboardTile || {}),
                 ...((validatedMetricStyling as any)?.tile || {})
@@ -633,6 +668,7 @@ const DashboardPreview = ({
               data: Array.isArray(c.data) ? c.data : (Array.isArray(c.rows) ? c.rows : []),
               styling: {
                 ...validatedTableStyling,
+                ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
                 tile: {
                   ...(dashboardTile || {}),
                   ...((validatedTableStyling as any)?.tile || {})
@@ -648,9 +684,10 @@ const DashboardPreview = ({
         const validatedChartStyling = chartLevelStyling && validateChartStyling(chartLevelStyling).isValid
           ? chartLevelStyling
           : (dashboardStyling || getDefaultChartStyling());
-        // merge dashboard tile defaults
+        // merge dashboard tile defaults; template presetTheme always wins
         const mergedChartStyling: any = {
           ...validatedChartStyling,
+          ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
           tile: {
             ...(dashboardTile || {}),
             ...((chartLevelStyling as any)?.tile || {})
@@ -716,9 +753,10 @@ const DashboardPreview = ({
             description: t.description || '',
             columns: Array.isArray(t.columns) ? t.columns : [],
             data: Array.isArray(t.data) ? t.data : (Array.isArray(t.rows) ? t.rows : []),
-            // Convert and merge styling with dashboard defaults
+            // Convert and merge styling with dashboard defaults; template presetTheme always wins
             styling: {
               ...validatedTableStyling,
+              ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
               tile: {
                 ...(dashboardTile || {}),
                 ...((validatedTableStyling as any)?.tile || {})
@@ -798,30 +836,34 @@ const DashboardPreview = ({
   const displayComponents = useMemo(() => {
     if (!activeDashboard?.components) return [];
     // Static config already has theme applied per-component via applyVisualSpec — don't override
-    if (staticConfig && !processedData) return activeDashboard.components;
-    const theme = effectiveStyling?.presetTheme;
-    if (!theme) return activeDashboard.components;
-    // Derive a fresh palette from the current theme so stored palettes from old/different
-    // themes (e.g. light-gray colors from the old dark default) don't become invisible.
-    const palette = getColorPalette(theme as ChartPresetTheme, 10);
-    return activeDashboard.components.map((comp: any) => ({
-      ...comp,
-      component_config: {
-        ...comp.component_config,
-        styling: {
-          ...comp.component_config?.styling,
-          presetTheme: theme,
-          colorPalette: palette,
-        }
-      }
-    }));
-  }, [activeDashboard?.components, effectiveStyling, staticConfig, processedData]);
+    const base = (staticConfig && !processedData)
+      ? activeDashboard.components
+      : (() => {
+          const theme = effectiveStyling?.presetTheme;
+          if (!theme) return activeDashboard.components;
+          // Derive a fresh palette from the current theme so stored palettes from old/different
+          // themes (e.g. light-gray colors from the old dark default) don't become invisible.
+          const palette = getColorPalette(theme as ChartPresetTheme, 10);
+          return activeDashboard.components.map((comp: any) => ({
+            ...comp,
+            component_config: {
+              ...comp.component_config,
+              styling: {
+                ...comp.component_config?.styling,
+                presetTheme: theme,
+                colorPalette: palette,
+              }
+            }
+          }));
+        })();
+    return base.filter((c: any) => !removedComponentIds.has(String(c.id)));
+  }, [activeDashboard?.components, effectiveStyling, staticConfig, processedData, removedComponentIds]);
 
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {
     if (type === 'metric') return { minW: 2, minH: 2 };
     if (type === 'table') return { minW: 12, minH: 8 };
-    return { minW: 4, minH: 4 }; // default for charts
+    return { minW: 4, minH: 8 }; // default for charts
   };
 
   const componentsToBaseLayout = (components: any[]): Layout[] => {
@@ -833,7 +875,7 @@ const DashboardPreview = ({
       const w = Number.isFinite(src.w) ? src.w : (Number.isFinite(c.position?.width) ? c.position.width : 4);
 
       // Calculate dynamic height for tables if not explicitly provided
-      let h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 4);
+      let h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 10);
 
       if (c.type === 'table' && c.component_config?.data) {
         const rowCount = Array.isArray(c.component_config.data) ? c.component_config.data.length : 0;
@@ -1287,10 +1329,18 @@ const DashboardPreview = ({
                   const cellKey = String(component.id);
                   return (
                     <div key={cellKey} className={`animate-fade-in h-full min-h-0 ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
-                      <div className="relative h-full min-h-0 rounded-md" data-chart-id={cellKey}>
+                      <div className="relative h-full min-h-0 rounded-md group/card transition-all duration-200 hover:shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.25)]" data-chart-id={cellKey}>
                         {showCardActionsMenu && (
                           <div
-                            className="dashboard-card-menu-trigger absolute right-2 top-2 z-20"
+                            className="absolute left-2 top-2 z-20 opacity-0 group-hover/card:opacity-40 transition-opacity duration-150 pointer-events-none"
+                            aria-hidden="true"
+                          >
+                            <GripVertical className="h-3.5 w-3.5 text-white" strokeWidth={2} />
+                          </div>
+                        )}
+                        {showCardActionsMenu && (
+                          <div
+                            className="dashboard-card-menu-trigger absolute right-2 top-2 z-20 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150"
                             onPointerDown={(e) => e.stopPropagation()}
                             onMouseDown={(e) => e.stopPropagation()}
                           >
@@ -1299,18 +1349,18 @@ const DashboardPreview = ({
                                 <button
                                   type="button"
                                   aria-label="Card actions"
-                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/90 shadow-sm backdrop-blur-sm outline-none transition-colors hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white/30"
+                                  className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background/50 dark:border-white/10 dark:bg-black/30 text-foreground/80 dark:text-white/80 backdrop-blur-sm outline-none transition-colors hover:bg-muted dark:hover:bg-black/55 hover:text-foreground dark:hover:text-white focus-visible:ring-2 focus-visible:ring-primary/30"
                                 >
-                                  <Menu className="h-4 w-4" strokeWidth={2} />
+                                  <MoreVertical className="h-3.5 w-3.5" strokeWidth={2} />
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
                                 align="end"
                                 sideOffset={6}
-                                className="min-w-[11rem] border-white/15 bg-[#1a1a1a] text-white shadow-lg"
+                                className="min-w-[11rem] rounded-xl border border-border dark:border-white/10 bg-popover/95 dark:bg-[#161616]/95 backdrop-blur-md text-popover-foreground dark:text-white shadow-xl"
                               >
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 focus:bg-white/10 focus:text-white"
+                                  className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
                                   onSelect={() => {
                                     window.dispatchEvent(
                                       new CustomEvent(SELECT_CHART_CONTEXT_EVENT, {
@@ -1323,7 +1373,7 @@ const DashboardPreview = ({
                                   Fix in chat
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 focus:bg-white/10 focus:text-white"
+                                  className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
                                   disabled={exportingIds.has(cellKey)}
                                   onSelect={async () => {
                                     const cardEl = document.querySelector<HTMLElement>(
@@ -1347,6 +1397,14 @@ const DashboardPreview = ({
                                     ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-400" />
                                     : <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />}
                                   Export to PNG
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-border dark:bg-white/10" />
+                                <DropdownMenuItem
+                                  className="cursor-pointer gap-2 py-2 text-red-400 focus:bg-red-500/15 focus:text-red-400"
+                                  onSelect={() => setConfirmRemoveId(cellKey)}
+                                >
+                                  <Trash2 className="h-4 w-4 shrink-0" />
+                                  Remove chart
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -1376,6 +1434,32 @@ const DashboardPreview = ({
           </div>
         )}
       </div>
+      <AlertDialog open={confirmRemoveId !== null} onOpenChange={(open) => { if (!open) setConfirmRemoveId(null); }}>
+        <AlertDialogContent className="border-border dark:border-white/15 bg-background dark:bg-[#1a1a1a] text-foreground dark:text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove chart?</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground dark:text-white/60">
+              This chart will be removed from the dashboard. This cannot be undone in the current session.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border dark:border-white/15 bg-transparent text-foreground dark:text-white hover:bg-black/5 dark:hover:bg-white/10 font-medium">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={() => {
+                if (confirmRemoveId) {
+                  setRemovedComponentIds(prev => new Set(prev).add(confirmRemoveId));
+                  setConfirmRemoveId(null);
+                }
+              }}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

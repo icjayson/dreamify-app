@@ -118,11 +118,11 @@ export default function WorkspaceSidebar({
       {/* Sidebar header */}
       <div className="flex items-center justify-between p-4 flex-shrink-0">
         {!collapsed && (
-          <span className="text-white/90 font-medium truncate">My workspace</span>
+          <span className="text-foreground/90 font-medium truncate">My workspace</span>
         )}
         <button
           onClick={() => onCollapsedChange(!collapsed)}
-          className={`text-white/70 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10 flex-shrink-0 ${collapsed ? "mx-auto" : ""}`}
+          className={`text-foreground/70 hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted flex-shrink-0 ${collapsed ? "mx-auto" : ""}`}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
@@ -142,13 +142,13 @@ export default function WorkspaceSidebar({
             className={cn(
               "flex items-center gap-2 rounded-md py-2 px-3 text-sm transition-colors w-full text-left",
               activeTab === tab
-                ? "bg-black/30 text-white"
-                : "text-white/80 hover:bg-black/30 hover:text-white",
+                ? "bg-primary/10 text-primary"
+                : "text-foreground/70 hover:bg-muted hover:text-foreground",
               collapsed ? "justify-center px-0" : ""
             )}
             title={collapsed ? label : undefined}
           >
-            <Icon className="w-4 h-4 flex-shrink-0 text-white/60" />
+            <Icon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
             {!collapsed && <span>{label}</span>}
           </button>
         ))}
@@ -157,19 +157,19 @@ export default function WorkspaceSidebar({
       {/* Recents list — only when expanded */}
       {!collapsed && (
         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2">
-          <div className="text-white/50 text-xs mt-4 mb-4">Recent projects</div>
+          <div className="text-muted-foreground text-xs mt-4 mb-4">Recent projects</div>
           {projectsLoading ? (
-            <div className="text-white/50 text-xs mt-4 text-center flex items-center justify-center gap-2">
-              <div className="w-3 h-3 border-2 border-white/20 border-t-white/80 rounded-full animate-spin"></div>
+            <div className="text-muted-foreground text-xs mt-4 text-center flex items-center justify-center gap-2">
+              <div className="w-3 h-3 border-2 border-border border-t-foreground/80 rounded-full animate-spin"></div>
               Loading your projects
             </div>
           ) : projects.length === 0 ? (
-            <div className="text-white/50 text-xs px-2">No projects yet</div>
+            <div className="text-muted-foreground text-xs px-2">No projects yet</div>
           ) : (
             projects.slice(0, 10).map((item) => (
               <div
                 key={item.id}
-                className="group relative w-full rounded-md hover:bg-black/40 transition-colors"
+                className="group relative w-full rounded-md hover:bg-muted transition-colors"
                 onClick={() => onOpenProject(item.id)}
                 role="button"
                 tabIndex={0}
@@ -189,19 +189,19 @@ export default function WorkspaceSidebar({
                     onOpenProject(item.id);
                   }}
                 >
-                  <SquareArrowOutUpRight className="w-4 h-4 text-white/80" />
+                  <SquareArrowOutUpRight className="w-4 h-4 text-foreground/80" />
                 </button>
 
                 {/* Title row with single-line truncation */}
-                <div className="w-full text-left px-3 py-2 text-white/90 text-sm md:transition-all md:duration-200 md:group-hover:pl-9 md:group-hover:pr-10 truncate whitespace-nowrap overflow-hidden">
+                <div className="w-full text-left px-3 py-2 text-foreground/90 text-sm md:transition-all md:duration-200 md:group-hover:pl-9 md:group-hover:pr-10 truncate whitespace-nowrap overflow-hidden">
                   {item.title}
                 </div>
 
                 {/* Hover tooltip with full title */}
                 <div className="pointer-events-none absolute left-3 bottom-full mb-2 z-[200] opacity-0 group-hover:opacity-100 transition-opacity hidden md:block">
-                  <div className="relative max-w-[240px] px-3 py-1.5 text-xs bg-black/80 text-white rounded-md shadow-lg whitespace-normal break-words">
+                  <div className="relative max-w-[240px] px-3 py-1.5 text-xs bg-popover text-popover-foreground border border-border rounded-md shadow-lg whitespace-normal break-words">
                     {item.title}
-                    <div className="absolute -bottom-1 left-4 w-2 h-2 bg-black/80 rotate-45" />
+                    <div className="absolute -bottom-1 left-4 w-2 h-2 bg-popover rotate-45" />
                   </div>
                 </div>
 
@@ -214,7 +214,7 @@ export default function WorkspaceSidebar({
                     setOpenMenuId((prev) => (prev === item.id ? null : item.id));
                   }}
                 >
-                  <Ellipsis className="w-4 h-4 text-white/80" />
+                  <Ellipsis className="w-4 h-4 text-foreground/80" />
                 </button>
 
                 {openMenuId === item.id && (
@@ -257,7 +257,7 @@ export default function WorkspaceSidebar({
         <button
           onClick={toggleUserMenu}
           className={cn(
-            "flex items-center gap-2 rounded-lg transition-colors hover:bg-black/50 w-full text-left",
+            "flex items-center gap-2 rounded-lg transition-colors hover:bg-muted w-full text-left",
             collapsed ? "justify-center py-2 px-0" : "px-2 py-1.5"
           )}
           aria-label="Toggle user menu"
@@ -271,10 +271,10 @@ export default function WorkspaceSidebar({
           </div>
           {!collapsed && (
             <>
-              <span className="text-sm font-medium text-white min-w-0 pr-2 truncate" title={displayName}>
+              <span className="text-sm font-medium text-foreground min-w-0 pr-2 truncate" title={displayName}>
                 {displayName}
               </span>
-              <ChevronsUpDown className="w-4 h-4 text-white/70 ml-auto flex-shrink-0" />
+              <ChevronsUpDown className="w-4 h-4 text-foreground/70 ml-auto flex-shrink-0" />
             </>
           )}
         </button>
@@ -315,28 +315,28 @@ export default function WorkspaceSidebar({
               </div>
 
               {/* Credit usage */}
-              <div className="w-full p-2 rounded-md bg-white/10 mb-2">
+              <div className="w-full p-2 rounded-md bg-muted/60 mb-2">
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-3.5 h-3.5 text-primary" />
                     <span className="text-sm text-foreground">Credit</span>
                   </div>
-                  <span className="text-sm font-bold text-white tabular-nums">
+                  <span className="text-sm font-bold text-foreground tabular-nums">
                     {creditsRemaining.toLocaleString()}
-                    <span className="text-white/30 font-normal"> / {tierLimit.toLocaleString()}</span>
+                    <span className="text-muted-foreground font-normal"> / {tierLimit.toLocaleString()}</span>
                   </span>
                 </div>
-                <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden">
+                <div className="h-3 w-full bg-border rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary transition-all duration-500"
                     style={{ width: `${Math.min(creditPct * 100, 100)}%` }}
                   />
                 </div>
                 <div className="flex items-center justify-between mt-1.5">
-                  <p className="text-[10px] text-white/30">Resets monthly</p>
+                  <p className="text-[10px] text-muted-foreground">Resets monthly</p>
                   <button
                     onClick={() => { setUserMenuOpen(false); setAccountCenterTab("plans"); setAccountCenterOpen(true); }}
-                    className="text-[10px] text-white/40 hover:text-white/70 hover:underline transition-colors cursor-pointer"
+                    className="text-[10px] text-muted-foreground hover:text-foreground/70 hover:underline transition-colors cursor-pointer"
                   >
                     Plans & credits →
                   </button>
@@ -375,7 +375,7 @@ export default function WorkspaceSidebar({
           <div className="relative z-[161] w-[280px] rounded-md border border-border/40 bg-background/95 backdrop-blur-md shadow-xl p-3">
             {dialog.mode === 'rename' ? (
               <div>
-                <div className="text-sm text-white/80 mb-2">Rename project</div>
+                <div className="text-sm text-foreground/80 mb-2">Rename project</div>
                 <input
                   value={dialog.value}
                   onChange={(e) => setDialog({ ...dialog, value: e.target.value })}
@@ -384,7 +384,7 @@ export default function WorkspaceSidebar({
                 />
                 <div className="mt-3 flex justify-end gap-2">
                   <button
-                    className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
+                    className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-border/40 text-foreground/70 hover:text-foreground"
                     onClick={() => setDialog({ ...dialog, open: false })}
                   >
                     Cancel
@@ -410,10 +410,10 @@ export default function WorkspaceSidebar({
               </div>
             ) : (
               <div>
-                <div className="text-sm text-white/80 mb-3">Delete "{dialog.itemTitle}"?</div>
+                <div className="text-sm text-foreground/80 mb-3">Delete "{dialog.itemTitle}"?</div>
                 <div className="flex justify-end gap-2">
                   <button
-                    className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-border/40 text-white/70 hover:text-white"
+                    className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-border/40 text-foreground/70 hover:text-foreground"
                     onClick={() => setDialog({ ...dialog, open: false })}
                   >
                     Cancel

@@ -8,7 +8,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { ArrowUpDown, Eye } from 'lucide-react';
+import { ArrowUpDown, Eye, LayoutTemplate } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { ConversationListItem } from '@/services/adminService';
 
@@ -99,6 +99,7 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
                 <ArrowUpDown className="ml-2 h-3 w-3" />
               </Button>
             </TableHead>
+            <TableHead>Template</TableHead>
             <TableHead>Environment</TableHead>
             <TableHead>Tokens</TableHead>
             <TableHead>
@@ -156,6 +157,16 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
                 )}
               </TableCell>
               <TableCell>{conv.title}</TableCell>
+              <TableCell>
+                {conv.template_id ? (
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                    <LayoutTemplate className="h-3 w-3" />
+                    <span className="truncate max-w-[100px]">{conv.template_id}</span>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground text-xs italic">none</span>
+                )}
+              </TableCell>
               <TableCell>
                 <div className="flex flex-col gap-1 items-start">
                   {conv.chat_mode ? (

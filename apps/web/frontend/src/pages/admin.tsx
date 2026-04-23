@@ -29,7 +29,7 @@ export default function AdminPage() {
   const { isSignedIn, isAdmin, userEmail, getToken, signOut } = useAdminAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
   const [projectIdFilter, setProjectIdFilter] = useState(searchParams.get('project_id') || '');
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1', 10));
 

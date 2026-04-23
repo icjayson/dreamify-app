@@ -28,6 +28,8 @@ export default function PreviewPage() {
       const cachedId = sessionStorage.getItem('project_preview_dashboard_id');
       if (cachedId) {
         setDashboardIdFromSession(cachedId);
+        // Restore the template associated with this dashboard from localStorage map
+        useChatStore.getState().setSelectedDashboardId(cachedId);
       }
     } catch (_e) {
       // ignore
@@ -72,6 +74,10 @@ export default function PreviewPage() {
 
             if (dashboardResponse?.dashboard_data) {
               setProcessedData(dashboardResponse.dashboard_data);
+              // Restore the template associated with this dashboard from localStorage map
+              if (dashboardResponse.dashboard_id) {
+                useChatStore.getState().setSelectedDashboardId(dashboardResponse.dashboard_id);
+              }
             }
           }
         } else {

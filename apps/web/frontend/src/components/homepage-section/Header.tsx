@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import AccountCenterModal from "@/components/homepage-section/AccountCenterModal";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useTheme } from "@/hooks/useTheme";
 
 const Header = () => {
   const navigate = useNavigate();
@@ -23,6 +24,9 @@ const Header = () => {
   const [showProjectsBtn, setShowProjectsBtn] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { creditsRemaining, creditUsage } = useSubscription();
+  const { resolvedTheme } = useTheme();
+  const logoHorizon = resolvedTheme === 'dark' ? "/logo-horizon.png" : "/logo-horizon-dark.png";
+  const logoWatermark = resolvedTheme === 'dark' ? "/logo-watermark.png" : "/logo-horizon-dark.png";
   const tierLimit = 1000;
   const creditPct = tierLimit > 0 ? creditsRemaining / tierLimit : 0;
 
@@ -97,15 +101,15 @@ const Header = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-40">
       <SignedOut>
-        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-white/5 py-2 px-4 shadow-2xl relative overflow-hidden group">
+        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-border dark:border-white/10 py-2 px-4 shadow-2xl relative overflow-hidden group">
           {/* Subtle animated shine effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none" />
 
-          <p className="text-xs sm:text-sm font-medium text-white/70 text-center tracking-wide">
-            ✨ <span className="text-white">Limited Offer:</span> We're giving away <span className="text-accent font-bold">Free Pro Access</span> to all early members.
+          <p className="text-xs sm:text-sm font-medium text-foreground/60 dark:text-white/70 text-center tracking-wide">
+            ✨ <span className="text-foreground dark:text-white">Limited Offer:</span> We're giving away <span className="text-accent font-bold">Free Pro Access</span> to all early members.
             <button
               onClick={() => navigate("/login")}
-              className="ml-2 text-white border-b border-white/30 hover:border-white transition-all pb-0.5"
+              className="ml-2 text-foreground dark:text-white border-b border-border dark:border-white/40 hover:border-foreground dark:hover:border-white transition-all pb-0.5"
             >
               Log in to claim
             </button>
@@ -114,12 +118,12 @@ const Header = () => {
       </SignedOut>
 
       <SignedIn>
-        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-white/5 py-2 px-4 shadow-2xl relative overflow-hidden group">
+        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-border dark:border-white/10 py-2 px-4 shadow-2xl relative overflow-hidden group">
           {/* Subtle animated shine effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none" />
 
-          <p className="text-xs sm:text-sm font-medium text-white/70 text-center tracking-wide">
-            ✨ <span className="text-white">Limited Offer:</span> We're giving away <span className="text-accent font-bold">Free Pro Access</span> to all early members.
+          <p className="text-xs sm:text-sm font-medium text-foreground/60 dark:text-white/70 text-center tracking-wide">
+            ✨ <span className="text-foreground dark:text-white">Limited Offer:</span> We're giving away <span className="text-accent font-bold">Free Pro Access</span> to all early members.
           </p>
         </div>
       </SignedIn>
@@ -135,14 +139,14 @@ const Header = () => {
                 onClick={() => window.dispatchEvent(new Event('open-projects'))}
                 className="button-outline group inline-flex items-center gap-2 px-3 py-2 rounded-md"
               >
-                <span className="text-sm text-white">My projects</span>
-                <PanelLeftOpen className="w-4 h-4 text-white/70 transition-transform group-hover:translate-x-0.5" />
+                <span className="text-sm text-foreground dark:text-white">My projects</span>
+                <PanelLeftOpen className="w-4 h-4 text-foreground/60 dark:text-white/70 transition-transform group-hover:translate-x-0.5" />
               </button>
             </div>
           )}
         </SignedIn>
 
-        <div className="2xl:max-w-6xl xl:max-w-4xl lg:max-w-2xl md:w-full flex h-14 items-center justify-between px-4 glass-panel rounded-2xl mx-auto mt-4">
+        <div className="2xl:max-w-6xl xl:max-w-4xl lg:max-w-2xl md:w-full flex h-14 items-center justify-between px-4 glass-panel rounded-2xl mx-auto mt-4 border border-black/15 dark:border-white/10">
           {/* Left side - Logo and brand */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
@@ -150,7 +154,7 @@ const Header = () => {
               <SignedIn>
                 <div className="hidden lg:block w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
                   <img
-                    src="/logo-horizon.png"
+                    src={logoHorizon}
                     alt="Dreamify Logo"
                     className="w-full h-full object-contain"
                     onClick={() => navigate("/")}
@@ -163,14 +167,14 @@ const Header = () => {
                 <div className="w-12 md:w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
                   {/* Small screens: watermark */}
                   <img
-                    src="/logo-watermark.png"
+                    src={logoWatermark}
                     alt="Dreamify Logo"
                     className="block md:hidden w-full h-full object-contain"
                     onClick={() => navigate("/")}
                   />
                   {/* md and up: original horizon logo */}
                   <img
-                    src="/logo-horizon.png"
+                    src={logoHorizon}
                     alt="Dreamify Logo"
                     className="hidden md:block w-full h-full object-contain"
                     onClick={() => navigate("/")}
@@ -188,25 +192,25 @@ const Header = () => {
                       onClick={() => window.dispatchEvent(new Event('open-projects'))}
                       className="button-outline group inline-flex items-center gap-2 px-3 py-2 rounded-md"
                     >
-                      <span className="text-sm text-white">My projects</span>
-                      <PanelLeftOpen className="w-4 h-4 text-white/70 transition-transform group-hover:translate-x-0.5" />
+                      <span className="text-sm text-foreground dark:text-white">My projects</span>
+                      <PanelLeftOpen className="w-4 h-4 text-foreground/60 dark:text-white/70 transition-transform group-hover:translate-x-0.5" />
                     </button>
                   </div>
                 )}
               </SignedIn>
               {/* Mobile menu trigger (small screens) */}
               <button
-                className="md:hidden inline-flex items-center justify-center ml-1 p-2 rounded-md hover:bg-white/10 transition-colors"
+                className="md:hidden inline-flex items-center justify-center ml-1 p-2 rounded-md hover:bg-foreground/10 dark:hover:bg-white/10 transition-colors"
                 aria-label="Open menu"
                 onClick={() => setMobileNavOpen(true)}
               >
-                <Menu className="w-5 h-5 text-white" />
+                <Menu className="w-5 h-5 text-foreground dark:text-white" />
               </button>
             </div>
             <nav className="hidden md:flex items-center space-x-4 ml-8">
               <button
                 onClick={() => navigate("/about")}
-                className="text-sm font-medium text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
+                className="text-sm font-medium text-foreground dark:text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
               >
                 About Us
               </button>
@@ -214,13 +218,13 @@ const Header = () => {
                 href="https://discord.gg/GhFjdbgdxd"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-medium text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
+                className="text-sm font-medium text-foreground dark:text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
               >
                 Community
               </a>
               <button
                 onClick={() => navigate("/pricing")}
-                className="text-sm font-medium text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
+                className="text-sm font-medium text-foreground dark:text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
               >
                 Pricing
               </button>
@@ -255,7 +259,7 @@ const Header = () => {
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={toggleUserMenu}
-                  className="flex items-center gap-2 px-2 py-1.5 hover:bg-black/50 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-2 py-1.5 hover:bg-foreground/10 dark:hover:bg-black/50 rounded-lg transition-colors"
                   aria-label="Toggle user menu"
                 >
                   <div className="w-8 h-8 shrink-0 aspect-square bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center overflow-hidden">
@@ -265,8 +269,8 @@ const Header = () => {
                       <UserIcon className="w-4 h-4 text-white" />
                     )}
                   </div>
-                  <span className="hidden sm:inline text-sm font-medium text-white max-w-[160px] truncate">{displayName}</span>
-                  <ChevronsUpDown className="w-4 h-4 text-white/70" />
+                  <span className="hidden sm:inline text-sm font-medium text-foreground dark:text-white max-w-[160px] truncate">{displayName}</span>
+                  <ChevronsUpDown className="w-4 h-4 text-foreground/60 dark:text-white/70" />
                 </button>
 
                 {/* User Menu Dropdown */}
@@ -310,28 +314,28 @@ const Header = () => {
                       </div>
 
                       {/* Credit usage */}
-                      <div className="w-full p-2 rounded-md bg-white/10 mb-2">
+                      <div className="w-full p-2 rounded-md dark:bg-white/10 bg-foreground/5 mb-2">
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-2">
                             <Sparkles className="w-3.5 h-3.5 text-primary" />
                             <span className="text-sm text-foreground">Credit</span>
                           </div>
-                          <span className="text-sm font-bold text-white tabular-nums">
+                          <span className="text-sm font-bold text-foreground dark:text-white tabular-nums">
                             {creditsRemaining.toLocaleString()}
-                            <span className="text-white/30 font-normal"> / {tierLimit.toLocaleString()}</span>
+                            <span className="text-foreground/30 dark:text-white/30 font-normal"> / {tierLimit.toLocaleString()}</span>
                           </span>
                         </div>
-                        <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-3 w-full dark:bg-white/10 bg-foreground/10 rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full bg-primary transition-all duration-500"
                             style={{ width: `${Math.min(creditPct * 100, 100)}%` }}
                           />
                         </div>
                         <div className="flex items-center justify-between mt-1.5">
-                          <p className="text-[10px] text-white/30">Resets monthly</p>
+                          <p className="text-[10px] text-foreground/30 dark:text-white/30">Resets monthly</p>
                           <button
                             onClick={() => { setUserMenuOpen(false); setAccountCenterTab("plans"); setAccountCenterOpen(true); }}
-                            className="text-[10px] text-white/40 hover:text-white/70 hover:underline transition-colors cursor-pointer"
+                            className="text-[10px] text-foreground/40 dark:text-white/40 hover:text-foreground/70 dark:hover:text-white/70 hover:underline transition-colors cursor-pointer"
                           >
                             Plans & credits →
                           </button>
@@ -404,10 +408,10 @@ const Header = () => {
             <div className="relative z-10 bg-muted rounded-lg shadow-lg w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
               <div className="px-4 pt-3 pb-2 border-b border-border flex-shrink-0">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Manage Account</h2>
+                  <h2 className="text-lg font-semibold text-foreground dark:text-white">Manage Account</h2>
                   <button
                     onClick={() => setUserProfileOpen(false)}
-                    className="text-white/70 hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors"
+                    className="text-foreground/60 dark:text-white/70 hover:text-foreground dark:hover:text-white p-1 rounded-md hover:bg-foreground/10 dark:hover:bg-white/10 transition-colors"
                     aria-label="Close profile"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -419,18 +423,18 @@ const Header = () => {
               <div className="flex flex-1 overflow-y-auto p-2">
                 <UserProfile
                   appearance={{
-                    baseTheme: dark,
+                    baseTheme: resolvedTheme === 'dark' ? dark : undefined,
                     elements: {
                       rootBox: "w-full h-full",
                       card: "shadow-none border-none bg-transparent",
                       navbar: "border-none",
-                      navbarButton: "text-white/70 hover:text-white hover:bg-primary active:bg-primary",
-                      navbarButtonActive: "text-white bg-white",
+                      navbarButton: resolvedTheme === 'dark' ? "text-white/70 hover:text-white hover:bg-primary active:bg-primary" : "text-foreground/70 hover:text-foreground hover:bg-primary/10",
+                      navbarButtonActive: resolvedTheme === 'dark' ? "text-white bg-white" : "text-primary bg-primary/10",
                       page: "p-4 bg-muted",
                       pageScrollBox: "p-0 bg-muted",
                       formButtonPrimary: "button-gradient",
-                      formFieldInput: "bg-black border-border text-white placeholder-white/30",
-                      formFieldLabel: "text-white",
+                      formFieldInput: resolvedTheme === 'dark' ? "bg-black border-border text-white placeholder-white/30" : "bg-background border-border text-foreground",
+                      formFieldLabel: resolvedTheme === 'dark' ? "text-white" : "text-foreground",
                       identityPreview: "bg-white/10 border-white/20",
                       identityPreviewText: "text-white",
                       identityPreviewEditButton: "text-white hover:text-white/80",

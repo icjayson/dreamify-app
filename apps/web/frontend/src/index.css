@@ -1,14 +1,46 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
-
 /* Import chart theme presets */
 @import './styles/chart-presets.css';
 
-/* Hide side and bottom resize handle glyphs but keep resize functionality */
+/* Hide side resize handles — functional but invisible */
 .react-resizable-handle-e,
 .react-resizable-handle-s,
 .react-resizable-handle-w,
 .react-resizable-handle-n {
   opacity: 0;
+}
+
+/* SE corner handle: replace default glyph with a styled L-bracket */
+.react-resizable-handle-se {
+  background-image: none !important;
+  width: 18px !important;
+  height: 18px !important;
+  bottom: 6px !important;
+  right: 6px !important;
+  padding: 0 !important;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.react-resizable-handle-se::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.4);
+  border-right: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 0 0 3px 0;
+}
+
+/* Reveal bracket on card hover */
+.react-grid-item:hover .react-resizable-handle-se {
+  opacity: 1;
+}
+
+/* Brighten on direct handle hover */
+.react-grid-item .react-resizable-handle-se:hover::after {
+  border-color: rgba(255, 255, 255, 0.75);
 }
 
 @tailwind base;
@@ -19,84 +51,106 @@
 
 @layer base {
   html {
+    font-size: 15px;
+  }
+
+  html.font-marketing {
     font-size: 14px;
   }
 
+  /* Light mode defaults (no class required) */
   :root {
-    /* Primary Brand Colors - Deep tech vibes */
-    --background: 0 0% 7%;
-    --foreground: 0 0% 98%;
-
-    /* Card system with glass morphism */
-    --card: 220 27% 8%;
-    --card-foreground: 0 0% 95%;
-
-    /* Interactive elements */
-    --popover: 220 27% 10%;
-    --popover-foreground: 0 0% 95%;
-
-    /* Primary - Electric Purple */
-    --primary: 221 78% 43%;
-    --primary-foreground: 0 0% 100%;
-    --primary-glow: 221 78% 55%;
-
-    /* Secondary - Deep Blue */
-    --secondary: 221 95% 16%;
-    --secondary-foreground: 0 0% 95%;
-
-    /* Muted elements */
-    --muted: 0 0% 10%;
-    --muted-foreground: 220 9% 55%;
-
-    /* Accent - Cyan highlight */
-    --accent: 193 100% 50%;
-    --accent-foreground: 220 27% 6%;
-
-    /* Status colors */
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 142 76% 36%;
-    --warning: 38 92% 50%;
-
-    /* Interactive states */
-    --border: 0 0% 24%;
-    --input: 220 27% 12%;
-    --ring: 221 78% 43%;
-
-    /* Advanced design tokens */
     --radius: 0.75rem;
-    
-    /* Gradients - Motion-rich backgrounds */
-    --gradient-primary: linear-gradient(135deg, hsl(221 78% 43%), hsl(217 91% 45%));
-    --gradient-secondary: linear-gradient(135deg, hsl(217 91% 15%), hsl(220 27% 8%));
-    --gradient-accent: linear-gradient(135deg, hsl(193 100% 50%), hsl(261 83% 70%));
-    --gradient-glass: linear-gradient(135deg, hsl(220 27% 8% / 0.8), hsl(220 27% 12% / 0.4));
-
-    /* Shadows with brand colors */
-    --shadow-primary: 0 25px 50px -12px hsl(var(--primary) / 0.3);
-    --shadow-accent: 0 25px 50px -12px hsl(193 100% 50% / 0.3);
-    --shadow-glass: 0 20px 40px -10px hsl(220 27% 6% / 0.5);
-
-    /* Animation variables */
     --animation-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
     --animation-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
     --animation-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
 
+    --background: 220 20% 97%;
+    --foreground: 220 25% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+    --primary: 221 72% 36%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 221 72% 48%;
+    --secondary: 220 30% 94%;
+    --secondary-foreground: 220 25% 20%;
+    --muted: 220 20% 94%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 199 65% 38%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 60% 30%;
+    --warning: 38 85% 40%;
+    --border: 220 20% 84%;
+    --input: 220 20% 92%;
+    --ring: 221 72% 36%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(221 72% 36%), hsl(217 80% 40%));
+    --gradient-secondary: linear-gradient(135deg, hsl(220 30% 94%), hsl(220 20% 97%));
+    --gradient-accent: linear-gradient(135deg, hsl(199 65% 38%), hsl(221 72% 36%));
+    --gradient-glass: linear-gradient(135deg, hsl(220 20% 100% / 0.9), hsl(220 20% 96% / 0.6));
+
+    --shadow-primary: 0 25px 50px -12px hsl(221 72% 36% / 0.2);
+    --shadow-accent: 0 25px 50px -12px hsl(199 65% 38% / 0.2);
+    --shadow-glass: 0 4px 24px -4px hsl(220 25% 10% / 0.08);
+
+    /* Sidebar light */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  /* Dark mode — Direction A "Midnight Refined" tokens */
+  .dark {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 98%;
+    --card: 220 27% 8%;
+    --card-foreground: 0 0% 95%;
+    --popover: 220 27% 10%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 221 65% 48%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 221 65% 58%;
+    --secondary: 221 95% 16%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 220 9% 55%;
+    --accent: 199 60% 52%;
+    --accent-foreground: 220 27% 6%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 76% 36%;
+    --warning: 38 92% 50%;
+    --border: 220 15% 18%;
+    --input: 220 27% 12%;
+    --ring: 221 65% 48%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(221 65% 48%), hsl(217 80% 45%));
+    --gradient-secondary: linear-gradient(135deg, hsl(217 91% 15%), hsl(220 27% 8%));
+    --gradient-accent: linear-gradient(135deg, hsl(199 60% 52%), hsl(221 65% 48%));
+    --gradient-glass: linear-gradient(135deg, hsl(220 27% 8% / 0.8), hsl(220 27% 12% / 0.4));
+
+    --shadow-primary: 0 25px 50px -12px hsl(var(--primary) / 0.3);
+    --shadow-accent: 0 25px 50px -12px hsl(199 60% 52% / 0.3);
+    --shadow-glass: 0 20px 40px -10px hsl(220 27% 6% / 0.5);
+
+    /* Sidebar dark */
+    --sidebar-background: 220 27% 6%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 221 65% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 27% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 221 65% 48%;
   }
 }
 
@@ -109,7 +163,7 @@
     @apply bg-background text-foreground;
     background: var(--gradient-secondary);
     background-attachment: fixed;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* Remove default button focus outline */
@@ -120,8 +174,13 @@
 }
 
 @layer components {
-  /* Glass morphism effect */
+  /* Glass morphism effect — theme-aware */
   .glass-panel {
+    background: rgba(0, 0, 0, 0.03);
+    outline: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+  }
+  .dark .glass-panel {
     background: rgba(255, 255, 255, 0.05);
     outline: 1px solid rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.2);
@@ -159,21 +218,19 @@
 
   /* Hover effects component */
   .button-gradient:hover {
-    background: linear-gradient(315deg, hsl(221 78% 43%), hsl(221 95% 16%));
-    box-shadow: 
-    inset -4px -4px 10px rgba(0, 0, 0, 0.1), 
-    inset 4px 4px 10px  rgba(255, 255, 255, 0.1) ,
-      0 0 20px hsl(var(--primary) / 0.8),
-      0 0 40px hsl(var(--primary) / 0.6),
-      0 0 80px hsl(var(--primary) / 0.4);
+    background: linear-gradient(315deg, hsl(221 65% 48%), hsl(221 95% 16%));
+    box-shadow:
+      inset -4px -4px 10px rgba(0, 0, 0, 0.1),
+      inset 4px 4px 10px rgba(255, 255, 255, 0.1),
+      0 0 24px hsl(var(--primary) / 0.5);
   }
 
   /* Primary outline button styling */
   .button-outline {
-    color: white;
+    color: hsl(var(--foreground));
     background: transparent;
-    border: 1px solid hsl(var(--primary) / 0.4);
-    box-shadow: inset -4px -4px 10px rgba(255, 255, 255, 0.2), inset 4px 4px 10px hsl(var(--primary) / 0.2);
+    border: 1px solid hsl(var(--primary) / 0.45);
+    box-shadow: inset -4px -4px 10px rgba(255, 255, 255, 0.1), inset 4px 4px 10px hsl(var(--primary) / 0.05);
     transition: var(--animation-smooth);
     border-radius: 0.5rem;
   }
@@ -223,10 +280,14 @@
     box-shadow: inset -4px -4px 10px rgba(255, 255, 255, 0.2), inset 10px 10px 10px rgba(0, 0, 0, 0.3);
   }
 
-  /* Icon panel component */
+  /* Icon panel component — theme-aware */
   .icon-panel {
-    background: linear-gradient(180deg, #222C45 0%, #131928 100%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--gradient-secondary);
+    border: 1px solid hsl(var(--border));
+  }
+  .dark .icon-panel {
+    background: linear-gradient(180deg, hsl(221 27% 16%) 0%, hsl(221 27% 10%) 100%);
+    border: 1px solid hsl(var(--border));
   }
 
   /* Value proposition card utilities */
@@ -351,11 +412,12 @@
   }
 
   .text-gradient-sweep {
-    background: linear-gradient(90deg,
-      rgba(255,255,255,0.95),
-      rgba(134,222,255,0.9),
-      rgba(195,153,255,0.9),
-      rgba(255,255,255,0.95)
+    background: linear-gradient(
+      90deg,
+      hsl(var(--foreground)) 0%,
+      hsl(var(--accent)) 40%,
+      hsl(var(--primary)) 70%,
+      hsl(var(--foreground)) 100%
     );
     background-size: 200% 100%;
     -webkit-background-clip: text;

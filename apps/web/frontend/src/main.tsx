@@ -9,6 +9,17 @@ import 'react-resizable/css/styles.css'
 import { apiClient } from '@/services/api'
 import ReactGA from 'react-ga4';
 
+// Apply theme class before React mounts to prevent flash
+try {
+  const theme = localStorage.getItem('dreamify-theme') || 'system';
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const resolved = theme === 'dark' || (theme === 'system' && prefersDark) ? 'dark' : 'light';
+  document.documentElement.classList.toggle('dark', resolved === 'dark');
+  document.documentElement.classList.toggle('light', resolved === 'light');
+} catch {
+  // localStorage may be unavailable in restricted contexts
+}
+
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Clerk Publishable Key")

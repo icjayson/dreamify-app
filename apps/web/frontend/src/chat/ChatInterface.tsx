@@ -22,6 +22,7 @@ import { CreditExhaustedCard } from "./CreditExhaustedCard";
 import type { DashboardComponent } from "@/types/dashboard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
+import { useTheme } from "@/hooks/useTheme";
 
 
 // Creative phrase variants per backend step — each key maps to a real Morpheus workflow step
@@ -261,12 +262,12 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
   const isLiveMode = !inline;
 
   const wrapperClass = inline
-    ? "w-full mt-3 bg-[#1E1E1E] border border-white/10 rounded-xl overflow-hidden shadow-sm"
-    : "w-full max-w-[85%] mt-3 ml-[38px] bg-[#1E1E1E] border border-white/10 rounded-xl overflow-hidden shadow-sm";
+    ? "w-full mt-3 bg-card dark:bg-[#1E1E1E] border border-border dark:border-white/10 rounded-xl overflow-hidden shadow-md dark:shadow-sm"
+    : "w-full max-w-[85%] mt-3 ml-[38px] bg-card dark:bg-[#1E1E1E] border border-border dark:border-white/10 rounded-xl overflow-hidden shadow-md dark:shadow-sm";
 
   const headerClass = isLiveMode
-    ? "grid grid-cols-[1fr_auto] items-center px-4 py-2 bg-[#18181B] border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors"
-    : "flex items-center justify-between px-4 py-2 bg-[#18181B] border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors";
+    ? "grid grid-cols-[1fr_auto] items-center px-4 py-2 bg-secondary/50 dark:bg-[#18181B] border-b border-border dark:border-white/5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/[0.02] transition-colors"
+    : "flex items-center justify-between px-4 py-2 bg-secondary/50 dark:bg-[#18181B] border-b border-border dark:border-white/5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/[0.02] transition-colors";
 
   return (
     <div className={wrapperClass}>
@@ -275,9 +276,9 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
         className={headerClass}
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-2 text-[10px] sm:text-xs tracking-wider text-white/50">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs tracking-wider text-muted-foreground dark:text-white/50">
           <ListTodo className="w-5 h-5" />
-          <span>Thinking Process <span className="text-white/20 mx-1">|</span> {isActive ? 'Executing' : 'Executed'}</span>
+          <span>Thinking Process <span className="text-muted-foreground/30 dark:text-white/20 mx-1">|</span> {isActive ? 'Executing' : 'Executed'}</span>
         </div>
         <div className={`flex items-center gap-2 ${isLiveMode ? 'flex-shrink-0' : ''}`}>
           <div className={`text-[10px] sm:text-xs text-white/40 ${isLiveMode ? 'whitespace-nowrap text-right' : ''}`}>
@@ -297,8 +298,8 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
             transition={{ duration: 0.25, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div className="px-4 py-3.5 border-t border-white/5">
-              <div className="text-xs font-medium text-white/80 mb-3.5">
+            <div className="px-4 py-3.5 border-t border-border dark:border-white/5">
+              <div className="text-xs font-medium text-muted-foreground dark:text-white/80 mb-3.5">
                 {isUsingWorkflow ? "Processing Steps" : `${displayTasks.length} Tasks Remaining`}
               </div>
 
@@ -308,12 +309,12 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
                   const isCompleted = savedTasks ? true : isUsingWorkflow ? (idx < displayTasks.length - 1 || !isActive) : !isActive;
 
                   return (
-                    <div key={task.id} className={`flex items-start gap-3 text-sm ${isTaskActive ? 'text-white' : 'text-white/50'}`}>
+                    <div key={task.id} className={`flex items-start gap-3 text-sm ${isTaskActive ? 'text-foreground dark:text-white' : 'text-muted-foreground/50 dark:text-white/50'}`}>
                       <div className="mt-[2px] flex-shrink-0">
                         {isCompleted ? (
                           <CheckCircle className="w-4 h-4 text-emerald-400" />
                         ) : isTaskActive ? (
-                          <CircleDashed className="w-4 h-4 text-white/80 animate-[spin_3s_linear_infinite]" />
+                          <CircleDashed className="w-4 h-4 text-muted-foreground/60 dark:text-white/80 animate-[spin_3s_linear_infinite]" />
                         ) : (
                           <Circle className="w-4 h-4 text-white/20" />
                         )}
@@ -382,7 +383,7 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
                   duration: 0.3,
                   ease: [0.4, 0.0, 0.2, 1]
                 }}
-                className="text-sm truncate bg-clip-text text-transparent bg-gradient-to-r from-gray-200 via-white to-gray-200 block max-w-full leading-normal"
+                className="text-sm truncate bg-clip-text text-transparent bg-gradient-to-r from-muted-foreground/40 via-foreground to-muted-foreground/40 dark:from-gray-200 dark:via-white dark:to-gray-200 block max-w-full leading-normal"
               >
                 {currentText}
               </motion.span>
@@ -442,14 +443,15 @@ interface ChatInterfaceProps {
 }
 
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, dashboardComponents }: ChatInterfaceProps) => {
+  const { resolvedTheme } = useTheme();
+  const logoFavicon = resolvedTheme === 'dark' ? "/logo-favicon.png" : "/logo-horizon-dark.png";
 
   // Model selector state
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const { creditsRemaining, creditUsage, subscription, refreshSubscription, upgradeToPro } = useSubscription();
   const tierLimit = 1000; // All users have Pro access (1000 credits/month)
 
-  // Template state
-  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  // Template state (controlled via store so project header can also trigger it)
   const [dragOver, setDragOver] = useState(false);
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -514,6 +516,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setAllConnectorsModalOpen,
+    isTemplateModalOpen,
+    setTemplateModalOpen,
+    templateModalSource,
     isDashboardOpen,
     selectedModel,
     setSelectedModel,
@@ -1238,9 +1243,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   };
 
   const handleTemplateSelect = (template: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string }) => {
+    if (templateModalSource === 'header') {
+      // Header entry point: store the template for next generation but don't
+      // show the chip or pre-fill the input (no pre-submit flow needed).
+      setSelectedTemplate(template, false);
+      return;
+    }
+    // Toolbar entry point: pre-submit flow — show chip + pre-fill input.
     setSelectedTemplate(template);
     setInputValue(`Use ${template.title} template to make `);
-    console.log('Template selected:', template);
   };
 
   const handleTemplateRemove = () => {
@@ -1323,30 +1334,33 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           const isSystem = message.role === "system";
           const bubbleLayoutClass = isUser ? "flex-row-reverse" : "flex-row";
           const avatarClass = isUser
-            ? "bg-black"
+            ? "bg-slate-800 dark:bg-black"
             : isSystem
-              ? "bg-white/10 border border-white/20"
+              ? "bg-muted dark:bg-white/10 border border-border dark:border-white/20"
               : "bg-transparent";
           const bubbleBgClass = isUser
-            ? "bg-black p-3"
+            ? "bg-muted dark:bg-black p-3 border border-border dark:border-white/10"
             : isSystem
-              ? "bg-white/5 p-3 border border-white/10"
+              ? "bg-muted/50 dark:bg-white/5 p-3 border border-border dark:border-white/10"
               : "bg-transparent p-0";
+          const isAssistant = !isUser && !isSystem;
+          const messageGap = isAssistant ? "gap-1" : "gap-2";
+          const avatarContainerSize = isAssistant ? "w-5 h-5" : "w-6 h-6";
           return (
             <div key={message.id} className="space-y-1">
               <div
                 className={`chat-enter flex ${isUser ? "justify-end" : "justify-start"}`}
               >
-                <div className={`max-w-[90%] min-w-0 flex gap-2 ${bubbleLayoutClass}`}>
-                  <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${avatarClass}`}>
+                <div className={`max-w-[90%] min-w-0 flex ${messageGap} ${bubbleLayoutClass}`}>
+                  <div className={`${avatarContainerSize} rounded-md flex items-center justify-center flex-shrink-0 ${avatarClass}`}>
                     {isUser ? (
                       <User className="w-3 h-3 text-white" />
                     ) : isSystem ? (
-                      <span className="text-[9px] font-semibold tracking-wide uppercase text-white/70">
+                      <span className="text-[9px] font-semibold tracking-wide uppercase text-muted-foreground dark:text-white/70">
                         SYS
                       </span>
                     ) : (
-                      <img src="/logo-watermark.png" alt="Dreamify" className="h-3 w-auto object-contain" />
+                      <img src={logoFavicon} alt="Dreamify" className="h-5 w-5 object-contain" />
                     )}
                   </div>
 
@@ -1433,7 +1447,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                                       }
                                     }
                                   }}
-                                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-white/90 backdrop-blur-md transition-all hover:bg-white/10 max-w-full outline-none"
+                                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-border dark:border-white/10 bg-card dark:bg-white/5 px-3 py-2.5 text-foreground dark:text-white/90 shadow-sm transition-all hover:bg-muted dark:hover:bg-white/10 max-w-full outline-none"
                                 >
                                   <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md p-2 ${logoBg}`}>
                                     {icon ? (
@@ -1443,11 +1457,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                                     )}
                                   </div>
                                   <div className="flex min-w-0 flex-1 flex-col leading-tight">
-                                    <span className="truncate text-sm font-medium text-white">
+                                    <span className="truncate text-sm font-medium text-foreground dark:text-white">
                                       {displayName}
                                     </span>
                                     {secondaryText && (
-                                      <span className="mt-0.5 truncate text-xs text-gray-400">
+                                      <span className="mt-0.5 truncate text-xs text-muted-foreground dark:text-gray-400">
                                         {secondaryText}
                                       </span>
                                     )}
@@ -1485,20 +1499,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                             <Tooltip key={`${chart.componentId}-${idx}`}>
                               <TooltipTrigger asChild>
                                 <div
-                                  className={`flex max-w-full cursor-default items-center gap-3 rounded-lg border px-3 py-2.5 text-white/90 backdrop-blur-md outline-none transition-all ${isEditDone ? 'border-emerald-500/20 bg-emerald-500/[0.06]' : 'border-purple-500/20 bg-purple-500/[0.06]'}`}
+                                  className={`flex max-w-full cursor-default items-center gap-3 rounded-lg border px-3 py-2.5 text-foreground dark:text-white/90 shadow-sm outline-none transition-all ${isEditDone ? 'border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/[0.06]' : 'border-purple-500/30 bg-purple-500/5 dark:bg-purple-500/[0.06]'}`}
                                 >
                                   <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md ${isEditDone ? 'bg-emerald-500/10' : 'bg-purple-500/10'}`}>
                                     <ChartIcon className={`h-5 w-5 ${isEditDone ? 'text-emerald-400' : 'text-purple-400'}`} />
                                   </div>
                                   <div className="flex min-w-0 flex-1 flex-col leading-tight">
-                                    <span className={`flex items-center gap-1.5 text-xs font-medium ${isEditDone ? 'text-emerald-300' : 'text-purple-300'}`}>
+                                    <span className={`flex items-center gap-1.5 text-xs font-medium ${isEditDone ? 'text-emerald-600 dark:text-emerald-300' : 'text-purple-600 dark:text-purple-300'}`}>
                                       {isEditDone ? (
                                         <><Check className="h-3 w-3" /> Edited {typeLabel} Chart</>
                                       ) : (
                                         <><Pencil className="h-3 w-3" /> Editing {typeLabel} Chart</>
                                       )}
                                     </span>
-                                    <span className="mt-0.5 truncate text-sm text-white">
+                                    <span className="mt-0.5 truncate text-sm text-foreground dark:text-white">
                                       {chart.title}
                                     </span>
                                   </div>
@@ -1519,12 +1533,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     {message.template && (
                       <div className="mb-2">
                         <span
-                          className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-white/20 bg-white/10 text-[11px] text-white/90 w-full"
+                          className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-border dark:border-white/20 bg-card dark:bg-white/10 text-[11px] text-foreground dark:text-white/90 w-full shadow-sm"
                           title={message.template.title}
                           aria-label="Selected template"
                         >
-                          <span className="inline-flex items-center gap-1 text-white/70">
-                            <LayoutTemplate className="w-3 h-3 text-white/80" />
+                          <span className="inline-flex items-center gap-1 text-muted-foreground dark:text-white/70">
+                            <LayoutTemplate className="w-3 h-3 text-muted-foreground dark:text-white/80" />
                             Template
                           </span>
                           <span className="truncate w-full">{message.template.title}</span>
@@ -1539,11 +1553,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       return (
                         <div className="relative">
                           <div
-                            className={`leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere] transition-all duration-300 ${isLong && !isExpanded ? 'max-h-[15em] overflow-hidden' : ''}`}
+                            className={`text-foreground dark:text-white leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere] transition-all duration-300 ${isLong && !isExpanded ? 'max-h-[15em] overflow-hidden' : ''}`}
                             dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
                           />
                           {isLong && !isExpanded && (
-                            <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${message.role === 'assistant' ? 'from-[#18181A] via-[#18181A]/80' : 'from-black/100'} to-transparent pointer-events-none`} />
+                            <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${message.role === 'assistant' ? 'from-background dark:from-[#18181A] via-background/80 dark:via-[#18181A]/80' : 'from-muted dark:from-black/100 via-muted/80 dark:via-black/80'} to-transparent pointer-events-none`} />
                           )}
                         </div>
                       );
@@ -1612,11 +1626,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                               aria-label="Open dashboard"
                               onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
-                              className={`group relative flex w-full max-w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-sm outline-none transition-all select-none hover:border-white/20 hover:bg-white/[0.06] ${message.content ? 'mt-3' : ''}`}
+                              className={`group relative flex w-full max-w-full cursor-pointer items-center justify-between rounded-xl border border-border dark:border-white/10 bg-white/[0.03] p-4 shadow-sm outline-none transition-all select-none hover:border-border/80 dark:hover:border-white/20 hover:bg-white/[0.06] ${message.content ? 'mt-3' : ''}`}
                             >
                               <div className="flex min-w-0 flex-1 items-center gap-3.5">
                                 <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-violet-500/20 via-blue-500/15 to-cyan-500/10 transition-all duration-300 group-hover:from-violet-500/30 group-hover:via-blue-500/25 group-hover:to-cyan-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
-                                  <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/10 group-hover:ring-white/15 transition-all duration-300" />
+                                  <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-border/50 dark:ring-white/10 group-hover:ring-border dark:ring-white/15 transition-all duration-300" />
                                   <svg viewBox="0 0 40 40" className="h-full w-full" aria-hidden="true">
                                     <defs>
                                       <linearGradient id="chatBarGrad1" x1="0" y1="0" x2="0" y2="1">
@@ -1639,10 +1653,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                                   </svg>
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-md truncate font-medium text-white">
+                                  <div className="text-md truncate font-medium text-foreground dark:text-white">
                                     {message.dashboardCard.dashboardTitle || "Dashboard"}
                                   </div>
-                                  <div className="mt-0.5 flex flex-wrap gap-x-2 truncate text-sm text-white/50">
+                                  <div className="mt-0.5 flex flex-wrap gap-x-2 truncate text-sm text-muted-foreground dark:text-white/50">
                                     <span className="truncate">Source: {sourceLabel}</span>
                                   </div>
                                 </div>
@@ -1687,7 +1701,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                                   return next;
                                 });
                               }}
-                              className="flex items-center gap-1 rounded-md text-white/40 hover:text-white transition-colors"
+                              className="flex items-center gap-1 rounded-md text-muted-foreground hover:text-foreground dark:text-white/40 dark:hover:text-white transition-colors"
                               title={isExpanded ? 'Collapse' : 'Expand'}
                               type="button"
                             >
@@ -1702,7 +1716,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                               navigator.clipboard.writeText(message.content);
                               toast({ title: "Copied", description: "Message copied to clipboard" });
                             }}
-                            className="px-2 rounded-md text-white/40 hover:text-white transition-colors"
+                            className="p-1 rounded-md text-muted-foreground hover:text-foreground dark:text-white/40 dark:hover:text-white transition-colors hover:bg-muted dark:hover:bg-white/10"
                             title="Copy message"
                           >
                             <Copy className="w-3.5 h-3.5" />
@@ -1740,9 +1754,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               <button
                 key={index}
                 onClick={() => setInputValue(prompt.text)}
-                className="inline-flex self-start px-2 py-1 text-xs text-white/30 border border-white/10 rounded-xl hover:bg-white/10 transition-all duration-200 text-left whitespace-normal break-words leading-snug overflow-hidden box-border max-w-full"
+                className="inline-flex self-start px-2 py-1 text-xs text-muted-foreground hover:text-foreground dark:text-white/30 border border-border dark:border-white/10 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200 text-left whitespace-normal break-words leading-snug overflow-hidden box-border max-w-full"
               >
-                <span className="block min-w-0 break-words">{prompt.text}</span>
+                <span className="block min-w-0 break-words dark:group-hover:text-white/80">{prompt.text}</span>
               </button>
             ))}
           </div>
@@ -1755,7 +1769,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         <div className="m-2">
           {/* Main Chat Input with Hero Section Styling */}
           <div
-            className="w-full min-h-[60px] text-sm p-4 pb-2 bg-[#292929] rounded-xl resize-none transition-all duration-300 relative"
+            className="w-full min-h-[60px] text-sm p-4 pb-2 bg-background dark:bg-[#292929] border border-border dark:border-transparent rounded-xl resize-none transition-all duration-300 relative"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -1800,15 +1814,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         <span className="flex-shrink-0 font-semibold text-accent">
                           Template:
                         </span>
-                        <span className="truncate font-medium text-white/90">
+                        <span className="truncate font-medium text-foreground/90 dark:text-white/90">
                           {selectedTemplate.title}
                         </span>
                       </div>
                       <button
                         onClick={handleTemplateRemove}
-                        className="group -mr-1 flex h-5 w-5 items-center justify-center rounded-full transition-colors hover:bg-white/10 active:scale-95"
+                        className="group -mr-1 flex h-5 w-5 items-center justify-center rounded-full transition-colors hover:bg-black/5 dark:hover:bg-white/10 active:scale-95"
                       >
-                        <X className="h-3 w-3 text-white/40 transition-colors group-hover:text-white/60" />
+                        <X className="h-3 w-3 text-muted-foreground dark:text-white/40 transition-colors group-hover:text-foreground dark:group-hover:text-white/60" />
                       </button>
                     </div>
                   </div>
@@ -1976,7 +1990,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 {/* Upload Button - Icon only */}
                 <button
                   onClick={handleFileUpload}
-                  className="p-2 flex items-center justify-center border border-white/30 rounded-md text-gray-400 hover:text-white transition-colors"
+                  className="p-2 flex items-center justify-center border border-border/50 dark:border-white/30 rounded-md text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white transition-colors"
                   title="Upload file"
                 >
                   <Upload className="w-4 h-4" />
@@ -1997,7 +2011,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       }
                     }
                   }}
-                  className={`project-context-trigger p-2 flex items-center justify-center border border-white/30 rounded-md text-gray-400 hover:text-white transition-colors ${isContextPickerOpen && pickerTriggerMode === 'button' ? 'bg-white/10 text-white' : ''
+                  className={`project-context-trigger p-2 flex items-center justify-center border border-border/50 dark:border-white/30 rounded-md text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white transition-colors ${isContextPickerOpen && pickerTriggerMode === 'button' ? 'bg-muted dark:bg-white/10 text-foreground dark:text-white' : ''
                     }`}
                   title="Project Context"
                 >
@@ -2007,7 +2021,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 {/* Template Button */}
                 <button
                   onClick={handleCloneTemplateClick}
-                  className="p-2 flex items-center justify-center border border-white/30 rounded-md text-gray-400 hover:text-white transition-colors"
+                  className="p-2 flex items-center justify-center border border-border/50 dark:border-white/30 rounded-md text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white transition-colors"
                   title="Choose template"
                   aria-label="Choose template"
                 >
@@ -2027,30 +2041,30 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     }}
                     className={`p-2 flex items-center justify-center gap-1 rounded-md transition-all duration-200 ${selectedDataSource
                       ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
-                      : 'border border-white/30 text-gray-400 hover:text-white'
+                      : 'border border-border/50 dark:border-white/30 text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white'
                       }`}
                     aria-expanded={dropdownOpen}
                     aria-haspopup="true"
                     aria-label="Connect data source"
                   >
                     <Link className="w-4 h-4" />
-                    <ChevronUp className={`w-3 h-3 transition-transform duration-200 ${selectedDataSource ? 'text-white' : 'text-white/60'
+                    <ChevronUp className={`w-3 h-3 transition-transform duration-200 ${selectedDataSource ? 'text-white' : 'text-muted-foreground/60 dark:text-white/60'
                       } ${dropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
 
                   {dropdownOpen && (
                     <div className="absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-2 w-52">
-                      <p className="px-2 pt-1 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-white/25">Popular</p>
+                      <p className="px-2 pt-1 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground dark:text-white/25">Popular</p>
 
                       {/* Active connectors */}
                       {CONNECTORS.filter(c => ['GA4', 'Google Ads', 'Firebase', 'Google Sheets'].includes(c.name)).map(con => (
                         <button
                           key={con.name}
                           onClick={() => handleIntegrationClick(con)}
-                          className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                          className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted dark:hover:bg-white/10 rounded-md transition-colors cursor-pointer"
                         >
                           <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                          <span className="text-white/90">{con.name}</span>
+                          <span className="text-foreground dark:text-white/90">{con.name}</span>
                         </button>
                       ))}
 
@@ -2062,10 +2076,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         <button
                           key={con.name}
                           onClick={() => handleIntegrationClick(con)}
-                          className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                          className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted dark:hover:bg-white/10 rounded-md transition-colors cursor-pointer"
                         >
                           <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0 opacity-50" />
-                          <span className="text-white/50">{con.name}</span>
+                          <span className="text-muted-foreground dark:text-white/50">{con.name}</span>
                           <span className="ml-auto text-[9px] text-white/30">SOON</span>
                         </button>
                       ))}
@@ -2073,7 +2087,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       <div className="border-t border-white/10 mt-1.5 pt-1.5">
                         <button
                           onClick={() => { setDropdownOpen(false); setAllConnectorsModalOpen(true); }}
-                          className="w-full px-2 py-1.5 text-left text-xs text-white/50 hover:text-white flex items-center gap-1.5 rounded-md hover:bg-white/10 transition-colors"
+                          className="w-full px-2 py-1.5 text-left text-xs text-muted-foreground hover:text-foreground dark:text-white/50 dark:hover:text-white flex items-center gap-1.5 rounded-md hover:bg-muted dark:hover:bg-white/10 transition-colors"
                         >
                           Browse all connectors
                           <ChevronRight className="w-3 h-3 ml-auto" />
@@ -2160,9 +2174,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
       {/* Template Modal */}
       <TemplateModal
-        open={templateModalOpen}
+        open={isTemplateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
         onTemplateSelect={handleTemplateSelect}
+        source={templateModalSource}
       />
     </div>
   );

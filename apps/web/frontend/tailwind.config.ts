@@ -19,7 +19,7 @@ export default {
     	},
 	    	extend: {
 	    			fontFamily: {
-	    				outfit: ['Outfit', 'Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'sans-serif'],
+	    				outfit: ['Outfit', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'sans-serif'],
 							'instrument-serif': ['Instrument Serif', 'serif']
 	    			},
     		colors: {
@@ -145,10 +145,10 @@ export default {
     			},
     			'pulse-glow': {
     				'0%, 100%': {
-    					boxShadow: '0 0 20px hsl(261 83% 58% / 0.3)'
+    					boxShadow: '0 0 20px hsl(var(--primary) / 0.3)'
     				},
     				'50%': {
-    					boxShadow: '0 0 40px hsl(261 83% 58% / 0.6)'
+    					boxShadow: '0 0 40px hsl(var(--primary) / 0.6)'
     				}
     			}
     		}

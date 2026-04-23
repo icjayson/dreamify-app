@@ -51,6 +51,20 @@ const AppContent = () => {
     ReactGA.send({ hitType: "pageview", page: location.pathname + location.search });
   }, [location]);
 
+  const isAppPath =
+    location.pathname.startsWith("/workspace") ||
+    location.pathname.startsWith("/admin") ||
+    location.pathname.startsWith("/preview") ||
+    location.pathname.startsWith("/templates");
+
+  useEffect(() => {
+    if (isAppPath) {
+      document.documentElement.classList.remove("font-marketing");
+    } else {
+      document.documentElement.classList.add("font-marketing");
+    }
+  }, [isAppPath]);
+
   const isAuthPath = location.pathname === "/login" || location.pathname === "/signup";
   const isWorkspacePath = location.pathname.startsWith("/workspace");
   const isAdminPath = location.pathname.startsWith("/admin");

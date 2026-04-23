@@ -115,15 +115,15 @@ const RechartsLineChart: React.FC<RechartsLineChartProps> = ({
   };
 
   return (
-    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '85%', ...style }}>
-      <div className="mb-4">
+    <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '100%', display: 'flex', flexDirection: 'column', ...style }}>
+      <div className="mb-4" style={{ flexShrink: 0 }}>
         <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }}>{title}</h3>
         {description && (
           <p className="text-sm" style={{ color: 'var(--description-color)' }}>{description}</p>
         )}
       </div>
 
-      <ResponsiveContainer width="100%">
+      <ResponsiveContainer width="100%" height="100%" style={{ flex: 1 }}>
         <LineChart
           data={transformedData}
           margin={{

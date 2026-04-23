@@ -444,7 +444,7 @@ interface ChatInterfaceProps {
 
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, dashboardComponents }: ChatInterfaceProps) => {
   const { resolvedTheme } = useTheme();
-  const logoFavicon = resolvedTheme === 'dark' ? "/logo-favicon.png" : "/logo-horizon-dark.png";
+  const logoFavicon = "/logo-favicon.png";
 
   // Model selector state
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);

@@ -433,7 +433,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
                   <div className="flex-1 overflow-y-auto">
                     {(isSignedIn ? mobileActiveTab : 'pricing') === "pricing" && <PricingContent />}
                     {isSignedIn && mobileActiveTab === "plans" && <PlansCreditsContent />}
-                    {isSignedIn && mobileActiveTab === "profile" && <AccountSettings />}
+                    {isSignedIn && mobileActiveTab === "account" && <AccountSettings />}
                     {isSignedIn && mobileActiveTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-foreground dark:text-white" />} />}
                     {isSignedIn && mobileActiveTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-foreground dark:text-white" />} />}
                     {isSignedIn && mobileActiveTab === "preferences" && <PreferencesContent />}
@@ -511,7 +511,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
           <section className="h-full overflow-y-auto">
             {(isSignedIn ? activeTab : 'pricing') === "pricing" && <PricingContent />}
             {isSignedIn && activeTab === "plans" && <PlansCreditsContent />}
-            {isSignedIn && activeTab === "profile" && <AccountSettings />}
+            {isSignedIn && activeTab === "account" && <AccountSettings />}
             {isSignedIn && activeTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-foreground dark:text-white" />} />}
             {isSignedIn && activeTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-foreground dark:text-white" />} />}
             {isSignedIn && activeTab === "preferences" && <PreferencesContent />}

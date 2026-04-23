@@ -47,7 +47,7 @@ export const DreamifyWaySection = () => {
               playsInline
               preload="metadata"
               aria-label="Dreamify way demo video"
-              src="/video-about-full.mov"
+              src="/video-about-full.mp4"
             />
           </div>
         </div>

@@ -232,11 +232,10 @@ const PreferencesContent: React.FC = () => {
             <button
               key={t}
               onClick={() => setTheme(t)}
-              className={`px-4 py-2 rounded-md text-sm font-medium border transition-colors ${
-                theme === t
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-muted text-muted-foreground border-border hover:border-primary/50'
-              }`}
+              className={`px-4 py-2 rounded-md text-sm font-medium border transition-colors ${theme === t
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-muted text-muted-foreground border-border hover:border-primary/50'
+                }`}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
@@ -337,7 +336,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
         { key: "account" as AccountCenterTab, label: "Manage Account", icon: <UserIcon className="w-4 h-4" /> },
         /* { key: "billing" as AccountCenterTab, label: "Billing", icon: <CreditCard className="w-4 h-4" /> },
         { key: "notifications" as AccountCenterTab, label: "Notifications", icon: <Bell className="w-4 h-4" /> },*/
-        { key: "preferences" as AccountCenterTab, label: "Preferences", icon: <Settings className="w-4 h-4" /> },
+        {/* key: "preferences" as AccountCenterTab, label: "Preferences", icon: <Settings className="w-4 h-4" /> */ },
       );
     }
     return items;
@@ -433,7 +432,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
                   <div className="flex-1 overflow-y-auto">
                     {(isSignedIn ? mobileActiveTab : 'pricing') === "pricing" && <PricingContent />}
                     {isSignedIn && mobileActiveTab === "plans" && <PlansCreditsContent />}
-                    {isSignedIn && mobileActiveTab === "profile" && <AccountSettings />}
+                    {isSignedIn && mobileActiveTab === "account" && <AccountSettings />}
                     {isSignedIn && mobileActiveTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-foreground dark:text-white" />} />}
                     {isSignedIn && mobileActiveTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-foreground dark:text-white" />} />}
                     {isSignedIn && mobileActiveTab === "preferences" && <PreferencesContent />}
@@ -511,7 +510,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
           <section className="h-full overflow-y-auto">
             {(isSignedIn ? activeTab : 'pricing') === "pricing" && <PricingContent />}
             {isSignedIn && activeTab === "plans" && <PlansCreditsContent />}
-            {isSignedIn && activeTab === "profile" && <AccountSettings />}
+            {isSignedIn && activeTab === "account" && <AccountSettings />}
             {isSignedIn && activeTab === "billing" && <Placeholder title="Billing" icon={<CreditCard className="w-6 h-6 text-foreground dark:text-white" />} />}
             {isSignedIn && activeTab === "notifications" && <Placeholder title="Notifications" icon={<Bell className="w-6 h-6 text-foreground dark:text-white" />} />}
             {isSignedIn && activeTab === "preferences" && <PreferencesContent />}

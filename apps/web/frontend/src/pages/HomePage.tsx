@@ -33,6 +33,7 @@ import { MissionSection } from "@/components/homepage-section/mission";
 import { ProblemSection } from "@/components/homepage-section/problem";
 import { FeaturesSection } from "@/components/homepage-section/features";
 import { CTAContainerSection } from "@/components/homepage-section/cta";
+import { useTheme } from "@/hooks/useTheme";
 
 interface HomePageProps {
   onGetStarted: () => void;
@@ -108,6 +109,9 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     selectedModel,
     setSelectedModel,
   } = useChatStore();
+
+  const { resolvedTheme } = useTheme();
+  const logoFullHorizon = resolvedTheme === 'dark' ? "/logo-full-horizon-white.png" : "/logo-full-horizon-dark.png";
 
   const {
     uploadState,
@@ -772,7 +776,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           <div className="max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-4xl mx-auto mb-12 animate-fade-in" style={{ animationDelay: '0s' }}>
             {/* Main Chat Input */}
             <div
-              className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border/30 rounded-3xl resize-none transition-all duration-300 relative"
+              className="w-full min-h-[80px] text-md p-3 sm:p-4 glass-panel border border-border rounded-3xl resize-none transition-all duration-300 relative"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
@@ -780,7 +784,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
             >
               {/* Drag Overlay */}
               {isDragging && (
-                <div className={`absolute inset-0 rounded-3xl border-2 border-dashed border-foreground/40 dark:border-white/60 flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-foreground/5 dark:bg-white/10' : ''}`}>
+                <div className={`absolute inset-0 rounded-3xl border-2 border-dashed border-foreground dark:border-white flex flex-col items-center justify-center z-10 pointer-events-none ${dragOver ? 'bg-foreground/5 dark:bg-white/10' : ''}`}>
                   <FileText className="w-10 h-10 text-foreground dark:text-white mb-3" />
                   <span className="text-base text-foreground dark:text-white font-medium">Drop file here to upload</span>
                 </div>
@@ -792,7 +796,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   {/* Template Selection Pill */}
                   {selectedTemplate && (
                     <div className="flex-shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
-                      <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-2 transition-all hover:border-accent/40 outline-none">
+                      <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent bg-accent/10 px-3 py-2 transition-all hover:border-accent outline-none">
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           <LayoutTemplate className="w-4 h-4 text-accent" />
                         </div>
@@ -957,7 +961,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     </Button>
 
                     {dropdownOpen && (
-                      <div className="absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-2 w-52">
+                      <div className="absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border rounded-xl shadow-2xl z-10 p-2 w-52">
                         <p className="px-2 pt-1 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">Popular</p>
 
                         {/* Active connectors */}

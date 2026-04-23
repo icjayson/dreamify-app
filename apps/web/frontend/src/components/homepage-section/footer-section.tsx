@@ -1,5 +1,6 @@
 import { Mail } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useTheme } from "@/hooks/useTheme";
 
 // X (Twitter) Icon Component
 const XIcon = ({ className }: { className?: string }) => (
@@ -36,6 +37,10 @@ const FacebookIcon = ({ className }: { className?: string }) => (
 );
 
 export const FooterSection = () => {
+  const { resolvedTheme } = useTheme();
+  const logoHorizon = resolvedTheme === 'dark' ? "/logo-horizon.png" : "/logo-horizon-dark.png";
+  const logoFullHorizon = resolvedTheme === 'dark' ? "/logo-full-horizon-white.png" : "/logo-full-horizon-dark.png";
+
   const socialLinks = [
     { icon: XIcon, href: "https://x.com/dreamify_dev", label: "X (Twitter)", external: true },
     { icon: FacebookIcon, href: "https://www.facebook.com/profile.php?id=61587411536040", label: "Facebook", external: true },
@@ -44,7 +49,7 @@ export const FooterSection = () => {
   ];
 
   return (
-    <footer className="relative py-8 border-t border-white/30 z-10">
+    <footer className="relative py-8 border-t border-border dark:border-white/10 z-10">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent"></div>
 
@@ -55,7 +60,7 @@ export const FooterSection = () => {
             <div className="flex items-center mb-2">
               <div className="w-40 h-auto rounded-xl flex items-center justify-center mr-3 p-1">
                 <img
-                  src="/logo-horizon.png"
+                  src={logoHorizon}
                   alt="Dreamify Logo"
                   className="w-full h-full object-contain"
                 />
@@ -86,7 +91,7 @@ export const FooterSection = () => {
           {/* Logo Image */}
           <div className="md:col-span-4 flex items-center justify-center md:justify-end md:self-center">
             <img
-              src="/logo-full-horizon-white.png"
+              src={logoFullHorizon}
               alt="Dreamify Logo"
               className="h-auto max-w-full object-contain lg:pl-40 opacity-30"
             />

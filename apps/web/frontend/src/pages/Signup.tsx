@@ -4,11 +4,14 @@ import { SignUp } from "@clerk/clerk-react";
 import { CheckCircle2, ArrowLeft } from "lucide-react";
 import WaveBackground from "../../../src/ui/lightswind/wave-background";
 import { dark } from "@clerk/themes";
+import { useTheme } from "@/hooks/useTheme";
 
 const REDIRECT_AFTER_AUTH = "/";
 
 const Signup = () => {
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
+  const logoWatermark = resolvedTheme === 'dark' ? "/logo-watermark.png" : "/logo-horizon-dark.png";
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6 relative overflow-hidden">
@@ -27,13 +30,13 @@ const Signup = () => {
         {/* Minimal Header */}
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center gap-3">
-            <img src="/logo-watermark.png" alt="Dreamify Logo" className="w-10 h-10 object-contain" />
+            <img src={logoWatermark} alt="Dreamify Logo" className="w-10 h-10 object-contain" />
             <span className="text-2xl font-medium text-foreground font-outfit">Dreamify</span>
           </div>
         </div>
 
         {/* Split Card */}
-        <div className="glass-panel border border-border/30 rounded-3xl overflow-hidden grid grid-cols-1 md:grid-cols-2">
+        <div className="glass-panel border border-border rounded-3xl overflow-hidden grid grid-cols-1 md:grid-cols-2">
           {/* Brand panel */}
           <div className="hidden md:flex flex-col justify-center gap-6 p-10 bg-gradient-to-br from-primary/10 via-background to-accent/10">
             <div>

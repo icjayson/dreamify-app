@@ -84,7 +84,7 @@
     --destructive-foreground: 0 0% 100%;
     --success: 142 60% 30%;
     --warning: 38 85% 40%;
-    --border: 220 20% 88%;
+    --border: 220 20% 84%;
     --input: 220 20% 92%;
     --ring: 221 72% 36%;
 
@@ -177,8 +177,8 @@
   /* Glass morphism effect — theme-aware */
   .glass-panel {
     background: rgba(0, 0, 0, 0.03);
-    outline: 1px solid rgba(0, 0, 0, 0.08);
-    border-color: rgba(0, 0, 0, 0.08);
+    outline: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.15);
   }
   .dark .glass-panel {
     background: rgba(255, 255, 255, 0.05);
@@ -229,8 +229,8 @@
   .button-outline {
     color: hsl(var(--foreground));
     background: transparent;
-    border: 1px solid hsl(var(--primary) / 0.4);
-    box-shadow: inset -4px -4px 10px rgba(255, 255, 255, 0.2), inset 4px 4px 10px hsl(var(--primary) / 0.2);
+    border: 1px solid hsl(var(--primary) / 0.45);
+    box-shadow: inset -4px -4px 10px rgba(255, 255, 255, 0.1), inset 4px 4px 10px hsl(var(--primary) / 0.05);
     transition: var(--animation-smooth);
     border-radius: 0.5rem;
   }

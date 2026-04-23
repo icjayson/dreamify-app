@@ -22,6 +22,7 @@ import { CreditExhaustedCard } from "./CreditExhaustedCard";
 import type { DashboardComponent } from "@/types/dashboard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
+import { useTheme } from "@/hooks/useTheme";
 
 
 // Creative phrase variants per backend step — each key maps to a real Morpheus workflow step
@@ -442,6 +443,8 @@ interface ChatInterfaceProps {
 }
 
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, dashboardComponents }: ChatInterfaceProps) => {
+  const { resolvedTheme } = useTheme();
+  const logoFavicon = resolvedTheme === 'dark' ? "/logo-favicon.png" : "/logo-horizon-dark.png";
 
   // Model selector state
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
@@ -1340,13 +1343,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
             : isSystem
               ? "bg-muted/50 dark:bg-white/5 p-3 border border-border dark:border-white/10"
               : "bg-transparent p-0";
+          const isAssistant = !isUser && !isSystem;
+          const messageGap = isAssistant ? "gap-1" : "gap-2";
+          const avatarContainerSize = isAssistant ? "w-5 h-5" : "w-6 h-6";
           return (
             <div key={message.id} className="space-y-1">
               <div
                 className={`chat-enter flex ${isUser ? "justify-end" : "justify-start"}`}
               >
-                <div className={`max-w-[90%] min-w-0 flex gap-2 ${bubbleLayoutClass}`}>
-                  <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${avatarClass}`}>
+                <div className={`max-w-[90%] min-w-0 flex ${messageGap} ${bubbleLayoutClass}`}>
+                  <div className={`${avatarContainerSize} rounded-md flex items-center justify-center flex-shrink-0 ${avatarClass}`}>
                     {isUser ? (
                       <User className="w-3 h-3 text-white" />
                     ) : isSystem ? (
@@ -1354,7 +1360,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         SYS
                       </span>
                     ) : (
-                      <img src="/logo-watermark.png" alt="Dreamify" className="h-3 w-auto object-contain" />
+                      <img src={logoFavicon} alt="Dreamify" className="h-5 w-5 object-contain" />
                     )}
                   </div>
 

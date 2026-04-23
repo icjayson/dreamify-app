@@ -25,6 +25,8 @@ const Header = () => {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { creditsRemaining, creditUsage } = useSubscription();
   const { resolvedTheme } = useTheme();
+  const logoHorizon = resolvedTheme === 'dark' ? "/logo-horizon.png" : "/logo-horizon-dark.png";
+  const logoWatermark = resolvedTheme === 'dark' ? "/logo-watermark.png" : "/logo-horizon-dark.png";
   const tierLimit = 1000;
   const creditPct = tierLimit > 0 ? creditsRemaining / tierLimit : 0;
 
@@ -99,7 +101,7 @@ const Header = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-40">
       <SignedOut>
-        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-white/5 py-2 px-4 shadow-2xl relative overflow-hidden group">
+        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-border dark:border-white/10 py-2 px-4 shadow-2xl relative overflow-hidden group">
           {/* Subtle animated shine effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none" />
 
@@ -107,7 +109,7 @@ const Header = () => {
             ✨ <span className="text-foreground dark:text-white">Limited Offer:</span> We're giving away <span className="text-accent font-bold">Free Pro Access</span> to all early members.
             <button
               onClick={() => navigate("/login")}
-              className="ml-2 text-foreground dark:text-white border-b border-foreground/30 dark:border-white/30 hover:border-foreground dark:hover:border-white transition-all pb-0.5"
+              className="ml-2 text-foreground dark:text-white border-b border-border dark:border-white/40 hover:border-foreground dark:hover:border-white transition-all pb-0.5"
             >
               Log in to claim
             </button>
@@ -116,7 +118,7 @@ const Header = () => {
       </SignedOut>
 
       <SignedIn>
-        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-white/5 py-2 px-4 shadow-2xl relative overflow-hidden group">
+        <div className="w-full bg-accent/5 backdrop-blur-xl border-b border-border dark:border-white/10 py-2 px-4 shadow-2xl relative overflow-hidden group">
           {/* Subtle animated shine effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none" />
 
@@ -144,7 +146,7 @@ const Header = () => {
           )}
         </SignedIn>
 
-        <div className="2xl:max-w-6xl xl:max-w-4xl lg:max-w-2xl md:w-full flex h-14 items-center justify-between px-4 glass-panel rounded-2xl mx-auto mt-4">
+        <div className="2xl:max-w-6xl xl:max-w-4xl lg:max-w-2xl md:w-full flex h-14 items-center justify-between px-4 glass-panel rounded-2xl mx-auto mt-4 border border-black/15 dark:border-white/10">
           {/* Left side - Logo and brand */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
@@ -152,7 +154,7 @@ const Header = () => {
               <SignedIn>
                 <div className="hidden lg:block w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
                   <img
-                    src="/logo-horizon.png"
+                    src={logoHorizon}
                     alt="Dreamify Logo"
                     className="w-full h-full object-contain"
                     onClick={() => navigate("/")}
@@ -165,14 +167,14 @@ const Header = () => {
                 <div className="w-12 md:w-32 h-auto rounded-lg flex items-center justify-center hover:cursor-pointer">
                   {/* Small screens: watermark */}
                   <img
-                    src="/logo-watermark.png"
+                    src={logoWatermark}
                     alt="Dreamify Logo"
                     className="block md:hidden w-full h-full object-contain"
                     onClick={() => navigate("/")}
                   />
                   {/* md and up: original horizon logo */}
                   <img
-                    src="/logo-horizon.png"
+                    src={logoHorizon}
                     alt="Dreamify Logo"
                     className="hidden md:block w-full h-full object-contain"
                     onClick={() => navigate("/")}

@@ -21,7 +21,7 @@ export const FeaturesSection = () => {
         title: "Quick Dashboard Generation",
         description: "Say 'create dashboard' to Dreamify, it analyse your data and generate desired output.",
         icon: MessageCircle,
-        videoSrc: "/video-about-dashboard.mov",
+        videoSrc: "/video-about-dashboard.mp4",
         bullets: [
           "Upload your data",
           "Describe your desired dashboard output",
@@ -33,7 +33,7 @@ export const FeaturesSection = () => {
         title: "Easy Layout Editation and Insight Collection",
         description: "You can edit layout and collect insights in seconds.",
         icon: Brain,
-        videoSrc: "/video-about-editandinsight.mov",
+        videoSrc: "/video-about-editandinsight.mp4",
         bullets: [
           "Manually edit layout or chat with Dreamify",
           "Collect instant and deep insights for each metrics",
@@ -44,7 +44,7 @@ export const FeaturesSection = () => {
         title: "Unique Dashboard Shared Link",
         description: "You can share your dashboard with anyone in seconds.",
         icon: Sparkles,
-        videoSrc: "/video-about-exportl.mov",
+        videoSrc: "/video-about-exportl.mp4",
         bullets: [
           "Unique dashboard link",
           "Fully control the permission of dashboard link",

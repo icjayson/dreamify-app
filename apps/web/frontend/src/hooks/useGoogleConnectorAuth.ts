@@ -75,11 +75,19 @@ export function useGoogleConnectorAuth({
         const redirectUrl = buildRedirectUrl();
 
         if (googleAccount) {
-          // User already has a Google account linked — request additional scopes
+          // Merge existing approved scopes with new ones so we don't lose
+          // previously-granted permissions. Google issues a new token on each
+          // reauthorize() containing ONLY what we ask for — so we must always
+          // include the scopes that are already approved.
+          const existingScopes: string = (googleAccount as any).approvedScopes ?? '';
+          const existingSet = new Set(existingScopes.split(' ').filter(Boolean));
+          requiredScopes.forEach((s) => existingSet.add(s));
+          const mergedScopes = Array.from(existingSet);
+
           // oidcPrompt: 'consent' forces Google to show the consent screen
           // so the user can see and approve the new permissions
           const updatedAccount = await (googleAccount as any).reauthorize({
-            additionalScopes: requiredScopes,
+            additionalScopes: mergedScopes,
             redirectUrl,
             oidcPrompt: 'consent',
           });

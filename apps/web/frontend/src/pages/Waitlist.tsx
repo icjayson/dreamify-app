@@ -52,7 +52,7 @@ export default function WaitlistPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-auto xl:gap-auto place-content-center lg:min-h-0 lg:place-content-stretch">
           {/* Video placeholder (left, 2/3 width) */}
           <section className="lg:col-span-2 flex items-center justify-center order-2 lg:order-1 z-0">
-            <video className="w-full rounded-2xl border border-white/50 max-w-5xl aspect-video object-cover bg-card/50" controls preload="auto" loop={true} autoPlay src="/video-about-full.mov">
+            <video className="w-full rounded-2xl border border-white/50 max-w-5xl aspect-video object-cover bg-card/50" controls preload="auto" loop={true} autoPlay src="/video-about-full.mp4">
             </video>
           </section>
 

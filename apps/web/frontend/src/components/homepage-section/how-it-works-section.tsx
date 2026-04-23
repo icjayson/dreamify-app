@@ -84,7 +84,7 @@ export const HowItWorksSection = () => {
             autoPlay
             muted
             aria-label="Product demo video"
-            src="/video-about-full.mov"
+            src="/video-about-full.mp4"
           >
           </video>
         </div>

@@ -23,6 +23,8 @@ import { projectService, type ProjectRecord } from "@/services/projectService";
 import { integrationService } from "@/services/integrationService";
 import { CONNECTORS, CONNECTOR_CATEGORIES } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
+import { SlackIntegrationCard } from "@/components/integrations/SlackIntegrationCard";
+import { toast as sonnerToast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ConnectorStatus {
@@ -83,6 +85,26 @@ export default function WorkspacePage() {
       setActiveTab(tab);
     }
   }, [searchParams]);
+
+  // ── Handle Slack OAuth return ────────────────────────────────────────────────
+  useEffect(() => {
+    const slackResult = searchParams.get("slack");
+    if (!slackResult) return;
+    const workspace = searchParams.get("workspace");
+    const message = searchParams.get("message");
+    if (slackResult === "success") {
+      sonnerToast.success(`Connected to ${workspace || "your Slack workspace"}`);
+    } else if (slackResult === "error") {
+      sonnerToast.error(`Slack connection failed: ${message || "Unknown error"}`);
+    }
+    setSearchParams((prev) => {
+      prev.delete("slack");
+      prev.delete("workspace");
+      prev.delete("message");
+      return prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
@@ -479,6 +501,12 @@ export default function WorkspacePage() {
                 <h2 className="text-lg font-semibold text-foreground dark:text-white mb-1">Connectors</h2>
                 <p className="text-sm text-muted-foreground">Connect your data sources to build dashboards faster.</p>
               </div>
+              {/* ── Integrations (chat platforms) ── */}
+              <div className="mb-8">
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Integrations</h3>
+                <SlackIntegrationCard />
+              </div>
+
               {connectorsLoading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {Array.from({ length: 6 }).map((_, i) => (

@@ -4,6 +4,8 @@ Startup script for FastAPI application.
 """
 
 import uvicorn
+from dotenv import load_dotenv
+load_dotenv()
 from utils.config import get_settings
 
 settings = get_settings()

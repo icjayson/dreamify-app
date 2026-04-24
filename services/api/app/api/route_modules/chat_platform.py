@@ -24,6 +24,9 @@ import uuid
 from typing import Any, Dict, Optional
 from urllib.parse import quote
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import requests as http_requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -44,9 +47,9 @@ SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID", "")
 SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", "")
 SLACK_OAUTH_SCOPES = (
     "channels:history,channels:join,groups:history,im:history,"
-    "chat:write,chat:write.public,files:write,app_mentions:read,commands"
+    "chat:write,chat:write.public,files:read,files:write,app_mentions:read,commands"
 )
-DREAMIFY_APP_URL = os.environ.get("DREAMIFY_APP_URL", "https://app.dreamify.dev")
+DREAMIFY_APP_URL = os.environ.get("DREAMIFY_APP_URL", "http://localhost:8080")
 STATE_TOKEN_TTL = 600  # 10 minutes
 
 
@@ -81,6 +84,64 @@ def _verify_state_token(token: str) -> str:
         return payload["user_id"]
     except (KeyError, json.JSONDecodeError) as exc:
         raise ValueError(f"Malformed state token: {exc}") from exc
+
+
+# ── Slack file fetch helper ──────────────────────────────────────────────────
+
+def _fetch_slack_files(bot_token: str, channel_id: str, message_ts: str) -> list:
+    """
+    Retrieve the file attachments for a specific Slack message.
+
+    The ``app_mention`` event payload intentionally omits the ``files`` field;
+    only ``message`` events carry it.  The authoritative way to get files for a
+    given message is to call ``conversations.replies`` with the exact message
+    timestamp (inclusive=True, limit=1) — this works for both top-level messages
+    and thread replies.
+
+    Requires the ``files:read`` bot scope so that ``url_private_download`` links
+    are accessible for download later.
+
+    Returns an empty list on any error so the caller degrades gracefully.
+    """
+    if not bot_token or not channel_id or not message_ts:
+        return []
+
+    try:
+        resp = http_requests.get(
+            "https://slack.com/api/conversations.replies",
+            headers={"Authorization": f"Bearer {bot_token}"},
+            params={
+                "channel": channel_id,
+                "ts": message_ts,        # thread parent (or the message itself)
+                "latest": message_ts,   # narrow to exactly this message
+                "inclusive": "true",
+                "limit": "1",
+            },
+            timeout=10,
+        )
+        data = resp.json()
+        if not data.get("ok"):
+            logger.warning(
+                "conversations.replies returned error for ts=%s: %s",
+                message_ts, data.get("error"),
+            )
+            return []
+
+        messages = data.get("messages", [])
+        for msg in messages:
+            if msg.get("ts") == message_ts:
+                files = msg.get("files", [])
+                logger.info(
+                    "Fetched %d file(s) from Slack message ts=%s", len(files), message_ts
+                )
+                return files
+
+        logger.info("No message matched ts=%s in conversations.replies response", message_ts)
+        return []
+
+    except Exception as exc:
+        logger.warning("_fetch_slack_files failed for ts=%s: %s", message_ts, exc)
+        return []
 
 
 # ── Slack Events API ──────────────────────────────────────────────────────────
@@ -121,6 +182,19 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
             logger.warning("Mention from unregistered workspace: %s", platform_workspace_id)
             return {"ok": True}
 
+        # The app_mention event never includes a `files` field by Slack design.
+        # Fetch the real message object via conversations.replies to get attachments.
+        message_ts = event.get("ts", "")
+        bot_token = decrypt_token(workspace["bot_token_encrypted"])
+        slack_files = _fetch_slack_files(bot_token, channel_id, message_ts)
+        if slack_files:
+            logger.info(
+                "Found %d file(s) attached to Slack mention (ts=%s)",
+                len(slack_files), message_ts,
+            )
+        else:
+            logger.info("No file attachments on Slack mention (ts=%s)", message_ts)
+
         background_tasks.add_task(
             handle_slack_query,
             query=query,
@@ -128,6 +202,7 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
             channel_id=channel_id,
             thread_ts=thread_ts,
             bot_token_encrypted=workspace["bot_token_encrypted"],
+            slack_files=slack_files,
         )
 
     return {"ok": True}

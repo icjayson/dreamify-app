@@ -1037,7 +1037,14 @@ CRITICAL RULES:
                 instruction = f"User question: {state.input_prompt}\n\n{file_info}"
 
             messages.append(HumanMessage(content=instruction))
-    
+        else:
+            # Q&A mode with no real data file (placeholder only) — use the raw query
+            if state.input_prompt:
+                messages.append(HumanMessage(content=state.input_prompt))
+    elif state.input_prompt:
+        # No file_paths at all — pure Q&A
+        messages.append(HumanMessage(content=state.input_prompt))
+
     # 🔥 FIX: Build conversation history from previous tool executions
     # This is crucial to prevent the agent from having "amnesia" and repeating the same actions
     conversation_history = _build_conversation_history_from_executions(state)

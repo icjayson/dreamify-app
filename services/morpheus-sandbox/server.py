@@ -687,20 +687,14 @@ def _process_conversation_background(
         assets = _extract_assets_from_nodes(conversation)
         logger.info(f"Found {len(assets)} asset(s) in conversation {conversation_id}")
 
-        # Handle file download - download all assets or create placeholder for Q&A
+        # Handle file download - download all assets, or skip entirely for Q&A
         temp_file_paths = []
         if not assets:
             logger.info(
-                f"No assets in conversation {conversation_id} - processing Q&A without file"
+                f"No assets in conversation {conversation_id} - processing as pure Q&A (no file)"
             )
-            # Create empty CSV file for Q&A mode (workflow will handle it)
-            temp_dir = tempfile.gettempdir()
-            temp_file_path = os.path.join(temp_dir, f"qa_{conversation_id}.csv")
-            # Create minimal CSV file
-            with open(temp_file_path, "w") as handle:
-                handle.write("placeholder\n1\n")  # Minimal CSV for workflow
-            temp_file_paths.append(temp_file_path)
-            logger.info(f"Created placeholder file for Q&A: {temp_file_path}")
+            # For Q&A with no data files, pass empty file_paths so the workflow
+            # routes to Q&A mode immediately without trying to open any file.
         else:
             _post_node_status_sync(
                 conversation_id, "processing", {"step": "download_asset"}

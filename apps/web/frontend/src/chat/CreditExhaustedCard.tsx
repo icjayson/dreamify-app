@@ -25,11 +25,11 @@ export const CreditExhaustedCard: React.FC<CreditExhaustedCardProps> = ({
 
       {/* Progress bar — full */}
       <div className="flex flex-col gap-1.5">
-        <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+        <div className="h-1.5 w-full rounded-full bg-black/5 dark:bg-white/5 overflow-hidden">
           <div className="h-full w-full rounded-full bg-amber-500/60" />
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-white/40">
+          <span className="text-xs text-muted-foreground">
             {isPro ? "Pro plan" : "Standard plan"} · {creditsLimit.toLocaleString()} credits/month
           </span>
           <span className="text-xs font-medium text-amber-400">
@@ -38,7 +38,7 @@ export const CreditExhaustedCard: React.FC<CreditExhaustedCardProps> = ({
         </div>
       </div>
 
-      <p className="text-xs text-white/40">Resets next month.</p>
+      <p className="text-xs text-muted-foreground">Resets next month.</p>
 
       {/* CTAs */}
       {isPro ? (
@@ -61,7 +61,7 @@ export const CreditExhaustedCard: React.FC<CreditExhaustedCardProps> = ({
           </button>*/}
           <a
             href="/pricing"
-            className="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs text-white/40 hover:text-white/70 transition-colors"
+            className="inline-flex items-center justify-center h-8 px-3 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             View plans
           </a>

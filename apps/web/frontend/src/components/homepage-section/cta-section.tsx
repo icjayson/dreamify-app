@@ -62,14 +62,14 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
           
           {/* Main headline */}
           <h2 className={`text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
-            <span className="text-white">Ready to</span>
+            <span className="text-foreground">Ready to</span>
             <div className="gradient-panel rounded-xl px-6 py-3">
               <span className="text-white font-bold text-3xl md:text-5xl">transform</span>
             </div>
           </h2>
-          
+
           <h2 className={`text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.2s' }}>
-            <span className="text-white">your data storytelling?</span>
+            <span className="text-foreground">your data storytelling?</span>
           </h2>
 
           <p className={`text-md text-muted-foreground max-w-3xl mx-auto mb-8 leading-relaxed ${isVisible ? 'animate-fade-in' : 'opacity-0'}`} style={{ animationDelay: '0.4s' }}>
@@ -89,7 +89,7 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
               <div className="mb-6">
                 <div className="relative">
                   <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto mb-6">
-                    <stat.icon className="w-8 h-8 text-white" />
+                    <stat.icon className="w-8 h-8 text-foreground dark:text-white" />
                   </div>
                   {/* Glow effect */}
                   <div className="absolute inset-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent opacity-20 blur-xl group-hover:opacity-80 transition-opacity duration-300 mx-auto"></div>

@@ -281,10 +281,10 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
           <span>Thinking Process <span className="text-muted-foreground/30 dark:text-white/20 mx-1">|</span> {isActive ? 'Executing' : 'Executed'}</span>
         </div>
         <div className={`flex items-center gap-2 ${isLiveMode ? 'flex-shrink-0' : ''}`}>
-          <div className={`text-[10px] sm:text-xs text-white/40 ${isLiveMode ? 'whitespace-nowrap text-right' : ''}`}>
+          <div className={`text-[10px] sm:text-xs text-muted-foreground dark:text-white/40 ${isLiveMode ? 'whitespace-nowrap text-right' : ''}`}>
             Total: {displayTasks.length} {displayTasks.length === 1 ? 'Task' : 'Tasks'}
           </div>
-          <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground/50 dark:text-white/30 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
@@ -1395,12 +1395,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                             : isGA4 ? "bg-orange-500/10"
                               : isSheets ? "bg-green-500/10"
                                 : isMeta ? "bg-blue-500/10"
-                                  : isTikTok ? "bg-black/20"
+                                  : isTikTok ? "bg-black/10 dark:bg-black/20"
                                     : isGoogleAds ? "bg-[#4285F4]/10"
                                       : isFirebase ? "bg-[#FFA000]/10"
-                                        : isAppsFlyer ? "bg-white/5"
+                                        : isAppsFlyer ? "bg-muted dark:bg-white/5"
                                           : isStripe ? "bg-[#6772E5]/10"
-                                            : "bg-white/10";
+                                            : "bg-muted dark:bg-white/10";
 
                           const connector = isMultiple ? undefined : CONNECTORS.find(c => {
                             if (isGA4 && c.name === 'GA4') return true;
@@ -1851,7 +1851,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               {inputValue.length > 100 && (
                 <button
                   onClick={() => setIsInputExpanded(!isInputExpanded)}
-                  className="absolute top-0 right-0 p-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all z-10"
+                  className="absolute top-0 right-0 p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-black/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/10 transition-all z-10"
                   title={isInputExpanded ? 'Collapse input' : 'Expand input'}
                   type="button"
                 >

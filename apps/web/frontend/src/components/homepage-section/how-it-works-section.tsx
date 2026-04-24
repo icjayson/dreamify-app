@@ -63,13 +63,13 @@ export const HowItWorksSection = () => {
 
           {/* Title with gradient panel */}
           <h2 className="text-3xl md:text-5xl font-bold mb-4 flex items-center justify-center gap-4 flex-wrap">
-            <span className="text-white">How</span>
+            <span className="text-foreground">How</span>
             <div className="gradient-panel rounded-xl px-6 py-3">
               <span className="text-white font-bold text-3xl md:text-5xl">It Works</span>
             </div>
           </h2>
 
-          <p className="text-md text-white/60 max-w-3xl mx-auto">
+          <p className="text-md text-muted-foreground max-w-3xl mx-auto">
             Four simple steps to transform your data into stunning visualizations
           </p>
         </div>
@@ -104,7 +104,7 @@ export const HowItWorksSection = () => {
                 {/* Step Number */}
                 <div className="relative mb-8">
                   <div className="w-16 h-16 icon-panel rounded-full flex items-center justify-center mb-6 transition-transform duration-300 shadow-[0_5px_5px_rgba(255,255,255),0_10px_10px_hsl(var(--primary)),0_20px_20px_hsl(var(--secondary))] mx-auto relative z-10">
-                    <span className="text-2xl font-bold text-white">{step.number}</span>
+                    <span className="text-2xl font-bold text-foreground dark:text-white">{step.number}</span>
                   </div>
 
                   {/* Icon with animation */}

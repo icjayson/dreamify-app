@@ -46,7 +46,7 @@ export const CTAContainerSection = ({
             </p>
 
             <div className="mt-16 flex items-center gap-4">
-              <button onClick={handleCtaClick} className="button-outline px-6 md:px-7 py-3 rounded-xl inline-flex items-center justify-center text-sm md:text-base group">
+              <button onClick={handleCtaClick} className="button-outline text-white px-6 md:px-7 py-3 rounded-xl inline-flex items-center justify-center text-sm md:text-base group">
                 <span>{ctaText}</span>
                 <span aria-hidden className="w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover:w-4 group-hover:opacity-100 group-hover:ml-2">→</span>
               </button>

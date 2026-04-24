@@ -336,7 +336,7 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
         { key: "account" as AccountCenterTab, label: "Manage Account", icon: <UserIcon className="w-4 h-4" /> },
         /* { key: "billing" as AccountCenterTab, label: "Billing", icon: <CreditCard className="w-4 h-4" /> },
         { key: "notifications" as AccountCenterTab, label: "Notifications", icon: <Bell className="w-4 h-4" /> },*/
-        {/* key: "preferences" as AccountCenterTab, label: "Preferences", icon: <Settings className="w-4 h-4" /> */ },
+        { key: "preferences" as AccountCenterTab, label: "Preferences", icon: <Settings className="w-4 h-4" /> },
       );
     }
     return items;

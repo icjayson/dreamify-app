@@ -507,11 +507,11 @@ export default function WorkspacePage() {
                               >
                                 <div className="flex items-start justify-between">
                                   <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/5 flex items-center justify-center flex-shrink-0">
+                                    <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${connector.iconBg ?? 'bg-muted dark:bg-white/5'}`}>
                                       <img
                                         src={connector.icon}
                                         alt={connector.name}
-                                        className={`w-7 h-7 object-contain ${connector.name === 'TikTok' ? 'scale-125' : ''}`}
+                                        className={`w-7 h-7 object-contain ${connector.name === 'TikTok Ads' ? 'scale-125' : ''}`}
                                         onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                                       />
                                     </div>

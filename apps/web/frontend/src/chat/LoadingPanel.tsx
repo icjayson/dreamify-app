@@ -66,13 +66,13 @@ export default function LoadingPanel({ isActive, stopSignal, mode = "dashboard" 
 
   // Text-only log, no background or borders
   return (
-    <div className="space-y-1 text-white">
+    <div className="space-y-1 text-foreground">
       {lines.map((line, i) => {
         const isLast = i === lines.length - 1 && !stopped;
         return (
           <div
             key={`${i}-${line}`}
-            className={`text-sm animate-fade-in-300 ${isLast ? "active-breathing text-gradient-sweep caret" : "text-white/90"}`}
+            className={`text-sm animate-fade-in-300 ${isLast ? "active-breathing text-gradient-sweep caret" : "text-foreground/70 dark:text-white/90"}`}
           >
             {line}
           </div>

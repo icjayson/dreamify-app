@@ -10,13 +10,13 @@ const REDIRECT_AFTER_AUTH = "/workspace";
 const Login = () => {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
-  const logoWatermark = resolvedTheme === 'dark' ? "/logo-watermark.png" : "/logo-horizon-dark.png";
+  const logoWatermark = "/logo-watermark.png";
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6 relative overflow-hidden">
       <WaveBackground 
       className="absolute inset-0 z-0" />
-      <div className="absolute inset-0 bg-black/60 z-1"></div>
+      <div className="absolute inset-0 bg-white/10 dark:bg-black/60 z-1"></div>
 
       {/* Back button */}
       <div className="absolute top-4 left-4 z-20">
@@ -30,7 +30,7 @@ const Login = () => {
         {/* Minimal Header */}
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center gap-3">
-            <img src={logoWatermark} alt="Dreamify Logo" className="w-10 h-10 object-contain" />
+            <img src={logoWatermark} alt="Dreamify Logo" className="w-10 h-10 object-contain brightness-0 dark:brightness-100" />
             <span className="text-2xl font-medium text-foreground font-outfit">Dreamify</span>
           </div>
         </div>
@@ -38,31 +38,31 @@ const Login = () => {
         {/* Split Card */}
         <div className="glass-panel border border-border rounded-3xl overflow-hidden grid grid-cols-1 md:grid-cols-2">
           {/* Brand panel */}
-          <div className="hidden md:flex flex-col justify-center gap-6 p-10 bg-gradient-to-br from-primary/10 via-background to-accent/10">
+          <div className="hidden md:flex flex-col justify-center gap-6 p-10 bg-gradient-to-br from-primary/70 via-primary/30 to-white/60 backdrop-blur-2xl dark:from-primary/10 dark:via-background dark:to-accent/10">
             <div>
-              <h2 className="text-2xl font-bold text-white">Welcome to Dreamify</h2>
-              <p className="text-white/70 mt-1">Build beautiful dashboards in minutes.</p>
+              <h2 className="text-2xl font-bold text-foreground dark:text-white">Welcome to Dreamify</h2>
+              <p className="text-foreground/70 dark:text-white/70 mt-1">Build beautiful dashboards in minutes.</p>
             </div>
-            <ul className="space-y-3 text-white/80">
-              <li className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-primary" /> AI‑assisted insights</li>
-              <li className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-primary" /> Real‑time analytics</li>
-              <li className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-primary" /> Secure by design</li>
+            <ul className="space-y-3 text-foreground/80 dark:text-white/80">
+              <li className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-foreground/60 dark:text-white/90" /> AI‑assisted insights</li>
+              <li className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-foreground/60 dark:text-white/90" /> Real‑time analytics</li>
+              <li className="flex items-center gap-3"><CheckCircle2 className="w-5 h-5 text-foreground/60 dark:text-white/90" /> Secure by design</li>
             </ul>
           </div>
 
           {/* Form panel */}
-          <div className="p-8 md:p-10">
+          <div className="p-8 md:p-10 bg-white/60 dark:bg-transparent backdrop-blur-sm">
             <h3 className="text-2xl font-semibold text-foreground mb-2">Login</h3>
             <p className="text-muted-foreground mb-6">Welcome back! Please sign in to continue.</p>
 
             <div className="space-y-4">
-              <SignIn 
+              <SignIn
                 appearance={{
-                  baseTheme: dark,
+                  baseTheme: resolvedTheme === 'dark' ? dark : undefined,
                   elements: {
                     formButtonPrimary: "w-full button-gradient",
                     fontFamily: "Outfit",
-                    card: "bg-transparent shadow-none border-none",
+                    card: "!bg-transparent shadow-none border-none",
                     headerTitle: "hidden",
                     headerSubtitle: "hidden",
                     socialButtonsBlockButton: "w-full button-gradient mb-4",
@@ -70,15 +70,17 @@ const Login = () => {
                     dividerText: "text-xs text-muted-foreground",
                     formFieldInput: "bg-input border-border text-foreground",
                     formFieldLabel: "text-sm font-medium text-foreground",
-                    footerActionLink: "text-white hover:text-accent hover:underline",
+                    footer: "!bg-transparent",
+                    footerActionLink: resolvedTheme === 'dark'
+                      ? "text-white hover:text-accent hover:underline"
+                      : "text-foreground/80 hover:text-accent hover:underline",
                     identityPreviewText: "text-muted-foreground",
                     formFieldSuccessText: "text-green-500",
                     formFieldErrorText: "text-red-500"
-
-                   },
+                  },
                   variables: {
-                    colorText: "#ffffff",
-                    colorBackground: "primary",
+                    colorText: resolvedTheme === 'dark' ? "#ffffff" : undefined,
+                    colorBackground: "rgba(0,0,0,0)",
                   },
                   layout: {
                     unsafe_disableDevelopmentModeWarnings: true,

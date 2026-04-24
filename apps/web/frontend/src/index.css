@@ -744,3 +744,25 @@ html::-webkit-scrollbar-thumb:hover {
 .animate-shimmer {
   animation: shimmer 5s infinite linear;
 }
+
+/* Clerk auth component overrides — force transparent backgrounds so the
+   panel background shows through regardless of Clerk's internal dark theme */
+.cl-card,
+.cl-cardBox,
+.cl-footer,
+.cl-footerAction,
+.cl-footerPages,
+.cl-main,
+.cl-rootBox {
+  background-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Clerk "Last used" badge — primary-blue pill matching design system */
+.cl-badge {
+  background-color: hsl(var(--primary) / 0.12) !important;
+  color: hsl(var(--primary)) !important;
+  border: 1px solid hsl(var(--primary) / 0.25) !important;
+  font-weight: 500 !important;
+}

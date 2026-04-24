@@ -44,3 +44,8 @@ clerk-backend-api>=1.0.0
 
 # Configuration
 PyYAML>=6.0.1
+
+# Chat platform integrations
+slack-bolt>=1.18.0
+slack-sdk>=3.27.0
+cryptography>=42.0.0

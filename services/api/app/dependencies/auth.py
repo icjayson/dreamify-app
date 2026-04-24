@@ -2,6 +2,7 @@
 Authentication dependencies for FastAPI routes.
 """
 import logging
+from typing import Optional
 from fastapi import Request, HTTPException, status
 from utils.clerk_auth import clerk_auth_jwt
 
@@ -35,7 +36,7 @@ def require_user(request: Request) -> str:
     return user_id
 
 
-def optional_user(request: Request) -> str | None:
+def optional_user(request: Request) -> Optional[str]:
     """
     FastAPI dependency for optional authentication.
     

@@ -130,6 +130,24 @@ def get_table_specs() -> Dict[str, Dict]:
                 {"AttributeName": "date", "AttributeType": "S"},
             ],
         },
+        tables.chat_workspaces: {
+            "KeySchema": [
+                {"AttributeName": "platform_workspace_id", "KeyType": "HASH"},
+            ],
+            "AttributeDefinitions": [
+                {"AttributeName": "platform_workspace_id", "AttributeType": "S"},
+            ],
+        },
+        tables.chat_sessions: {
+            "KeySchema": [
+                {"AttributeName": "platform_workspace_id", "KeyType": "HASH"},
+                {"AttributeName": "thread_key", "KeyType": "RANGE"},
+            ],
+            "AttributeDefinitions": [
+                {"AttributeName": "platform_workspace_id", "AttributeType": "S"},
+                {"AttributeName": "thread_key", "AttributeType": "S"},
+            ],
+        },
     }
 
 

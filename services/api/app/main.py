@@ -129,6 +129,13 @@ def create_app():
         logger.info("Integration router registered successfully")
     except ImportError as e:
         logger.error(f"Failed to import Integration router: {e}")
+
+    try:
+        from app.api.route_modules.chat_platform import router as chat_router
+        app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
+        logger.info("Chat platform router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Chat platform router: {e}")
     
     # Root endpoint
     @app.get("/", tags=["root"])

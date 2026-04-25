@@ -128,6 +128,15 @@ class ApiClient {
     });
   }
 
+  // PATCH request
+  async patch<T>(endpoint: string, data?: any, options?: RequestInit): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options,
+    });
+  }
+
   // DELETE request
   async delete<T>(endpoint: string, options?: RequestInit): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
@@ -248,6 +257,7 @@ export const api = {
   get: <T>(endpoint: string, options?: RequestInit) => apiClient.get<T>(endpoint, options),
   post: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.post<T>(endpoint, data, options),
   put: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.put<T>(endpoint, data, options),
+  patch: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.patch<T>(endpoint, data, options),
   delete: <T>(endpoint: string, options?: RequestInit) => apiClient.delete<T>(endpoint, options),
   postFormData: <T>(endpoint: string, formData: FormData, options?: RequestInit) =>
     apiClient.postFormData<T>(endpoint, formData, options),

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Plug,
   LayoutDashboard,
+  Clock,
   PanelLeftClose,
   PanelLeftOpen,
   ChevronsUpDown,
@@ -20,11 +21,12 @@ import AccountCenterModal from "@/components/homepage-section/AccountCenterModal
 import { useSubscription } from "@/hooks/useSubscription";
 import { useToast } from "@/hooks/use-toast";
 
-type Tab = "connectors" | "dashboards";
+type Tab = "connectors" | "dashboards" | "schedules";
 
 const NAV_ITEMS: { tab: Tab; label: string; Icon: React.ElementType }[] = [
   { tab: "connectors", label: "Connectors", Icon: Plug },
   { tab: "dashboards", label: "My Dashboards", Icon: LayoutDashboard },
+  { tab: "schedules", label: "Scheduled Syncs", Icon: Clock },
 ];
 
 interface WorkspaceSidebarProps {

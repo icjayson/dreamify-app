@@ -24,6 +24,7 @@ import { integrationService } from "@/services/integrationService";
 import { CONNECTORS, CONNECTOR_CATEGORIES } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
 import { SlackIntegrationCard } from "@/components/integrations/SlackIntegrationCard";
+import { ScheduleManager } from "@/components/schedules/ScheduleManager";
 import { toast as sonnerToast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ const SOURCE_COLORS: Record<string, string> = {
   CSV: "bg-foreground/10 text-foreground/60",
 };
 
-type Tab = "projects" | "connectors" | "dashboards";
+type Tab = "projects" | "connectors" | "dashboards" | "schedules";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function WorkspacePage() {
@@ -58,7 +59,7 @@ export default function WorkspacePage() {
   const tabParam = searchParams.get("tab") as Tab | null;
 
   const [activeTab, setActiveTab] = useState<Tab>(
-    tabParam && ["projects", "connectors", "dashboards"].includes(tabParam) ? tabParam : "projects"
+    tabParam && ["projects", "connectors", "dashboards", "schedules"].includes(tabParam) ? tabParam : "projects"
   );
   const [collapsed, setCollapsed] = useState(false);
 
@@ -81,7 +82,7 @@ export default function WorkspacePage() {
   // ── Sync active tab with URL ─────────────────────────────────────────────────
   useEffect(() => {
     const tab = searchParams.get("tab") as Tab | null;
-    if (tab && ["projects", "connectors", "dashboards"].includes(tab)) {
+    if (tab && ["projects", "connectors", "dashboards", "schedules"].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -342,7 +343,7 @@ export default function WorkspacePage() {
             <span className="hidden md:inline text-muted-foreground">{displayName}</span>
             <span className="hidden md:inline text-border">›</span>
             <span className="text-foreground font-medium">
-              {activeTab === "dashboards" ? "My Dashboards" : activeTab === "connectors" ? "Connectors" : "Projects"}
+              {activeTab === "dashboards" ? "My Dashboards" : activeTab === "connectors" ? "Connectors" : activeTab === "schedules" ? "Scheduled Syncs" : "Projects"}
             </span>
           </div>
           <button
@@ -373,6 +374,12 @@ export default function WorkspacePage() {
             className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'dashboards' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}
           >
             Dashboards
+          </button>
+          <button
+            onClick={() => navigate('/workspace?tab=schedules')}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'schedules' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}
+          >
+            Schedules
           </button>
         </div>
 
@@ -579,6 +586,12 @@ export default function WorkspacePage() {
                 </div>
               )}
             </div>
+          )}
+
+
+          {/* ════ SCHEDULES TAB ════ */}
+          {activeTab === "schedules" && (
+            <ScheduleManager projectId={projects[0]?.project_id ?? ""} />
           )}
 
 

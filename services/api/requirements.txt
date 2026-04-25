@@ -50,3 +50,7 @@ slack-bolt>=1.18.0
 slack-sdk>=3.27.0
 aiohttp>=3.9.0
 cryptography>=42.0.0
+
+# Chart rendering (opt-in — requires ENABLE_CHART_RENDERING=true)
+plotly>=5.18.0
+kaleido>=1.0.0

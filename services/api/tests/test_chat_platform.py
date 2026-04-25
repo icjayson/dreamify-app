@@ -143,6 +143,41 @@ class TestSlackServiceFormatters:
         action_blocks = [b for b in blocks if b.get("type") == "actions"]
         assert len(action_blocks) == 0
 
+    def test_build_response_blocks_with_metrics(self):
+        from app.services.slack_service import build_response_blocks
+        metrics = [
+            {"title": "Revenue", "value": "$142k", "change": "+12%", "trend": "up"},
+            {"title": "Users", "value": "8,420", "change": "+3%", "trend": "up"},
+        ]
+        blocks = build_response_blocks(
+            "Dashboard complete.", "https://preview.dreamify.dev/p", 5, metrics=metrics
+        )
+        # Should have: narrative section, metrics section, actions, context
+        section_blocks = [b for b in blocks if b.get("type") == "section"]
+        assert len(section_blocks) == 2
+        metrics_text = section_blocks[1]["text"]["text"]
+        assert "Revenue" in metrics_text
+        assert "Users" in metrics_text
+        assert "📈" in metrics_text
+        assert "|" in metrics_text
+
+    def test_build_response_blocks_metrics_capped_at_four(self):
+        from app.services.slack_service import build_response_blocks
+        metrics = [{"title": f"M{i}", "value": i} for i in range(6)]
+        blocks = build_response_blocks("Narrative.", "https://example.com", 5, metrics=metrics)
+        section_blocks = [b for b in blocks if b.get("type") == "section"]
+        metrics_text = section_blocks[1]["text"]["text"]
+        # M0–M3 should appear; M4/M5 should not
+        assert "M3" in metrics_text
+        assert "M4" not in metrics_text
+
+    def test_build_response_blocks_no_metrics_section_when_empty(self):
+        from app.services.slack_service import build_response_blocks
+        blocks = build_response_blocks("Narrative.", None, 5, metrics=[])
+        section_blocks = [b for b in blocks if b.get("type") == "section"]
+        # Only narrative section — no metrics section
+        assert len(section_blocks) == 1
+
     def test_build_error_blocks(self):
         from app.services.slack_service import build_error_blocks
         blocks = build_error_blocks("Something went wrong.")
@@ -218,13 +253,41 @@ class TestChatPlatformServiceHelpers:
             "dashboards": [{"dashboard_id": "dash-1"}]
         }
         url = _build_dashboard_url("proj-1", conversation)
+        assert url is not None
         assert "proj-1" in url
-        assert "dash-1" in url
+        assert "preview" in url
 
     def test_build_dashboard_url_no_dashboard(self):
         from app.services.chat_platform_service import _build_dashboard_url
         conversation = {"dashboards": []}
         assert _build_dashboard_url("proj-1", conversation) is None
+
+    def test_extract_top_metrics_returns_up_to_max(self):
+        from app.services.chat_platform_service import _extract_top_metrics
+        dashboard = {
+            "metrics": [
+                {"title": "Revenue", "value": 142000, "change": "+12%", "trend": "up"},
+                {"title": "Users", "value": 8420, "change": "+3%", "trend": "up"},
+                {"title": "Churn", "value": "5%", "change": "-1%", "trend": "down"},
+                {"title": "MRR", "value": 50000, "change": "+8%", "trend": "up"},
+                {"title": "Extra", "value": 99},
+            ]
+        }
+        result = _extract_top_metrics(dashboard, max_n=4)
+        assert len(result) == 4
+        assert result[0]["title"] == "Revenue"
+        assert result[3]["title"] == "MRR"
+
+    def test_extract_top_metrics_empty_dashboard(self):
+        from app.services.chat_platform_service import _extract_top_metrics
+        assert _extract_top_metrics({}) == []
+        assert _extract_top_metrics({"metrics": []}) == []
+
+    def test_extract_top_metrics_fewer_than_max(self):
+        from app.services.chat_platform_service import _extract_top_metrics
+        dashboard = {"metrics": [{"title": "Revenue", "value": 100}]}
+        result = _extract_top_metrics(dashboard, max_n=4)
+        assert len(result) == 1
 
     def test_make_user_node_structure(self):
         from app.services.chat_platform_service import _make_user_node

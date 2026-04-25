@@ -24,6 +24,7 @@ import boto3
 import requests
 
 from app.services.credit_service import CreditService
+from app.services.chart_renderer import is_chart_rendering_enabled, render_dashboard_previews
 from app.services.slack_service import (
     build_analyzing_blocks,
     build_error_blocks,
@@ -109,13 +110,37 @@ def _extract_narrative(conversation: Dict[str, Any]) -> Optional[str]:
 
 
 def _build_dashboard_url(project_id: str, conversation: Dict[str, Any]) -> Optional[str]:
+    """Return the public preview URL for the most recently created dashboard."""
     dashboards = conversation.get("dashboards", [])
     if not dashboards:
         return None
-    dashboard_id = dashboards[-1].get("dashboard_id")
-    if not dashboard_id:
+    # Use the public preview page so the link works without Clerk auth
+    return f"{DREAMIFY_APP_URL}/workspace/project/preview?projectId={project_id}"
+
+
+def _load_dashboard_json(s3_uri: str) -> Optional[Dict[str, Any]]:
+    """
+    Load a dashboard JSON config from an S3 URI (s3://bucket/key).
+    Returns the parsed dict, or None on any error.
+    """
+    import json
+    from utils.s3.client import download_bytes
+
+    try:
+        if not s3_uri or not s3_uri.startswith("s3://"):
+            return None
+        without_scheme = s3_uri[len("s3://"):]
+        bucket, _, key = without_scheme.partition("/")
+        raw = download_bytes(bucket, key)
+        return json.loads(raw)
+    except Exception as exc:
+        logger.warning("Failed to load dashboard JSON from %s: %s", s3_uri, exc)
         return None
-    return f"{DREAMIFY_APP_URL}/projects/{project_id}?dashboard={dashboard_id}"
+
+
+def _extract_top_metrics(dashboard: Dict[str, Any], max_n: int = 4) -> list:
+    """Return up to max_n metric dicts from a dashboard JSON config."""
+    return dashboard.get("metrics", [])[:max_n]
 
 
 # ── Session management ────────────────────────────────────────────────────────
@@ -478,6 +503,8 @@ async def handle_slack_query(
 
         # For plain Q&A responses Morpheus puts the reply directly in the status metadata,
         # so we can skip the S3 load entirely.
+        metrics: list = []
+        dashboard_json: Optional[Dict[str, Any]] = None
         if final_meta.get("response_type") == "message" and final_meta.get("content"):
             narrative = final_meta["content"]
             dashboard_url = None
@@ -495,15 +522,52 @@ async def handle_slack_query(
             narrative = _extract_narrative(conversation) or "Analysis complete. No narrative returned."
             dashboard_url = _build_dashboard_url(project_id, conversation)
 
+            # Auto-enable public preview and extract dashboard metrics
+            dashboards = conversation.get("dashboards", [])
+            if dashboards:
+                try:
+                    projects_repo.update_project(
+                        user_id=user_id,
+                        project_id=project_id,
+                        is_preview_public=True,
+                    )
+                    logger.info("Enabled public preview for project %s", project_id)
+                except Exception as exc:
+                    logger.warning("Failed to enable public preview for %s: %s", project_id, exc)
+
+                s3_uri = dashboards[-1].get("s3_uri")
+                if s3_uri:
+                    dashboard_json = _load_dashboard_json(s3_uri)
+                    if dashboard_json:
+                        metrics = _extract_top_metrics(dashboard_json)
+                        logger.info("Extracted %d metric(s) from dashboard", len(metrics))
+
         logger.info("Updating Slack message with narrative (len=%d)", len(narrative))
 
         await client.chat_update(
             channel=channel_id,
             ts=placeholder_ts,
-            blocks=build_response_blocks(narrative, dashboard_url, CHAT_CREDIT_COST),
+            blocks=build_response_blocks(narrative, dashboard_url, CHAT_CREDIT_COST, metrics=metrics),
             text=narrative,
         )
         logger.info("Successfully updated Slack message for conversation %s", conversation_id)
+
+        # Phase 2B — upload chart preview PNGs into the thread (opt-in)
+        if is_chart_rendering_enabled() and dashboard_json:
+            chart_previews = render_dashboard_previews(dashboard_json, max_charts=3)
+            for png_bytes, chart_title in chart_previews:
+                try:
+                    safe_name = chart_title.lower().replace(" ", "_").replace("/", "_")
+                    await client.files_upload_v2(
+                        channel=channel_id,
+                        thread_ts=thread_ts,
+                        content=png_bytes,
+                        filename=f"{safe_name}.png",
+                        title=chart_title,
+                    )
+                    logger.info("Uploaded chart image '%s'", chart_title)
+                except Exception as exc:
+                    logger.warning("Failed to upload chart '%s': %s", chart_title, exc)
 
     except Exception as exc:
         logger.error("handle_slack_query failed for %s: %s", platform_workspace_id, exc, exc_info=True)

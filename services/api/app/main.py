@@ -2,6 +2,9 @@
 Main FastAPI application entry point for Dreamify Backend.
 """
 
+from dotenv import load_dotenv
+load_dotenv()  # load .env before any module reads os.environ
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

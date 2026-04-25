@@ -61,10 +61,24 @@ def build_status_blocks(step_label: str) -> list:
     ]
 
 
+def _format_metric_chip(metric: Dict[str, Any]) -> str:
+    """Render one dashboard metric as a compact mrkdwn chip."""
+    trend = metric.get("trend", "")
+    icon = "📈" if trend == "up" else "📉" if trend == "down" else "➡️"
+    title = metric.get("title", "")
+    value = metric.get("value", "")
+    change = metric.get("change", "")
+    parts = [f"*{title}*", str(value)]
+    if change:
+        parts.append(f"{icon} {change}")
+    return "  ".join(parts)
+
+
 def build_response_blocks(
     narrative: str,
     dashboard_url: Optional[str],
     credits_used: int,
+    metrics: Optional[list] = None,
 ) -> list:
     blocks: list = [
         {
@@ -73,12 +87,20 @@ def build_response_blocks(
         }
     ]
 
+    # Inline metric chips — shown when a dashboard was generated
+    if metrics:
+        chips = "   |   ".join(_format_metric_chip(m) for m in metrics[:4])
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": chips},
+        })
+
     action_elements = []
     if dashboard_url:
         action_elements.append(
             {
                 "type": "button",
-                "text": {"type": "plain_text", "text": "Open Dashboard"},
+                "text": {"type": "plain_text", "text": "View Dashboard"},
                 "url": dashboard_url,
                 "style": "primary",
             }

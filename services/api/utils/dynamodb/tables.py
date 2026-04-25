@@ -18,6 +18,8 @@ class DynamoTables:
     connected_accounts: str = config.aws.dynamodb.CONNECTED_ACCOUNTS_TABLE
     chat_workspaces: str = config.aws.dynamodb.CHAT_WORKSPACES_TABLE
     chat_sessions: str = config.aws.dynamodb.CHAT_SESSIONS_TABLE
+    sync_schedules: str = config.aws.dynamodb.SYNC_SCHEDULES_TABLE
+    sync_runs: str = config.aws.dynamodb.SYNC_RUNS_TABLE
 
 
 tables = DynamoTables()

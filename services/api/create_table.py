@@ -148,6 +148,47 @@ def get_table_specs() -> Dict[str, Dict]:
                 {"AttributeName": "thread_key", "AttributeType": "S"},
             ],
         },
+        tables.sync_schedules: {
+            "KeySchema": [
+                {"AttributeName": "user_id", "KeyType": "HASH"},
+                {"AttributeName": "schedule_id", "KeyType": "RANGE"},
+            ],
+            "AttributeDefinitions": [
+                {"AttributeName": "user_id", "AttributeType": "S"},
+                {"AttributeName": "schedule_id", "AttributeType": "S"},
+            ],
+            "GlobalSecondaryIndexes": [
+                {
+                    "IndexName": "schedule_id_index",
+                    "KeySchema": [
+                        {"AttributeName": "schedule_id", "KeyType": "HASH"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
+            ],
+        },
+        tables.sync_runs: {
+            "KeySchema": [
+                {"AttributeName": "schedule_id", "KeyType": "HASH"},
+                {"AttributeName": "run_id", "KeyType": "RANGE"},
+            ],
+            "AttributeDefinitions": [
+                {"AttributeName": "schedule_id", "AttributeType": "S"},
+                {"AttributeName": "run_id", "AttributeType": "S"},
+                {"AttributeName": "user_id", "AttributeType": "S"},
+                {"AttributeName": "triggered_at", "AttributeType": "S"},
+            ],
+            "GlobalSecondaryIndexes": [
+                {
+                    "IndexName": "user_id_triggered_at_index",
+                    "KeySchema": [
+                        {"AttributeName": "user_id", "KeyType": "HASH"},
+                        {"AttributeName": "triggered_at", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
+            ],
+        },
     }
 
 

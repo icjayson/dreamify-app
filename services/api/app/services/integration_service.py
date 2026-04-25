@@ -37,6 +37,14 @@ from utils.s3.paths import build_asset_key
 logger = logging.getLogger(__name__)
 
 
+class TokenExpiredError(Exception):
+    """Raised when a connector OAuth token is expired or missing during a scheduled sync."""
+
+    def __init__(self, provider: str, reason: str = "Token expired or missing"):
+        self.provider = provider
+        super().__init__(f"{provider}: {reason}")
+
+
 class IntegrationService:
     def __init__(self):
         self.clerk = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
@@ -1640,6 +1648,32 @@ class IntegrationService:
         """Return whether a valid Stripe connection exists for this user."""
         record = connected_accounts_repo.get_connection(user_id, "stripe")
         return {"connected": record is not None}
+
+    # ── Scheduled sync token guards ───────────────────────────────────────────
+
+    def assert_meta_token_valid(self, user_id: str) -> None:
+        """Raise TokenExpiredError if the Meta token is missing or expired."""
+        status = self.get_meta_connection_status(user_id)
+        if not status.get("connected"):
+            raise TokenExpiredError("meta_ads", status.get("reason", "token missing or expired"))
+
+    def assert_tiktok_token_valid(self, user_id: str) -> None:
+        """Raise TokenExpiredError if the TikTok token is missing or expired."""
+        status = self.get_tiktok_connection_status(user_id)
+        if not status.get("connected"):
+            raise TokenExpiredError("tiktok", status.get("reason", "token missing or expired"))
+
+    def assert_stripe_token_valid(self, user_id: str) -> None:
+        """Raise TokenExpiredError if no Stripe connection record exists."""
+        record = connected_accounts_repo.get_connection(user_id, "stripe")
+        if not record:
+            raise TokenExpiredError("stripe", "Stripe connection not found — please reconnect")
+
+    def assert_appsflyer_token_valid(self, user_id: str) -> None:
+        """Raise TokenExpiredError if no AppsFlyer token exists."""
+        status = self.get_appsflyer_connection_status(user_id)
+        if not status.get("connected"):
+            raise TokenExpiredError("appsflyer", "AppsFlyer token missing — please reconnect")
 
     def _resolve_stripe_dates(
         self,

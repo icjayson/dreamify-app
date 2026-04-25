@@ -139,6 +139,20 @@ def create_app():
         logger.info("Chat platform router registered successfully")
     except ImportError as e:
         logger.error(f"Failed to import Chat platform router: {e}")
+
+    try:
+        from app.api.route_modules.schedules import router as schedules_router
+        app.include_router(schedules_router, prefix="/api/v1", tags=["schedules"])
+        logger.info("Schedules router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Schedules router: {e}")
+
+    try:
+        from app.api.route_modules.internal import router as internal_router
+        app.include_router(internal_router, prefix="/api/v1", tags=["internal"])
+        logger.info("Internal router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Internal router: {e}")
     
     # Root endpoint
     @app.get("/", tags=["root"])

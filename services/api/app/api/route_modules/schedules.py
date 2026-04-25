@@ -1,0 +1,236 @@
+"""
+User-facing CRUD routes for data sync schedules.
+"""
+import logging
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from app.dependencies.auth import require_user
+from app.services import scheduler_service
+from utils.dynamodb.repos import sync_schedules as schedules_repo
+from utils.dynamodb.repos import sync_runs as runs_repo
+
+logger = logging.getLogger(__name__)
+router = APIRouter(tags=["schedules"])
+
+
+# ── Request / Response models ──────────────────────────────────────────────────
+
+class CreateScheduleRequest(BaseModel):
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe
+    connector_config: Dict[str, Any]
+    project_id: str
+    account_name: str = ""
+    frequency: str  # daily | weekly | biweekly
+    hour_utc: int = Field(ge=0, le=23, default=9)
+    day_of_week: int = Field(ge=0, le=6, default=0)  # 0=Mon
+    date_range_preset: str = "last_30d"  # last_7d | last_14d | last_30d | last_90d
+
+
+class UpdateScheduleRequest(BaseModel):
+    frequency: Optional[str] = None
+    hour_utc: Optional[int] = Field(None, ge=0, le=23)
+    day_of_week: Optional[int] = Field(None, ge=0, le=6)
+    date_range_preset: Optional[str] = None
+    account_name: Optional[str] = None
+    project_id: Optional[str] = None
+    connector_config: Optional[Dict[str, Any]] = None
+
+
+_VALID_PROVIDERS = {"ga4", "meta_ads", "tiktok", "appsflyer", "stripe"}
+_VALID_FREQUENCIES = {"daily", "weekly", "biweekly"}
+_VALID_DATE_PRESETS = {"last_7d", "last_14d", "last_30d", "last_90d"}
+
+
+def _validate_create(req: CreateScheduleRequest) -> None:
+    if req.provider not in _VALID_PROVIDERS:
+        raise HTTPException(400, f"Invalid provider. Must be one of: {', '.join(_VALID_PROVIDERS)}")
+    if req.frequency not in _VALID_FREQUENCIES:
+        raise HTTPException(400, f"Invalid frequency. Must be one of: {', '.join(_VALID_FREQUENCIES)}")
+    if req.date_range_preset not in _VALID_DATE_PRESETS:
+        raise HTTPException(400, f"Invalid date_range_preset. Must be one of: {', '.join(_VALID_DATE_PRESETS)}")
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
+
+@router.post("/schedules")
+async def create_schedule(
+    req: CreateScheduleRequest,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Create a new data sync schedule."""
+    _validate_create(req)
+    record = schedules_repo.create_schedule(
+        user_id=user_id,
+        provider=req.provider,
+        connector_config=req.connector_config,
+        project_id=req.project_id,
+        account_name=req.account_name,
+        frequency=req.frequency,
+        hour_utc=req.hour_utc,
+        day_of_week=req.day_of_week,
+        date_range_preset=req.date_range_preset,
+    )
+    # Create EventBridge schedule (no-op if EVENTBRIDGE_ROLE_ARN not configured)
+    try:
+        rule_name = scheduler_service.create_schedule(
+            schedule_id=record["schedule_id"],
+            frequency=req.frequency,
+            hour_utc=req.hour_utc,
+            day_of_week=req.day_of_week,
+        )
+        schedules_repo.update_schedule(
+            user_id, record["schedule_id"], eventbridge_rule_name=rule_name
+        )
+        record["eventbridge_rule_name"] = rule_name
+    except Exception as exc:
+        logger.warning("EventBridge schedule creation failed (non-fatal): %s", exc)
+
+    return record
+
+
+@router.get("/schedules")
+async def list_schedules(
+    user_id: str = Depends(require_user),
+) -> List[Dict]:
+    """List all sync schedules for the current user."""
+    return schedules_repo.list_schedules(user_id)
+
+
+@router.get("/schedules/{schedule_id}")
+async def get_schedule(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Get a single schedule."""
+    record = schedules_repo.get_schedule(user_id, schedule_id)
+    if not record:
+        raise HTTPException(404, "Schedule not found")
+    return record
+
+
+@router.patch("/schedules/{schedule_id}")
+async def update_schedule(
+    schedule_id: str,
+    req: UpdateScheduleRequest,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Update schedule frequency, time, or date range."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    updates = req.model_dump(exclude_none=True)
+
+    # Validate fields when provided
+    if "frequency" in updates and updates["frequency"] not in _VALID_FREQUENCIES:
+        raise HTTPException(400, f"Invalid frequency")
+    if "date_range_preset" in updates and updates["date_range_preset"] not in _VALID_DATE_PRESETS:
+        raise HTTPException(400, "Invalid date_range_preset")
+
+    # Update EventBridge if timing changed
+    timing_changed = any(k in updates for k in ("frequency", "hour_utc", "day_of_week"))
+    if timing_changed and existing.get("eventbridge_rule_name"):
+        try:
+            scheduler_service.update_schedule(
+                rule_name=existing["eventbridge_rule_name"],
+                schedule_id=schedule_id,
+                frequency=updates.get("frequency", existing["frequency"]),
+                hour_utc=updates.get("hour_utc", existing["hour_utc"]),
+                day_of_week=updates.get("day_of_week", existing["day_of_week"]),
+            )
+        except Exception as exc:
+            logger.warning("EventBridge update failed (non-fatal): %s", exc)
+
+    return schedules_repo.update_schedule(user_id, schedule_id, **updates)
+
+
+@router.delete("/schedules/{schedule_id}", status_code=204)
+async def delete_schedule(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> None:
+    """Delete a schedule and its EventBridge rule."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    if existing.get("eventbridge_rule_name"):
+        try:
+            scheduler_service.delete_schedule(existing["eventbridge_rule_name"])
+        except Exception as exc:
+            logger.warning("EventBridge delete failed (non-fatal): %s", exc)
+
+    schedules_repo.delete_schedule(user_id, schedule_id)
+
+
+@router.post("/schedules/{schedule_id}/pause", status_code=200)
+async def pause_schedule(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Pause a schedule (disables EventBridge rule)."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    if existing.get("eventbridge_rule_name"):
+        try:
+            scheduler_service.pause_schedule(existing["eventbridge_rule_name"])
+        except Exception as exc:
+            logger.warning("EventBridge pause failed (non-fatal): %s", exc)
+
+    return schedules_repo.update_schedule(user_id, schedule_id, status="paused")
+
+
+@router.post("/schedules/{schedule_id}/resume", status_code=200)
+async def resume_schedule(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Resume a paused schedule."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    if existing.get("eventbridge_rule_name"):
+        try:
+            scheduler_service.resume_schedule(existing["eventbridge_rule_name"])
+        except Exception as exc:
+            logger.warning("EventBridge resume failed (non-fatal): %s", exc)
+
+    return schedules_repo.update_schedule(user_id, schedule_id, status="active")
+
+
+@router.get("/schedules/{schedule_id}/runs")
+async def get_schedule_runs(
+    schedule_id: str,
+    limit: int = 20,
+    user_id: str = Depends(require_user),
+) -> List[Dict]:
+    """Return recent run history for a specific schedule."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+    return runs_repo.list_runs_for_schedule(schedule_id, limit=min(limit, 100))
+
+
+@router.get("/sync-runs")
+async def get_all_sync_runs(
+    limit: int = 50,
+    last_key: Optional[str] = None,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Return paginated sync run history across all schedules for the current user."""
+    import json
+
+    last_evaluated_key = json.loads(last_key) if last_key else None
+    items, next_key = runs_repo.list_runs_for_user(
+        user_id, limit=min(limit, 100), last_evaluated_key=last_evaluated_key
+    )
+    return {
+        "items": items,
+        "next_key": json.dumps(next_key) if next_key else None,
+    }

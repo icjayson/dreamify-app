@@ -247,9 +247,153 @@ export default function CSVPreviewTable({
   const startRow = sortedRows.length === 0 ? 0 : currentPage * effectivePageSize + 1;
   const endRow = Math.min((currentPage + 1) * effectivePageSize, sortedRows.length);
 
+  if (compact) {
+    return (
+      <div className="w-full flex-1 min-h-0 flex flex-col bg-card">
+        {/* Header */}
+        {!hideHeader && (
+          <div className="border-b bg-muted/50 p-4 flex-shrink-0">
+            <h1 className="text-xl font-semibold mb-1">
+              {sourceType ? `${sourceType} Data` : filename}
+            </h1>
+            <div className="flex items-center gap-4 md:text-sm text-xs text-muted-foreground">
+              <span>{totalRows.toLocaleString()} total rows</span>
+              <span>{columns.length} columns</span>
+              {isLoadingMore && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  {loadedRows != null
+                    ? `Loading… ${loadedRows.toLocaleString()} / ${totalRows.toLocaleString()} rows`
+                    : 'Loading more rows…'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Scrollable table — thead sticky, only tbody scrolls */}
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted sticky top-0 z-10">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/80">
+                  #
+                </th>
+                {columns.map((col, idx) => (
+                  <th
+                    key={idx}
+                    onClick={() => handleSort(idx)}
+                    className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/80 cursor-pointer hover:bg-muted transition-colors select-none"
+                  >
+                    <div className="flex items-center">
+                      {col || `Column ${idx + 1}`}
+                      {getSortIcon(idx)}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-background divide-y divide-border">
+              {paginatedRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={columns.length + 1}
+                    className="px-4 py-8 text-center text-muted-foreground"
+                  >
+                    No data rows found
+                  </td>
+                </tr>
+              ) : (
+                paginatedRows.map((row, rowIdx) => (
+                  <tr key={rowIdx} className="hover:bg-muted/50 transition-colors">
+                    <td className="px-4 py-2 text-sm text-muted-foreground bg-muted/30 font-mono">
+                      {startRow + rowIdx}
+                    </td>
+                    {columns.map((_, colIdx) => (
+                      <td key={colIdx} className="px-4 py-2 text-sm whitespace-nowrap">
+                        {row[colIdx] ?? ''}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination — always pinned at bottom */}
+        {sortedRows.length > 0 && (
+          <div className="flex flex-shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-0">
+            <div className="w-full text-sm text-muted-foreground text-right lg:w-auto lg:text-left">
+              Showing {startRow} to {endRow} of {sortedRows.length} entries
+            </div>
+            <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-end lg:w-auto lg:flex-row lg:items-center lg:gap-4">
+              <Pagination className="w-full overflow-x-auto lg:w-auto">
+                <PaginationContent className="justify-center lg:justify-start flex-wrap">
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={handlePreviousPage}
+                      className={currentPage === 0 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                  {getPageNumbers().map((page, idx) => {
+                    if (page === 'ellipsis') {
+                      return (
+                        <PaginationItem key={`ellipsis-${idx}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      );
+                    }
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          onClick={(e) => { e.preventDefault(); handlePageClick(page); }}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={handleNextPage}
+                      className={currentPage >= totalPages - 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              {onPageSizeChange && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="whitespace-nowrap text-sm text-muted-foreground">Rows per page:</span>
+                  <Select
+                    value={String(effectivePageSize)}
+                    onValueChange={(v) => onPageSizeChange(Number(v))}
+                  >
+                    <SelectTrigger className="h-9 w-[100px] bg-background" aria-label="Rows per page">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent side="top" className="z-[200000]">
+                      {pageSizeOptions.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n.toLocaleString()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className={`w-full h-full flex items-center justify-center ${compact ? 'p-0' : 'p-4 md:p-6 lg:p-8'}`}>
-      <div className={`w-full h-full flex flex-col bg-card overflow-hidden ${compact ? '' : 'max-w-[95vw] lg:max-w-[1400px] max-h-[95vh] border border-border rounded-lg shadow-sm'}`}>
+    <div className="w-full h-full flex items-center justify-center p-4 md:p-6 lg:p-8">
+      <div className="w-full h-full flex flex-col bg-card overflow-hidden max-w-[95vw] lg:max-w-[1400px] max-h-[95vh] border border-border rounded-lg shadow-sm">
         {/* Header — hidden in compact/panel mode */}
         {!hideHeader && (
           <div className="border-b bg-muted/50 p-4 flex-shrink-0">
@@ -258,7 +402,7 @@ export default function CSVPreviewTable({
             </h1>
             <div className="flex items-center gap-4 md:text-sm text-xs text-muted-foreground">
               <span>{totalRows.toLocaleString()} total rows</span>
-              {!compact && displayedRows < totalRows && (
+              {displayedRows < totalRows && (
                 <span className="text-amber-600">
                   Showing first {displayedRows.toLocaleString()} rows
                 </span>
@@ -397,7 +541,7 @@ export default function CSVPreviewTable({
                     <SelectTrigger className="h-9 w-[100px] bg-background" aria-label="Rows per page">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent side="top" className="z-[200000]">
                       {pageSizeOptions.map((n) => (
                         <SelectItem key={n} value={String(n)}>
                           {n.toLocaleString()}

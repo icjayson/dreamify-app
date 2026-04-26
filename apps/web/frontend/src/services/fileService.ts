@@ -15,6 +15,7 @@ export interface AssetRecord {
   row_count?: number;
   column_count?: number;
   asset_type?: string;
+  checksum_sha256?: string;
 }
 
 export interface UploadResponse {
@@ -42,6 +43,7 @@ export interface FileItem {
   size: number;
   ext: string;
   created_at: string;
+  checksum_sha256?: string;
   asset?: AssetRecord;
 }
 
@@ -67,7 +69,7 @@ class FileService {
     };
   }
 
-  async uploadFile(file: File, options?: { projectId?: string; assetType?: string }): Promise<UploadResponse> {
+  async uploadFile(file: File, options?: { projectId?: string; assetType?: string; onProgress?: (percent: number) => void }): Promise<UploadResponse> {
     const extraFields: Record<string, string> = {
       asset_type: options?.assetType || 'raw',
     };
@@ -75,7 +77,7 @@ class FileService {
       extraFields.project_id = options.projectId;
     }
 
-    const res = await api.uploadFile<AssetRecord>(`${this.baseUrl}/upload`, file, undefined, extraFields);
+    const res = await api.uploadFile<AssetRecord>(`${this.baseUrl}/upload`, file, undefined, extraFields, options?.onProgress);
     if (res.success && res.data) {
       const asset = res.data as AssetRecord;
       return this.mapAssetToUploadResponse(asset);
@@ -92,6 +94,7 @@ class FileService {
         size: asset.size_bytes,
         ext: asset.extension,
         created_at: asset.created_at || '',
+        checksum_sha256: asset.checksum_sha256,
         asset,
       }));
       return { success: true, files };
@@ -105,6 +108,39 @@ class FileService {
       return res.data as DeleteResponse;
     }
     return { success: false, error: res.error || 'Failed to delete file' };
+  }
+
+  async getFilePreview(fileID: string, limit = 100): Promise<{
+    success: boolean;
+    filename?: string;
+    columns?: string[];
+    rows?: any[][];
+    total_rows?: number;
+    displayed_rows?: number;
+    source_type?: string;
+    error?: string;
+  }> {
+    const res = await api.get<{
+      success: boolean;
+      filename: string;
+      columns: string[];
+      rows: any[][];
+      total_rows: number;
+      displayed_rows: number;
+      source_type?: string;
+    }>(`/api/v1/files/preview/${fileID}?limit=${limit}`);
+    if (res.success && res.data) return res.data;
+    return { success: false, error: res.error || 'Failed to load preview' };
+  }
+
+  async getDownloadUrl(fileID: string): Promise<{ url?: string; filename?: string; error?: string }> {
+    const res = await api.get<{ success: boolean; url: string; filename: string }>(
+      `${this.baseUrl}/${fileID}/download-url`
+    );
+    if (res.success && res.data) {
+      return { url: res.data.url, filename: res.data.filename };
+    }
+    return { error: res.error || 'Failed to get download URL' };
   }
 
   async getAsset(fileID: string): Promise<UploadResponse> {

@@ -192,7 +192,8 @@ class ApiClient {
     endpoint: string,
     file: File,
     options?: RequestInit,
-    extraFields?: Record<string, string>
+    extraFields?: Record<string, string>,
+    onProgress?: (percent: number) => void
   ): Promise<ApiResponse<T>> {
     const formData = new FormData();
     formData.append('file', file);
@@ -204,48 +205,53 @@ class ApiClient {
 
     const url = `${this.baseURL}${endpoint}`;
 
+    let authHeader: string | undefined;
     try {
-      const restOptions = { ...(options || {}) };
-      const headers: Record<string, string> = {};
-      // Attach Authorization if available
-      try {
-        if (this.authTokenProvider) {
-          const token = await this.authTokenProvider();
-          if (token) headers.Authorization = `Bearer ${token}`;
-        }
-      } catch (_) { }
+      if (this.authTokenProvider) {
+        const token = await this.authTokenProvider();
+        if (token) authHeader = `Bearer ${token}`;
+      }
+    } catch (_) { }
 
-      const response = await fetch(url, {
-        method: HTTP_METHODS.POST,
-        body: formData,
-        headers, // let browser set multipart boundary, we only add Authorization
-        ...restOptions,
-      });
+    return new Promise<ApiResponse<T>>((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      if (authHeader) xhr.setRequestHeader('Authorization', authHeader);
 
-      if (!response.ok) {
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          if (errorData && errorData.detail) {
-            errorMessage = typeof errorData.detail === 'string' 
-              ? errorData.detail 
-              : JSON.stringify(errorData.detail);
+      if (onProgress) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            onProgress(Math.round((e.loaded / e.total) * 100));
           }
-        } catch (_) {
-          try {
-            const errorText = await response.text();
-            if (errorText) errorMessage = errorText;
-          } catch (__) {}
-        }
-        throw new Error(errorMessage);
+        };
       }
 
-      const data = await response.json();
-      return { success: true, data };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      return { success: false, error: errorMessage };
-    }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            resolve({ success: true, data });
+          } catch {
+            resolve({ success: false, error: 'Invalid JSON response' });
+          }
+        } else {
+          let errorMessage = `HTTP error! status: ${xhr.status}`;
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            if (errorData?.detail) {
+              errorMessage = typeof errorData.detail === 'string'
+                ? errorData.detail
+                : JSON.stringify(errorData.detail);
+            }
+          } catch { }
+          resolve({ success: false, error: errorMessage });
+        }
+      };
+
+      xhr.onerror = () => resolve({ success: false, error: 'Network error' });
+      xhr.ontimeout = () => resolve({ success: false, error: 'Request timed out' });
+      xhr.send(formData);
+    });
   }
 }
 
@@ -261,8 +267,8 @@ export const api = {
   delete: <T>(endpoint: string, options?: RequestInit) => apiClient.delete<T>(endpoint, options),
   postFormData: <T>(endpoint: string, formData: FormData, options?: RequestInit) =>
     apiClient.postFormData<T>(endpoint, formData, options),
-  uploadFile: <T>(endpoint: string, file: File, options?: RequestInit, extraFields?: Record<string, string>) =>
-    apiClient.uploadFile<T>(endpoint, file, options, extraFields),
+  uploadFile: <T>(endpoint: string, file: File, options?: RequestInit, extraFields?: Record<string, string>, onProgress?: (percent: number) => void) =>
+    apiClient.uploadFile<T>(endpoint, file, options, extraFields, onProgress),
   uploadAnalyticsFile: (file: File, options?: RequestInit) =>
     apiClient.uploadFile<UploadResponse>('/api/v1/analytics/data', file, options),
 };

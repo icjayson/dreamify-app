@@ -61,6 +61,8 @@ export interface UploadedFile {
   processedData?: any;
   rowCount?: number;
   columnCount?: number;
+  /** Upload progress percentage (0-100) for local file uploads */
+  uploadProgress?: number;
   /** True if file was selected from @mention dropdown (already exists in conversation) */
   isFromMention?: boolean;
   /** Integration source type if the file came from an API sync */
@@ -108,6 +110,8 @@ interface ChatState {
 
   // File state
   uploadedFiles: UploadedFile[];
+  /** Files queued from the Files tab to be restored after WorkspaceNewChat's resetChat() */
+  pendingFilesForNewChat: UploadedFile[];
   currentConversationId: string | null;
   currentProjectId: string | null;
 
@@ -185,6 +189,7 @@ interface ChatState {
   removeFile: (fileId: string) => void;
   clearFiles: () => void;
   updateFile: (fileId: string, updates: Partial<UploadedFile>) => void;
+  setPendingFilesForNewChat: (files: UploadedFile[]) => void;
   setCurrentConversationId: (conversationId: string | null) => void;
   setDropdownOpen: (open: boolean) => void;
   setSelectedDataSource: (source: string) => void;
@@ -288,6 +293,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isTyping: false,
   messages: initialMessages,
   uploadedFiles: [],
+  pendingFilesForNewChat: [],
   currentConversationId: null,
   currentProjectId: null,
   isProcessing: false,
@@ -353,6 +359,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     uploadedFiles: state.uploadedFiles.filter(f => f.fileID !== fileId)
   })),
   clearFiles: () => set({ uploadedFiles: [] }),
+  setPendingFilesForNewChat: (files) => set({ pendingFilesForNewChat: files }),
   updateFile: (fileId, updates) => set((state) => ({
     uploadedFiles: state.uploadedFiles.map(f => f.fileID === fileId ? { ...f, ...updates } : f)
   })),

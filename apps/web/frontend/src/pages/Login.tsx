@@ -3,6 +3,7 @@ import { SignIn } from "@clerk/clerk-react";
 import { dark } from '@clerk/themes';
 import { CheckCircle2, ArrowLeft } from "lucide-react";
 import WaveBackground from "../../../src/ui/lightswind/wave-background";
+import VideoBackground from "@/components/homepage-section/VideoBackground";
 import { useTheme } from "@/hooks/useTheme";
 
 const REDIRECT_AFTER_AUTH = "/workspace";
@@ -14,9 +15,12 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6 relative overflow-hidden">
-      <WaveBackground 
-      className="absolute inset-0 z-0" />
-      <div className="absolute inset-0 bg-white/10 dark:bg-black/60 z-1"></div>
+      {resolvedTheme === 'dark' ? (
+        <WaveBackground className="absolute inset-0 z-0" />
+      ) : (
+        <VideoBackground className="absolute inset-0 z-0" />
+      )}
+      <div className={`absolute inset-0 z-[1] ${resolvedTheme === 'dark' ? 'bg-black/60' : 'bg-white/20'}`}></div>
 
       {/* Back button */}
       <div className="absolute top-4 left-4 z-20">

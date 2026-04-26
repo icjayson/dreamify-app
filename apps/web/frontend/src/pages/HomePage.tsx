@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Upload, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn, TrendingUp, AlertCircle, LayoutDashboard, X } from "lucide-react";
+import { Sparkles, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn, TrendingUp, AlertCircle, LayoutDashboard, X } from "lucide-react";
+import FileAttachDropdown from "@/components/chat/FileAttachDropdown";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { SignedIn, useAuth, useUser } from "@clerk/clerk-react";
@@ -95,6 +96,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     uploadedFiles,
     addFiles,
     removeFile,
+    updateFile,
     isProcessing,
     selectedTemplate,
     setInputValue,
@@ -461,14 +463,15 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       return;
     }
 
+    const tempId = `pending-${Date.now()}-${Math.random()}`;
     try {
-      // Create new file object for upload
       const newFile = {
-        fileID: 'pending',
+        fileID: tempId,
         filename: file.name,
         size: file.size,
         ext: (file.name.split('.').pop() || '').toLowerCase(),
-        status: 'uploading' as const
+        status: 'uploading' as const,
+        uploadProgress: 0,
       };
 
       if (uploadedFiles.length >= 5) {
@@ -481,10 +484,12 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       }
       addFiles([newFile]);
 
-      const res: UploadResponse = await fileService.uploadFile(file);
+      const res: UploadResponse = await fileService.uploadFile(file, {
+        onProgress: (percent) => updateFile(tempId, { uploadProgress: Math.min(percent, 95) }),
+      });
       if (!res.success || !res.fileID || !res.ext || res.size === undefined || !res.filename) {
-        removeFile('pending');
-        addFiles([{ ...newFile, status: 'error' }]);
+        removeFile(tempId);
+        addFiles([{ ...newFile, status: 'error', uploadProgress: undefined }]);
         toast({ title: "Upload failed", description: res.error || 'Upload failed', variant: "destructive" });
         return;
       }
@@ -493,7 +498,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       const fallbackSize = res.size ?? file.size;
       const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
 
-      removeFile('pending');
+      removeFile(tempId);
       addFiles([{
         fileID: res.fileID,
         filename: fallbackFilename,
@@ -509,7 +514,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       });
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
     } catch (_e) {
-      removeFile('pending');
+      removeFile(tempId);
       addFiles([{
         fileID: 'error',
         filename: file.name,
@@ -906,24 +911,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     aria-label="Select file"
                   />
 
-                  {/* Attach Button */}
-                  <button
-                    onClick={handleAttachClick}
+                  {/* File attach dropdown */}
+                  <FileAttachDropdown
+                    onUpload={handleAttachClick}
                     disabled={uploadState.isUploading}
-                    className="px-3 py-1.5 text-sm button-outline rounded-md disabled:opacity-50 flex items-center gap-2"
-                    onMouseEnter={(e) => {
-                      if (!uploadState.isUploading) {
-                        e.currentTarget.classList.add('btn-primary-hover');
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.classList.remove('btn-primary-hover');
-                    }}
-                    aria-label="Attach file"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span className="hidden sm:inline">{uploadState.isUploading ? 'Uploading...' : 'Attach'}</span>
-                  </button>
+                  />
 
                   <button
                     onClick={handleCloneTemplateClick}

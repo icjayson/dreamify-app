@@ -379,17 +379,17 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
             <div>
               <div className="text-sm font-medium mb-2">Share Link</div>
               <div className="flex items-stretch sm:items-center gap-2">
-                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-black group hover:bg-black/80 transition-all duration-200 min-w-0">
-                  <Globe className="w-4 h-4 flex-shrink-0" />
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-muted-foreground/10 border border-border group hover:bg-muted-foregrounds/20 transition-all duration-200 min-w-0">
+                  <Globe className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
                   <button
                     onClick={handleOpenPublishedDashboard}
-                    className="text-sm text-white group-hover:underline cursor-pointer flex items-center transition-all duration-200 flex-1 text-left truncate min-w-0"
+                    className="text-sm text-foreground group-hover:underline cursor-pointer flex items-center transition-all duration-200 flex-1 text-left truncate min-w-0"
                   >
                     {previewUrl}
                   </button>
                   <button
                     onClick={handleOpenPublishedDashboard}
-                    className="text-muted-foreground hover:text-white transition-colors duration-200 flex-shrink-0"
+                    className="text-muted-foreground hover:text-foreground transition-colors duration-200 flex-shrink-0"
                   >
                     <SquareArrowOutUpRight className="w-4 h-4" />
                   </button>
@@ -459,14 +459,14 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
 
                     {/* Email input with lookup popup */}
                     <div className="relative" ref={lookupContainerRef}>
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/40 border border-white/10 focus-within:border-white/20 transition-colors duration-200">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted border border-border focus-within:border-border/80 transition-colors duration-200">
                         <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         <input
                           type="email"
                           value={lookupEmail}
                           onChange={(e) => setLookupEmail(e.target.value.trim())}
                           placeholder="Enter email to invite..."
-                          className="flex-1 bg-transparent text-sm text-white placeholder:text-muted-foreground outline-none"
+                          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                         />
                         {isLookingUp && (
                           <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Star, CreditCard, Bell, LogOut, LogIn, User as UserIcon, Sparkles, Check, Settings } from "lucide-react";
+import { Star, CreditCard, Bell, LogOut, LogIn, User as UserIcon, Sparkles, Check, Settings, Sun, Moon, Laptop } from "lucide-react";
 import { useClerk, useUser, UserProfile } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { dark } from "@clerk/themes";
@@ -9,6 +9,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useSubscription } from "@/hooks/useSubscription";
 import { PricingPlansCenterModal } from "@/components/homepage-section/pricing-plans-center-modal";
 import { useTheme } from "@/hooks/useTheme";
+import { useLayoutStyle } from "@/hooks/useLayoutStyle";
 
 type AccountCenterTab = "pricing" | "account" | "billing" | "notifications" | "plans" | "preferences";
 
@@ -19,7 +20,7 @@ interface AccountCenterModalProps {
   onClose: () => void;
 }
 
-const PricingContent: React.FC = () => {
+export const PricingContent: React.FC = () => {
   const { upgradeToPro, isLoading, error } = useSubscription();
   const { isSignedIn } = useUser();
   const navigate = useNavigate();
@@ -139,7 +140,7 @@ const PricingContent: React.FC = () => {
   );
 };
 
-const PlansCreditsContent: React.FC = () => {
+export const PlansCreditsContent: React.FC = () => {
   const { creditsRemaining, creditUsage } = useSubscription();
   const tierLimit = 1000;
   const used = creditUsage?.monthly_credits_used ?? (tierLimit - creditsRemaining);
@@ -148,7 +149,7 @@ const PlansCreditsContent: React.FC = () => {
   return (
     <div className="w-full p-6">
       <div className="mb-1">
-        <h2 className="text-xl font-semibold text-foreground dark:text-white">Plans & credits</h2>
+        <h2 className="text-2xl md:text-3xl font-semibold text-foreground dark:text-white">Plans & credits</h2>
         <p className="text-sm text-muted-foreground dark:text-white/50 mt-1">Manage your subscription plan and credit balance.</p>
       </div>
 
@@ -220,27 +221,110 @@ const Placeholder: React.FC<{ title: string; icon?: React.ReactNode }> = ({ titl
   </div>
 );
 
-const PreferencesContent: React.FC = () => {
-  const { theme, setTheme } = useTheme();
+export const PreferencesContent: React.FC = () => {
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [layoutStyle, setLayoutStyle] = useLayoutStyle();
+
   return (
-    <div className="w-full p-6 space-y-6">
+    <div className="w-full p-6 space-y-8">
+      {/* ── Color theme ── */}
       <div>
-        <h3 className="text-lg font-semibold text-foreground mb-1">Appearance</h3>
+        <h3 className="text-2xl md:text-3xl font-semibold text-foreground mb-1">Appearance</h3>
         <p className="text-sm text-muted-foreground mb-4">Choose how Dreamify looks for you.</p>
         <div className="flex gap-2">
-          {(['dark', 'light', 'system'] as const).map((t) => (
+          {([
+            { value: 'light', label: 'Light', icon: <Sun className="w-3.5 h-3.5" /> },
+            { value: 'dark',  label: 'Dark',  icon: <Moon className="w-3.5 h-3.5" /> },
+            { value: 'system',label: 'System',icon: <Laptop className="w-3.5 h-3.5" /> },
+          ] as const).map(({ value, label, icon }) => (
             <button
-              key={t}
-              onClick={() => setTheme(t)}
-              className={`px-4 py-2 rounded-md text-sm font-medium border transition-colors ${theme === t
+              key={value}
+              onClick={() => setTheme(value)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium border transition-colors ${theme === value
                 ? 'bg-primary text-primary-foreground border-primary'
                 : 'bg-muted text-muted-foreground border-border hover:border-primary/50'
                 }`}
             >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
+              {icon}
+              {label}
             </button>
           ))}
         </div>
+      </div>
+
+      {/* ── Layout style ── */}
+      <div>
+        <h4 className="text-base font-semibold text-foreground mb-1">Layout style</h4>
+        <p className="text-sm text-muted-foreground mb-4">
+          Choose the visual style for your workspace chat.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          {/* Minimalism */}
+          <button
+            onClick={() => setLayoutStyle("minimalism")}
+            className={`rounded-xl border text-left transition-all overflow-hidden ${
+              layoutStyle === "minimalism"
+                ? "border-primary ring-1 ring-primary"
+                : "border-border hover:border-primary/50"
+            }`}
+          >
+            {/* Diagonal split preview: dark (left) + light (right) */}
+            <div className="w-full relative overflow-hidden" style={{ aspectRatio: "1667/914" }}>
+              <img
+                src="/dark-minimal-preview.png"
+                alt="Dark minimalism"
+                className="absolute inset-0 w-full h-full object-cover object-top"
+                style={{ clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
+              />
+              <img
+                src="/light-minimal-preview.png"
+                alt="Light minimalism"
+                className="absolute inset-0 w-full h-full object-cover object-top"
+                style={{ clipPath: "polygon(100% 0, 100% 100%, 0 100%)" }}
+              />
+            </div>
+            <div className="px-3 py-2.5">
+              <p className="text-sm font-medium text-foreground">Minimalism</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Clean, distraction-free</p>
+            </div>
+          </button>
+
+          {/* Aesthetic */}
+          <button
+            onClick={() => setLayoutStyle("aesthetic")}
+            className={`rounded-xl border text-left transition-all overflow-hidden ${
+              layoutStyle === "aesthetic"
+                ? "border-primary ring-1 ring-primary"
+                : "border-border hover:border-primary/50"
+            }`}
+          >
+            {/* Diagonal split preview: dark (left) + light (right) */}
+            <div className="w-full relative overflow-hidden" style={{ aspectRatio: "1667/914" }}>
+              <img
+                src="/dark-aethetic-preview.png"
+                alt="Dark aesthetic"
+                className="absolute inset-0 w-full h-full object-cover object-top"
+                style={{ clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
+              />
+              <img
+                src="/light-aethetic-preview.png"
+                alt="Light aesthetic"
+                className="absolute inset-0 w-full h-full object-cover object-top"
+                style={{ clipPath: "polygon(100% 0, 100% 100%, 0 100%)" }}
+              />
+            </div>
+            <div className="px-3 py-2.5">
+              <p className="text-sm font-medium text-foreground">Aesthetic</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Immersive background</p>
+            </div>
+          </button>
+        </div>
+
+        {layoutStyle === "aesthetic" && (
+          <p className="mt-3 text-xs text-muted-foreground/70">
+            Wave background in dark mode · Video background in light mode
+          </p>
+        )}
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ export interface ProjectRecord {
   dashboard_preview_key?: string | null;
   is_preview_public?: boolean;
   allowed?: AllowedUser[];
+  source_type?: string | null;
 }
 
 export interface ProjectResponse {

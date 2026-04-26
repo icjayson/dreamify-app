@@ -67,8 +67,8 @@ const getProviderMeta = (rawProvider: string) => {
   };
 };
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="border-t border-border pt-6 mb-6">
+const Section: React.FC<{ title: string; children: React.ReactNode; noBorder?: boolean }> = ({ title, children, noBorder }) => (
+  <div className={`${noBorder ? "" : "border-t border-border "}pt-6 mb-6`}>
     <h3 className="text-foreground dark:text-white text-lg font-semibold mb-4">{title}</h3>
     {children}
   </div>
@@ -313,9 +313,10 @@ const AccountSettings: React.FC = () => {
 
   return (
     <div className="px-3 md:px-4 pt-8">
-        <h2 className="text-2xl md:text-3xl font-semibold text-foreground dark:text-white mb-4">Manage account</h2>
+        <h2 className="text-2xl md:text-3xl font-semibold text-foreground dark:text-white mb-1">Manage account</h2>
+        <p className="text-sm text-muted-foreground dark:text-white/50 mt-1 mb-4">Update your profile, connected accounts, and active sessions.</p>
 
-      <Section title="Profile">
+      <Section title="Profile" noBorder>
         {/* Avatar uploader */}
         <div className="flex items-center gap-4 mb-4">
           <div className="w-16 h-16 rounded-full overflow-hidden bg-foreground/10 dark:bg-white/10 flex items-center justify-center">

@@ -118,14 +118,14 @@ export default function AllConnectorsModal() {
     <Dialog open={isOpen} onOpenChange={setOpen}>
       <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto p-0 gap-0">
         {/* Header */}
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/8">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/50">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
               <Plug className="w-4 h-4 text-primary" />
             </div>
             <div>
               <DialogTitle className="text-base font-semibold">Connect a data source</DialogTitle>
-              <p className="text-xs text-white/40 mt-0.5">Select a platform to connect and start analyzing your data.</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Select a platform to connect and start analyzing your data.</p>
             </div>
           </div>
         </DialogHeader>
@@ -138,7 +138,7 @@ export default function AllConnectorsModal() {
 
             return (
               <div key={category}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/25 mb-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-3">
                   {category}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -155,14 +155,14 @@ export default function AllConnectorsModal() {
                           px-3.5 py-3 rounded-xl border transition-all duration-150
                           ${isConnected
                             ? 'border-emerald-500/25 bg-emerald-500/5 hover:border-emerald-500/40 hover:bg-emerald-500/10'
-                            : 'border-white/8 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                            : 'border-border bg-muted/40 hover:border-border/80 hover:bg-muted/70'
                           }
                         `}
                       >
                         {/* Icon */}
                         <div className={`
                           w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors
-                          ${isConnected ? 'bg-emerald-500/10' : 'bg-white/5 group-hover:bg-white/10'}
+                          ${isConnected ? 'bg-emerald-500/10' : 'bg-foreground/5 group-hover:bg-foreground/10'}
                         `}>
                           <img
                             src={connector.icon}
@@ -174,13 +174,13 @@ export default function AllConnectorsModal() {
 
                         {/* Text */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white leading-tight">{connector.name}</p>
+                          <p className="text-sm font-medium text-foreground leading-tight">{connector.name}</p>
                           {loading ? (
-                            <p className="text-xs text-white/25 mt-0.5">Checking…</p>
+                            <p className="text-xs text-muted-foreground/60 mt-0.5">Checking…</p>
                           ) : isConnected ? (
-                            <p className="text-xs text-emerald-400 mt-0.5 truncate">{status?.info}</p>
+                            <p className="text-xs text-emerald-500 dark:text-emerald-400 mt-0.5 truncate">{status?.info}</p>
                           ) : (
-                            <p className="text-xs text-white/35 mt-0.5">Not connected</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Not connected</p>
                           )}
                         </div>
 
@@ -188,7 +188,7 @@ export default function AllConnectorsModal() {
                         {isConnected ? (
                           <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                         ) : (
-                          <span className="text-xs text-white/50 border border-white/15 rounded-md px-2.5 py-1 flex-shrink-0 group-hover:border-white/30 group-hover:text-white/80 transition-colors">
+                          <span className="text-xs text-muted-foreground border border-border rounded-md px-2.5 py-1 flex-shrink-0 group-hover:border-foreground/30 group-hover:text-foreground/80 transition-colors">
                             Connect
                           </span>
                         )}

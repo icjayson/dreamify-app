@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap, Maximize2 } from "lucide-react";
+import { CornerRightUp, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap, Maximize2 } from "lucide-react";
+import FileAttachDropdown from "@/components/chat/FileAttachDropdown";
 import { CONNECTORS, CONNECTOR_CATEGORIES, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -486,6 +487,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     uploadedFiles,
     addFiles,
     removeFile,
+    updateFile,
     clearFiles,
     dropdownOpen,
     selectedDataSource,
@@ -1028,19 +1030,20 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       toast({ title: "Upload error", description: validationError, variant: "destructive" });
       return;
     }
+    const tempId = `pending-${Date.now()}-${Math.random()}`;
     try {
-      // Create new file object for upload
       // Detect sourceType based on filename pattern
       let sourceType: string | undefined;
       if (file.name.startsWith('google_analytics')) sourceType = 'GA4';
       else if (file.name.startsWith('google_sheet')) sourceType = 'Google Sheets';
 
       const newFile = {
-        fileID: 'pending',
+        fileID: tempId,
         filename: file.name,
         size: file.size,
         ext: (file.name.split('.').pop() || '').toLowerCase(),
         status: 'uploading' as const,
+        uploadProgress: 0,
         sourceType
       };
 
@@ -1054,10 +1057,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       }
       addFiles([newFile]);
 
-      const res: UploadResponse = await fileService.uploadFile(file, { projectId: projectId ?? undefined });
+      const res: UploadResponse = await fileService.uploadFile(file, {
+        projectId: projectId ?? undefined,
+        onProgress: (percent) => updateFile(tempId, { uploadProgress: Math.min(percent, 95) }),
+      });
       if (!res.success || !res.fileID || res.asset?.status !== 'uploaded') {
-        removeFile('pending');
-        addFiles([{ ...newFile, status: 'error' }]);
+        removeFile(tempId);
+        addFiles([{ ...newFile, status: 'error', uploadProgress: undefined }]);
         toast({
           title: "Upload failed",
           description: res.error || `Unexpected upload status: ${res.asset?.status ?? 'unknown'}`,
@@ -1070,7 +1076,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       const fallbackSize = res.size ?? file.size;
       const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
 
-      removeFile('pending');
+      removeFile(tempId);
       addFiles([{
         fileID: res.fileID,
         filename: fallbackFilename,
@@ -1085,8 +1091,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       try {
         // Persist original file for CSV export if it's CSV
         if ((file.name.split('.').pop() || '').toLowerCase() === 'csv') {
-          // store in chat store for export
-          // lazy import to avoid circulars
           const { useChatStore } = await import('@/chat/useChatStore');
           useChatStore.getState().setOriginalFile({ blob: file, name: file.name });
         } else {
@@ -1098,7 +1102,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
 
     } catch (_e) {
-      removeFile('pending');
+      removeFile(tempId);
       addFiles([{
         fileID: 'error',
         filename: file.name,
@@ -2041,14 +2045,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
             <div className="flex items-center justify-between">
               {/* Left side - File Upload and Data Connector Buttons */}
               <div className="flex items-center gap-2">
-                {/* Upload Button - Icon only */}
-                <button
-                  onClick={handleFileUpload}
-                  className="p-2 flex items-center justify-center border border-border/50 dark:border-white/30 rounded-md text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white transition-colors"
-                  title="Upload file"
-                >
-                  <Upload className="w-4 h-4" />
-                </button>
+                {/* File attach dropdown */}
+                <FileAttachDropdown
+                  onUpload={handleFileUpload}
+                  compact
+                />
 
                 {/* Project Context Button */}
                 <button

@@ -1176,6 +1176,20 @@ def _process_conversation_background(
             },
         )
 
+        # Derive source_type from primary asset's asset_type
+        _asset_type_to_source: dict = {
+            "integration_ga4": "GA4",
+            "integration_gsheets": "Google Sheets",
+            "integration_meta_ads": "Meta Ads",
+            "integration_tiktok_ads": "TikTok Ads",
+            "integration_appsflyer": "AppsFlyer",
+            "integration_stripe": "Stripe",
+            "integration_google_ads": "Google Ads",
+            "integration_firebase": "Firebase",
+        }
+        _raw_asset_type = primary_asset.get("asset_type", "") if primary_asset else ""
+        dashboard_source_type = _asset_type_to_source.get(_raw_asset_type, "CSV")
+
         # Update project metadata in backend so UI can restore conversations/dashboards
         try:
             project_metadata_payload = {
@@ -1189,6 +1203,7 @@ def _process_conversation_background(
                     else None
                 ),
                 "dashboard_title": dashboard_title,
+                "source_type": dashboard_source_type,
             }
             headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
             response = requests.put(

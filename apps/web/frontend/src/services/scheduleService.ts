@@ -6,6 +6,11 @@ export type DateRangePreset = 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d';
 export type ScheduleStatus = 'active' | 'paused';
 export type RunStatus = 'running' | 'success' | 'failed' | 'token_expired';
 
+export interface SlackAction {
+  type: 'slack';
+  channel_id: string;
+}
+
 export interface ScheduleRecord {
   schedule_id: string;
   user_id: string;
@@ -24,6 +29,9 @@ export interface ScheduleRecord {
   last_run_at?: string;
   last_run_status?: RunStatus;
   last_run_rows?: number;
+  on_complete_actions?: SlackAction[];
+  auto_refresh_conversation_id?: string;
+  auto_refresh_prompt?: string;
 }
 
 export interface SyncRun {
@@ -52,6 +60,9 @@ export interface CreateScheduleRequest {
   hour_utc: number;
   day_of_week: number;
   date_range_preset: DateRangePreset;
+  on_complete_actions?: SlackAction[];
+  auto_refresh_conversation_id?: string;
+  auto_refresh_prompt?: string;
 }
 
 export interface UpdateScheduleRequest {
@@ -62,6 +73,9 @@ export interface UpdateScheduleRequest {
   account_name?: string;
   project_id?: string;
   connector_config?: Record<string, unknown>;
+  on_complete_actions?: SlackAction[];
+  auto_refresh_conversation_id?: string;
+  auto_refresh_prompt?: string;
 }
 
 export interface PaginatedSyncRuns {

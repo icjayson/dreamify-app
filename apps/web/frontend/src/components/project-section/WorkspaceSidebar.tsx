@@ -11,10 +11,10 @@ import {
   User as UserIcon,
   Sparkles,
   CreditCard,
-  Bell,
   Ellipsis,
   SquareArrowOutUpRight,
 } from "lucide-react";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { cn } from "@/lib/utils";
 import AccountCenterModal from "@/components/homepage-section/AccountCenterModal";
@@ -253,6 +253,11 @@ export default function WorkspaceSidebar({
 
       {/* Spacer for collapsed */}
       {collapsed && <div className="flex-1" />}
+
+      {/* Notification bell */}
+      <div className={`px-4 pb-2 ${collapsed ? 'flex justify-center' : ''}`}>
+        <NotificationBell />
+      </div>
 
       {/* Footer / User Account */}
       <div className="p-4 border-t border-border/30 relative" ref={userMenuRef}>

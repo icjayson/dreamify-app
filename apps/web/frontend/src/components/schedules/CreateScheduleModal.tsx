@@ -4,6 +4,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -75,10 +77,27 @@ export function CreateScheduleModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Slack action
+  const [slackEnabled, setSlackEnabled] = useState(false);
+  const [slackChannelId, setSlackChannelId] = useState('');
+
+  // Auto-refresh
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  const [autoRefreshConvId, setAutoRefreshConvId] = useState('');
+  const DEFAULT_AUTO_REFRESH_PROMPT = 'Refresh this dashboard with the latest synced data.';
+
   const showDayPicker = frequency === 'weekly' || frequency === 'biweekly';
 
   const handleSubmit = async () => {
     setError(null);
+    if (slackEnabled && !slackChannelId.trim()) {
+      setError('Please enter a Slack channel ID to enable the Slack action.');
+      return;
+    }
+    if (autoRefreshEnabled && !autoRefreshConvId.trim()) {
+      setError('Please enter a conversation ID to enable auto-refresh.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const req: CreateScheduleRequest = {
@@ -90,6 +109,13 @@ export function CreateScheduleModal({
         hour_utc: hourUtc,
         day_of_week: dayOfWeek,
         date_range_preset: datePreset,
+        on_complete_actions: slackEnabled && slackChannelId.trim()
+          ? [{ type: 'slack', channel_id: slackChannelId.trim() }]
+          : undefined,
+        auto_refresh_conversation_id: autoRefreshEnabled && autoRefreshConvId.trim()
+          ? autoRefreshConvId.trim()
+          : undefined,
+        auto_refresh_prompt: autoRefreshEnabled ? DEFAULT_AUTO_REFRESH_PROMPT : undefined,
       };
       await createSchedule(req);
       onClose();
@@ -178,6 +204,66 @@ export function CreateScheduleModal({
             <p className="text-xs text-muted-foreground">
               Each sync will pull this rolling window of data.
             </p>
+          </div>
+
+          {/* Slack action */}
+          <div className="border-t border-border/50 pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Post to Slack after sync</p>
+                <p className="text-xs text-muted-foreground">
+                  Automatically analyze data and post a summary to a Slack channel
+                </p>
+              </div>
+              <Switch
+                checked={slackEnabled}
+                onCheckedChange={setSlackEnabled}
+              />
+            </div>
+            {slackEnabled && (
+              <div className="space-y-1.5">
+                <Label>Slack Channel ID</Label>
+                <Input
+                  placeholder="e.g. C1234567890"
+                  value={slackChannelId}
+                  onChange={(e) => setSlackChannelId(e.target.value)}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Find the channel ID in Slack: right-click channel → View channel details → scroll to bottom.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Auto-refresh */}
+          <div className="border-t border-border/50 pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Auto-refresh dashboard</p>
+                <p className="text-xs text-muted-foreground">
+                  Re-run analysis on an existing conversation after each sync
+                </p>
+              </div>
+              <Switch
+                checked={autoRefreshEnabled}
+                onCheckedChange={setAutoRefreshEnabled}
+              />
+            </div>
+            {autoRefreshEnabled && (
+              <div className="space-y-1.5">
+                <Label>Conversation ID</Label>
+                <Input
+                  placeholder="Paste conversation UUID"
+                  value={autoRefreshConvId}
+                  onChange={(e) => setAutoRefreshConvId(e.target.value)}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Find this in the project URL or from the Dreamify API.
+                </p>
+              </div>
+            )}
           </div>
 
           {error && (

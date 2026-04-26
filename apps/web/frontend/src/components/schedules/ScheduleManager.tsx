@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Clock, Plus, Trash2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Clock, Plus, Trash2, ChevronDown, ChevronUp, AlertCircle, ArrowRight } from 'lucide-react';
 import { useScheduleStore } from '@/chat/useScheduleStore';
-import { ScheduleRecord } from '@/services/scheduleService';
+import { ScheduleRecord, scheduleService } from '@/services/scheduleService';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -61,15 +62,40 @@ interface ScheduleCardProps {
   defaultProjectId: string;
 }
 
+const ASSET_SOURCE_TYPE: Record<string, string> = {
+  integration_ga4: 'GA4',
+  integration_meta_ads: 'Meta Ads',
+  integration_tiktok: 'TikTok Ads',
+  integration_appsflyer: 'AppsFlyer',
+  integration_stripe: 'Stripe',
+};
+
 function ScheduleCard({ schedule, defaultProjectId }: ScheduleCardProps) {
   const { togglePause, deleteSchedule } = useScheduleStore();
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const handleDelete = async () => {
     if (!window.confirm('Delete this schedule? This cannot be undone.')) return;
     setIsDeleting(true);
     await deleteSchedule(schedule.schedule_id);
+  };
+
+  const handleAnalyze = async () => {
+    setIsAnalyzing(true);
+    try {
+      const runs = await scheduleService.getScheduleRuns(schedule.schedule_id, 1);
+      const latestRun = runs[0];
+      if (!latestRun?.asset_id) return;
+      const projectId = schedule.project_id || defaultProjectId;
+      navigate(`/project?projectId=${projectId}&analyze=${latestRun.asset_id}`);
+    } catch (err) {
+      console.error('Failed to fetch run for analyze shortcut', err);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const scheduleLabel = () => {
@@ -102,7 +128,7 @@ function ScheduleCard({ schedule, defaultProjectId }: ScheduleCardProps) {
           </div>
 
           {schedule.last_run_status && (
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
               {lastRunBadge(schedule)}
               <span>Last sync: {formatRunTime(schedule.last_run_at)}</span>
               {schedule.last_run_rows != null && (
@@ -113,6 +139,17 @@ function ScheduleCard({ schedule, defaultProjectId }: ScheduleCardProps) {
                   <AlertCircle className="w-3 h-3" />
                   Reconnect account
                 </span>
+              )}
+              {schedule.last_run_status === 'success' && (
+                <button
+                  onClick={handleAnalyze}
+                  disabled={isAnalyzing}
+                  className="flex items-center gap-1 text-primary hover:text-primary/80 font-medium disabled:opacity-50 transition-colors ml-1"
+                  title="Open this data in project chat"
+                >
+                  {isAnalyzing ? 'Opening…' : 'Analyze'}
+                  {!isAnalyzing && <ArrowRight className="w-3 h-3" />}
+                </button>
               )}
             </div>
           )}

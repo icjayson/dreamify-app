@@ -13,6 +13,7 @@ import { useUser } from "@clerk/clerk-react";
 import PublishModal from "@/components/project-section/PublishModal";
 import { projectService } from "@/services/projectService";
 import { conversationService } from "@/services/conversationService";
+import { fileService } from "@/services/fileService";
 import { conversationNodesToMessages } from "@/chat/conversationToMessages";
 import { useToast } from "@/hooks/use-toast";
 import HeaderCreditBadge from "@/components/ui/HeaderCreditBadge";
@@ -427,6 +428,45 @@ export default function ProjectPage() {
     newParams.delete('connector');
     const newUrl = `${window.location.pathname}${newParams.toString() ? '?' + newParams.toString() : ''}`;
     window.history.replaceState({}, '', newUrl);
+  }, [searchParams]);
+
+  // ── Post-redirect: auto-load synced asset from schedule "Analyze →" button ──
+  useEffect(() => {
+    const analyzeAssetId = searchParams.get('analyze');
+    if (!analyzeAssetId) return;
+
+    // Clean up the URL param immediately
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('analyze');
+    const newUrl = `${window.location.pathname}${newParams.toString() ? '?' + newParams.toString() : ''}`;
+    window.history.replaceState({}, '', newUrl);
+
+    const SOURCE_TYPE_MAP: Record<string, string> = {
+      integration_ga4: 'GA4',
+      integration_meta_ads: 'Meta Ads',
+      integration_tiktok: 'TikTok Ads',
+      integration_appsflyer: 'AppsFlyer',
+      integration_stripe: 'Stripe',
+    };
+
+    fileService.getAsset(analyzeAssetId).then((res) => {
+      if (!res.success || !res.asset) return;
+      const asset = res.asset;
+      useChatStore.getState().addFiles([{
+        fileID: asset.asset_id,
+        filename: asset.filename,
+        size: asset.size_bytes,
+        ext: asset.extension,
+        status: 'uploaded',
+        projectId: asset.project_id,
+        sourceType: SOURCE_TYPE_MAP[asset.asset_type || ''],
+        rowCount: asset.row_count,
+        columnCount: asset.column_count,
+      }]);
+      useChatStore.getState().setInputValue('Analyze this data and build me a dashboard');
+    }).catch((err) => {
+      console.error('Failed to load asset for analyze shortcut', err);
+    });
   }, [searchParams]);
 
   // Sync processedData from store to local state

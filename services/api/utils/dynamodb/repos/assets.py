@@ -75,7 +75,7 @@ def list_assets(
     if project_id:
         items = [item for item in items if item.get("project_id") == project_id]
     if asset_type:
-        items = [item for item in items if item.get("type") == asset_type]
+        items = [item for item in items if item.get("asset_type") == asset_type]
     return items
 
 

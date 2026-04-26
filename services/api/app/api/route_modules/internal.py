@@ -12,6 +12,7 @@ from fastapi import APIRouter, Header, HTTPException
 from utils.config import config
 from utils.dynamodb.repos import sync_schedules as schedules_repo
 from utils.dynamodb.repos import sync_runs as runs_repo
+from utils.dynamodb.repos import notifications as notifications_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["internal"])
@@ -80,6 +81,7 @@ async def trigger_schedule(
     rows: Optional[int] = None
     columns: Optional[int] = None
     asset_id: Optional[str] = None
+    asset_obj: dict = {}
     error_message: Optional[str] = None
 
     try:
@@ -95,8 +97,8 @@ async def trigger_schedule(
         status = "success"
         rows = result.get("row_count")
         columns = result.get("column_count")
-        asset = result.get("asset", {})
-        asset_id = asset.get("asset_id") if asset else None
+        asset_obj = result.get("asset") or {}
+        asset_id = asset_obj.get("asset_id") if asset_obj else None
 
     except TokenExpiredError as exc:
         status = "token_expired"
@@ -130,10 +132,60 @@ async def trigger_schedule(
         error=error_message,
     )
 
+    # Write in-app notification
+    _write_notification(
+        user_id=user_id,
+        schedule=schedule,
+        run_id=run_id,
+        status=status,
+        rows=rows,
+        asset_id=asset_id,
+        error_message=error_message,
+    )
+
     logger.info(
         "Scheduled sync %s completed: status=%s rows=%s duration=%dms",
         schedule_id, status, rows, duration_ms,
     )
+
+    # Fire auto-refresh (re-analyze existing conversation with new asset)
+    if status == "success" and asset_obj:
+        auto_refresh_conv_id = schedule.get("auto_refresh_conversation_id")
+        if auto_refresh_conv_id:
+            import asyncio as _asyncio
+            from app.services.chat_platform_service import trigger_auto_refresh
+            _asyncio.ensure_future(
+                trigger_auto_refresh(
+                    user_id=user_id,
+                    project_id=project_id,
+                    conversation_id=auto_refresh_conv_id,
+                    asset=asset_obj,
+                    prompt=schedule.get(
+                        "auto_refresh_prompt",
+                        "Refresh this dashboard with the latest synced data.",
+                    ),
+                )
+            )
+
+    # Fire post-sync Slack action(s) in the background (success only)
+    if status == "success" and asset_obj:
+        on_complete_actions = schedule.get("on_complete_actions") or []
+        for action in on_complete_actions:
+            if action.get("type") == "slack" and action.get("channel_id"):
+                import asyncio as _asyncio
+                from app.services.chat_platform_service import post_sync_to_slack
+                _asyncio.ensure_future(
+                    post_sync_to_slack(
+                        user_id=user_id,
+                        project_id=project_id,
+                        channel_id=action["channel_id"],
+                        provider=provider,
+                        account_name=schedule.get("account_name", provider),
+                        rows_fetched=rows,
+                        asset=asset_obj,
+                    )
+                )
+
     return {"status": status, "run_id": run_id, "rows": rows, "duration_ms": duration_ms}
 
 
@@ -224,3 +276,59 @@ async def _run_sync(
 
     else:
         raise ValueError(f"Unknown provider: {provider}")
+
+
+_PROVIDER_LABELS: dict = {
+    "ga4": "Google Analytics 4",
+    "meta_ads": "Meta Ads",
+    "tiktok": "TikTok Ads",
+    "appsflyer": "AppsFlyer",
+    "stripe": "Stripe",
+}
+
+
+def _write_notification(
+    user_id: str,
+    schedule: dict,
+    run_id: str,
+    status: str,
+    rows: Optional[int],
+    asset_id: Optional[str],
+    error_message: Optional[str],
+) -> None:
+    """Create a notification record after a sync run completes."""
+    provider = schedule.get("provider", "")
+    account_name = schedule.get("account_name") or _PROVIDER_LABELS.get(provider, provider)
+    project_id = schedule.get("project_id")
+    schedule_id = schedule.get("schedule_id")
+    label = _PROVIDER_LABELS.get(provider, provider)
+
+    if status == "success":
+        rows_str = f" · {rows:,} rows" if rows is not None else ""
+        title = f"{account_name} synced{rows_str}"
+        body = f"{label} data fetched successfully and is ready for analysis."
+        notification_type = "sync_success"
+    elif status == "token_expired":
+        title = f"{account_name} — reconnect required"
+        body = f"Your {label} token has expired. Reconnect the account to resume automatic syncs."
+        notification_type = "token_expired"
+    else:
+        title = f"{account_name} sync failed"
+        body = error_message or f"{label} scheduled sync encountered an error."
+        notification_type = "sync_failed"
+
+    try:
+        notifications_repo.create_notification(
+            user_id=user_id,
+            notification_type=notification_type,
+            title=title,
+            body=body,
+            schedule_id=schedule_id,
+            run_id=run_id,
+            provider=provider,
+            asset_id=asset_id if status == "success" else None,
+            project_id=project_id,
+        )
+    except Exception as exc:
+        # Notification failure must never break the sync result
+        logger.warning("Failed to create notification for run %s: %s", run_id, exc)

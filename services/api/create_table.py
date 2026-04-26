@@ -189,6 +189,27 @@ def get_table_specs() -> Dict[str, Dict]:
                 }
             ],
         },
+        tables.notifications: {
+            "KeySchema": [
+                {"AttributeName": "user_id", "KeyType": "HASH"},
+                {"AttributeName": "notification_id", "KeyType": "RANGE"},
+            ],
+            "AttributeDefinitions": [
+                {"AttributeName": "user_id", "AttributeType": "S"},
+                {"AttributeName": "notification_id", "AttributeType": "S"},
+                {"AttributeName": "created_at", "AttributeType": "S"},
+            ],
+            "GlobalSecondaryIndexes": [
+                {
+                    "IndexName": "user_id_created_at_index",
+                    "KeySchema": [
+                        {"AttributeName": "user_id", "KeyType": "HASH"},
+                        {"AttributeName": "created_at", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
+            ],
+        },
     }
 
 

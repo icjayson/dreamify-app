@@ -153,6 +153,13 @@ def create_app():
         logger.info("Internal router registered successfully")
     except ImportError as e:
         logger.error(f"Failed to import Internal router: {e}")
+
+    try:
+        from app.api.route_modules.notifications import router as notifications_router
+        app.include_router(notifications_router, prefix="/api/v1", tags=["notifications"])
+        logger.info("Notifications router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Notifications router: {e}")
     
     # Root endpoint
     @app.get("/", tags=["root"])

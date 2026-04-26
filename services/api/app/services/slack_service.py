@@ -132,6 +132,70 @@ def build_error_blocks(message: str) -> list:
     ]
 
 
+def build_sync_placeholder_blocks(provider_label: str, account_name: str, rows: Optional[int]) -> list:
+    """Placeholder sent immediately after sync completes, before Morpheus analysis."""
+    rows_str = f" · {rows:,} rows" if rows is not None else ""
+    return [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"✅ *{account_name}* synced successfully{rows_str}\n"
+                    f"_Analyzing data with Dreamify AI…_"
+                ),
+            },
+        }
+    ]
+
+
+def build_sync_result_blocks(
+    provider_label: str,
+    account_name: str,
+    rows: Optional[int],
+    narrative: str,
+    dashboard_url: Optional[str],
+    metrics: Optional[list] = None,
+) -> list:
+    """Final Slack message after Morpheus analysis completes."""
+    rows_str = f" · {rows:,} rows" if rows is not None else ""
+    blocks: list = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"✅ *{account_name}* synced{rows_str}\n\n"
+                    f"{narrative}"
+                ),
+            },
+        }
+    ]
+    if metrics:
+        chips = "   |   ".join(_format_metric_chip(m) for m in metrics[:4])
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": chips},
+        })
+    if dashboard_url:
+        blocks.append({
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Open Dashboard →"},
+                    "url": dashboard_url,
+                    "style": "primary",
+                }
+            ],
+        })
+    blocks.append({
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": "_Powered by Dreamify_"}],
+    })
+    return blocks
+
+
 # ── Workflow step labels ──────────────────────────────────────────────────────
 
 _STEP_LABELS: Dict[str, str] = {

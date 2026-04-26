@@ -94,6 +94,7 @@ def update_schedule(user_id: str, schedule_id: str, **updates) -> Optional[Dict]
         "frequency", "hour_utc", "day_of_week", "date_range_preset",
         "status", "eventbridge_rule_name", "updated_at",
         "connector_config", "account_name", "project_id",
+        "on_complete_actions", "auto_refresh_conversation_id", "auto_refresh_prompt",
     }
     set_expr_parts = []
     expr_names = {}

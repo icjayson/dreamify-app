@@ -20,6 +20,7 @@ class DynamoTables:
     chat_sessions: str = config.aws.dynamodb.CHAT_SESSIONS_TABLE
     sync_schedules: str = config.aws.dynamodb.SYNC_SCHEDULES_TABLE
     sync_runs: str = config.aws.dynamodb.SYNC_RUNS_TABLE
+    notifications: str = config.aws.dynamodb.NOTIFICATIONS_TABLE
 
 
 tables = DynamoTables()

@@ -27,6 +27,11 @@ class CreateScheduleRequest(BaseModel):
     hour_utc: int = Field(ge=0, le=23, default=9)
     day_of_week: int = Field(ge=0, le=6, default=0)  # 0=Mon
     date_range_preset: str = "last_30d"  # last_7d | last_14d | last_30d | last_90d
+    # Optional post-sync actions: [{"type": "slack", "channel_id": "C123"}]
+    on_complete_actions: Optional[List[Dict[str, Any]]] = None
+    # Optional auto-refresh: conversation_id to re-analyze after each sync
+    auto_refresh_conversation_id: Optional[str] = None
+    auto_refresh_prompt: Optional[str] = None
 
 
 class UpdateScheduleRequest(BaseModel):
@@ -37,6 +42,9 @@ class UpdateScheduleRequest(BaseModel):
     account_name: Optional[str] = None
     project_id: Optional[str] = None
     connector_config: Optional[Dict[str, Any]] = None
+    on_complete_actions: Optional[List[Dict[str, Any]]] = None
+    auto_refresh_conversation_id: Optional[str] = None
+    auto_refresh_prompt: Optional[str] = None
 
 
 _VALID_PROVIDERS = {"ga4", "meta_ads", "tiktok", "appsflyer", "stripe"}
@@ -73,6 +81,17 @@ async def create_schedule(
         day_of_week=req.day_of_week,
         date_range_preset=req.date_range_preset,
     )
+    # Persist optional action/refresh fields if provided
+    optional_updates: Dict[str, Any] = {}
+    if req.on_complete_actions is not None:
+        optional_updates["on_complete_actions"] = req.on_complete_actions
+    if req.auto_refresh_conversation_id is not None:
+        optional_updates["auto_refresh_conversation_id"] = req.auto_refresh_conversation_id
+    if req.auto_refresh_prompt is not None:
+        optional_updates["auto_refresh_prompt"] = req.auto_refresh_prompt
+    if optional_updates:
+        schedules_repo.update_schedule(user_id, record["schedule_id"], **optional_updates)
+        record.update(optional_updates)
     # Create EventBridge schedule (no-op if EVENTBRIDGE_ROLE_ARN not configured)
     try:
         rule_name = scheduler_service.create_schedule(

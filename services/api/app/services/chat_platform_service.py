@@ -30,6 +30,8 @@ from app.services.slack_service import (
     build_error_blocks,
     build_response_blocks,
     build_status_blocks,
+    build_sync_placeholder_blocks,
+    build_sync_result_blocks,
     decrypt_token,
     step_label,
 )
@@ -581,3 +583,302 @@ async def handle_slack_query(
                 )
             except Exception:
                 pass
+
+
+# ── Scheduled sync → Slack ────────────────────────────────────────────────────
+
+_PROVIDER_LABELS_SLACK: Dict[str, str] = {
+    "ga4": "Google Analytics 4",
+    "meta_ads": "Meta Ads",
+    "tiktok": "TikTok Ads",
+    "appsflyer": "AppsFlyer",
+    "stripe": "Stripe",
+}
+
+SYNC_ANALYSIS_PROMPT = (
+    "Summarize this data with the most important KPIs, trends, and insights. "
+    "Be concise — 3-5 sentences max."
+)
+
+
+async def post_sync_to_slack(
+    user_id: str,
+    project_id: str,
+    channel_id: str,
+    provider: str,
+    account_name: str,
+    rows_fetched: Optional[int],
+    asset: Dict[str, Any],
+) -> None:
+    """
+    After a scheduled sync completes:
+    1. Post placeholder to Slack channel
+    2. Create a new conversation with the synced asset
+    3. Trigger Morpheus analysis
+    4. Poll for completion
+    5. Update Slack with narrative + [Open Dashboard →] button
+    """
+    from slack_sdk.web.async_client import AsyncWebClient
+
+    provider_label = _PROVIDER_LABELS_SLACK.get(provider, provider)
+
+    # 1. Find the user's connected Slack workspace and decrypt token
+    workspace = chat_platform_repo.get_workspace_by_user(user_id, "slack")
+    if not workspace:
+        logger.info("No Slack workspace connected for user %s — skipping Slack post", user_id)
+        return
+    try:
+        bot_token = decrypt_token(workspace["bot_token_encrypted"])
+    except Exception as exc:
+        logger.error("Failed to decrypt bot token for user %s: %s", user_id, exc)
+        return
+
+    client = AsyncWebClient(token=bot_token)
+
+    # 2. Post placeholder immediately
+    placeholder_ts: Optional[str] = None
+    try:
+        resp = await client.chat_postMessage(
+            channel=channel_id,
+            blocks=build_sync_placeholder_blocks(provider_label, account_name, rows_fetched),
+            text=f"✅ {account_name} synced · Analyzing…",
+        )
+        placeholder_ts = resp["ts"]
+    except Exception as exc:
+        logger.error("Failed to post sync placeholder to Slack: %s", exc)
+        return
+
+    # 3. Create a new conversation with text prompt + asset content
+    conversation_id = str(uuid.uuid4())
+    now_iso = datetime.now().isoformat()
+    bucket = config.aws.s3.USER_ASSETS_BUCKET
+    keys = _build_conversation_keys(user_id, project_id, conversation_id)
+
+    asset_content = {
+        "type": "asset",
+        "data": {
+            "asset_id": asset.get("asset_id"),
+            "file_id": asset.get("file_id") or asset.get("asset_id"),
+            "s3_bucket": asset.get("s3_bucket"),
+            "s3_key": asset.get("s3_key"),
+            "extension": asset.get("extension", ""),
+            "filename": asset.get("filename", ""),
+            "sourceType": asset.get("asset_type", ""),
+        },
+    }
+    user_node = {
+        "node_id": f"node_{uuid.uuid4().hex[:8]}",
+        "role": "user",
+        "status": "completed",
+        "created_at": now_iso,
+        "contents": [
+            {"type": "text", "data": {"text": SYNC_ANALYSIS_PROMPT}},
+            asset_content,
+        ],
+        "metadata": {"chat_mode": CHAT_MODEL_ALIAS, "resolved_model": CHAT_MODEL_ID},
+    }
+    conversation = {
+        "user_id": user_id,
+        "project_id": project_id,
+        "conversation_id": conversation_id,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+        "metadata": {
+            "status": "active",
+            "chat_mode": CHAT_MODEL_ALIAS,
+            "resolved_model": CHAT_MODEL_ID,
+            "source": "scheduled_sync",
+            "project": {"project_id": project_id, "user_id": user_id},
+        },
+        "nodes": [_make_greeting_node(), user_node],
+        "dashboards": [],
+    }
+
+    try:
+        save_conversation(bucket, keys["primary"], conversation)
+        save_conversation(bucket, keys["backup"], conversation)
+        conversations_repo.create_conversation(
+            project_id=project_id,
+            user_id=user_id,
+            s3_bucket=bucket,
+            s3_key=keys["primary"],
+            title=f"{account_name} auto-analysis",
+            metadata={"source": "scheduled_sync"},
+            conversation_id=conversation_id,
+            node_count=len(conversation["nodes"]),
+        )
+        # Update project's latest_conversation_id
+        projects_repo.update_project(
+            user_id=user_id,
+            project_id=project_id,
+            latest_conversation_id=conversation_id,
+        )
+    except Exception as exc:
+        logger.error("Failed to save sync analysis conversation %s: %s", conversation_id, exc)
+        await _update_slack_error(client, channel_id, placeholder_ts)
+        return
+
+    await asyncio.sleep(0.5)
+
+    # 4. Trigger Morpheus
+    try:
+        _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
+        credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
+    except Exception as exc:
+        logger.error("Failed to trigger Morpheus for sync analysis %s: %s", conversation_id, exc)
+        await _update_slack_error(client, channel_id, placeholder_ts)
+        return
+
+    # 5. Poll for completion
+    async def _on_step(label: str) -> None:
+        if placeholder_ts:
+            try:
+                await client.chat_update(
+                    channel=channel_id,
+                    ts=placeholder_ts,
+                    blocks=build_status_blocks(label),
+                    text=label,
+                )
+            except Exception:
+                pass
+
+    final_status, _, final_meta = await _poll_workflow(conversation_id, on_step=_on_step)
+
+    if final_status != "completed":
+        await _update_slack_error(client, channel_id, placeholder_ts, "Analysis did not complete.")
+        return
+
+    # 6. Extract result and update Slack message
+    metrics: list = []
+    dashboard_url: Optional[str] = None
+    if final_meta.get("response_type") == "message" and final_meta.get("content"):
+        narrative = final_meta["content"]
+    else:
+        try:
+            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            if conversation_meta:
+                conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+                narrative = _extract_narrative(conv) or "Analysis complete."
+                dashboard_url = _build_dashboard_url(project_id, conv)
+                dashboards = conv.get("dashboards", [])
+                if dashboards:
+                    projects_repo.update_project(
+                        user_id=user_id, project_id=project_id, is_preview_public=True
+                    )
+                    s3_uri = dashboards[-1].get("s3_uri")
+                    if s3_uri:
+                        dj = _load_dashboard_json(s3_uri)
+                        if dj:
+                            metrics = _extract_top_metrics(dj)
+            else:
+                narrative = "Analysis complete."
+        except Exception as exc:
+            logger.error("Failed to load sync analysis result: %s", exc)
+            narrative = "Analysis complete. View results in Dreamify."
+
+    try:
+        await client.chat_update(
+            channel=channel_id,
+            ts=placeholder_ts,
+            blocks=build_sync_result_blocks(
+                provider_label, account_name, rows_fetched, narrative, dashboard_url, metrics
+            ),
+            text=narrative,
+        )
+    except Exception as exc:
+        logger.warning("Failed to post sync analysis result to Slack: %s", exc)
+
+
+async def trigger_auto_refresh(
+    user_id: str,
+    project_id: str,
+    conversation_id: str,
+    asset: Dict[str, Any],
+    prompt: str = "Refresh this dashboard with the latest synced data.",
+) -> None:
+    """
+    Re-run Morpheus on an existing conversation with a new asset.
+    Called after a scheduled sync when auto_refresh_conversation_id is set.
+    Fire-and-forget — does not wait for completion.
+    """
+    try:
+        bucket = config.aws.s3.USER_ASSETS_BUCKET
+        keys = _build_conversation_keys(user_id, project_id, conversation_id)
+
+        conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+        if not conversation_meta:
+            logger.warning(
+                "Auto-refresh: conversation %s not found in DynamoDB — skipping", conversation_id
+            )
+            return
+
+        conversation = load_conversation(
+            conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+        )
+
+        now_iso = datetime.now().isoformat()
+        asset_content = {
+            "type": "asset",
+            "data": {
+                "asset_id": asset.get("asset_id"),
+                "file_id": asset.get("file_id") or asset.get("asset_id"),
+                "s3_bucket": asset.get("s3_bucket"),
+                "s3_key": asset.get("s3_key"),
+                "extension": asset.get("extension", ""),
+                "filename": asset.get("filename", ""),
+                "sourceType": asset.get("asset_type", ""),
+            },
+        }
+        user_node = {
+            "node_id": f"node_{uuid.uuid4().hex[:8]}",
+            "role": "user",
+            "status": "completed",
+            "created_at": now_iso,
+            "contents": [
+                {"type": "text", "data": {"text": prompt}},
+                asset_content,
+            ],
+            "metadata": {"chat_mode": CHAT_MODEL_ALIAS, "resolved_model": CHAT_MODEL_ID},
+        }
+        conversation.setdefault("nodes", []).append(user_node)
+        conversation["updated_at"] = now_iso
+
+        save_conversation(bucket, keys["primary"], conversation)
+        save_conversation(bucket, keys["backup"], conversation)
+
+        # Update conversation metadata in DynamoDB
+        existing_meta = conversations_repo.get_conversation(project_id, conversation_id)
+        if existing_meta:
+            conversations_repo.update_conversation_metadata(
+                project_id,
+                conversation_id,
+                {**existing_meta.get("metadata", {}), "source": "auto_refresh"},
+            )
+
+        await asyncio.sleep(0.3)
+        _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
+        credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
+        logger.info(
+            "Auto-refresh triggered for conversation %s in project %s",
+            conversation_id, project_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "Auto-refresh failed for conversation %s: %s", conversation_id, exc, exc_info=True
+        )
+
+
+async def _update_slack_error(
+    client: Any, channel_id: str, placeholder_ts: Optional[str], msg: str = "Something went wrong."
+) -> None:
+    if placeholder_ts:
+        try:
+            from app.services.slack_service import build_error_blocks
+            await client.chat_update(
+                channel=channel_id,
+                ts=placeholder_ts,
+                blocks=build_error_blocks(msg),
+                text=msg,
+            )
+        except Exception:
+            pass

@@ -100,7 +100,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
             exit={{ opacity: 0, y: placement === 'bottom' ? 5 : -5, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
             className={`absolute ${placement === 'bottom' ? 'top-full mt-3' : 'bottom-full mb-3'
-              } w-64 bg-background/95 dark:bg-[#121214]/95 backdrop-blur-xl border border-border dark:border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-20 overflow-hidden ${anchor === 'right' ? 'right-0' : 'left-0'
+              } w-72 bg-background/95 dark:bg-[#121214]/95 backdrop-blur-xl border border-border dark:border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-20 overflow-hidden ${anchor === 'right' ? 'right-0' : 'left-0'
               }`}
           >
             <div className="p-2 space-y-1">

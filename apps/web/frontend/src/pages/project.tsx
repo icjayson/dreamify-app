@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, LayoutTemplate, Pencil, Sparkles, SquareArrowOutUpRight, X } from "lucide-react";
+import { ArrowLeft, LayoutTemplate, Pencil, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
+import CsvPreviewPanel from "@/components/project-section/CsvPreviewPanel";
 import DashboardLoading from "@/components/project-section/DashboardLoading";
 import { useChatStore } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
@@ -27,6 +28,8 @@ export default function ProjectPage() {
   const [processedData, setProcessedData] = useState<any>(null);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'dashboard'>('chat');
+  const [csvPreview, setCsvPreview] = useState<{ assetId: string; filename: string } | null>(null);
+  const [csvPreviewMeta, setCsvPreviewMeta] = useState<{ totalRows: number; columns: string[] } | null>(null);
   const [isProjectLoading, setIsProjectLoading] = useState(false);
   const [projectTitle, setProjectTitle] = useState("Untitled Project");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -290,8 +293,7 @@ export default function ProjectPage() {
     if (projectRef.current !== projectId) {
       console.log('Project ID changed, resetting chat state:', projectId);
       const pendingAction = useChatStore.getState().pendingAction;
-      const shouldPreserveTemplate = pendingAction && pendingAction.projectId === projectId;
-      useChatStore.getState().resetChat(shouldPreserveTemplate);
+      useChatStore.getState().resetChat();
       useFileStore.getState().resetFileState();
       useChatStore.getState().setCurrentProjectId(projectId);
       projectRef.current = projectId;
@@ -546,8 +548,8 @@ export default function ProjectPage() {
         </div>
 
         {/* Content */}
-        <div className={`grid grid-cols-1 ${shouldShowDashboard && isDashboardOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} flex-1 lg:flex-none lg:h-[calc(100vh-4rem)] min-h-0`}>
-          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300 h-full lg:h-auto min-h-0`}>
+        <div className={`grid grid-cols-1 ${(shouldShowDashboard && isDashboardOpen) || csvPreview ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} flex-1 lg:flex-none lg:h-[calc(100vh-4rem)] min-h-0`}>
+          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${(shouldShowDashboard && isDashboardOpen) || csvPreview ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300 h-full lg:h-auto min-h-0`}>
             <div className="bg-muted h-full lg:h-[calc(100vh-4rem)] min-h-0 flex flex-col lg:block">
               <div className="flex-1 min-h-0 h-full lg:h-auto lg:block">
                 <div className="px-1 h-full lg:h-[calc(100vh-4rem)] flex flex-col lg:block" data-chat-root>
@@ -579,6 +581,13 @@ export default function ProjectPage() {
                           }
                         });
                       }
+                      setCsvPreview(null);
+                      setIsDashboardOpen(true);
+                      setActiveTab('dashboard');
+                    }}
+                    onShowCsvPreview={(assetId, filename) => {
+                      setCsvPreview({ assetId, filename });
+                      setCsvPreviewMeta(null);
                       setIsDashboardOpen(true);
                       setActiveTab('dashboard');
                     }}
@@ -590,10 +599,41 @@ export default function ProjectPage() {
           </div>
 
           {/* dashboard columns */}
-          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${shouldShowDashboard && isDashboardOpen ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative h-full lg:h-auto min-h-0`}>
+          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${(shouldShowDashboard && isDashboardOpen) || csvPreview ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative h-full lg:h-auto min-h-0`}>
             <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-border h-full lg:h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
-              {/* Dashboard panel header */}
-              {shouldShowDashboard && isDashboardOpen && !isProjectLoading && (
+              {/* Panel header — CSV preview mode */}
+              {csvPreview && (
+                <div className="shrink-0 flex items-center gap-2 px-3 h-10 border-b border-border bg-background/60 backdrop-blur-sm">
+                  <Database className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500" />
+                  <span className="text-sm font-medium text-foreground/80 truncate min-w-0">
+                    {csvPreview.filename}
+                  </span>
+                  {csvPreviewMeta && (
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                      {csvPreviewMeta.totalRows.toLocaleString()} rows · {csvPreviewMeta.columns.length} columns
+                    </span>
+                  )}
+                  <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => {
+                        setCsvPreview(null);
+                        setCsvPreviewMeta(null);
+                        if (!shouldShowDashboard || !isDashboardOpen) {
+                          setIsDashboardOpen(false);
+                          setActiveTab('chat');
+                        }
+                      }}
+                      className="button-outline h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Close data preview"
+                      title="Close data preview"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* Panel header — Dashboard mode */}
+              {!csvPreview && shouldShowDashboard && isDashboardOpen && !isProjectLoading && (
                 <div className="shrink-0 flex items-center gap-2 px-3 h-10 border-b border-border bg-background/60 backdrop-blur-sm">
                   <span className="text-sm font-medium text-foreground/80 truncate min-w-0">
                     {dashboardTitle || 'Dashboard'}
@@ -630,7 +670,13 @@ export default function ProjectPage() {
               )}
               {/* Content area */}
               <div className="flex-1 overflow-hidden relative">
-                {!shouldShowDashboard ? (
+                {/* CSV data preview mode */}
+                {csvPreview ? (
+                  <CsvPreviewPanel
+                    assetId={csvPreview.assetId}
+                    onMetaLoaded={(meta) => setCsvPreviewMeta(meta)}
+                  />
+                ) : !shouldShowDashboard ? (
                   <BlankState
                     subtexts={[
                       "Upload a CSV file and let Dreamify build your dashboard",

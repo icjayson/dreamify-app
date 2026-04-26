@@ -23,8 +23,9 @@ export interface Message {
     id: string;
     title: string;
     description: string;
-    image: string;
+    image?: string;
     category: string;
+    suggestedTheme?: string;
   };
   dashboardCard?: {
     sourceFileName: string;

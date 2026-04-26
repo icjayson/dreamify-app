@@ -17,7 +17,7 @@ const Header = () => {
   const [userProfileOpen, setUserProfileOpen] = useState(false);
   const [pricingOpen, setPricingOpen] = useState(false);
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
-  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans">("pricing");
+  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans" | "preferences">("pricing");
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user } = useUser();
   const { signOut } = useClerk();

@@ -120,8 +120,9 @@ function WaveBackground({
         gl.uniform3f(iColorBaseLocation, -0.1, 0.3, 0.95);
         gl.uniform3f(iColorScaleLocation, 1.0, 1.0, 1.0);
       } else {
-        gl.uniform3f(iColorBaseLocation, 0.88, 0.91, 0.97);
-        gl.uniform3f(iColorScaleLocation, 0.06, 0.05, 0.03);
+        // Top = white → mid ≈ accent zone → bottom = primary
+        gl.uniform3f(iColorBaseLocation, 0.55, 0.64, 0.81);
+        gl.uniform3f(iColorScaleLocation, 0.45, 0.36, 0.19);
       }
     };
 

@@ -18,6 +18,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { Message } from "@/types/message";
 import { FooterSection } from '@/components/homepage-section/footer-section';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
+import VideoBackground from '@/components/homepage-section/VideoBackground';
 import ProjectsSection from '@/components/homepage-section/ProjectsSection';
 import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
 import TemplateModal from '@/components/homepage-section/TemplateModal';
@@ -409,7 +410,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     setTemplateModalOpen(true);
   };
 
-  const handleTemplateSelect = (template: { id: string; title: string; description: string; image: string; category: string }) => {
+  const handleTemplateSelect = (template: { id: string; title: string; description: string; category: string; suggestedTheme: string; image?: string }) => {
     setSelectedTemplate(template);
     setInputValue(`Use ${template.title} template to make `);
     console.log('Template selected:', template);
@@ -714,13 +715,15 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
   return (
     <div className="min-h-screen overflow-y-auto homepage-scrollbar">
-      {/* Fixed WaveBackground Component for entire page */}
-      <WaveBackground
-        className="fixed inset-0 z-0"
-      />
+      {/* Fixed background: Video for light, Wave for dark */}
+      {resolvedTheme === 'dark' ? (
+        <WaveBackground className="fixed inset-0 z-0" />
+      ) : (
+        <VideoBackground className="fixed inset-0 z-0" />
+      )}
 
       {/* Fixed overlay for better text readability */}
-      <div className="fixed inset-0 z-[1] dark:bg-black/60 bg-white/20"></div>
+      <div className={`fixed inset-0 z-[1] ${resolvedTheme === 'dark' ? 'bg-black/60' : 'bg-white/20'}`}></div>
 
       <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden pt-44">
 

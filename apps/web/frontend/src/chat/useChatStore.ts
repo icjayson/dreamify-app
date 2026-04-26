@@ -228,7 +228,7 @@ interface ChatState {
   // Complex actions
   sendMessage: (content: string) => void;
   clearInput: () => void;
-  resetChat: () => void;
+  resetChat: (preserveTemplate?: boolean) => void;
   processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => Promise<void>;
   stopGeneration: () => Promise<void>;
   resumeWorkflowPolling: (projectId: string, conversationId: string, onProcessedDataChange?: (data: any) => void) => Promise<void>;
@@ -1675,7 +1675,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   resetChat: (preserveTemplate = false) => {
     if (!preserveTemplate) {
-      try { localStorage.removeItem('dreamify_selected_template'); } catch {}
+      try { localStorage.removeItem('dreamify_selected_template'); } catch { }
     }
     set({
       inputValue: "",

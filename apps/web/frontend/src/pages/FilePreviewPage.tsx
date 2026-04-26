@@ -4,10 +4,7 @@ import { useAuth } from '@clerk/clerk-react';
 import CSVPreviewTable, { CSVPreviewTableProps } from '@/components/CSVPreviewTable';
 import { getFilePreview } from '@/services/filePreviewService';
 
-const PREVIEW_ROW_OPTIONS = [100, 1000, 2000] as const;
-
-/** Max rows fetched in one preview request — must match backend `limit` cap (2000). */
-const PREVIEW_FETCH_MAX = 2000;
+const PREVIEW_ROW_OPTIONS = [100, 500, 1000, 5000] as const;
 
 export default function FilePreviewPage() {
   const { assetId } = useParams<{ assetId: string }>();
@@ -52,7 +49,7 @@ export default function FilePreviewPage() {
           }
         }
         
-        const data = await getFilePreview(assetId, token, { limit: PREVIEW_FETCH_MAX });
+        const data = await getFilePreview(assetId, token);
         setPreviewData({
           columns: data.columns,
           rows: data.rows,

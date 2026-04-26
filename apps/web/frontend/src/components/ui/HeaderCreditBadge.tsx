@@ -15,7 +15,7 @@ const HeaderCreditBadge: React.FC<HeaderCreditBadgeProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
-  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans">("plans");
+  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans" | "preferences">("plans");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const used = monthlyCreditsUsed ?? (TIER_LIMIT - creditsRemaining);

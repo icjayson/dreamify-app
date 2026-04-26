@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap } from "lucide-react";
+import { CornerRightUp, Upload, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap, Maximize2 } from "lucide-react";
 import { CONNECTORS, CONNECTOR_CATEGORIES, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
@@ -13,6 +13,7 @@ import { useChatStore, type UploadedFile, isNonAnalyzableUpload } from "@/chat/u
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
+import InlineCsvPreview from "../components/chat/InlineCsvPreview";
 import ChartPreviewChip from "../components/chat/ChartPreviewChip";
 import type { ChartChipData } from "../components/chat/ChartPreviewChip";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
@@ -439,10 +440,11 @@ interface ChatInterfaceProps {
   projectId?: string;
   onProcessedDataChange?: (data: any) => void;
   onSwitchToDashboard?: (dashboardId?: string) => void;
+  onShowCsvPreview?: (assetId: string, filename: string) => void;
   dashboardComponents?: DashboardComponent[];
 }
 
-const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, dashboardComponents }: ChatInterfaceProps) => {
+const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, dashboardComponents }: ChatInterfaceProps) => {
   const { resolvedTheme } = useTheme();
   const logoFavicon = "/logo-favicon.png";
 
@@ -1427,25 +1429,77 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           } else {
                             secondaryText = message.attachment.name.replace(/\.[^/.]+$/, "");
                           }
+                          const isIntegration = isGA4 || isSheets || isMeta || isTikTok || isGoogleAds || isFirebase || isAppsFlyer || isStripe;
+                          const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
+                          const isCsvOrExcel = !isIntegration && !isMultiple && (
+                            /\.(csv|xlsx|xls)$/i.test(message.attachment.name) ||
+                            message.attachment.kind === 'csv'
+                          );
+                          const openPreview = () => {
+                            if (!matchedAsset) return;
+                            if (onShowCsvPreview) {
+                              onShowCsvPreview(matchedAsset.id, message.attachment!.name);
+                            } else {
+                              window.open(`/preview/${matchedAsset.id}`, '_blank');
+                            }
+                          };
+
+                          if (isCsvOrExcel) {
+                            return (
+                              <div className="overflow-hidden rounded-lg border border-border dark:border-white/10 bg-card dark:bg-white/5 shadow-sm max-w-full">
+                                {/* Card header */}
+                                <div className="flex items-center gap-3 px-3 py-2.5">
+                                  <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md p-2 ${logoBg}`}>
+                                    <Database className="h-4 w-4 text-emerald-400" />
+                                  </div>
+                                  <div className="flex min-w-0 flex-1 flex-col leading-tight">
+                                    <span className="truncate text-sm font-medium text-foreground dark:text-white">
+                                      {displayName}
+                                    </span>
+                                    {secondaryText && (
+                                      <span className="mt-0.5 truncate text-xs text-muted-foreground dark:text-gray-400">
+                                        {secondaryText}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {matchedAsset && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <button
+                                          type="button"
+                                          onClick={openPreview}
+                                          className="flex-shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-white/10 dark:hover:text-white outline-none"
+                                        >
+                                          <Maximize2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side="top"
+                                        sideOffset={6}
+                                        className="z-[300] !bg-black/90 !text-white text-xs shadow-lg"
+                                      >
+                                        Open full preview
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </div>
+                                {/* Inline CSV/Excel data preview */}
+                                {matchedAsset && (
+                                  <InlineCsvPreview assetId={matchedAsset.id} />
+                                )}
+                              </div>
+                            );
+                          }
+
                           return (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div
                                   role="button"
                                   tabIndex={0}
-                                  onClick={() => {
-                                    const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
-                                    if (matchedAsset) {
-                                      window.open(`/preview/${matchedAsset.id}`, '_blank');
-                                    }
-                                  }}
+                                  onClick={openPreview}
                                   onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
-                                      if (matchedAsset) {
-                                        window.open(`/preview/${matchedAsset.id}`, '_blank');
-                                      }
-                                    }
+                                    if (e.key === 'Enter' || e.key === ' ') openPreview();
                                   }}
                                   className="flex cursor-pointer items-center gap-3 rounded-lg border border-border dark:border-white/10 bg-card dark:bg-white/5 px-3 py-2.5 text-foreground dark:text-white/90 shadow-sm transition-all hover:bg-muted dark:hover:bg-white/10 max-w-full outline-none"
                                 >

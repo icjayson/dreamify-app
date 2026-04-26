@@ -58,7 +58,7 @@ export default function WorkspaceSidebar({
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
-  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans">("pricing");
+  const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans" | "preferences">("pricing");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [dialog, setDialog] = useState({ open: false, mode: 'rename', itemId: '', itemTitle: '', value: '' });
 

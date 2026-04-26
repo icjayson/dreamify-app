@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Pagination,
@@ -31,6 +31,14 @@ export interface CSVPreviewTableProps {
   pageSize?: number;
   onPageSizeChange?: (size: number) => void;
   pageSizeOptions?: number[];
+  /** Reduce outer padding — for use inside a panel/frame */
+  compact?: boolean;
+  /** Hide the filename / row-count / column-count header section */
+  hideHeader?: boolean;
+  /** Show a subtle spinner in the header while more chunks are being fetched */
+  isLoadingMore?: boolean;
+  /** Number of rows fetched so far (used in header text when loading more) */
+  loadedRows?: number;
 }
 
 export default function CSVPreviewTable({
@@ -45,6 +53,10 @@ export default function CSVPreviewTable({
   pageSize: pageSizeProp,
   onPageSizeChange,
   pageSizeOptions = [100, 1000, 2000],
+  compact = false,
+  hideHeader = false,
+  isLoadingMore = false,
+  loadedRows,
 }: CSVPreviewTableProps) {
   const effectivePageSize = pageSizeProp ?? 100;
   const [currentPage, setCurrentPage] = useState(0);
@@ -236,23 +248,33 @@ export default function CSVPreviewTable({
   const endRow = Math.min((currentPage + 1) * effectivePageSize, sortedRows.length);
 
   return (
-    <div className="w-full h-full flex items-center justify-center p-4 md:p-6 lg:p-8">
-      <div className="w-full max-w-[95vw] lg:max-w-[1400px] h-full max-h-[95vh] flex flex-col bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-        {/* Header */}
-        <div className="border-b bg-muted/50 p-4 flex-shrink-0">
-        <h1 className="text-xl font-semibold mb-1">
-          {sourceType ? `${sourceType} Data` : filename}
-        </h1>
-        <div className="flex items-center gap-4 md:text-sm text-xs text-muted-foreground">
-          <span>{totalRows.toLocaleString()} total rows</span>
-          {displayedRows < totalRows && (
-            <span className="text-amber-600">
-              Showing first {displayedRows.toLocaleString()} rows
-            </span>
-          )}
-          <span>{columns.length} columns</span>
-        </div>
-      </div>
+    <div className={`w-full h-full flex items-center justify-center ${compact ? 'p-0' : 'p-4 md:p-6 lg:p-8'}`}>
+      <div className={`w-full h-full flex flex-col bg-card overflow-hidden ${compact ? '' : 'max-w-[95vw] lg:max-w-[1400px] max-h-[95vh] border border-border rounded-lg shadow-sm'}`}>
+        {/* Header — hidden in compact/panel mode */}
+        {!hideHeader && (
+          <div className="border-b bg-muted/50 p-4 flex-shrink-0">
+            <h1 className="text-xl font-semibold mb-1">
+              {sourceType ? `${sourceType} Data` : filename}
+            </h1>
+            <div className="flex items-center gap-4 md:text-sm text-xs text-muted-foreground">
+              <span>{totalRows.toLocaleString()} total rows</span>
+              {!compact && displayedRows < totalRows && (
+                <span className="text-amber-600">
+                  Showing first {displayedRows.toLocaleString()} rows
+                </span>
+              )}
+              <span>{columns.length} columns</span>
+              {isLoadingMore && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  {loadedRows != null
+                    ? `Loading… ${loadedRows.toLocaleString()} / ${totalRows.toLocaleString()} rows`
+                    : 'Loading more rows…'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
       {/* Table Container */}
       <div className="flex-1 overflow-auto">
@@ -317,7 +339,7 @@ export default function CSVPreviewTable({
           <div className="flex flex-shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-0">
             <div className="w-full text-sm text-muted-foreground text-right lg:w-auto lg:text-left">
               Showing {startRow} to {endRow} of {sortedRows.length} entries
-              {totalRows > sortedRows.length && (
+              {!compact && totalRows > sortedRows.length && (
                 <span className="ml-2 text-amber-600 dark:text-amber-500">
                   ({totalRows.toLocaleString()} total in file)
                 </span>

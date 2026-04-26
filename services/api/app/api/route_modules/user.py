@@ -636,7 +636,8 @@ async def preview_file_endpoint(
     asset_id: str,
     request: Request,
     token: Optional[str] = Query(None, description="Authentication token"),
-    limit: int = Query(100, ge=1, le=2000, description="Maximum number of rows to return in the preview payload"),
+    limit: int = Query(100, ge=1, le=5000, description="Maximum number of rows to return in the preview payload"),
+    offset: int = Query(0, ge=0, description="Row offset for paginated fetching"),
 ):
     """
     Generate a data preview for a specific asset.
@@ -675,9 +676,9 @@ async def preview_file_endpoint(
                     displayed_rows=0
                 )
             
-            # Prepare preview (row cap for performance; client may request up to 2000)
+            # Prepare preview slice using offset + limit
             total_rows = len(df)
-            df_preview = df.head(limit)
+            df_preview = df.iloc[offset:offset + limit]
             
             # Explicitly convert all values to basic types for JSON serialization
             from app.core.analytics import convert_numpy_types

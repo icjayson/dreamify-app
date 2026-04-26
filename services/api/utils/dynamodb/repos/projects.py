@@ -98,6 +98,7 @@ def update_project(
     dashboard_preview_key: Optional[str] = None,
     is_preview_public: Optional[bool] = None,
     allowed: Optional[List[Dict]] = None,
+    source_type: Optional[str] = None,
 ) -> Optional[Dict]:
     logger.info(f"Updating project {project_id} for user {user_id}: name={name}, dashboard_title={dashboard_title}, conversation_id={latest_conversation_id}")
     table = get_table(tables.projects)
@@ -136,6 +137,10 @@ def update_project(
         expr.append("#allowed = :allowed")
         names["#allowed"] = "allowed"
         values[":allowed"] = allowed
+    if source_type is not None:
+        expr.append("#source_type = :source_type")
+        names["#source_type"] = "source_type"
+        values[":source_type"] = source_type
     if not expr:
         logger.info(f"No fields to update for project {project_id}")
         return get_project(user_id, project_id)

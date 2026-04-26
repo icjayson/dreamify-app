@@ -60,6 +60,7 @@ class ProjectMetadataUpdateRequest(BaseModel):
     latest_conversation_id: Optional[str] = None
     latest_dashboard_id: Optional[str] = None
     dashboard_title: Optional[str] = None
+    source_type: Optional[str] = None
 
 
 def _map_node(item: Dict) -> NodeStatusResponse:
@@ -181,6 +182,7 @@ async def update_project_metadata(
         latest_conversation_id=request.latest_conversation_id,
         latest_dashboard_id=request.latest_dashboard_id,
         dashboard_title=request.dashboard_title,
+        source_type=request.source_type,
     )
     if not updated_project:
         raise HTTPException(status_code=404, detail="Project not found")

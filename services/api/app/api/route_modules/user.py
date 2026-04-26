@@ -22,7 +22,7 @@ from utils.config import config
 from utils.logger import logger
 from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import projects as projects_repo
-from utils.s3.client import compute_sha256_checksum, upload_bytes, delete_object, download_bytes, generate_presigned_url
+from utils.s3.client import compute_sha256_checksum, upload_bytes, delete_object, download_bytes, generate_presigned_url, get_s3_client
 from utils.s3.paths import build_asset_key
 from clerk_backend_api import Clerk
 
@@ -106,6 +106,7 @@ class ProjectUpdateRequest(BaseModel):
     dashboard_preview_key: Optional[str] = None
     is_preview_public: Optional[bool] = None
     allowed: Optional[List[AllowedUser]] = None
+    source_type: Optional[str] = None
 
 
 class ProjectResponse(BaseModel):
@@ -120,6 +121,7 @@ class ProjectResponse(BaseModel):
     dashboard_preview_key: Optional[str] = None
     is_preview_public: Optional[bool] = None
     allowed: Optional[List[AllowedUser]] = None
+    source_type: Optional[str] = None
 
 
 class ProjectListResponse(BaseModel):
@@ -141,6 +143,7 @@ class AssetResponse(BaseModel):
     created_at: Optional[str] = None
     row_count: Optional[int] = None
     column_count: Optional[int] = None
+    checksum_sha256: Optional[str] = None
 
 
 class AssetListResponse(BaseModel):
@@ -183,6 +186,7 @@ def _map_project(item: dict) -> ProjectResponse:
         dashboard_preview_key=item.get("dashboard_preview_key"),
         is_preview_public=item.get("is_preview_public", False),
         allowed=item.get("allowed", []),
+        source_type=item.get("source_type"),
     )
 
 
@@ -231,6 +235,7 @@ def _map_asset(item: dict, row_count: Optional[int] = None, column_count: Option
         created_at=item.get("created_at"),
         row_count=rc,
         column_count=cc,
+        checksum_sha256=item.get("checksum_sha256"),
     )
 
 
@@ -294,6 +299,7 @@ async def update_project_endpoint(
         dashboard_preview_key=request.dashboard_preview_key,
         is_preview_public=request.is_preview_public,
         allowed=[u.model_dump() for u in request.allowed] if request.allowed is not None else None,
+        source_type=request.source_type,
     )
     if not updated_project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -512,6 +518,31 @@ def _get_asset_or_404(user_id: str, asset_id: str) -> dict:
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
     return asset
+
+
+@router.get("/user/asset/{asset_id}/download-url")
+async def get_asset_download_url(
+    asset_id: str,
+    user_id: str = Depends(require_user),
+):
+    """Generate a short-lived presigned S3 URL that forces a file download."""
+    asset = _get_asset_or_404(user_id, asset_id)
+    try:
+        s3 = get_s3_client()
+        filename = asset.get("filename", asset_id)
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": asset["s3_bucket"],
+                "Key": asset["s3_key"],
+                "ResponseContentDisposition": f'attachment; filename="{filename}"',
+            },
+            ExpiresIn=300,  # 5 minutes
+        )
+        return {"success": True, "url": url, "filename": filename}
+    except Exception as e:
+        logger.error(f"Failed to generate download URL for asset {asset_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate download URL")
 
 
 @router.get("/user/asset/{asset_id}", response_model=AssetResponse)

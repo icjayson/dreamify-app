@@ -491,3 +491,346 @@ class TestDisconnectWorkspace:
             with pytest.raises(HTTPException) as exc:
                 self._run(disconnect_workspace("slack:GONE", user_id="user-1"))
         assert exc.value.status_code == 404
+
+
+# ── Telegram service — formatters ─────────────────────────────────────────────
+
+class TestTelegramFormatters:
+    def test_escape_markdown_special_chars(self):
+        from app.services.telegram_service import escape_markdown
+        assert escape_markdown("1+1=2 (ok)") == r"1\+1\=2 \(ok\)"
+
+    def test_escape_markdown_plain_text_unchanged(self):
+        from app.services.telegram_service import escape_markdown
+        assert escape_markdown("hello world") == "hello world"
+
+    def test_format_analyzing_message(self):
+        from app.services.telegram_service import format_analyzing_message
+        msg = format_analyzing_message("why did revenue drop?")
+        assert "Analyzing" in msg
+        assert "revenue drop" in msg
+
+    def test_format_analyzing_message_truncates_long_query(self):
+        from app.services.telegram_service import format_analyzing_message
+        long_query = "x" * 100
+        msg = format_analyzing_message(long_query)
+        assert "…" in msg
+
+    def test_format_status_message(self):
+        from app.services.telegram_service import format_status_message
+        msg = format_status_message("Loading data...")
+        assert "Loading data" in msg
+        assert "⏳" in msg
+
+    def test_format_error_message(self):
+        from app.services.telegram_service import format_error_message
+        msg = format_error_message("Something went wrong.")
+        assert "⚠️" in msg
+        assert "Something went wrong" in msg
+
+    def test_format_response_message_no_dashboard(self):
+        from app.services.telegram_service import format_response_message
+        msg = format_response_message("Revenue grew 12%.", None, 5)
+        assert "Dreamify" in msg
+        assert "Revenue grew" in msg
+        assert "5 credits" in msg
+        assert "View Dashboard" not in msg
+
+    def test_format_response_message_with_metrics(self):
+        from app.services.telegram_service import format_response_message
+        metrics = [
+            {"title": "Revenue", "value": "$142k", "change": "+12%", "trend": "up"},
+            {"title": "Users", "value": "8420", "change": "-3%", "trend": "down"},
+        ]
+        msg = format_response_message("Analysis done.", "https://app.dreamify.dev/x", 5, metrics)
+        assert "Revenue" in msg
+        assert "📈" in msg
+        assert "Users" in msg
+        assert "📉" in msg
+
+    def test_format_response_message_metrics_capped_at_four(self):
+        from app.services.telegram_service import format_response_message
+        metrics = [{"title": f"M{i}", "value": i} for i in range(6)]
+        msg = format_response_message("ok", None, 5, metrics)
+        # Only first 4 metric titles should appear
+        assert "M0" in msg and "M3" in msg
+        assert "M4" not in msg
+
+
+# ── Telegram repo — get_workspace_by_telegram_user_id ─────────────────────────
+
+class TestGetWorkspaceByTelegramUserId:
+    def _make_scan_mock(self, items: list) -> MagicMock:
+        mock = MagicMock()
+        mock.scan.return_value = {"Items": items}
+        return mock
+
+    def test_found(self):
+        from utils.dynamodb.repos.chat_platform_repo import get_workspace_by_telegram_user_id
+        workspace = {
+            "platform_workspace_id": "telegram:123",
+            "platform": "telegram",
+            "telegram_user_id": "123",
+            "user_id": "u1",
+        }
+        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=self._make_scan_mock([workspace])):
+            result = get_workspace_by_telegram_user_id("123")
+        assert result is not None
+        assert result["telegram_user_id"] == "123"
+
+    def test_not_found(self):
+        from utils.dynamodb.repos.chat_platform_repo import get_workspace_by_telegram_user_id
+        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=self._make_scan_mock([])):
+            result = get_workspace_by_telegram_user_id("999")
+        assert result is None
+
+
+# ── Telegram repo — save_workspace with telegram_user_id ─────────────────────
+
+class TestSaveWorkspaceWithTelegramUserId:
+    def test_telegram_user_id_stored(self):
+        from utils.dynamodb.repos.chat_platform_repo import save_workspace
+        mock_table = MagicMock()
+        mock_table.put_item.return_value = {}
+        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+            result = save_workspace(
+                platform_workspace_id="telegram:123",
+                user_id="u1",
+                project_id="p1",
+                platform="telegram",
+                bot_token_encrypted="",
+                telegram_user_id="123",
+            )
+        assert result["telegram_user_id"] == "123"
+        stored = mock_table.put_item.call_args[1]["Item"]
+        assert stored["telegram_user_id"] == "123"
+
+    def test_telegram_user_id_omitted_when_none(self):
+        from utils.dynamodb.repos.chat_platform_repo import save_workspace
+        mock_table = MagicMock()
+        mock_table.put_item.return_value = {}
+        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+            result = save_workspace(
+                platform_workspace_id="slack:T123",
+                user_id="u1",
+                project_id="p1",
+                platform="slack",
+                bot_token_encrypted="enc",
+            )
+        assert "telegram_user_id" not in result
+        stored = mock_table.put_item.call_args[1]["Item"]
+        assert "telegram_user_id" not in stored
+
+
+# ── POST /chat/telegram/generate-code ────────────────────────────────────────
+
+class TestTelegramGenerateCode:
+    def _run(self, coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    def test_returns_deeplink_and_stores_pending(self):
+        from app.api.route_modules.chat_platform import telegram_generate_code
+        with patch("app.api.route_modules.chat_platform._telegram_bot_token", return_value="tok"), \
+             patch("app.api.route_modules.chat_platform._telegram_bot_username", return_value="TestBot"), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.save_workspace") as mock_save:
+            result = self._run(telegram_generate_code(user_id="u1"))
+        assert result.bot_username == "TestBot"
+        assert result.deeplink.startswith("https://t.me/TestBot?start=")
+        assert len(result.code) == 8
+        assert result.expires_in == 900
+        # Pending entry created
+        mock_save.assert_called_once()
+        call_kwargs = mock_save.call_args[1]
+        assert call_kwargs["platform"] == "telegram_pending"
+        assert call_kwargs["user_id"] == "u1"
+        assert call_kwargs["platform_workspace_id"].startswith("pending:")
+
+    def test_503_when_not_configured(self):
+        from fastapi import HTTPException
+        from app.api.route_modules.chat_platform import telegram_generate_code
+        with patch("app.api.route_modules.chat_platform._telegram_bot_token", return_value=""):
+            with pytest.raises(HTTPException) as exc:
+                self._run(telegram_generate_code(user_id="u1"))
+        assert exc.value.status_code == 503
+
+
+# ── GET /chat/telegram/me ────────────────────────────────────────────────────
+
+class TestGetTelegramStatus:
+    def _run(self, coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    def test_not_connected(self):
+        from app.api.route_modules.chat_platform import get_telegram_status
+        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=None):
+            result = self._run(get_telegram_status(user_id="u1"))
+        assert result.connected is False
+
+    def test_connected(self):
+        from app.api.route_modules.chat_platform import get_telegram_status
+        workspace = {
+            "platform_workspace_id": "telegram:999",
+            "workspace_name": "MyDM",
+            "project_id": "proj-tg",
+        }
+        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=workspace):
+            result = self._run(get_telegram_status(user_id="u1"))
+        assert result.connected is True
+        assert result.workspace_name == "MyDM"
+        assert result.platform_workspace_id == "telegram:999"
+
+
+# ── POST /chat/telegram/webhook — /start code handling ───────────────────────
+
+class TestTelegramWebhookStart:
+    def _run(self, coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    def _make_request(self, text: str, chat_type: str = "private", from_id: int = 42) -> MagicMock:
+        payload = {
+            "message": {
+                "text": text,
+                "chat": {"id": 100, "type": chat_type},
+                "from": {"id": from_id, "first_name": "Alice"},
+            }
+        }
+        req = MagicMock()
+        req.headers = {}
+        req.json = MagicMock(return_value=payload)
+
+        async def _json():
+            return payload
+        req.json = _json
+        return req
+
+    def test_valid_code_dispatches_start_task(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import telegram_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request("/start ABCD1234")
+        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value=""):
+            result = self._run(telegram_webhook(req, bg))
+        assert result == {"ok": True}
+        bg.add_task.assert_called_once()
+        # first arg is the handler function
+        task_fn = bg.add_task.call_args[0][0]
+        assert task_fn.__name__ == "_handle_telegram_start"
+
+    def test_no_code_dispatches_hint_task(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import telegram_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request("/start")
+        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value=""):
+            result = self._run(telegram_webhook(req, bg))
+        assert result == {"ok": True}
+        task_fn = bg.add_task.call_args[0][0]
+        assert task_fn.__name__ == "_send_telegram_start_hint"
+
+    def test_invalid_secret_returns_403(self):
+        from fastapi import BackgroundTasks, HTTPException
+        from app.api.route_modules.chat_platform import telegram_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request("hello")
+        req.headers = {"X-Telegram-Bot-Api-Secret-Token": "wrong"}
+        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value="correctsecret"):
+            with pytest.raises(HTTPException) as exc:
+                self._run(telegram_webhook(req, bg))
+        assert exc.value.status_code == 403
+
+    def test_valid_secret_passes(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import telegram_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request("hello")
+        req.headers = {"X-Telegram-Bot-Api-Secret-Token": "mysecret"}
+        # No workspace registered → silently returns ok (not a start command, not a known workspace)
+        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value="mysecret"), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+            result = self._run(telegram_webhook(req, bg))
+        assert result == {"ok": True}
+
+
+# ── _handle_telegram_start integration ───────────────────────────────────────
+
+class TestHandleTelegramStart:
+    def _run(self, coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    def _pending(self, code: str, user_id: str, age_seconds: int = 0) -> dict:
+        from datetime import datetime, timedelta
+        created = datetime.now() - timedelta(seconds=age_seconds)
+        return {
+            "platform_workspace_id": f"pending:{code}",
+            "platform": "telegram_pending",
+            "user_id": user_id,
+            "project_id": "",
+            "created_at": created.isoformat(),
+        }
+
+    def test_valid_code_creates_workspace(self):
+        from app.api.route_modules.chat_platform import _handle_telegram_start
+        mock_bot = MagicMock()
+        mock_bot.send_message = MagicMock(return_value=MagicMock())
+
+        async def _send(**kwargs):
+            return MagicMock()
+        mock_bot.send_message = _send
+
+        pending = self._pending("VALID123", "dreamify-user-1")
+        new_project = {"project_id": "proj-new"}
+
+        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", side_effect=[pending, None]), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.save_workspace") as mock_save, \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace") as mock_del, \
+             patch("app.api.route_modules.chat_platform.projects_repo.create_project", return_value=new_project), \
+             patch("app.services.telegram_service.get_telegram_bot", return_value=mock_bot):
+            self._run(_handle_telegram_start("VALID123", 100, "42", {"id": 42, "first_name": "Alice"}))
+
+        mock_save.assert_called_once()
+        saved = mock_save.call_args[1]
+        assert saved["platform_workspace_id"] == "telegram:100"
+        assert saved["platform"] == "telegram"
+        assert saved["telegram_user_id"] == "42"
+        mock_del.assert_called_once_with("pending:VALID123")
+
+    def test_expired_code_sends_error(self):
+        from app.api.route_modules.chat_platform import _handle_telegram_start
+        sent_texts = []
+
+        async def _send(**kwargs):
+            sent_texts.append(kwargs.get("text", ""))
+            return MagicMock()
+
+        mock_bot = MagicMock()
+        mock_bot.send_message = _send
+
+        expired = self._pending("EXP123", "u1", age_seconds=1000)
+
+        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=expired), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace"), \
+             patch("app.services.telegram_service.get_telegram_bot", return_value=mock_bot):
+            self._run(_handle_telegram_start("EXP123", 100, "42", {}))
+
+        assert any("expired" in t.lower() for t in sent_texts)
+
+    def test_unknown_code_sends_error(self):
+        from app.api.route_modules.chat_platform import _handle_telegram_start
+        sent_texts = []
+
+        async def _send(**kwargs):
+            sent_texts.append(kwargs.get("text", ""))
+            return MagicMock()
+
+        mock_bot = MagicMock()
+        mock_bot.send_message = _send
+
+        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None), \
+             patch("app.services.telegram_service.get_telegram_bot", return_value=mock_bot):
+            self._run(_handle_telegram_start("UNKNOWN", 100, "42", {}))
+
+        assert any("not found" in t.lower() for t in sent_texts)

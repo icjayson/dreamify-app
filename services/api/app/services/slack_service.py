@@ -3,13 +3,11 @@ Slack Bolt app setup, event handlers, and Block Kit formatting helpers.
 """
 
 import logging
-import os
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
+from utils.config import config
 
-SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
-SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
+logger = logging.getLogger(__name__)
 
 # Lazily initialised — only constructed when the Slack event handler is first used.
 # This avoids hard-importing slack_bolt at module load time so the module can be
@@ -21,11 +19,13 @@ _slack_handler = None
 def get_slack_app():
     global _slack_app
     if _slack_app is None:
+        signing_secret = config.slack.signing_secret if config.slack else ""
+        bot_token = config.slack.bot_token if config.slack else ""
         from slack_bolt.async_app import AsyncApp
         _slack_app = AsyncApp(
-            signing_secret=SLACK_SIGNING_SECRET,
-            token=SLACK_BOT_TOKEN or None,
-            token_verification_enabled=bool(SLACK_BOT_TOKEN),
+            signing_secret=signing_secret,
+            token=bot_token or None,
+            token_verification_enabled=bool(bot_token),
         )
     return _slack_app
 
@@ -237,8 +237,7 @@ def decrypt_token(encrypted: str) -> str:
 
 
 def _get_fernet_key() -> bytes:
-    raw = os.environ.get("CHAT_ENCRYPTION_KEY", "")
+    raw = config.slack.chat_encryption_key if config.slack else ""
     if not raw:
-        raise RuntimeError("CHAT_ENCRYPTION_KEY env var is not set")
-    # Accept both raw bytes (urlsafe base64) and plain strings
+        raise RuntimeError("slack.chat_encryption_key is not set in config.yaml")
     return raw.encode() if isinstance(raw, str) else raw

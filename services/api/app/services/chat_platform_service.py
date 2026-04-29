@@ -46,8 +46,16 @@ from utils.s3.paths import build_conversation_key
 
 logger = logging.getLogger(__name__)
 
-MORPHEUS_SERVICE_URL = os.environ.get("MORPHEUS_SERVICE_URL", "http://localhost:8000")
-DREAMIFY_APP_URL = os.environ.get("DREAMIFY_APP_URL", "https://app.dreamify.dev")
+MORPHEUS_SERVICE_URL = (
+    config.chat_platform.morpheus_service_url
+    if config.chat_platform
+    else "http://localhost:8000"
+)
+DREAMIFY_APP_URL = (
+    config.chat_platform.dreamify_app_url
+    if config.chat_platform
+    else "https://app.dreamify.dev"
+)
 
 # Chat queries always use the "fast" model alias (5 credits).
 CHAT_MODEL_ALIAS = "fast"
@@ -882,3 +890,273 @@ async def _update_slack_error(
             )
         except Exception:
             pass
+
+
+# ── Telegram file handling ────────────────────────────────────────────────────
+
+TELEGRAM_FILE_SIZE_LIMIT = 20 * 1024 * 1024  # 20 MB (Telegram Bot API limit)
+
+
+async def _download_and_attach_telegram_files(
+    file_ids: list,
+    bot: Any,
+    user_id: str,
+    project_id: str,
+    conversation: Dict[str, Any],
+    bucket: str,
+    keys: Dict[str, str],
+) -> None:
+    """
+    Download Telegram document files by file_id, upload to S3, create asset records,
+    and attach asset content nodes to the last user node in the conversation.
+    """
+    import aiohttp
+
+    asset_nodes = []
+    for file_id in file_ids:
+        try:
+            tg_file = await bot.get_file(file_id)
+        except Exception as exc:
+            logger.warning("Failed to get Telegram file %s: %s", file_id, exc)
+            continue
+
+        file_path = tg_file.file_path or ""
+        filename = file_path.split("/")[-1] if file_path else f"{file_id}.bin"
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+        download_url = tg_file.file_url if hasattr(tg_file, "file_url") else (
+            f"https://api.telegram.org/file/bot{bot.token}/{file_path}"
+        )
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(download_url) as resp:
+                    if resp.status != 200:
+                        logger.error("Failed to download Telegram file %s: HTTP %s", file_id, resp.status)
+                        continue
+                    file_bytes = await resp.read()
+        except Exception as exc:
+            logger.error("Error downloading Telegram file %s: %s", file_id, exc)
+            continue
+
+        if len(file_bytes) > TELEGRAM_FILE_SIZE_LIMIT:
+            logger.warning("Telegram file %s exceeds 20 MB limit, skipping", filename)
+            continue
+
+        asset_id = str(uuid.uuid4())
+        s3_key = f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+
+        try:
+            s3 = boto3.client(
+                "s3",
+                region_name=config.aws.access_key.AWS_DEFAULT_REGION,
+                aws_access_key_id=config.aws.access_key.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=config.aws.access_key.AWS_SECRET_ACCESS_KEY,
+            )
+            s3.put_object(Bucket=bucket, Key=s3_key, Body=file_bytes)
+        except Exception as exc:
+            logger.error("Failed to upload Telegram file %s to S3: %s", filename, exc)
+            continue
+
+        try:
+            assets_repo.create_asset(
+                user_id=user_id,
+                project_id=project_id,
+                s3_bucket=bucket,
+                s3_key=s3_key,
+                asset_type="raw",
+                size_bytes=len(file_bytes),
+                checksum_sha256=None,
+                version="1",
+                content_type=None,
+                asset_id=asset_id,
+                file_id=asset_id,
+                original_filename=filename,
+                extension=ext,
+            )
+        except Exception as exc:
+            logger.error("Failed to create asset record for Telegram file %s: %s", filename, exc)
+            continue
+
+        asset_nodes.append({
+            "type": "asset",
+            "data": {
+                "asset_id": asset_id,
+                "file_id": asset_id,
+                "s3_bucket": bucket,
+                "s3_key": s3_key,
+                "extension": ext,
+                "filename": filename,
+            },
+        })
+        logger.info("Attached Telegram file %s as asset %s", filename, asset_id)
+
+    if not asset_nodes:
+        return
+
+    nodes = conversation.get("nodes", [])
+    for node in reversed(nodes):
+        if node.get("role") == "user":
+            node.setdefault("contents", []).extend(asset_nodes)
+            break
+
+    conversation["updated_at"] = _now_iso()
+    save_conversation(bucket, keys["primary"], conversation)
+    save_conversation(bucket, keys["backup"], conversation)
+
+
+# ── Telegram main entry point ─────────────────────────────────────────────────
+
+async def handle_telegram_query(
+    query: str,
+    platform_workspace_id: str,
+    chat_id: int,
+    message_thread_id: Optional[int],
+    telegram_file_ids: list = [],
+) -> None:
+    """
+    Full lifecycle for a Telegram message query. Runs as a background task.
+    Mirrors handle_slack_query but uses Telegram Bot API instead of Slack SDK.
+    """
+    from app.services.telegram_service import (
+        build_dashboard_keyboard,
+        format_analyzing_message,
+        format_error_message,
+        format_response_message,
+        format_status_message,
+        get_telegram_bot,
+    )
+
+    try:
+        bot = await get_telegram_bot()
+    except RuntimeError as exc:
+        logger.error("Telegram bot not configured: %s", exc)
+        return
+
+    # Post placeholder immediately
+    placeholder_message_id: Optional[int] = None
+    try:
+        msg = await bot.send_message(
+            chat_id=chat_id,
+            text=format_analyzing_message(query),
+            parse_mode="MarkdownV2",
+            message_thread_id=message_thread_id,
+        )
+        placeholder_message_id = msg.message_id
+    except Exception as exc:
+        logger.error("Failed to post placeholder to Telegram chat %s: %s", chat_id, exc)
+        return
+
+    async def update_status(label: str) -> None:
+        if placeholder_message_id:
+            try:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=placeholder_message_id,
+                    text=format_status_message(label),
+                    parse_mode="MarkdownV2",
+                )
+            except Exception as exc:
+                logger.warning("Failed to update Telegram status message: %s", exc)
+
+    try:
+        workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+        if not workspace:
+            raise RuntimeError(f"Workspace {platform_workspace_id} not found")
+
+        user_id = workspace["user_id"]
+        thread_key = f"{chat_id}#{message_thread_id or 0}"
+        conversation_id, project_id, is_new = _get_or_create_session(
+            platform_workspace_id, thread_key, workspace
+        )
+
+        if is_new:
+            bucket, keys = _save_new_conversation(user_id, project_id, conversation_id, query)
+        else:
+            bucket, keys = _append_user_node_to_conversation(
+                user_id, project_id, conversation_id, query
+            )
+            chat_platform_repo.update_session_conversation(
+                platform_workspace_id, thread_key, conversation_id
+            )
+
+        await asyncio.sleep(0.5)
+
+        if telegram_file_ids:
+            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            if conversation_meta:
+                conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+                await _download_and_attach_telegram_files(
+                    telegram_file_ids, bot, user_id, project_id, conv, bucket, keys
+                )
+                await asyncio.sleep(0.5)
+
+        _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
+        credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
+
+        final_status, _, final_meta = await _poll_workflow(conversation_id, on_step=update_status)
+
+        if final_status != "completed":
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=placeholder_message_id,
+                text=format_error_message("Analysis did not complete. Please try again."),
+                parse_mode="MarkdownV2",
+            )
+            return
+
+        metrics: list = []
+        dashboard_url: Optional[str] = None
+        dashboard_json: Optional[Dict[str, Any]] = None
+
+        if final_meta.get("response_type") == "message" and final_meta.get("content"):
+            narrative = final_meta["content"]
+            logger.info("Using inline narrative from Telegram workflow metadata (len=%d)", len(narrative))
+        else:
+            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            if not conversation_meta:
+                raise RuntimeError(f"Post-poll: conversation {conversation_id} not found in DynamoDB")
+            conversation = load_conversation(
+                conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+            )
+            narrative = _extract_narrative(conversation) or "Analysis complete. No narrative returned."
+            dashboard_url = _build_dashboard_url(project_id, conversation)
+
+            dashboards = conversation.get("dashboards", [])
+            if dashboards:
+                try:
+                    projects_repo.update_project(
+                        user_id=user_id,
+                        project_id=project_id,
+                        is_preview_public=True,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to enable public preview for %s: %s", project_id, exc)
+
+                s3_uri = dashboards[-1].get("s3_uri")
+                if s3_uri:
+                    dashboard_json = _load_dashboard_json(s3_uri)
+                    if dashboard_json:
+                        metrics = _extract_top_metrics(dashboard_json)
+
+        reply_markup = build_dashboard_keyboard(dashboard_url) if dashboard_url else None
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=placeholder_message_id,
+            text=format_response_message(narrative, dashboard_url, CHAT_CREDIT_COST, metrics),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup,
+        )
+        logger.info("Successfully updated Telegram message for conversation %s", conversation_id)
+
+    except Exception as exc:
+        logger.error("handle_telegram_query failed for %s: %s", platform_workspace_id, exc, exc_info=True)
+        if placeholder_message_id:
+            try:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=placeholder_message_id,
+                    text=format_error_message("Something went wrong. Please try again."),
+                    parse_mode="MarkdownV2",
+                )
+            except Exception:
+                pass

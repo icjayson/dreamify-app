@@ -17,15 +17,11 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import re
 import time
 import uuid
 from typing import Any, Dict, Optional
 from urllib.parse import quote
-
-from dotenv import load_dotenv
-load_dotenv()
 
 import requests as http_requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
@@ -33,7 +29,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from app.dependencies.auth import require_user
-from app.services.chat_platform_service import handle_slack_query
+from app.services.chat_platform_service import handle_slack_query, handle_telegram_query
 from app.services.slack_service import decrypt_token, encrypt_token
 from utils.config import config
 from utils.dynamodb.repos import chat_platform_repo
@@ -43,14 +39,40 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
-SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID", "")
-SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", "")
 SLACK_OAUTH_SCOPES = (
     "channels:history,channels:join,groups:history,im:history,"
     "chat:write,chat:write.public,files:read,files:write,app_mentions:read,commands"
 )
-DREAMIFY_APP_URL = os.environ.get("DREAMIFY_APP_URL", "http://localhost:8080")
 STATE_TOKEN_TTL = 600  # 10 minutes
+TELEGRAM_CODE_TTL = 900  # 15 minutes
+
+
+def _slack_client_id() -> str:
+    return config.slack.client_id if config.slack else ""
+
+
+def _slack_client_secret() -> str:
+    return config.slack.client_secret if config.slack else ""
+
+
+def _dreamify_app_url() -> str:
+    return (
+        config.chat_platform.dreamify_app_url
+        if config.chat_platform
+        else "http://localhost:8080"
+    )
+
+
+def _telegram_bot_token() -> str:
+    return config.telegram.bot_token if config.telegram else ""
+
+
+def _telegram_bot_username() -> str:
+    return config.telegram.bot_username if config.telegram else "DreamifyBot"
+
+
+def _telegram_webhook_secret() -> str:
+    return config.telegram.webhook_secret if config.telegram else ""
 
 
 # ── State token (signed, short-lived, no new deps) ────────────────────────────
@@ -220,14 +242,15 @@ async def slack_auth_url(user_id: str = Depends(require_user)):
     Return a signed Slack OAuth URL for the authenticated user.
     Frontend does window.location.href = url to start OAuth.
     """
-    if not SLACK_CLIENT_ID:
+    slack_client_id = _slack_client_id()
+    if not slack_client_id:
         raise HTTPException(status_code=503, detail="Slack integration not configured")
 
     state = _create_state_token(user_id)
-    redirect_uri = f"{DREAMIFY_APP_URL}/api/v1/chat/slack/oauth/callback"
+    redirect_uri = f"{_dreamify_app_url()}/api/v1/chat/slack/oauth/callback"
     url = (
         f"https://slack.com/oauth/v2/authorize"
-        f"?client_id={SLACK_CLIENT_ID}"
+        f"?client_id={slack_client_id}"
         f"&scope={SLACK_OAUTH_SCOPES}"
         f"&redirect_uri={redirect_uri}"
         f"&state={state}"
@@ -245,7 +268,7 @@ async def slack_oauth_callback(
     OAuth 2.0 callback from Slack. Exchanges code for token, stores workspace,
     then redirects to the frontend with success/error query params.
     """
-    frontend_base = f"{DREAMIFY_APP_URL}/workspace?tab=connectors"
+    frontend_base = f"{_dreamify_app_url()}/workspace?tab=connectors"
 
     if error:
         return RedirectResponse(
@@ -264,12 +287,12 @@ async def slack_oauth_callback(
             url=f"{frontend_base}&slack=error&message={quote(str(exc))}"
         )
 
-    redirect_uri = f"{DREAMIFY_APP_URL}/api/v1/chat/slack/oauth/callback"
+    redirect_uri = f"{_dreamify_app_url()}/api/v1/chat/slack/oauth/callback"
     resp = http_requests.post(
         "https://slack.com/api/oauth.v2.access",
         data={
-            "client_id": SLACK_CLIENT_ID,
-            "client_secret": SLACK_CLIENT_SECRET,
+            "client_id": _slack_client_id(),
+            "client_secret": _slack_client_secret(),
             "code": code,
             "redirect_uri": redirect_uri,
         },
@@ -388,4 +411,390 @@ async def get_workspace(platform_workspace_id: str):
         project_id=workspace["project_id"],
         language=workspace.get("language", "en"),
         created_at=workspace.get("created_at", ""),
+    )
+
+
+# ── Telegram webhook ──────────────────────────────────────────────────────────
+
+import secrets
+import string
+from datetime import datetime as _datetime
+
+
+def _generate_telegram_code() -> str:
+    # Exclude ambiguous characters: 0, O, 1, I, L
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+def _verify_telegram_webhook(request: Request) -> bool:
+    webhook_secret = _telegram_webhook_secret()
+    if not webhook_secret:
+        return True  # no secret configured — allow all (dev mode)
+    token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    return hmac.compare_digest(token, webhook_secret)
+
+
+@router.post("/chat/telegram/webhook")
+async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Receive Telegram Update payloads. Must respond within a few seconds.
+    Dispatches /start, /connect, and mention/DM messages to background tasks.
+    """
+    if not _verify_telegram_webhook(request):
+        raise HTTPException(status_code=403, detail="Invalid webhook token")
+
+    body: Dict[str, Any] = {}
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": True}
+
+    message = body.get("message") or body.get("edited_message")
+    if not message:
+        return {"ok": True}
+
+    chat = message.get("chat", {})
+    chat_id: int = chat.get("id", 0)
+    chat_type: str = chat.get("type", "")  # "private", "group", "supergroup", "channel"
+    from_user = message.get("from", {})
+    telegram_user_id: str = str(from_user.get("id", ""))
+    text: str = message.get("text", "").strip()
+    message_thread_id: Optional[int] = message.get("message_thread_id")
+
+    if not chat_id or not text:
+        return {"ok": True}
+
+    # ── /start {code} — DM registration ──────────────────────────────────────
+    if text.startswith("/start"):
+        parts = text.split(maxsplit=1)
+        code = parts[1].strip() if len(parts) > 1 else ""
+        if code:
+            code = code.strip().upper()
+            logger.info("Received Telegram /start with code: %s", code)
+            background_tasks.add_task(
+                _handle_telegram_start, code, chat_id, telegram_user_id, from_user
+            )
+        else:
+            # /start with no code — just send a welcome hint
+            background_tasks.add_task(_send_telegram_start_hint, chat_id)
+        return {"ok": True}
+
+    # ── /connect — group linking ──────────────────────────────────────────────
+    if text.startswith("/connect") and chat_type in ("group", "supergroup"):
+        background_tasks.add_task(_handle_telegram_connect, chat_id, chat, telegram_user_id)
+        return {"ok": True}
+
+    # ── Query messages ────────────────────────────────────────────────────────
+    # In private (DM) chats: any message is a query
+    # In group chats: only messages that @mention the bot
+    is_dm = chat_type == "private"
+    is_mention = _is_bot_mentioned(message)
+
+    if not is_dm and not is_mention:
+        return {"ok": True}
+
+    # Strip the @BotUsername mention from the text if present
+    query = _strip_bot_mention(text).strip()
+    if not query:
+        return {"ok": True}
+
+    # Determine platform_workspace_id
+    platform_workspace_id = f"telegram:{chat_id}"
+    workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+    if not workspace:
+        logger.warning("Telegram message from unregistered chat: %s", platform_workspace_id)
+        return {"ok": True}
+
+    # Collect document file_ids (CSV / data files)
+    telegram_file_ids = _extract_document_file_ids(message)
+
+    background_tasks.add_task(
+        handle_telegram_query,
+        query=query,
+        platform_workspace_id=platform_workspace_id,
+        chat_id=chat_id,
+        message_thread_id=message_thread_id,
+        telegram_file_ids=telegram_file_ids,
+    )
+    return {"ok": True}
+
+
+def _is_bot_mentioned(message: Dict[str, Any]) -> bool:
+    """Return True if the bot's username appears in the message entities."""
+    bot_mention = f"@{_telegram_bot_username()}".lower()
+    for entity in message.get("entities", []):
+        if entity.get("type") == "mention":
+            offset = entity.get("offset", 0)
+            length = entity.get("length", 0)
+            text = message.get("text", "")
+            mention = text[offset:offset + length].lower()
+            if mention == bot_mention:
+                return True
+    return False
+
+
+def _strip_bot_mention(text: str) -> str:
+    """Remove @BotUsername from the query text."""
+    return re.sub(rf"@{re.escape(_telegram_bot_username())}", "", text, flags=re.IGNORECASE).strip()
+
+
+def _extract_document_file_ids(message: Dict[str, Any]) -> list:
+    """Return file_ids for documents attached to the message."""
+    doc = message.get("document")
+    if doc and doc.get("file_id"):
+        return [doc["file_id"]]
+    return []
+
+
+async def _send_telegram_start_hint(chat_id: int) -> None:
+    try:
+        from app.services.telegram_service import get_telegram_bot
+        bot = await get_telegram_bot()
+        await bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "👋 Hi\\! I'm *Dreamify Morpheus*, your analytics teammate\\.\n\n"
+                "To connect, generate a code at [app\\.dreamify\\.dev](https://app.dreamify.dev) "
+                "under *Integrations → Telegram*, then send `/start YOUR_CODE` here\\."
+            ),
+            parse_mode="MarkdownV2",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send Telegram start hint: %s", exc)
+
+
+async def _handle_telegram_start(
+    code: str, chat_id: int, telegram_user_id: str, from_user: Dict[str, Any]
+) -> None:
+    """Validate registration code and create the Telegram workspace."""
+    from app.services.telegram_service import get_telegram_bot, escape_markdown
+
+    try:
+        bot = await get_telegram_bot()
+    except RuntimeError as exc:
+        logger.error("Telegram bot not configured: %s", exc)
+        return
+
+    pending_key = f"pending:{code}"
+    logger.info("Looking up Telegram pending key: %s", pending_key)
+    pending = chat_platform_repo.get_workspace(pending_key)
+    
+    if not pending:
+        logger.warning("Telegram registration code not found: %s", code)
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ Code not found\\. Please generate a new code at app\\.dreamify\\.dev\\.",
+                parse_mode="MarkdownV2",
+            )
+        except Exception as exc:
+            logger.error("Failed to send 'code not found' message: %s", exc)
+        return
+
+    # Check expiry
+    created_at_str = pending.get("created_at", "")
+    try:
+        created_at = _datetime.fromisoformat(created_at_str)
+        age_seconds = (_datetime.now() - created_at).total_seconds()
+        logger.info("Telegram code %s age: %.1fs (TTL: %d)", code, age_seconds, TELEGRAM_CODE_TTL)
+    except Exception as exc:
+        logger.error("Failed to parse created_at for code %s: %s", code, exc)
+        age_seconds = TELEGRAM_CODE_TTL + 1  # treat malformed timestamp as expired
+
+    if age_seconds > TELEGRAM_CODE_TTL:
+        logger.warning("Telegram code %s expired (age: %.1fs)", code, age_seconds)
+        chat_platform_repo.delete_workspace(pending_key)
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="⏰ Code expired\\. Please generate a new code at app\\.dreamify\\.dev\\.",
+                parse_mode="MarkdownV2",
+            )
+        except Exception:
+            pass
+        return
+
+    user_id = pending["user_id"]
+    platform_workspace_id = f"telegram:{chat_id}"
+
+    # Create the Dreamify project for this chat (if not already connected)
+    existing = chat_platform_repo.get_workspace(platform_workspace_id)
+    if existing:
+        project_id = existing["project_id"]
+    else:
+        first_name = from_user.get("first_name", "")
+        username = from_user.get("username", "")
+        chat_label = username or first_name or f"user_{telegram_user_id}"
+        project = projects_repo.create_project(
+            user_id=user_id,
+            name=f"Telegram — {chat_label}",
+            description="Auto-created for Telegram DM integration",
+        )
+        project_id = project["project_id"]
+
+    logger.info("Saving Telegram workspace: %s for user %s", platform_workspace_id, user_id)
+    try:
+        chat_platform_repo.save_workspace(
+            platform_workspace_id=platform_workspace_id,
+            user_id=user_id,
+            project_id=project_id,
+            platform="telegram",
+            bot_token_encrypted="",  # global bot token used from env
+            workspace_name=from_user.get("first_name") or from_user.get("username") or "Telegram DM",
+            telegram_user_id=telegram_user_id,
+        )
+        logger.info("Successfully saved Telegram workspace: %s", platform_workspace_id)
+    except Exception as exc:
+        logger.error("Failed to save Telegram workspace %s: %s", platform_workspace_id, exc)
+        return
+
+    chat_platform_repo.delete_workspace(pending_key)
+    logger.info("Deleted pending key: %s", pending_key)
+
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "✅ *Dreamify connected\\!*\n\n"
+                "I'm Morpheus, your analytics teammate\\. "
+                "Just message me with a question about your data\\.\n\n"
+                "_Example: What were our top performing campaigns last month?_"
+            ),
+            parse_mode="MarkdownV2",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send Telegram welcome message: %s", exc)
+
+
+async def _handle_telegram_connect(
+    chat_id: int, chat: Dict[str, Any], telegram_user_id: str
+) -> None:
+    """Link a group chat to an existing Dreamify user who already connected via DM."""
+    from app.services.telegram_service import get_telegram_bot
+
+    try:
+        bot = await get_telegram_bot()
+    except RuntimeError as exc:
+        logger.error("Telegram bot not configured: %s", exc)
+        return
+
+    # Look up the DM workspace for this Telegram user
+    dm_workspace = chat_platform_repo.get_workspace_by_telegram_user_id(telegram_user_id)
+    if not dm_workspace:
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    "⚠️ You haven't connected your Dreamify account yet\\.\n\n"
+                    "DM me first: click [here](https://t.me/" +
+                    re.escape(_telegram_bot_username()) + ") and send `/start YOUR_CODE`\\."
+                ),
+                parse_mode="MarkdownV2",
+            )
+        except Exception:
+            pass
+        return
+
+    user_id = dm_workspace["user_id"]
+    platform_workspace_id = f"telegram:{chat_id}"
+
+    existing = chat_platform_repo.get_workspace(platform_workspace_id)
+    if existing:
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="✅ This group is already connected to Dreamify\\.",
+                parse_mode="MarkdownV2",
+            )
+        except Exception:
+            pass
+        return
+
+    group_name = chat.get("title") or f"group_{chat_id}"
+    project = projects_repo.create_project(
+        user_id=user_id,
+        name=f"Telegram — {group_name}",
+        description="Auto-created for Telegram group integration",
+    )
+
+    chat_platform_repo.save_workspace(
+        platform_workspace_id=platform_workspace_id,
+        user_id=user_id,
+        project_id=project["project_id"],
+        platform="telegram",
+        bot_token_encrypted="",
+        workspace_name=group_name,
+    )
+
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "✅ *Dreamify connected to this group\\!*\n\n"
+                "Mention me with a question: `@" + _telegram_bot_username() + " why did signups drop?`"
+            ),
+            parse_mode="MarkdownV2",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send Telegram group welcome message: %s", exc)
+
+
+# ── Telegram registration code ────────────────────────────────────────────────
+
+class TelegramCodeResponse(BaseModel):
+    code: str
+    bot_username: str
+    deeplink: str
+    expires_in: int
+
+
+@router.post("/chat/telegram/generate-code", response_model=TelegramCodeResponse)
+async def telegram_generate_code(user_id: str = Depends(require_user)):
+    """Generate a short-lived registration code for Telegram DM linking."""
+    if not _telegram_bot_token():
+        raise HTTPException(status_code=503, detail="Telegram integration not configured")
+
+    code = _generate_telegram_code()
+    pending_key = f"pending:{code}"
+    logger.info("Generating new Telegram code %s for user %s", code, user_id)
+
+    chat_platform_repo.save_workspace(
+        platform_workspace_id=pending_key,
+        user_id=user_id,
+        project_id="",
+        platform="telegram_pending",
+        bot_token_encrypted="",
+    )
+
+    bot_username = _telegram_bot_username()
+    deeplink = f"https://t.me/{bot_username}?start={code}"
+    return TelegramCodeResponse(
+        code=code,
+        bot_username=bot_username,
+        deeplink=deeplink,
+        expires_in=TELEGRAM_CODE_TTL,
+    )
+
+
+# ── Telegram status ───────────────────────────────────────────────────────────
+
+class TelegramStatusResponse(BaseModel):
+    connected: bool
+    workspace_name: Optional[str] = None
+    platform_workspace_id: Optional[str] = None
+    project_id: Optional[str] = None
+
+
+@router.get("/chat/telegram/me", response_model=TelegramStatusResponse)
+async def get_telegram_status(user_id: str = Depends(require_user)):
+    """Return the current user's connected Telegram workspace, or connected=false."""
+    workspace = chat_platform_repo.get_workspace_by_user(user_id, "telegram")
+    if not workspace:
+        return TelegramStatusResponse(connected=False)
+    return TelegramStatusResponse(
+        connected=True,
+        workspace_name=workspace.get("workspace_name"),
+        platform_workspace_id=workspace["platform_workspace_id"],
+        project_id=workspace.get("project_id"),
     )

@@ -32,6 +32,7 @@ def save_workspace(
     bot_token_encrypted: str,
     workspace_name: str = "",
     language: str = "en",
+    telegram_user_id: Optional[str] = None,
 ) -> Dict:
     table = get_table(tables.chat_workspaces)
     item = {
@@ -44,6 +45,8 @@ def save_workspace(
         "language": language,
         "created_at": _now_iso(),
     }
+    if telegram_user_id is not None:
+        item["telegram_user_id"] = telegram_user_id
     table.put_item(Item=item)
     return item
 
@@ -58,6 +61,17 @@ def get_workspace_by_user(user_id: str, platform: str) -> Optional[Dict]:
     table = get_table(tables.chat_workspaces)
     resp = table.scan(
         FilterExpression=Attr("user_id").eq(user_id) & Attr("platform").eq(platform),
+        Limit=10,
+    )
+    items = resp.get("Items", [])
+    return items[0] if items else None
+
+
+def get_workspace_by_telegram_user_id(telegram_user_id: str) -> Optional[Dict]:
+    """Find a Telegram DM workspace by the Telegram user_id stored at registration."""
+    table = get_table(tables.chat_workspaces)
+    resp = table.scan(
+        FilterExpression=Attr("platform").eq("telegram") & Attr("telegram_user_id").eq(telegram_user_id),
         Limit=10,
     )
     items = resp.get("Items", [])

@@ -40,11 +40,11 @@ export function SlackIntegrationCard() {
         {/* Right: action */}
         {isLoading ? null : workspace.connected ? (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             onClick={disconnect}
             disabled={isDisconnecting}
-            className="text-xs text-muted-foreground hover:text-destructive"
+            className="text-xs text-muted-foreground"
           >
             {isDisconnecting ? (
               <Loader2 className="w-3 h-3 animate-spin mr-1" />

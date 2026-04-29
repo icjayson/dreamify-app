@@ -21,6 +21,9 @@ import { cn } from "@/lib/utils";
 import { useLayoutStyle } from "@/hooks/useLayoutStyle";
 import { useTheme } from "@/hooks/useTheme";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import WorkspaceSidebar from "@/components/project-section/WorkspaceSidebar";
 import WorkspaceNewChat from "@/components/workspace/WorkspaceNewChat";
 import AccountSettings from "@/components/homepage-section/AccountSettings";
@@ -35,6 +38,7 @@ import { integrationService } from "@/services/integrationService";
 import { CONNECTORS, CONNECTOR_CATEGORIES } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
 import { SlackIntegrationCard } from "@/components/integrations/SlackIntegrationCard";
+import { TelegramIntegrationCard } from "@/components/integrations/TelegramIntegrationCard";
 import { ScheduleManager } from "@/components/schedules/ScheduleManager";
 import { toast as sonnerToast } from "sonner";
 
@@ -686,15 +690,20 @@ export default function WorkspacePage() {
               <p className="text-sm text-muted-foreground">Connect your data sources to build dashboards faster.</p>
             </div>
             {/* ── Integrations (chat platforms) ── */}
-            <div className="mb-8">
+            <div className="mb-6">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Integrations</h3>
-              <SlackIntegrationCard />
+              <div className="flex flex-col gap-3">
+                <SlackIntegrationCard />
+                <TelegramIntegrationCard />
+              </div>
             </div>
+
+            <Separator className="mb-6" />
 
             {connectorsLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Card key={i} className="animate-pulse p-4 h-32" />
+                {Array.from({ length: CONNECTORS.length }).map((_, i) => (
+                  <Card key={i} className="animate-pulse p-4 h-[80px]" />
                 ))}
               </div>
             ) : (
@@ -715,10 +724,10 @@ export default function WorkspacePage() {
                             <Card
                               key={connector.name}
                               onClick={() => !isSoon && handleIntegrationClick(connector.name)}
-                              className={`p-4 transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40 cursor-pointer"}`}
+                              className={`p-4 h-[80px] transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40 cursor-pointer"}`}
                             >
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-between h-full">
+                                <div className="flex items-center gap-3 min-w-0">
                                   <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${connector.iconBg ?? 'bg-muted dark:bg-white/5'}`}>
                                     <img
                                       src={connector.icon}
@@ -727,30 +736,31 @@ export default function WorkspacePage() {
                                       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                                     />
                                   </div>
-                                  <div>
+                                  <div className="min-w-0">
                                     <h3 className="font-medium text-sm text-foreground">{connector.name}</h3>
                                     {isSoon ? (
-                                      <span className="text-xs text-muted-foreground">Coming soon</span>
+                                      <Badge variant="secondary" className="text-xs font-normal mt-0.5">Coming soon</Badge>
                                     ) : isConnected ? (
-                                      <span className="text-xs text-emerald-600 dark:text-emerald-400">
-                                        Connected account: {status?.info ? status.info.replace(/^Account:\s*/i, "").replace(" connected", "") : connector.name}
+                                      <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                                        <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+                                        <span className="truncate">
+                                          {status?.info ? status.info.replace(/^Account:\s*/i, "").replace(" connected", "") : connector.name}
+                                        </span>
                                       </span>
                                     ) : (
                                       <span className="text-xs text-muted-foreground">Not connected</span>
                                     )}
                                   </div>
                                 </div>
-                                {!isSoon && (
-                                  isConnected ? (
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-2" />
-                                  ) : (
-                                    <button
-                                      onClick={() => handleIntegrationClick(connector.name)}
-                                      className="w-fit px-4 py-1.5 button-outline text-xs rounded-md inline-flex items-center justify-center mt-1"
-                                    >
-                                      Connect
-                                    </button>
-                                  )
+                                {!isSoon && !isConnected && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => { e.stopPropagation(); handleIntegrationClick(connector.name); }}
+                                    className="text-xs flex-shrink-0"
+                                  >
+                                    Connect
+                                  </Button>
                                 )}
                               </div>
                             </Card>

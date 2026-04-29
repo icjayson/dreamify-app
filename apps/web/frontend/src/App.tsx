@@ -13,6 +13,7 @@ import PricingPage from "./pages/Pricing";
 import FinancePage from "./pages/Finance";
 import PrivacyPage from "./pages/Privacy";
 import TermsPage from "./pages/Terms";
+import DocsPage from "./pages/Docs";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login.tsx";
@@ -74,11 +75,12 @@ const AppContent = () => {
   const isFinancePath = location.pathname === "/finance";
   const isPrivacyPath = location.pathname === "/privacy";
   const isTermsPath = location.pathname === "/terms";
+  const isDocsPath = location.pathname === "/docs";
   const isPreviewPath = location.pathname.startsWith("/preview/");
 
   return (
     <>
-      {(isHomePath || isAboutPath || isPricingPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath)) && <Header />}
+      {(isHomePath || isAboutPath || isPricingPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath && !isDocsPath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/about" element={<AboutPage />} />
@@ -86,6 +88,7 @@ const AppContent = () => {
         <Route path="/finance" element={<FinancePage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/docs" element={<DocsPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/waitlist" element={<WaitlistPage />} />

@@ -103,6 +103,7 @@ export const FooterSection = () => {
           <div className="flex gap-4 text-sm text-muted-foreground">
             <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
+            <Link to="/docs" className="hover:text-foreground transition-colors">Documentation</Link>
           </div>
         </div>
       </div>

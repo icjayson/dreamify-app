@@ -12,6 +12,7 @@ import Table from '@/components/charts/Table';
 // Import Recharts components
 import RechartsLineChart from '@/components/charts/RechartsLineChart';
 import RechartsBarChart from '@/components/charts/RechartsBarChart';
+import RechartsStackedBarChart from '@/components/charts/RechartsStackedBarChart';
 import RechartsPieChart from '@/components/charts/RechartsPieChart';
 import RechartsAreaChart from '@/components/charts/RechartsAreaChart';
 import RechartsScatterChart from '@/components/charts/RechartsScatterChart';
@@ -26,6 +27,8 @@ import RechartsSankeyChart from '@/components/charts/RechartsSankeyChart';
 const CHART_COMPONENTS = {
   [ChartType.LINE]: RechartsLineChart,
   [ChartType.BAR]: RechartsBarChart,
+  [ChartType.STACKED_BAR]: RechartsStackedBarChart,
+  [ChartType.STACKED_COLUMN]: RechartsStackedBarChart,
   [ChartType.PIE]: RechartsPieChart,
   [ChartType.AREA]: RechartsAreaChart,
   [ChartType.SCATTER]: RechartsScatterChart,
@@ -187,6 +190,8 @@ class ChartFactory {
 
       case ChartType.LINE:
       case ChartType.BAR:
+      case ChartType.STACKED_BAR:
+      case ChartType.STACKED_COLUMN:
       case ChartType.PIE:
       case ChartType.AREA:
       case ChartType.SCATTER:
@@ -207,7 +212,14 @@ class ChartFactory {
           data: (chartConfig as any).data,
           config: chartConfig.config,
           layout: chartConfig.layout,
-          styling: chartConfig.styling
+          styling: chartConfig.styling,
+          // Pass orientation for stacked charts based on chart type
+          orientation:
+            type === ChartType.STACKED_BAR
+              ? 'horizontal'
+              : type === ChartType.STACKED_COLUMN
+              ? 'vertical'
+              : undefined,
         };
 
 
@@ -280,6 +292,8 @@ class ChartFactory {
 
       case ChartType.LINE:
       case ChartType.BAR:
+      case ChartType.STACKED_BAR:
+      case ChartType.STACKED_COLUMN:
       case ChartType.PIE:
       case ChartType.AREA:
       case ChartType.SCATTER:

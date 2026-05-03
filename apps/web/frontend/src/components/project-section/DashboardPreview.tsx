@@ -611,6 +611,8 @@ const DashboardPreview = ({
       // Direct mappings for current LLM output
       line: 'line',
       bar: 'bar',
+      stacked_bar: 'stacked_bar',
+      stacked_column: 'stacked_column',
       pie: 'pie',
       area: 'area',
       scatter: 'scatter',
@@ -718,7 +720,7 @@ const DashboardPreview = ({
             axisConfig: c.config || { xKey: 'label', yKey: 'value' },
             datasets: normalizedDatasets,
             data: c.data,
-            config: {},
+            config: c.config || {},
             styling: mergedChartStyling
           }
         });

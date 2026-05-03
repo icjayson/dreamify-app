@@ -5,6 +5,8 @@
 export enum ChartType {
   LINE = "line",
   BAR = "bar",
+  STACKED_BAR = "stacked_bar",
+  STACKED_COLUMN = "stacked_column",
   PIE = "pie",
   AREA = "area",
   SCATTER = "scatter",

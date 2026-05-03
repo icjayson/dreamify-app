@@ -77,9 +77,40 @@ LAYOUT RULES (MANDATORY)
 - Use knowledge/charts/chart_types.py layout defaults when available:
   - Charts default minH = 10
   - The following chart types require minH = 12: line, area, pie, donut, radial_bar, treemap, sankey
-  - Other chart types (bar, scatter, composed, radar, funnel, geographic) use minH = 10
+  - Other chart types (bar, stacked_bar, stacked_column, scatter, composed, radar, funnel, geographic) use minH = 10
   - Tables use minH = 10
   - Metrics generally use minH = 4 (do not force above 4 unless already larger)
+
+CHART TYPE SELECTION GUIDE (MANDATORY for bar-family charts)
+=============================================================
+When the data has MULTIPLE SERIES (2+ datasets to compare), choose between:
+
+  bar            → Grouped side-by-side bars. Use when comparing absolute values
+                   of each series independently matters more than the total.
+                   Example: "Q1 vs Q2 revenue per region" (you want to compare Q1 vs Q2 directly).
+
+  stacked_column → Vertical stacked bars. Use when the SUM (total) across series is
+                   meaningful AND the contribution of each series to that total matters.
+                   Categories on X-axis. Use this for time-based composition.
+                   Example: "Monthly revenue broken down by product line",
+                            "New vs returning users per month".
+
+  stacked_bar    → Horizontal stacked bars. Functionally identical to stacked_column
+                   but with categories on the Y-axis. Prefer this when:
+                   - Category labels are long (they fit better on Y-axis)
+                   - There are many categories (>8) that would crowd the X-axis
+                   Example: "Cost breakdown by department (many departments)",
+                            "Survey responses by question (long question text)".
+
+For stacked charts, structure datasets EXACTLY like a plain bar chart:
+  datasets: [
+    { "label": "Series A", "data": [{"label": "Jan", "value": 100}, ...] },
+    { "label": "Series B", "data": [{"label": "Jan", "value": 80}, ...] }
+  ]
+The frontend will stack them automatically based on chart_type.
+
+Optional config flags for stacked charts:
+  config.normalized: true   → 100%% stacked (each bar reaches 100%%, shows proportions)
 
 ================================================================================
 DATA ANALYSIS CAPABILITIES (For Both Modes)

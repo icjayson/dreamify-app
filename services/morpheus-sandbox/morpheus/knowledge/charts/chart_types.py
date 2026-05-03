@@ -35,6 +35,36 @@ CHART_TYPES = {
             "Sales by region/product"
         ]
     },
+    "stacked_column": {
+        "name": "Stacked Column Chart",
+        "description": "Vertical stacked bars showing composition across categories or time. Best for showing how multiple series contribute to a total, with categories on the X-axis.",
+        "data_requirements": {
+            "min_data_points": 1,
+            "required_columns": ["category", "series", "value"],
+            "data_types": ["categorical", "categorical", "numeric"]
+        },
+        "use_cases": [
+            "Revenue breakdown by product/category per period",
+            "Budget allocation by department over time",
+            "New vs returning users by month",
+            "Part-to-whole composition over time"
+        ]
+    },
+    "stacked_bar": {
+        "name": "Stacked Bar Chart",
+        "description": "Horizontal stacked bars showing composition across categories. Best for part-to-whole comparisons when category labels are long or there are many categories.",
+        "data_requirements": {
+            "min_data_points": 1,
+            "required_columns": ["category", "series", "value"],
+            "data_types": ["categorical", "categorical", "numeric"]
+        },
+        "use_cases": [
+            "Market share by region with multiple segments",
+            "Survey response breakdown by demographic",
+            "Employee count by department and role",
+            "Cost breakdown by project phase"
+        ]
+    },
     "pie": {
         "name": "Pie Chart", 
         "description": "Show parts of a whole as percentages. Best for categorical composition and proportion analysis.",
@@ -234,6 +264,8 @@ LAYOUT_DEFAULTS: Dict[str, Dict[str, int]] = {
 
     # Other charts render well at a 10-row minimum
     "bar": {"minH": 10},
+    "stacked_bar": {"minH": 10},
+    "stacked_column": {"minH": 10},
     "scatter": {"minH": 10},
     "composed": {"minH": 10},
     "radar": {"minH": 10},

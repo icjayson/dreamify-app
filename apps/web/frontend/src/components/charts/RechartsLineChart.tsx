@@ -135,10 +135,12 @@ const RechartsLineChart: React.FC<RechartsLineChartProps & { axisConfig?: any }>
             bottom: 20,
           }}
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            className="chart-grid"
-          />
+          {styling?.gridVisible !== false && (
+            <CartesianGrid
+              strokeDasharray="3 3"
+              className="chart-grid"
+            />
+          )}
           <XAxis
             dataKey="label"
             className="chart-axis"
@@ -164,7 +166,8 @@ const RechartsLineChart: React.FC<RechartsLineChartProps & { axisConfig?: any }>
               strokeWidth={2}
               dot={false}
               activeDot={false}
-              animationDuration={styling?.animationEnabled ? 1000 : 0}
+              isAnimationActive={styling?.animationEnabled !== false}
+              animationDuration={styling?.animationEnabled !== false ? 1000 : 0}
             />
           ))}
         </LineChart>

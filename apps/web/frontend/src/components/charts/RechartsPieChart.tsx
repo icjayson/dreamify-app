@@ -171,7 +171,8 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
             outerRadius={isDense ? 100 : 80}
             fill="#8884d8"
             dataKey="value"
-            animationDuration={styling?.animationEnabled ? 1000 : 0}
+            isAnimationActive={styling?.animationEnabled !== false}
+            animationDuration={styling?.animationEnabled !== false ? 1000 : 0}
           >
             {displayData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={colors[index]} />

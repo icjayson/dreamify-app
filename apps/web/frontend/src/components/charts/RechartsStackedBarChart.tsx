@@ -221,12 +221,14 @@ const RechartsStackedBarChart: React.FC<RechartsStackedBarChartProps & { axisCon
           margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
           barCategoryGap="20%"
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            className="chart-grid"
-            horizontal={orientation !== 'horizontal'}
-            vertical={orientation === 'horizontal'}
-          />
+          {styling?.gridVisible !== false && (
+            <CartesianGrid
+              strokeDasharray="3 3"
+              className="chart-grid"
+              horizontal={orientation !== 'horizontal'}
+              vertical={orientation === 'horizontal'}
+            />
+          )}
 
           {/* XAxis */}
           <XAxis
@@ -272,6 +274,7 @@ const RechartsStackedBarChart: React.FC<RechartsStackedBarChartProps & { axisCon
                 stackId="stack"
                 fill={dataset.color}
                 radius={barRadius}
+                isAnimationActive={styling?.animationEnabled !== false}
                 animationDuration={styling?.animationEnabled !== false ? 800 : 0}
                 animationBegin={index * 80}
               />

@@ -136,10 +136,12 @@ const RechartsComposedChart: React.FC<RechartsComposedChartProps & { axisConfig?
             bottom: 20,
           }}
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            className="chart-grid"
-          />
+          {styling?.gridVisible !== false && (
+            <CartesianGrid
+              strokeDasharray="3 3"
+              className="chart-grid"
+            />
+          )}
           <XAxis
             dataKey="label"
             className="chart-axis"
@@ -165,7 +167,8 @@ const RechartsComposedChart: React.FC<RechartsComposedChartProps & { axisConfig?
                   dataKey={dataset.label}
                   fill={dataset.color}
                   radius={[4, 4, 0, 0]}
-                  animationDuration={styling?.animationEnabled ? 1000 : 0}
+                  isAnimationActive={styling?.animationEnabled !== false}
+                  animationDuration={styling?.animationEnabled !== false ? 1000 : 0}
                 />
               );
             } else {
@@ -178,7 +181,8 @@ const RechartsComposedChart: React.FC<RechartsComposedChartProps & { axisConfig?
                   strokeWidth={2}
                   dot={false}
                   activeDot={false}
-                  animationDuration={styling?.animationEnabled ? 1000 : 0}
+                  isAnimationActive={styling?.animationEnabled !== false}
+                  animationDuration={styling?.animationEnabled !== false ? 1000 : 0}
                 />
               );
             }

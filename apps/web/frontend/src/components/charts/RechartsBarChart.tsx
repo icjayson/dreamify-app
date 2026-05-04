@@ -182,7 +182,8 @@ const RechartsBarChart: React.FC<RechartsBarChartProps & { axisConfig?: any }> =
               dataKey={dataset.label}
               fill={dataset.color}
               radius={[4, 4, 0, 0]}
-              animationDuration={styling?.animationEnabled ? 1000 : 0}
+              isAnimationActive={styling?.animationEnabled !== false}
+              animationDuration={styling?.animationEnabled !== false ? 1000 : 0}
             />
           ))}
         </BarChart>

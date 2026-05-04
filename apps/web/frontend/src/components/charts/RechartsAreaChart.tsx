@@ -135,10 +135,12 @@ const RechartsAreaChart: React.FC<RechartsAreaChartProps & { axisConfig?: any }>
             bottom: 20,
           }}
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            className="chart-grid"
-          />
+          {styling?.gridVisible !== false && (
+            <CartesianGrid
+              strokeDasharray="3 3"
+              className="chart-grid"
+            />
+          )}
           <XAxis
             dataKey="label"
             className="chart-axis"
@@ -164,7 +166,8 @@ const RechartsAreaChart: React.FC<RechartsAreaChartProps & { axisConfig?: any }>
               stroke={dataset.color}
               fill={dataset.color}
               fillOpacity={0.6}
-              animationDuration={styling?.animationEnabled ? 1000 : 0}
+              isAnimationActive={styling?.animationEnabled !== false}
+              animationDuration={styling?.animationEnabled !== false ? 1000 : 0}
             />
           ))}
         </AreaChart>

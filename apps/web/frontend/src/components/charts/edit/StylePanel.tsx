@@ -33,9 +33,6 @@ const StylePanel: React.FC<StylePanelProps> = ({ component, onApplyEdit }) => {
   const patchStyling = (patch: Record<string, any>) => {
     onApplyEdit(component.id, { styling: { ...styling, ...patch } });
   };
-  const patchTile = (patch: Record<string, any>) => {
-    onApplyEdit(component.id, { styling: { ...styling, tile: { ...(styling.tile || {}), ...patch } } });
-  };
   const patchPaletteAt = (index: number, color: string) => {
     const next = [...palette];
     next[index] = color;
@@ -90,7 +87,6 @@ const StylePanel: React.FC<StylePanelProps> = ({ component, onApplyEdit }) => {
                 <SelectContent>
                   <SelectItem value="top">Top</SelectItem>
                   <SelectItem value="bottom">Bottom</SelectItem>
-                  <SelectItem value="right">Right</SelectItem>
                   <SelectItem value="none">Hidden</SelectItem>
                 </SelectContent>
               </Select>
@@ -116,39 +112,12 @@ const StylePanel: React.FC<StylePanelProps> = ({ component, onApplyEdit }) => {
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <Label htmlFor="chartstyle" className="text-sm">Card style</Label>
-              <Select
-                value={styling.chartStyle || 'rounded'}
-                onValueChange={(v) => patchStyling({ chartStyle: v })}
-              >
-                <SelectTrigger id="chartstyle" className="w-32 h-8" data-edit-control>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="rounded">Rounded</SelectItem>
-                  <SelectItem value="sharp">Sharp</SelectItem>
-                  <SelectItem value="minimal">Minimal</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
           </section>
         </>
       )}
 
-      <section className="space-y-3">
-        <Label className="text-xs uppercase tracking-wide opacity-70">Card</Label>
-        <ColorPicker
-          label="Border color"
-          value={styling?.tile?.borderColor || ''}
-          onChange={(c) => patchTile({ borderColor: c })}
-        />
-        <ColorPicker
-          label="Background"
-          value={styling?.tile?.background || ''}
-          onChange={(c) => patchTile({ background: c })}
-        />
-      </section>
+
     </div>
   );
 };

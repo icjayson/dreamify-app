@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2 } from "lucide-react";
+import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2, Pencil } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
@@ -113,6 +113,7 @@ const DashboardPreview = ({
 
   // Manual-edit feature state
   const editMode = useEditMode((s) => s.editMode);
+  const setEditMode = useEditMode((s) => s.setEditMode);
   const editsState = useEditMode((s) => s.edits);
   const selectedComponentId = useEditMode((s) => s.selectedComponentId);
   const setSelectedComponent = useEditMode((s) => s.setSelectedComponent);
@@ -1444,6 +1445,16 @@ const DashboardPreview = ({
                                 sideOffset={6}
                                 className="min-w-[11rem] rounded-xl border border-border dark:border-white/10 bg-popover/95 dark:bg-[#161616]/95 backdrop-blur-md text-popover-foreground dark:text-white shadow-xl"
                               >
+                                <DropdownMenuItem
+                                  className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
+                                  onSelect={() => {
+                                    setEditMode(true);
+                                    setSelectedComponent(cellKey);
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4 shrink-0 text-blue-400" />
+                                  Edit
+                                </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
                                   onSelect={() => {

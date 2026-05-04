@@ -80,7 +80,8 @@ const Table = ({
 
   // Sort data
   const sortedData = useMemo(() => {
-    if (!sortConfig || !hasData) return data;
+    if (!hasData) return Array.isArray(data) ? data : [];
+    if (!sortConfig) return data;
 
     return [...data].sort((a, b) => {
       const aValue = a[sortConfig.key];
@@ -99,6 +100,7 @@ const Table = ({
   // Paginate data
   const paginatedData = useMemo(() => {
     const startIndex = currentPage * pageSize;
+    if (!Array.isArray(sortedData)) return [];
     return sortedData.slice(startIndex, startIndex + pageSize);
   }, [sortedData, currentPage, pageSize]);
 

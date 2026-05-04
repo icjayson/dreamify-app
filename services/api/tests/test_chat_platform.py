@@ -753,6 +753,85 @@ class TestTelegramWebhookStart:
             result = self._run(telegram_webhook(req, bg))
         assert result == {"ok": True}
 
+    def test_document_with_caption_dispatches_query(self):
+        """Telegram puts caption text on document messages in `caption`, not
+        `text`. Make sure file uploads with prompts aren't silently dropped."""
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import telegram_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+
+        payload = {
+            "message": {
+                "message_id": 99,
+                "caption": "đây là data NRU tháng đầu",
+                "document": {
+                    "file_id": "BQACAgUAAxkBAAMe",
+                    "file_name": "DATA.csv",
+                },
+                "chat": {"id": 100, "type": "private"},
+                "from": {"id": 42, "first_name": "Alice"},
+            }
+        }
+        req = MagicMock()
+        req.headers = {}
+        async def _json():
+            return payload
+        req.json = _json
+
+        ws = {
+            "platform_workspace_id": "telegram:100",
+            "user_id": "u1",
+            "project_id": "p1",
+            "platform": "telegram",
+        }
+        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value=""), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+            result = self._run(telegram_webhook(req, bg))
+        assert result == {"ok": True}
+        bg.add_task.assert_called_once()
+        task_fn = bg.add_task.call_args[0][0]
+        assert task_fn.__name__ == "handle_telegram_query"
+        # Caption is the query, file_id is in telegram_file_ids
+        kwargs = bg.add_task.call_args[1]
+        assert kwargs["query"] == "đây là data NRU tháng đầu"
+        assert kwargs["telegram_file_ids"] == ["BQACAgUAAxkBAAMe"]
+
+    def test_document_with_no_caption_dispatches_query(self):
+        """A bare file (no caption) is still actionable — DM handler should
+        run a query with placeholder text."""
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import telegram_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+
+        payload = {
+            "message": {
+                "message_id": 99,
+                "document": {"file_id": "FILE123", "file_name": "x.csv"},
+                "chat": {"id": 100, "type": "private"},
+                "from": {"id": 42},
+            }
+        }
+        req = MagicMock()
+        req.headers = {}
+        async def _json():
+            return payload
+        req.json = _json
+
+        ws = {
+            "platform_workspace_id": "telegram:100",
+            "user_id": "u1",
+            "project_id": "p1",
+            "platform": "telegram",
+        }
+        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value=""), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+            result = self._run(telegram_webhook(req, bg))
+        assert result == {"ok": True}
+        bg.add_task.assert_called_once()
+        kwargs = bg.add_task.call_args[1]
+        assert "(file attached)" in kwargs["query"]
+        assert kwargs["telegram_file_ids"] == ["FILE123"]
+
 
 # ── _handle_telegram_start integration ───────────────────────────────────────
 
@@ -834,3 +913,416 @@ class TestHandleTelegramStart:
             self._run(_handle_telegram_start("UNKNOWN", 100, "42", {}))
 
         assert any("not found" in t.lower() for t in sent_texts)
+
+
+# ── Zalo Bot Platform tests ──────────────────────────────────────────────────
+
+
+class TestZaloService:
+    def test_chunk_short_text_returns_single_chunk(self):
+        from app.services.zalo_service import _chunk_text
+        out = _chunk_text("hello world")
+        assert out == ["hello world"]
+
+    def test_chunk_long_text_splits_on_paragraph(self):
+        from app.services.zalo_service import _chunk_text
+        text = ("para1\n\n" + "x" * 1500 + "\n\n" + "y" * 1500)
+        chunks = _chunk_text(text, limit=1800)
+        assert len(chunks) >= 2
+        assert all(len(c) <= 1800 for c in chunks)
+
+    def test_format_response_appends_dashboard_url_as_text(self):
+        from app.services.zalo_service import format_response_message
+        out = format_response_message(
+            "Sales are up.", "https://example.com/dash/123", credits_used=5, metrics=[]
+        )
+        assert "https://example.com/dash/123" in out
+        assert "5 credits used" in out
+
+    def test_format_response_no_dashboard(self):
+        from app.services.zalo_service import format_response_message
+        out = format_response_message("ok", None, credits_used=5)
+        assert "View dashboard" not in out
+
+    def test_format_error_message(self):
+        from app.services.zalo_service import format_error_message
+        assert format_error_message("nope").startswith("⚠️")
+
+
+class TestZaloGenerateCode:
+    def _run(self, coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    def test_returns_qr_url_and_stores_pending(self):
+        from app.api.route_modules.chat_platform import zalo_generate_code
+        with patch("app.api.route_modules.chat_platform._zalo_bot_token", return_value="123:abc"), \
+             patch("app.api.route_modules.chat_platform._zalo_bot_username", return_value="DreamifyBot"), \
+             patch("app.api.route_modules.chat_platform._zalo_bot_id", return_value="123"), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.save_workspace") as mock_save:
+            result = self._run(zalo_generate_code(user_id="u1"))
+        assert result.bot_username == "DreamifyBot"
+        assert result.bot_id == "123"
+        # qr_url is a relative path so the frontend hits it through the same origin
+        assert result.qr_url == f"/api/v1/chat/zalo/qr/{result.code}"
+        assert len(result.code) == 8
+        assert result.expires_in == 900
+        mock_save.assert_called_once()
+        call_kwargs = mock_save.call_args[1]
+        assert call_kwargs["platform"] == "zalo_pending"
+        assert call_kwargs["user_id"] == "u1"
+        assert call_kwargs["platform_workspace_id"].startswith("pending:")
+
+    def test_503_when_not_configured(self):
+        from fastapi import HTTPException
+        from app.api.route_modules.chat_platform import zalo_generate_code
+        with patch("app.api.route_modules.chat_platform._zalo_bot_token", return_value=""):
+            with pytest.raises(HTTPException) as exc:
+                self._run(zalo_generate_code(user_id="u1"))
+        assert exc.value.status_code == 503
+
+
+class TestGetZaloStatus:
+    def _run(self, coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    def test_not_connected(self):
+        from app.api.route_modules.chat_platform import get_zalo_status
+        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=None):
+            result = self._run(get_zalo_status(user_id="u1"))
+        assert result.connected is False
+
+    def test_connected(self):
+        from app.api.route_modules.chat_platform import get_zalo_status
+        workspace = {
+            "platform_workspace_id": "zalo:777",
+            "workspace_name": "Hung",
+            "project_id": "proj-zalo",
+        }
+        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=workspace):
+            result = self._run(get_zalo_status(user_id="u1"))
+        assert result.connected is True
+        assert result.workspace_name == "Hung"
+        assert result.platform_workspace_id == "zalo:777"
+
+
+class TestZaloWebhook:
+    def _run(self, coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    def _make_request(self, message: dict, headers: dict = None) -> MagicMock:
+        payload = {"ok": True, "result": {"update_id": 1, "message": message}}
+        req = MagicMock()
+        req.headers = headers or {}
+
+        async def _json():
+            return payload
+        req.json = _json
+        return req
+
+    def _msg(self, text: str, chat_type: str = "PRIVATE", from_id: str = "42"):
+        return {
+            "message_id": "m1",
+            "text": text,
+            "event_name": "text_message",
+            "chat": {"id": "100", "chat_type": chat_type},
+            "from": {"id": from_id, "display_name": "Alice"},
+        }
+
+    def test_invalid_secret_returns_403(self):
+        from fastapi import BackgroundTasks, HTTPException
+        from app.api.route_modules.chat_platform import zalo_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request(self._msg("hi"), headers={"X-Bot-Api-Secret-Token": "wrong"})
+        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value="correct"):
+            with pytest.raises(HTTPException) as exc:
+                self._run(zalo_webhook(req, bg))
+        assert exc.value.status_code == 403
+
+    def test_valid_secret_passes(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import zalo_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request(self._msg("hi"), headers={"X-Bot-Api-Secret-Token": "mysecret"})
+        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value="mysecret"), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+            result = self._run(zalo_webhook(req, bg))
+        assert result == {"ok": True}
+
+    def test_start_with_code_dispatches_handler(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import zalo_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request(self._msg("start ABCD1234"))
+        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""):
+            result = self._run(zalo_webhook(req, bg))
+        assert result == {"ok": True}
+        bg.add_task.assert_called_once()
+        task_fn = bg.add_task.call_args[0][0]
+        assert task_fn.__name__ == "_handle_zalo_start"
+
+    def test_start_no_code_dispatches_hint(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import zalo_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request(self._msg("start"))
+        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""):
+            result = self._run(zalo_webhook(req, bg))
+        assert result == {"ok": True}
+        task_fn = bg.add_task.call_args[0][0]
+        assert task_fn.__name__ == "_send_zalo_start_hint"
+
+    def test_group_chat_ignored_phase1(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import zalo_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request(self._msg("hello", chat_type="GROUP"))
+        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""):
+            result = self._run(zalo_webhook(req, bg))
+        assert result == {"ok": True}
+        bg.add_task.assert_not_called()
+
+    def test_known_workspace_dispatches_query(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import zalo_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        req = self._make_request(self._msg("show campaigns"))
+        ws = {"platform_workspace_id": "zalo:100", "user_id": "u1", "project_id": "p1", "platform": "zalo"}
+        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+            result = self._run(zalo_webhook(req, bg))
+        assert result == {"ok": True}
+        bg.add_task.assert_called_once()
+        task_fn = bg.add_task.call_args[0][0]
+        assert task_fn.__name__ == "handle_zalo_query"
+
+    def test_dispatches_query_for_message_text_received_event(self):
+        """Zalo's actual event_name is `message.text.received` (not the
+        `text_message` we initially coded against). Make sure we don't
+        gatekeep on the string and silently drop real user messages."""
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import zalo_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        # Top-level event_name (where Zalo actually puts it) using the
+        # production naming.
+        payload = {
+            "event_name": "message.text.received",
+            "message": {
+                "message_id": "m1",
+                "text": "hello who are you",
+                "chat": {"id": "100", "chat_type": "PRIVATE"},
+                "from": {"id": "42", "display_name": "Alice"},
+            },
+        }
+        req = MagicMock()
+        req.headers = {}
+        async def _json():
+            return payload
+        req.json = _json
+
+        ws = {"platform_workspace_id": "zalo:100", "user_id": "u1", "project_id": "p1", "platform": "zalo"}
+        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+            result = self._run(zalo_webhook(req, bg))
+        assert result == {"ok": True}
+        bg.add_task.assert_called_once()
+        task_fn = bg.add_task.call_args[0][0]
+        assert task_fn.__name__ == "handle_zalo_query"
+
+    def test_unknown_event_name_with_text_still_dispatches(self):
+        """Future-proofing: Zalo may shift event names again. As long as
+        text is present, we still process the message."""
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import zalo_webhook
+        bg = MagicMock(spec=BackgroundTasks)
+        payload = {
+            "event_name": "some.future.naming",
+            "message": {
+                "message_id": "m1",
+                "text": "still works",
+                "chat": {"id": "100", "chat_type": "PRIVATE"},
+                "from": {"id": "42"},
+            },
+        }
+        req = MagicMock()
+        req.headers = {}
+        async def _json():
+            return payload
+        req.json = _json
+
+        ws = {"platform_workspace_id": "zalo:100", "user_id": "u1", "project_id": "p1", "platform": "zalo"}
+        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+            result = self._run(zalo_webhook(req, bg))
+        assert result == {"ok": True}
+        bg.add_task.assert_called_once()
+        assert bg.add_task.call_args[0][0].__name__ == "handle_zalo_query"
+
+
+class TestHandleZaloStart:
+    def _pending(self, code: str, user_id: str, age_seconds: int = 0) -> dict:
+        from datetime import datetime, timedelta
+        created = datetime.now() - timedelta(seconds=age_seconds)
+        return {
+            "platform_workspace_id": f"pending:{code}",
+            "platform": "zalo_pending",
+            "user_id": user_id,
+            "project_id": "",
+            "created_at": created.isoformat(),
+        }
+
+    def test_valid_code_creates_workspace(self):
+        from app.api.route_modules.chat_platform import _handle_zalo_start
+        pending = self._pending("ZAL12345", "user-1")
+        new_project = {"project_id": "proj-new"}
+
+        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
+             patch("app.services.zalo_service.send_message", return_value={"ok": True}), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", side_effect=[pending, None]), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.save_workspace") as mock_save, \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace") as mock_del, \
+             patch("app.api.route_modules.chat_platform.projects_repo.create_project", return_value=new_project):
+            _handle_zalo_start("ZAL12345", "100", "42", {"id": "42", "display_name": "Alice"})
+
+        mock_save.assert_called_once()
+        saved = mock_save.call_args[1]
+        assert saved["platform_workspace_id"] == "zalo:100"
+        assert saved["platform"] == "zalo"
+        assert saved["zalo_user_id"] == "42"
+        mock_del.assert_called_once_with("pending:ZAL12345")
+
+    def test_expired_code_deletes_pending(self):
+        from app.api.route_modules.chat_platform import _handle_zalo_start
+        sent = []
+
+        def _send(chat_id, text):
+            sent.append(text)
+            return {"ok": True}
+
+        expired = self._pending("EXP123", "u1", age_seconds=2000)
+
+        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
+             patch("app.services.zalo_service.send_message", side_effect=_send), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=expired), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace") as mock_del:
+            _handle_zalo_start("EXP123", "100", "42", {})
+
+        assert any("expired" in t.lower() for t in sent)
+        mock_del.assert_called_once()
+
+    def test_unknown_code_sends_error(self):
+        from app.api.route_modules.chat_platform import _handle_zalo_start
+        sent = []
+
+        def _send(chat_id, text):
+            sent.append(text)
+            return {"ok": True}
+
+        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
+             patch("app.services.zalo_service.send_message", side_effect=_send), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+            _handle_zalo_start("MISSING", "100", "42", {})
+
+        assert any("not found" in t.lower() for t in sent)
+
+    def test_bot_not_configured_returns_silently(self):
+        from app.api.route_modules.chat_platform import _handle_zalo_start
+        with patch("app.services.zalo_service._bot_token", return_value=""), \
+             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace") as mock_get:
+            _handle_zalo_start("X", "100", "42", {})
+        mock_get.assert_not_called()
+
+
+# ── Chart-image delivery (Phase 2B) ──────────────────────────────────────────
+
+
+class TestZaloSendPhoto:
+    """Unit tests for the multipart sendPhoto helper."""
+
+    def test_send_photo_posts_multipart_with_caption(self):
+        from app.services import zalo_service
+        captured = {}
+
+        class _FakeResp:
+            content = b'{"ok": true, "result": {"message_id": "m1"}}'
+            def json(self):
+                return {"ok": True, "result": {"message_id": "m1"}}
+
+        def _fake_post(url, data=None, files=None, timeout=None):
+            captured["url"] = url
+            captured["data"] = data
+            captured["files"] = files
+            return _FakeResp()
+
+        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
+             patch("app.services.zalo_service.requests.post", side_effect=_fake_post):
+            result = zalo_service.send_photo(
+                chat_id=999, photo_bytes=b"\x89PNG\x00fake", caption="Revenue", filename="rev.png"
+            )
+
+        assert result == {"ok": True, "result": {"message_id": "m1"}}
+        assert captured["url"].endswith("/bot123:abc/sendPhoto")
+        assert captured["data"]["chat_id"] == "999"
+        assert captured["data"]["caption"] == "Revenue"
+        # files dict should hold the photo as a 3-tuple (filename, bytes, content-type)
+        photo_filename, photo_bytes, photo_ctype = captured["files"]["photo"]
+        assert photo_filename == "rev.png"
+        assert photo_bytes == b"\x89PNG\x00fake"
+        assert photo_ctype == "image/png"
+
+    def test_send_photo_truncates_long_caption(self):
+        from app.services import zalo_service
+        captured = {}
+
+        class _FakeResp:
+            content = b'{"ok": true}'
+            def json(self):
+                return {"ok": True}
+
+        def _fake_post(url, data=None, files=None, timeout=None):
+            captured["data"] = data
+            return _FakeResp()
+
+        long_caption = "x" * 2000
+        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
+             patch("app.services.zalo_service.requests.post", side_effect=_fake_post):
+            zalo_service.send_photo(chat_id=1, photo_bytes=b"png", caption=long_caption)
+
+        assert len(captured["data"]["caption"]) == 1024
+
+    def test_send_photo_swallows_request_errors(self):
+        from app.services import zalo_service
+        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
+             patch("app.services.zalo_service.requests.post", side_effect=RuntimeError("boom")):
+            result = zalo_service.send_photo(chat_id=1, photo_bytes=b"png")
+        assert result is None
+
+
+class TestChartRenderingBranches:
+    """Verify the chart-rendering branch is gated on ENABLE_CHART_RENDERING and
+    a populated dashboard_json. We don't need to spin up Morpheus — we exercise
+    the gate logic via render_dashboard_previews directly."""
+
+    def test_renderer_returns_empty_for_dashboard_with_no_charts(self):
+        from app.services.chart_renderer import render_dashboard_previews
+        out = render_dashboard_previews({"charts": []}, max_charts=4)
+        assert out == []
+
+    def test_renderer_skips_unsupported_chart_types(self):
+        from app.services.chart_renderer import render_dashboard_previews
+        out = render_dashboard_previews(
+            {"charts": [{"chart_type": "fancy_3d_holograph", "title": "x"}]},
+            max_charts=4,
+        )
+        assert out == []
+
+    def test_chart_rendering_disabled_by_default(self):
+        from app.services.chart_renderer import is_chart_rendering_enabled
+        # Whatever the env says, the function should return a bool — and when
+        # explicitly disabled it must be False.
+        with patch.dict(os.environ, {"ENABLE_CHART_RENDERING": "false"}):
+            assert is_chart_rendering_enabled() is False
+        with patch.dict(os.environ, {"ENABLE_CHART_RENDERING": "true"}):
+            assert is_chart_rendering_enabled() is True

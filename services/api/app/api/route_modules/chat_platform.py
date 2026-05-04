@@ -29,7 +29,11 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from app.dependencies.auth import require_user
-from app.services.chat_platform_service import handle_slack_query, handle_telegram_query
+from app.services.chat_platform_service import (
+    handle_slack_query,
+    handle_telegram_query,
+    handle_zalo_query,
+)
 from app.services.slack_service import decrypt_token, encrypt_token
 from utils.config import config
 from utils.dynamodb.repos import chat_platform_repo
@@ -73,6 +77,25 @@ def _telegram_bot_username() -> str:
 
 def _telegram_webhook_secret() -> str:
     return config.telegram.webhook_secret if config.telegram else ""
+
+
+def _zalo_bot_token() -> str:
+    return config.zalo.bot_token if config.zalo else ""
+
+
+def _zalo_bot_username() -> str:
+    return config.zalo.bot_username if config.zalo else "DreamifyBot"
+
+
+def _zalo_bot_id() -> str:
+    return config.zalo.bot_id if config.zalo else ""
+
+
+def _zalo_webhook_secret() -> str:
+    return config.zalo.webhook_secret if config.zalo else ""
+
+
+ZALO_CODE_TTL = 900  # 15 minutes
 
 
 # ── State token (signed, short-lived, no new deps) ────────────────────────────
@@ -459,10 +482,18 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     chat_type: str = chat.get("type", "")  # "private", "group", "supergroup", "channel"
     from_user = message.get("from", {})
     telegram_user_id: str = str(from_user.get("id", ""))
-    text: str = message.get("text", "").strip()
+    # Telegram puts the body in `text` for plain messages and `caption` for
+    # document/photo/video messages. Read both.
+    text: str = (message.get("text") or message.get("caption") or "").strip()
     message_thread_id: Optional[int] = message.get("message_thread_id")
+    has_document = bool(message.get("document"))
 
-    if not chat_id or not text:
+    if not chat_id:
+        return {"ok": True}
+    # Drop only when there is neither text nor a document — otherwise the
+    # message has actionable content (a file with no caption is still a query
+    # in DMs: "analyze this").
+    if not text and not has_document:
         return {"ok": True}
 
     # ── /start {code} — DM registration ──────────────────────────────────────
@@ -496,6 +527,9 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
 
     # Strip the @BotUsername mention from the text if present
     query = _strip_bot_mention(text).strip()
+    if not query and has_document:
+        # Document with no caption — still a valid query, just no narrative
+        query = "(file attached)"
     if not query:
         return {"ok": True}
 
@@ -504,10 +538,17 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     workspace = chat_platform_repo.get_workspace(platform_workspace_id)
     if not workspace:
         logger.warning("Telegram message from unregistered chat: %s", platform_workspace_id)
+        # Reply with a hint so the user isn't stuck in a silent chat.
+        # Only send for DMs — in groups, the bot was @mentioned but isn't
+        # connected, and we don't want to spam the channel.
+        if is_dm:
+            background_tasks.add_task(_send_telegram_unregistered_hint, chat_id)
         return {"ok": True}
 
-    # Collect document file_ids (CSV / data files)
-    telegram_file_ids = _extract_document_file_ids(message)
+    # Resolve file metadata (including download URL) now, while we have async context.
+    # This mirrors the Slack pattern and avoids a fragile bot.get_file() call inside
+    # the background task where failures are harder to surface.
+    telegram_files = await _fetch_telegram_document_metadata(message)
 
     background_tasks.add_task(
         handle_telegram_query,
@@ -515,20 +556,30 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
         platform_workspace_id=platform_workspace_id,
         chat_id=chat_id,
         message_thread_id=message_thread_id,
-        telegram_file_ids=telegram_file_ids,
+        telegram_files=telegram_files,
     )
     return {"ok": True}
 
 
 def _is_bot_mentioned(message: Dict[str, Any]) -> bool:
-    """Return True if the bot's username appears in the message entities."""
+    """Return True if the bot's username appears in the message entities.
+
+    Checks both `entities` (plain text messages) and `caption_entities`
+    (document/photo messages with a caption) so group @mentions work
+    regardless of whether the user sends text or a file with caption.
+    """
     bot_mention = f"@{_telegram_bot_username()}".lower()
-    for entity in message.get("entities", []):
+    all_entities = [
+        *message.get("entities", []),
+        *message.get("caption_entities", []),
+    ]
+    for entity in all_entities:
         if entity.get("type") == "mention":
             offset = entity.get("offset", 0)
             length = entity.get("length", 0)
-            text = message.get("text", "")
-            mention = text[offset:offset + length].lower()
+            # Mention offset/length applies to whichever text field is present.
+            source_text = message.get("text") or message.get("caption") or ""
+            mention = source_text[offset:offset + length].lower()
             if mention == bot_mention:
                 return True
     return False
@@ -539,12 +590,43 @@ def _strip_bot_mention(text: str) -> str:
     return re.sub(rf"@{re.escape(_telegram_bot_username())}", "", text, flags=re.IGNORECASE).strip()
 
 
-def _extract_document_file_ids(message: Dict[str, Any]) -> list:
-    """Return file_ids for documents attached to the message."""
+async def _fetch_telegram_document_metadata(message: Dict[str, Any]) -> list:
+    """Return rich file metadata dicts for documents attached to the message.
+
+    Resolves the Telegram file download URL now (in the async webhook handler)
+    so the background task can HTTP-GET the file directly without needing a
+    second bot.get_file() call that could fail silently.
+    """
+    from app.services.telegram_service import get_telegram_bot
+
     doc = message.get("document")
-    if doc and doc.get("file_id"):
-        return [doc["file_id"]]
-    return []
+    if not doc or not doc.get("file_id"):
+        return []
+
+    file_id = doc["file_id"]
+    filename = doc.get("file_name") or f"{file_id}.bin"
+    file_size = doc.get("file_size", 0)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+
+    try:
+        bot = await get_telegram_bot()
+        tg_file = await bot.get_file(file_id)
+        # In python-telegram-bot v21+, bot.get_file() already rewrites file_path to
+        # the full download URL (https://api.telegram.org/file/bot<token>/<path>).
+        # Use it directly — do NOT prepend the base URL again.
+        download_url = tg_file.file_path or ""
+    except Exception as exc:
+        logger.warning("Failed to resolve Telegram file %s (%s): %s", file_id, filename, exc)
+        return []
+
+    return [
+        {
+            "filename": filename,
+            "size": file_size,
+            "ext": ext,
+            "download_url": download_url,
+        }
+    ]
 
 
 async def _send_telegram_start_hint(chat_id: int) -> None:
@@ -562,6 +644,25 @@ async def _send_telegram_start_hint(chat_id: int) -> None:
         )
     except Exception as exc:
         logger.warning("Failed to send Telegram start hint: %s", exc)
+
+
+async def _send_telegram_unregistered_hint(chat_id: int) -> None:
+    """Reply when a DM arrives from a chat we don't have a workspace for —
+    so users aren't stuck wondering why nothing happens."""
+    try:
+        from app.services.telegram_service import get_telegram_bot
+        bot = await get_telegram_bot()
+        await bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "🔌 You're not connected to *Dreamify* yet\\.\n\n"
+                "Generate a code at [app\\.dreamify\\.dev](https://app.dreamify.dev) "
+                "under *Integrations → Telegram*, then send `/start YOUR_CODE` here\\."
+            ),
+            parse_mode="MarkdownV2",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send Telegram unregistered hint: %s", exc)
 
 
 async def _handle_telegram_start(
@@ -755,6 +856,17 @@ async def telegram_generate_code(user_id: str = Depends(require_user)):
     if not _telegram_bot_token():
         raise HTTPException(status_code=503, detail="Telegram integration not configured")
 
+    # Opportunistic GC: prune any expired pending rows for this user before
+    # adding a new one. Cheap (scoped scan), keeps the table tidy.
+    try:
+        pruned = chat_platform_repo.cleanup_expired_pending(
+            "telegram_pending", TELEGRAM_CODE_TTL, user_id=user_id
+        )
+        if pruned:
+            logger.info("Pruned %d expired telegram_pending rows for user %s", pruned, user_id)
+    except Exception as exc:
+        logger.warning("telegram_pending GC failed: %s", exc)
+
     code = _generate_telegram_code()
     pending_key = f"pending:{code}"
     logger.info("Generating new Telegram code %s for user %s", code, user_id)
@@ -793,6 +905,532 @@ async def get_telegram_status(user_id: str = Depends(require_user)):
     if not workspace:
         return TelegramStatusResponse(connected=False)
     return TelegramStatusResponse(
+        connected=True,
+        workspace_name=workspace.get("workspace_name"),
+        platform_workspace_id=workspace["platform_workspace_id"],
+        project_id=workspace.get("project_id"),
+    )
+
+
+# ── Zalo Bot Platform webhook ─────────────────────────────────────────────────
+
+def _verify_zalo_webhook(request: Request) -> bool:
+    webhook_secret = _zalo_webhook_secret()
+    if not webhook_secret:
+        return True  # no secret configured — allow all (dev mode)
+    token = request.headers.get("X-Bot-Api-Secret-Token", "")
+    return hmac.compare_digest(token, webhook_secret)
+
+
+def _extract_zalo_image_file_ids(message: Dict[str, Any]) -> list:
+    """Return file_ids for image attachments on a Zalo Bot Platform message.
+
+    Zalo's payload shape for images isn't well-documented and the field name
+    has drifted over time, so we probe several plausible locations rather
+    than gating on event_name (which is unreliable — see the text-event bug).
+    """
+    candidates = [
+        message.get("file_id"),
+        (message.get("photo") or {}).get("file_id") if isinstance(message.get("photo"), dict) else None,
+        (message.get("image") or {}).get("file_id") if isinstance(message.get("image"), dict) else None,
+    ]
+    return [c for c in candidates if c]
+
+
+@router.post("/chat/zalo/webhook")
+async def zalo_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Receive Zalo Bot Platform Update payloads. Must respond within ~2 seconds;
+    actual processing runs in a background task.
+    """
+    if not _verify_zalo_webhook(request):
+        raise HTTPException(status_code=403, detail="Invalid webhook token")
+
+    body: Dict[str, Any] = {}
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": True}
+
+    # Zalo wraps the payload as {"event_name": "...", "message": {...}} at the
+    # TOP level (not nested inside `message`). Also tolerate the older
+    # `{"result": {...}}` shape we initially coded against.
+    update = body.get("result") if isinstance(body.get("result"), dict) else body
+    message = update.get("message") if isinstance(update, dict) else None
+    if not message:
+        return {"ok": True}
+
+    # event_name lives at the update level, not on `message` itself.
+    event_name = update.get("event_name") or message.get("event_name") or ""
+
+    chat = message.get("chat", {}) or {}
+    chat_id = chat.get("id")
+    chat_type = chat.get("chat_type") or chat.get("type") or ""
+    from_user = message.get("from", {}) or {}
+    zalo_user_id = str(from_user.get("id", ""))
+    text = (message.get("text") or "").strip()
+
+    if not chat_id:
+        return {"ok": True}
+
+    # Phase 1: DMs only (chat_type == "PRIVATE"); ignore groups until Zalo ships them
+    if chat_type and chat_type.upper() != "PRIVATE":
+        return {"ok": True}
+
+    # `start CODE` registration handshake (Zalo Bot has no slash-command convention)
+    lowered = text.lower()
+    if lowered.startswith("start ") or lowered == "start":
+        parts = text.split(maxsplit=1)
+        code = parts[1].strip() if len(parts) > 1 else ""
+        if code:
+            background_tasks.add_task(
+                _handle_zalo_start, code, chat_id, zalo_user_id, from_user
+            )
+        else:
+            background_tasks.add_task(_send_zalo_start_hint, chat_id)
+        return {"ok": True}
+
+    # Zalo Bot Platform delivers files (CSV/PDF/etc.) as `message.unsupported.received`
+    # with no downloadable reference. We mint a one-tap upload URL so the user can
+    # attach the file via the web — it queues onto the workspace and the next text
+    # query will pull it into the conversation.
+    if event_name == "message.unsupported.received":
+        platform_workspace_id = f"zalo:{chat_id}"
+        if chat_platform_repo.get_workspace(platform_workspace_id):
+            background_tasks.add_task(_handle_zalo_unsupported_file, chat_id)
+        return {"ok": True}
+
+    # Dispatch based on actual payload shape, not event_name strings — Zalo's
+    # event naming has shifted (`text_message` → `user_send_text` →
+    # `message.text.received`) and gating on names breaks silently each time.
+    # Any message-family event carrying text or an image is a query.
+    zalo_file_ids = _extract_zalo_image_file_ids(message)
+    if not text and not zalo_file_ids:
+        return {"ok": True}
+
+    platform_workspace_id = f"zalo:{chat_id}"
+    workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+    if not workspace:
+        logger.warning("Zalo message from unregistered chat: %s", platform_workspace_id)
+        background_tasks.add_task(_send_zalo_unregistered_hint, chat_id)
+        return {"ok": True}
+
+    query = text or "(image attachment)"
+
+    background_tasks.add_task(
+        handle_zalo_query,
+        query=query,
+        platform_workspace_id=platform_workspace_id,
+        chat_id=chat_id,
+        zalo_file_ids=zalo_file_ids,
+    )
+    return {"ok": True}
+
+
+def _send_zalo_start_hint(chat_id: Any) -> None:
+    try:
+        from app.services import zalo_service
+        zalo_service.send_message(
+            chat_id,
+            "👋 Hi! I'm Dreamify Morpheus, your analytics teammate.\n\n"
+            "To connect, generate a code at app.dreamify.dev under "
+            "Integrations → Zalo, then send `start YOUR_CODE` here.",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send Zalo start hint: %s", exc)
+
+
+def _send_zalo_unregistered_hint(chat_id: Any) -> None:
+    """Reply when a Zalo DM arrives from a chat we don't have a workspace for."""
+    try:
+        from app.services import zalo_service
+        zalo_service.send_message(
+            chat_id,
+            "🔌 You're not connected to Dreamify yet.\n\n"
+            "Generate a code at app.dreamify.dev under Integrations → Zalo, "
+            "then send `start YOUR_CODE` here.",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send Zalo unregistered hint: %s", exc)
+
+
+# ── Zalo file upload (magic-token URL) ──────────────────────────────────────
+
+ZALO_UPLOAD_TTL = 1800  # 30 minutes
+
+
+def _zalo_upload_app_url() -> str:
+    """Return the user-facing base URL where the upload page is served.
+
+    Defers to chat_platform.dreamify_app_url so it can be overridden per env
+    (ngrok in dev, app.dreamify.dev in prod).
+    """
+    return _dreamify_app_url().rstrip("/")
+
+
+def _generate_upload_token() -> str:
+    # 16-char URL-safe token (~96 bits of entropy)
+    return secrets.token_urlsafe(12)
+
+
+def _handle_zalo_unsupported_file(chat_id: Any) -> None:
+    """Mint an upload token and reply with a tappable URL.
+
+    Zalo Bot Platform delivers CSV/PDF/document attachments as
+    ``message.unsupported.received`` with no downloadable reference, so the
+    user must re-upload the file via the web. We park a token row pointing at
+    the user's Zalo workspace; the upload page POSTs to
+    ``/chat/zalo/upload/{token}`` and the asset queues onto the workspace.
+    """
+    from app.services import zalo_service
+
+    platform_workspace_id = f"zalo:{chat_id}"
+    workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+    if not workspace:
+        return
+
+    token = _generate_upload_token()
+    chat_platform_repo.save_workspace(
+        platform_workspace_id=f"zalo_upload:{token}",
+        user_id=workspace["user_id"],
+        project_id=workspace.get("project_id", ""),
+        platform="zalo_upload_token",
+        bot_token_encrypted="",
+        target_workspace_id=platform_workspace_id,
+    )
+
+    upload_url = f"{_zalo_upload_app_url()}/zalo-upload/{token}"
+    try:
+        zalo_service.send_message(
+            chat_id,
+            "📎 I noticed an attachment. Zalo bots can't receive files directly,\n"
+            f"so please upload it here (expires in 30 min):\n\n{upload_url}\n\n"
+            "I'll attach it to your next message.",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send Zalo upload URL: %s", exc)
+
+
+class ZaloUploadInfoResponse(BaseModel):
+    valid: bool
+    workspace_name: Optional[str] = None
+    expires_in: Optional[int] = None
+
+
+@router.get("/chat/zalo/upload/{token}", response_model=ZaloUploadInfoResponse)
+async def zalo_upload_info(token: str):
+    """Return validity + remaining TTL for an upload token. No auth — the
+    token IS the credential; the user got it via their authenticated Zalo
+    chat session with our bot."""
+    row = chat_platform_repo.get_workspace(f"zalo_upload:{token}")
+    if not row or row.get("platform") != "zalo_upload_token":
+        return ZaloUploadInfoResponse(valid=False)
+
+    try:
+        created_at = _datetime.fromisoformat(row.get("created_at", ""))
+        age = (_datetime.now() - created_at).total_seconds()
+    except Exception:
+        return ZaloUploadInfoResponse(valid=False)
+
+    if age > ZALO_UPLOAD_TTL:
+        return ZaloUploadInfoResponse(valid=False)
+
+    target_id = row.get("target_workspace_id", "")
+    target = chat_platform_repo.get_workspace(target_id) if target_id else None
+    return ZaloUploadInfoResponse(
+        valid=True,
+        workspace_name=(target or {}).get("workspace_name"),
+        expires_in=int(ZALO_UPLOAD_TTL - age),
+    )
+
+
+@router.post("/chat/zalo/upload/{token}")
+async def zalo_upload_file(token: str, request: Request):
+    """Accept a multipart file upload, validate the token, push to S3,
+    queue the asset onto the target Zalo workspace, and ack to the user
+    via the bot."""
+    from fastapi import UploadFile
+    import boto3
+    from app.services import zalo_service
+    from utils.dynamodb.repos import assets as assets_repo
+
+    row = chat_platform_repo.get_workspace(f"zalo_upload:{token}")
+    if not row or row.get("platform") != "zalo_upload_token":
+        raise HTTPException(status_code=404, detail="Invalid or used upload token")
+
+    try:
+        created_at = _datetime.fromisoformat(row.get("created_at", ""))
+        age = (_datetime.now() - created_at).total_seconds()
+    except Exception:
+        age = ZALO_UPLOAD_TTL + 1
+    if age > ZALO_UPLOAD_TTL:
+        chat_platform_repo.delete_workspace(f"zalo_upload:{token}")
+        raise HTTPException(status_code=410, detail="Upload token expired")
+
+    target_id = row.get("target_workspace_id", "")
+    target = chat_platform_repo.get_workspace(target_id) if target_id else None
+    if not target:
+        raise HTTPException(status_code=404, detail="Target workspace not found")
+
+    form = await request.form()
+    upload: Optional["UploadFile"] = form.get("file")  # type: ignore
+    if upload is None:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    file_bytes = await upload.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    # Reuse the existing 5 MB ceiling for parity with inline image handling.
+    if len(file_bytes) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
+
+    user_id = target["user_id"]
+    project_id = target["project_id"]
+    bucket = config.aws.s3.USER_ASSETS_BUCKET
+    asset_id = str(uuid.uuid4())
+    filename = upload.filename or f"upload_{asset_id}.bin"
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+    s3_key = f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+
+    try:
+        s3 = boto3.client(
+            "s3",
+            region_name=config.aws.access_key.AWS_DEFAULT_REGION,
+            aws_access_key_id=config.aws.access_key.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=config.aws.access_key.AWS_SECRET_ACCESS_KEY,
+        )
+        s3.put_object(Bucket=bucket, Key=s3_key, Body=file_bytes)
+    except Exception as exc:
+        logger.error("Zalo upload S3 put failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Storage upload failed")
+
+    try:
+        assets_repo.create_asset(
+            user_id=user_id,
+            project_id=project_id,
+            s3_bucket=bucket,
+            s3_key=s3_key,
+            asset_type="raw",
+            size_bytes=len(file_bytes),
+            checksum_sha256=None,
+            version="1",
+            content_type=upload.content_type,
+            asset_id=asset_id,
+            file_id=asset_id,
+            original_filename=filename,
+            extension=ext,
+        )
+    except Exception as exc:
+        logger.error("Zalo upload asset record failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Asset record failed")
+
+    asset_record = {
+        "asset_id": asset_id,
+        "filename": filename,
+        "s3_bucket": bucket,
+        "s3_key": s3_key,
+        "extension": ext,
+        "queued_at": _datetime.now().isoformat(),
+    }
+    chat_platform_repo.append_pending_asset(target_id, asset_record)
+    # Token is single-use
+    chat_platform_repo.delete_workspace(f"zalo_upload:{token}")
+
+    # Reach the user back in chat
+    chat_id = target_id.split(":", 1)[1] if ":" in target_id else target_id
+    try:
+        zalo_service.send_message(
+            chat_id,
+            f"✅ Got '{filename}' ({len(file_bytes)/1024:.1f} KB).\n"
+            "Now ask me what you'd like to know about it.",
+        )
+    except Exception as exc:
+        logger.warning("Failed to ack Zalo upload: %s", exc)
+
+    return {"ok": True, "filename": filename, "asset_id": asset_id}
+
+
+def _handle_zalo_start(
+    code: str, chat_id: Any, zalo_user_id: str, from_user: Dict[str, Any]
+) -> None:
+    """Validate registration code and create the Zalo workspace."""
+    from app.services import zalo_service
+
+    if not zalo_service._bot_token():
+        logger.error("Zalo bot not configured")
+        return
+
+    pending_key = f"pending:{code}"
+    pending = chat_platform_repo.get_workspace(pending_key)
+    if not pending or pending.get("platform") != "zalo_pending":
+        try:
+            zalo_service.send_message(
+                chat_id,
+                "❌ Code not found. Please generate a new code at app.dreamify.dev.",
+            )
+        except Exception:
+            pass
+        return
+
+    # Check expiry
+    created_at_str = pending.get("created_at", "")
+    try:
+        created_at = _datetime.fromisoformat(created_at_str)
+        age_seconds = (_datetime.now() - created_at).total_seconds()
+    except Exception:
+        age_seconds = ZALO_CODE_TTL + 1  # treat malformed timestamp as expired
+
+    if age_seconds > ZALO_CODE_TTL:
+        chat_platform_repo.delete_workspace(pending_key)
+        try:
+            zalo_service.send_message(
+                chat_id,
+                "⏰ Code expired. Please generate a new code at app.dreamify.dev.",
+            )
+        except Exception:
+            pass
+        return
+
+    user_id = pending["user_id"]
+    platform_workspace_id = f"zalo:{chat_id}"
+
+    existing = chat_platform_repo.get_workspace(platform_workspace_id)
+    if existing:
+        project_id = existing["project_id"]
+    else:
+        display_name = from_user.get("display_name") or from_user.get("name") or f"user_{zalo_user_id}"
+        project = projects_repo.create_project(
+            user_id=user_id,
+            name=f"Zalo — {display_name}",
+            description="Auto-created for Zalo DM integration",
+        )
+        project_id = project["project_id"]
+
+    workspace_name = (
+        from_user.get("display_name")
+        or from_user.get("name")
+        or "Zalo DM"
+    )
+    chat_platform_repo.save_workspace(
+        platform_workspace_id=platform_workspace_id,
+        user_id=user_id,
+        project_id=project_id,
+        platform="zalo",
+        bot_token_encrypted="",  # global bot token used from config
+        workspace_name=workspace_name,
+        zalo_user_id=zalo_user_id,
+    )
+    chat_platform_repo.delete_workspace(pending_key)
+
+    try:
+        zalo_service.send_message(
+            chat_id,
+            "✅ Dreamify connected!\n\n"
+            "I'm Morpheus, your analytics teammate. "
+            "Just message me with a question about your data.\n\n"
+            "Example: What were our top performing campaigns last month?",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send Zalo welcome message: %s", exc)
+
+
+# ── Zalo registration code ────────────────────────────────────────────────────
+
+class ZaloCodeResponse(BaseModel):
+    code: str
+    bot_username: str
+    bot_id: str
+    qr_url: str
+    expires_in: int
+
+
+@router.post("/chat/zalo/generate-code", response_model=ZaloCodeResponse)
+async def zalo_generate_code(user_id: str = Depends(require_user)):
+    """Generate a short-lived registration code for Zalo DM linking."""
+    if not _zalo_bot_token():
+        raise HTTPException(status_code=503, detail="Zalo integration not configured")
+
+    # Opportunistic GC of stale zalo_pending rows for this user.
+    try:
+        pruned = chat_platform_repo.cleanup_expired_pending(
+            "zalo_pending", ZALO_CODE_TTL, user_id=user_id
+        )
+        if pruned:
+            logger.info("Pruned %d expired zalo_pending rows for user %s", pruned, user_id)
+    except Exception as exc:
+        logger.warning("zalo_pending GC failed: %s", exc)
+
+    code = _generate_telegram_code()  # shared helper — same alphabet/length
+    pending_key = f"pending:{code}"
+
+    chat_platform_repo.save_workspace(
+        platform_workspace_id=pending_key,
+        user_id=user_id,
+        project_id="",
+        platform="zalo_pending",
+        bot_token_encrypted="",
+    )
+
+    # Return a relative path so the frontend always reaches the QR endpoint
+    # via the same origin (Vite proxy in dev, same-host serving in prod).
+    return ZaloCodeResponse(
+        code=code,
+        bot_username=_zalo_bot_username(),
+        bot_id=_zalo_bot_id(),
+        qr_url=f"/api/v1/chat/zalo/qr/{code}",
+        expires_in=ZALO_CODE_TTL,
+    )
+
+
+# ── Zalo QR code (anonymous) ──────────────────────────────────────────────────
+
+@router.get("/chat/zalo/qr/{code}")
+async def zalo_qr_code(code: str):
+    """Render an SVG QR that opens the Zalo bot profile when scanned.
+
+    Zalo Bot Platform does not support deeplink payloads (unlike Telegram's
+    `t.me/Bot?start=CODE`). The QR therefore encodes only the bot profile URL
+    `https://zalo.me/{bot_id}`; the user still types `start <CODE>` manually.
+
+    The path param ``code`` is unused for the encoded payload — it is kept in
+    the URL so that each pending session gets its own cache-bust key, and so
+    the frontend's `<img src>` invalidates whenever a new code is generated.
+    """
+    from fastapi.responses import Response
+    import io
+    import segno
+
+    bot_id = _zalo_bot_id()
+    if not bot_id:
+        raise HTTPException(status_code=503, detail="Zalo integration not configured")
+
+    target = f"https://zalo.me/{bot_id}"
+    buf = io.BytesIO()
+    segno.make(target, error="m").save(buf, kind="svg", scale=8, border=2)
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=900"},
+    )
+
+
+# ── Zalo status ───────────────────────────────────────────────────────────────
+
+class ZaloStatusResponse(BaseModel):
+    connected: bool
+    workspace_name: Optional[str] = None
+    platform_workspace_id: Optional[str] = None
+    project_id: Optional[str] = None
+
+
+@router.get("/chat/zalo/me", response_model=ZaloStatusResponse)
+async def get_zalo_status(user_id: str = Depends(require_user)):
+    """Return the current user's connected Zalo workspace, or connected=false."""
+    workspace = chat_platform_repo.get_workspace_by_user(user_id, "zalo")
+    if not workspace:
+        return ZaloStatusResponse(connected=False)
+    return ZaloStatusResponse(
         connected=True,
         workspace_name=workspace.get("workspace_name"),
         platform_workspace_id=workspace["platform_workspace_id"],

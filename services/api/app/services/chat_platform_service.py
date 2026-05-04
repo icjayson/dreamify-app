@@ -898,8 +898,7 @@ TELEGRAM_FILE_SIZE_LIMIT = 20 * 1024 * 1024  # 20 MB (Telegram Bot API limit)
 
 
 async def _download_and_attach_telegram_files(
-    file_ids: list,
-    bot: Any,
+    telegram_files: list,
     user_id: str,
     project_id: str,
     conversation: Dict[str, Any],
@@ -907,35 +906,43 @@ async def _download_and_attach_telegram_files(
     keys: Dict[str, str],
 ) -> None:
     """
-    Download Telegram document files by file_id, upload to S3, create asset records,
+    Download pre-resolved Telegram document files, upload to S3, create asset records,
     and attach asset content nodes to the last user node in the conversation.
+
+    `telegram_files` is a list of rich dicts produced by _fetch_telegram_document_metadata
+    in the webhook handler: {filename, size, ext, download_url}.  The download URL is
+    already resolved so no extra bot.get_file() call is needed here.
     """
     import aiohttp
 
+    logger.info(
+        "_download_and_attach_telegram_files called with %d file(s): %s",
+        len(telegram_files),
+        [f.get("filename", "<unnamed>") for f in telegram_files],
+    )
     asset_nodes = []
-    for file_id in file_ids:
-        try:
-            tg_file = await bot.get_file(file_id)
-        except Exception as exc:
-            logger.warning("Failed to get Telegram file %s: %s", file_id, exc)
-            continue
+    for tf in telegram_files:
+        filename = tf.get("filename", "file")
+        size = tf.get("size", 0)
+        ext = tf.get("ext", "bin")
+        download_url = tf.get("download_url", "")
 
-        file_path = tg_file.file_path or ""
-        filename = file_path.split("/")[-1] if file_path else f"{file_id}.bin"
-        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
-        download_url = tg_file.file_url if hasattr(tg_file, "file_url") else (
-            f"https://api.telegram.org/file/bot{bot.token}/{file_path}"
-        )
+        if not download_url:
+            logger.warning("Telegram file %s has no download URL, skipping", filename)
+            continue
+        if size > TELEGRAM_FILE_SIZE_LIMIT:
+            logger.warning("Telegram file %s exceeds 20 MB limit, skipping", filename)
+            continue
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(download_url) as resp:
                     if resp.status != 200:
-                        logger.error("Failed to download Telegram file %s: HTTP %s", file_id, resp.status)
+                        logger.error("Failed to download Telegram file %s: HTTP %s", filename, resp.status)
                         continue
                     file_bytes = await resp.read()
         except Exception as exc:
-            logger.error("Error downloading Telegram file %s: %s", file_id, exc)
+            logger.error("Error downloading Telegram file %s: %s", filename, exc)
             continue
 
         if len(file_bytes) > TELEGRAM_FILE_SIZE_LIMIT:
@@ -1011,11 +1018,14 @@ async def handle_telegram_query(
     platform_workspace_id: str,
     chat_id: int,
     message_thread_id: Optional[int],
-    telegram_file_ids: list = [],
+    telegram_files: list = [],
 ) -> None:
     """
     Full lifecycle for a Telegram message query. Runs as a background task.
     Mirrors handle_slack_query but uses Telegram Bot API instead of Slack SDK.
+
+    `telegram_files` is a list of pre-resolved file metadata dicts produced by
+    _fetch_telegram_document_metadata in the webhook handler.
     """
     from app.services.telegram_service import (
         build_dashboard_keyboard,
@@ -1081,14 +1091,19 @@ async def handle_telegram_query(
 
         await asyncio.sleep(0.5)
 
-        if telegram_file_ids:
+        if telegram_files:
             conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
             if conversation_meta:
                 conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
                 await _download_and_attach_telegram_files(
-                    telegram_file_ids, bot, user_id, project_id, conv, bucket, keys
+                    telegram_files, user_id, project_id, conv, bucket, keys
                 )
                 await asyncio.sleep(0.5)
+            else:
+                logger.warning(
+                    "Conversation meta not found for %s — skipping file attachment",
+                    conversation_id,
+                )
 
         _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
         credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
@@ -1148,6 +1163,35 @@ async def handle_telegram_query(
         )
         logger.info("Successfully updated Telegram message for conversation %s", conversation_id)
 
+        # Phase 2B — upload chart previews into the chat (opt-in via ENABLE_CHART_RENDERING).
+        # Album for 2-10 charts, single send_photo for 1.
+        if is_chart_rendering_enabled() and dashboard_json:
+            chart_previews = render_dashboard_previews(dashboard_json, max_charts=4)
+            if chart_previews:
+                try:
+                    from telegram import InputMediaPhoto
+                    if len(chart_previews) == 1:
+                        png_bytes, chart_title = chart_previews[0]
+                        await bot.send_photo(
+                            chat_id=chat_id,
+                            photo=png_bytes,
+                            caption=chart_title[:1024],
+                            message_thread_id=message_thread_id,
+                        )
+                    else:
+                        media = [
+                            InputMediaPhoto(media=png, caption=title[:1024])
+                            for png, title in chart_previews
+                        ]
+                        await bot.send_media_group(
+                            chat_id=chat_id,
+                            media=media,
+                            message_thread_id=message_thread_id,
+                        )
+                    logger.info("Sent %d chart preview(s) to Telegram", len(chart_previews))
+                except Exception as exc:
+                    logger.warning("Failed to send Telegram chart previews: %s", exc)
+
     except Exception as exc:
         logger.error("handle_telegram_query failed for %s: %s", platform_workspace_id, exc, exc_info=True)
         if placeholder_message_id:
@@ -1160,3 +1204,310 @@ async def handle_telegram_query(
                 )
             except Exception:
                 pass
+
+
+# ── Zalo file handling ────────────────────────────────────────────────────────
+
+ZALO_FILE_SIZE_LIMIT = 5 * 1024 * 1024  # 5 MB (Zalo Bot Platform default)
+
+
+def _download_and_attach_zalo_files(
+    file_ids: list,
+    user_id: str,
+    project_id: str,
+    conversation: Dict[str, Any],
+    bucket: str,
+    keys: Dict[str, str],
+) -> None:
+    """
+    Resolve Zalo file_ids via getFile, download, push to S3, and attach asset
+    nodes to the last user node in the conversation. Synchronous (uses requests)
+    to match zalo_service's HTTP client.
+    """
+    from app.services import zalo_service
+
+    asset_nodes = []
+    for file_id in file_ids:
+        info = zalo_service.get_file(file_id)
+        if not info or not info.get("ok"):
+            logger.warning("Failed to resolve Zalo file %s", file_id)
+            continue
+
+        result = info.get("result", {}) or {}
+        download_url = result.get("file_url") or result.get("file_path") or ""
+        filename = (download_url.rsplit("/", 1)[-1] if download_url else f"{file_id}.bin").split("?")[0]
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+
+        if not download_url:
+            logger.warning("Zalo getFile returned no URL for %s", file_id)
+            continue
+
+        try:
+            resp = requests.get(download_url, timeout=20)
+            if resp.status_code != 200:
+                logger.error("Failed to download Zalo file %s: HTTP %s", file_id, resp.status_code)
+                continue
+            file_bytes = resp.content
+        except Exception as exc:
+            logger.error("Error downloading Zalo file %s: %s", file_id, exc)
+            continue
+
+        if len(file_bytes) > ZALO_FILE_SIZE_LIMIT:
+            logger.warning("Zalo file %s exceeds 5 MB limit, skipping", filename)
+            continue
+
+        asset_id = str(uuid.uuid4())
+        s3_key = f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+
+        try:
+            s3 = boto3.client(
+                "s3",
+                region_name=config.aws.access_key.AWS_DEFAULT_REGION,
+                aws_access_key_id=config.aws.access_key.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=config.aws.access_key.AWS_SECRET_ACCESS_KEY,
+            )
+            s3.put_object(Bucket=bucket, Key=s3_key, Body=file_bytes)
+        except Exception as exc:
+            logger.error("Failed to upload Zalo file %s to S3: %s", filename, exc)
+            continue
+
+        try:
+            assets_repo.create_asset(
+                user_id=user_id,
+                project_id=project_id,
+                s3_bucket=bucket,
+                s3_key=s3_key,
+                asset_type="raw",
+                size_bytes=len(file_bytes),
+                checksum_sha256=None,
+                version="1",
+                content_type=None,
+                asset_id=asset_id,
+                file_id=asset_id,
+                original_filename=filename,
+                extension=ext,
+            )
+        except Exception as exc:
+            logger.error("Failed to create asset record for Zalo file %s: %s", filename, exc)
+            continue
+
+        asset_nodes.append({
+            "type": "asset",
+            "data": {
+                "asset_id": asset_id,
+                "file_id": asset_id,
+                "s3_bucket": bucket,
+                "s3_key": s3_key,
+                "extension": ext,
+                "filename": filename,
+            },
+        })
+        logger.info("Attached Zalo file %s as asset %s", filename, asset_id)
+
+    if not asset_nodes:
+        return
+
+    nodes = conversation.get("nodes", [])
+    for node in reversed(nodes):
+        if node.get("role") == "user":
+            node.setdefault("contents", []).extend(asset_nodes)
+            break
+
+    conversation["updated_at"] = _now_iso()
+    save_conversation(bucket, keys["primary"], conversation)
+    save_conversation(bucket, keys["backup"], conversation)
+
+
+# ── Zalo main entry point ─────────────────────────────────────────────────────
+
+async def handle_zalo_query(
+    query: str,
+    platform_workspace_id: str,
+    chat_id: Any,
+    zalo_file_ids: list = [],
+) -> None:
+    """
+    Full lifecycle for a Zalo Bot Platform message query. Runs as a background task.
+
+    Zalo Bot Platform is **send-only** — `editMessageText` returns 404 — so we
+    can't edit the "Analyzing..." placeholder into the final response the way
+    we do on Telegram. The shape here is therefore:
+
+      1. send a one-shot "Analyzing..." placeholder so the user knows we got it
+      2. emit `sendChatAction("typing")` heartbeats during the workflow as
+         lightweight progress feedback (no chat clutter)
+      3. send the final narrative as a NEW message when the workflow completes
+      4. on error, send the error as a NEW message
+    """
+    from app.services import zalo_service
+
+    if not zalo_service._bot_token():
+        logger.error("Zalo bot not configured")
+        return
+
+    try:
+        zalo_service.send_message(chat_id, zalo_service.format_analyzing_message(query))
+    except Exception as exc:
+        logger.error("Failed to post placeholder to Zalo chat %s: %s", chat_id, exc)
+        return
+
+    async def update_status(label: str) -> None:
+        # Zalo can't edit messages and we don't want to spam the chat with a
+        # new message per workflow step. Use a typing indicator instead — it
+        # auto-dismisses after a few seconds and stays out of the transcript.
+        try:
+            zalo_service.send_chat_action(chat_id, action="typing")
+        except Exception as exc:
+            logger.debug("Zalo sendChatAction failed (non-fatal): %s", exc)
+
+    try:
+        workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+        if not workspace:
+            raise RuntimeError(f"Workspace {platform_workspace_id} not found")
+
+        user_id = workspace["user_id"]
+        thread_key = f"{chat_id}#0"
+        conversation_id, project_id, is_new = _get_or_create_session(
+            platform_workspace_id, thread_key, workspace
+        )
+
+        if is_new:
+            bucket, keys = _save_new_conversation(user_id, project_id, conversation_id, query)
+        else:
+            bucket, keys = _append_user_node_to_conversation(
+                user_id, project_id, conversation_id, query
+            )
+            chat_platform_repo.update_session_conversation(
+                platform_workspace_id, thread_key, conversation_id
+            )
+
+        await asyncio.sleep(0.5)
+
+        # Drain any web-uploaded files that arrived before this query.
+        # (Zalo Bot Platform doesn't deliver file payloads in webhooks, so users
+        # upload via the magic-token URL the bot replied with on
+        # `message.unsupported.received`. Those assets are queued on the
+        # workspace as `pending_assets`.)
+        pending_assets = workspace.get("pending_assets") or []
+        if pending_assets:
+            try:
+                conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+                if conversation_meta:
+                    conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+                    asset_nodes = []
+                    for a in pending_assets:
+                        asset_nodes.append({
+                            "type": "asset",
+                            "data": {
+                                "asset_id": a.get("asset_id"),
+                                "file_id": a.get("asset_id"),
+                                "s3_bucket": a.get("s3_bucket"),
+                                "s3_key": a.get("s3_key"),
+                                "extension": a.get("extension"),
+                                "filename": a.get("filename"),
+                            },
+                        })
+                    nodes = conv.get("nodes", [])
+                    for node in reversed(nodes):
+                        if node.get("role") == "user":
+                            node.setdefault("contents", []).extend(asset_nodes)
+                            break
+                    conv["updated_at"] = _now_iso()
+                    save_conversation(bucket, keys["primary"], conv)
+                    save_conversation(bucket, keys["backup"], conv)
+                    logger.info("Attached %d pending Zalo asset(s) to conversation %s",
+                                len(asset_nodes), conversation_id)
+                chat_platform_repo.clear_pending_assets(platform_workspace_id)
+            except Exception as exc:
+                logger.warning("Failed to drain Zalo pending assets: %s", exc)
+            await asyncio.sleep(0.3)
+
+        if zalo_file_ids:
+            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            if conversation_meta:
+                conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+                _download_and_attach_zalo_files(
+                    zalo_file_ids, user_id, project_id, conv, bucket, keys
+                )
+                await asyncio.sleep(0.5)
+
+        _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
+        credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
+
+        final_status, _, final_meta = await _poll_workflow(conversation_id, on_step=update_status)
+
+        if final_status != "completed":
+            zalo_service.send_message(
+                chat_id,
+                zalo_service.format_error_message("Analysis did not complete. Please try again."),
+            )
+            return
+
+        metrics: list = []
+        dashboard_url: Optional[str] = None
+        dashboard_json: Optional[Dict[str, Any]] = None
+
+        if final_meta.get("response_type") == "message" and final_meta.get("content"):
+            narrative = final_meta["content"]
+            logger.info("Using inline narrative from Zalo workflow metadata (len=%d)", len(narrative))
+        else:
+            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            if not conversation_meta:
+                raise RuntimeError(f"Post-poll: conversation {conversation_id} not found in DynamoDB")
+            conversation = load_conversation(
+                conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+            )
+            narrative = _extract_narrative(conversation) or "Analysis complete. No narrative returned."
+            dashboard_url = _build_dashboard_url(project_id, conversation)
+
+            dashboards = conversation.get("dashboards", [])
+            if dashboards:
+                try:
+                    projects_repo.update_project(
+                        user_id=user_id,
+                        project_id=project_id,
+                        is_preview_public=True,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to enable public preview for %s: %s", project_id, exc)
+
+                s3_uri = dashboards[-1].get("s3_uri")
+                if s3_uri:
+                    dashboard_json = _load_dashboard_json(s3_uri)
+                    if dashboard_json:
+                        metrics = _extract_top_metrics(dashboard_json)
+
+        zalo_service.send_message(
+            chat_id,
+            zalo_service.format_response_message(narrative, dashboard_url, CHAT_CREDIT_COST, metrics),
+        )
+        logger.info("Successfully sent Zalo response for conversation %s", conversation_id)
+
+        # Phase 2B — upload chart previews via sendPhoto (sequential; Zalo Bot
+        # Platform has no documented sendMediaGroup). Throttled at 200 ms to
+        # stay clear of any undocumented per-chat rate limit.
+        if is_chart_rendering_enabled() and dashboard_json:
+            chart_previews = render_dashboard_previews(dashboard_json, max_charts=4)
+            for png_bytes, chart_title in chart_previews:
+                try:
+                    safe_name = chart_title.lower().replace(" ", "_").replace("/", "_")
+                    zalo_service.send_photo(
+                        chat_id,
+                        png_bytes,
+                        caption=chart_title,
+                        filename=f"{safe_name}.png",
+                    )
+                    logger.info("Sent Zalo chart preview '%s'", chart_title)
+                except Exception as exc:
+                    logger.warning("Failed to send Zalo chart '%s': %s", chart_title, exc)
+                await asyncio.sleep(0.2)
+
+    except Exception as exc:
+        logger.error("handle_zalo_query failed for %s: %s", platform_workspace_id, exc, exc_info=True)
+        try:
+            zalo_service.send_message(
+                chat_id,
+                zalo_service.format_error_message("Something went wrong. Please try again."),
+            )
+        except Exception:
+            pass

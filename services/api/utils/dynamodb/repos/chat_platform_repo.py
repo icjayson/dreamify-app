@@ -33,6 +33,8 @@ def save_workspace(
     workspace_name: str = "",
     language: str = "en",
     telegram_user_id: Optional[str] = None,
+    zalo_user_id: Optional[str] = None,
+    target_workspace_id: Optional[str] = None,
 ) -> Dict:
     table = get_table(tables.chat_workspaces)
     item = {
@@ -47,8 +49,64 @@ def save_workspace(
     }
     if telegram_user_id is not None:
         item["telegram_user_id"] = telegram_user_id
+    if zalo_user_id is not None:
+        item["zalo_user_id"] = zalo_user_id
+    if target_workspace_id is not None:
+        # Used by short-lived `zalo_upload:{token}` rows to point at the
+        # real Zalo workspace that owns the upload session.
+        item["target_workspace_id"] = target_workspace_id
     table.put_item(Item=item)
     return item
+
+
+def append_pending_asset(platform_workspace_id: str, asset: Dict) -> None:
+    """Append a pending-asset record to a chat workspace.
+
+    Used for Zalo: files uploaded via the web upload page are parked on the
+    workspace until the user's next chat query consumes them.
+    """
+    table = get_table(tables.chat_workspaces)
+    table.update_item(
+        Key={"platform_workspace_id": platform_workspace_id},
+        UpdateExpression="SET pending_assets = list_append(if_not_exists(pending_assets, :empty), :a)",
+        ExpressionAttributeValues={":empty": [], ":a": [asset]},
+    )
+
+
+def clear_pending_assets(platform_workspace_id: str) -> None:
+    table = get_table(tables.chat_workspaces)
+    table.update_item(
+        Key={"platform_workspace_id": platform_workspace_id},
+        UpdateExpression="REMOVE pending_assets",
+    )
+
+
+def cleanup_expired_pending(platform: str, ttl_seconds: int, user_id: Optional[str] = None) -> int:
+    """Delete pending registration rows older than ``ttl_seconds``.
+
+    Called opportunistically from the `generate-code` endpoints so the table
+    doesn't accumulate stale `*_pending` rows. Scoped to a single user when
+    ``user_id`` is provided to keep the scan small.
+    Returns the number of rows deleted.
+    """
+    from datetime import datetime
+    table = get_table(tables.chat_workspaces)
+    flt = Attr("platform").eq(platform)
+    if user_id:
+        flt = flt & Attr("user_id").eq(user_id)
+    resp = table.scan(FilterExpression=flt, Limit=50)
+    now = datetime.now()
+    deleted = 0
+    for item in resp.get("Items", []):
+        try:
+            created = datetime.fromisoformat(item.get("created_at", ""))
+            age = (now - created).total_seconds()
+        except Exception:
+            age = ttl_seconds + 1  # malformed timestamp → treat as expired
+        if age > ttl_seconds:
+            table.delete_item(Key={"platform_workspace_id": item["platform_workspace_id"]})
+            deleted += 1
+    return deleted
 
 
 def delete_workspace(platform_workspace_id: str) -> None:
@@ -72,6 +130,17 @@ def get_workspace_by_telegram_user_id(telegram_user_id: str) -> Optional[Dict]:
     table = get_table(tables.chat_workspaces)
     resp = table.scan(
         FilterExpression=Attr("platform").eq("telegram") & Attr("telegram_user_id").eq(telegram_user_id),
+        Limit=10,
+    )
+    items = resp.get("Items", [])
+    return items[0] if items else None
+
+
+def get_workspace_by_zalo_user_id(zalo_user_id: str) -> Optional[Dict]:
+    """Find a Zalo DM workspace by the Zalo user_id stored at registration."""
+    table = get_table(tables.chat_workspaces)
+    resp = table.scan(
+        FilterExpression=Attr("platform").eq("zalo") & Attr("zalo_user_id").eq(zalo_user_id),
         Limit=10,
     )
     items = resp.get("Items", [])

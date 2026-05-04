@@ -691,6 +691,56 @@ async def update_dashboard_template(
     return {"success": True}
 
 
+class SaveDashboardDataRequest(BaseModel):
+    project_id: str
+    dashboard_data: Dict[str, Any]
+
+
+@router.put("/conversation/{conversation_id}/dashboard/{dashboard_id}/data")
+async def save_dashboard_data(
+    conversation_id: str,
+    dashboard_id: str,
+    request: SaveDashboardDataRequest,
+    user_id: str = Depends(require_user),
+):
+    """Overwrite a saved dashboard JSON in S3 with new data (manual edits)."""
+    conversation_meta = conversations_repo.get_conversation(request.project_id, conversation_id)
+    if not conversation_meta:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_meta.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    s3_bucket = conversation_meta["s3_bucket"]
+    s3_key = conversation_meta["s3_key"]
+    conversation = load_conversation(s3_bucket, s3_key)
+
+    dashboards = conversation.get("dashboards", [])
+    target = next((d for d in dashboards if d.get("dashboard_id") == dashboard_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    s3_uri = target.get("s3_uri", "")
+    if not s3_uri.startswith("s3://"):
+        raise HTTPException(status_code=500, detail="Invalid dashboard S3 URI")
+
+    uri_parts = s3_uri[5:].split("/", 1)
+    if len(uri_parts) != 2:
+        raise HTTPException(status_code=500, detail="Invalid dashboard S3 URI")
+
+    bucket = uri_parts[0]
+    key = uri_parts[1].lstrip("/")
+
+    try:
+        updated_bytes = json.dumps(request.dashboard_data, ensure_ascii=False, indent=2).encode("utf-8")
+        upload_bytes(bucket, key, updated_bytes, content_type="application/json")
+    except Exception as e:
+        logger.error("Failed to save dashboard data: dashboard_id=%s, error=%s", dashboard_id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to save dashboard: {str(e)}")
+
+    logger.info("Dashboard saved: conversation_id=%s, dashboard_id=%s", conversation_id, dashboard_id)
+    return {"success": True}
+
+
 @router.post(
     "/conversation/{conversation_id}/stop", response_model=StopWorkflowResponse
 )

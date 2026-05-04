@@ -11,9 +11,13 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
-import { ChartConfiguration } from '@/types/dashboard';
 import { useChartTheme } from '@/hooks/useChartTheme';
 import { assignDatasetColors, isLightBackground } from '@/utils/chartStyling';
+
+const LABEL_PERCENT_THRESHOLD = 0.03;
+const DENSE_THRESHOLD = 6;
+const AGGREGATE_THRESHOLD = 12;
+const OTHERS_COLOR = '#94a3b8';
 
 interface RechartsPieChartProps {
   title?: string;
@@ -77,6 +81,27 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
     });
   }, [datasets]);
 
+  // Collapse slices below threshold into "Others" when there are too many
+  const displayData = React.useMemo(() => {
+    if (transformedData.length <= AGGREGATE_THRESHOLD) return transformedData;
+
+    const total = transformedData.reduce((s, d) => s + d.value, 0);
+    const visible: typeof transformedData = [];
+    let othersValue = 0;
+
+    for (const slice of transformedData) {
+      if (total > 0 && slice.value / total >= LABEL_PERCENT_THRESHOLD) {
+        visible.push(slice);
+      } else {
+        othersValue += slice.value;
+      }
+    }
+    if (othersValue > 0) visible.push({ name: 'Others', value: othersValue });
+    return visible;
+  }, [transformedData]);
+
+  const isDense = displayData.length > DENSE_THRESHOLD;
+
   // Assign colors to datasets
   const coloredDatasets = React.useMemo(() => {
     return assignColors(datasets);
@@ -84,13 +109,14 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
 
   // Get colors for pie slices
   const colors = React.useMemo(() => {
-    return coloredDatasets[0]?.color ? 
-      transformedData.map((_, index) => {
-        const colorPalette = styling?.colorPalette || ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-        return colorPalette[index % colorPalette.length];
-      }) : 
-      ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-  }, [coloredDatasets, transformedData, styling?.colorPalette]);
+    const colorPalette = styling?.colorPalette || ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    return displayData.map((entry, index) => {
+      if (entry.name === 'Others') return OTHERS_COLOR;
+      return coloredDatasets[0]?.color
+        ? colorPalette[index % colorPalette.length]
+        : colorPalette[index % colorPalette.length];
+    });
+  }, [coloredDatasets, displayData, styling?.colorPalette]);
 
   // Get styling classes
   const stylingClasses = getStylingClasses();
@@ -127,35 +153,37 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
       <ResponsiveContainer width="100%" height="100%" style={{ flex: 1 }}>
         <PieChart>
           <Pie
-            data={transformedData}
+            data={displayData}
             cx="50%"
             cy="50%"
-            labelLine={false}
-            label={({ name, percent, cx, cy, midAngle, innerRadius, outerRadius }) => {
+            labelLine={isDense ? false : { stroke: labelFillColor, strokeWidth: 1, opacity: 0.4 }}
+            label={isDense ? false : ({ name, percent, cx, cy, midAngle, outerRadius }) => {
+              if (percent < LABEL_PERCENT_THRESHOLD) return null;
               const RADIAN = Math.PI / 180;
-              const radius = outerRadius + 16;
-              const x = cx + radius * Math.cos(-midAngle * RADIAN);
-              const y = cy + radius * Math.sin(-midAngle * RADIAN);
+              const r = outerRadius + 20;
+              const x = cx + r * Math.cos(-midAngle * RADIAN);
+              const y = cy + r * Math.sin(-midAngle * RADIAN);
               return (
-                <text x={x} y={y} fill={labelFillColor} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12}>
+                <text x={x} y={y} fill={labelFillColor} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={11}>
                   {`${name} ${(percent * 100).toFixed(0)}%`}
                 </text>
               );
             }}
-            outerRadius={80}
+            outerRadius={isDense ? 100 : 80}
             fill="#8884d8"
             dataKey="value"
             animationDuration={styling?.animationEnabled ? 1000 : 0}
           >
-            {transformedData.map((entry, index) => (
+            {displayData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={colors[index]} />
             ))}
           </Pie>
           <Tooltip content={<CustomTooltip />} />
-          {styling?.legendPosition !== 'none' && (
-            <Legend 
+          {(styling?.legendPosition !== 'none' || isDense) && (
+            <Legend
               className="chart-legend"
               verticalAlign={styling?.legendPosition === 'top' ? 'top' : 'bottom'}
+              wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
             />
           )}
         </PieChart>

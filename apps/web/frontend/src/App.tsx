@@ -23,6 +23,7 @@ import ProjectPage from "./pages/project";
 import PreviewPage from "./pages/preview.tsx";
 import FilePreviewPage from "./pages/FilePreviewPage";
 import WaitlistPage from "./pages/Waitlist.tsx";
+import ZaloUploadPage from "./pages/ZaloUpload";
 import CancelPage from "./pages/CancelPage";
 import SuccessPage from "./pages/SuccessPage";
 import AdminPage from "./pages/admin";
@@ -92,6 +93,7 @@ const AppContent = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/waitlist" element={<WaitlistPage />} />
+        <Route path="/zalo-upload/:token" element={<ZaloUploadPage />} />
         <Route path="/workspace" element={
           <SignedIn>
             <WorkspacePage />

@@ -39,6 +39,7 @@ import { CONNECTORS, CONNECTOR_CATEGORIES } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
 import { SlackIntegrationCard } from "@/components/integrations/SlackIntegrationCard";
 import { TelegramIntegrationCard } from "@/components/integrations/TelegramIntegrationCard";
+import { ZaloIntegrationCard } from "@/components/integrations/ZaloIntegrationCard";
 import { ScheduleManager } from "@/components/schedules/ScheduleManager";
 import { toast as sonnerToast } from "sonner";
 
@@ -695,6 +696,7 @@ export default function WorkspacePage() {
               <div className="flex flex-col gap-3">
                 <SlackIntegrationCard />
                 <TelegramIntegrationCard />
+                <ZaloIntegrationCard />
               </div>
             </div>
 

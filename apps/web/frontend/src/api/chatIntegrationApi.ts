@@ -21,6 +21,21 @@ export interface TelegramCodeResponse {
   expires_in: number;
 }
 
+export interface ZaloStatusResponse {
+  connected: boolean;
+  workspace_name?: string;
+  platform_workspace_id?: string;
+  project_id?: string;
+}
+
+export interface ZaloCodeResponse {
+  code: string;
+  bot_username: string;
+  bot_id: string;
+  qr_url: string;
+  expires_in: number;
+}
+
 export const chatIntegrationApi = {
   async getSlackStatus(): Promise<SlackStatusResponse> {
     const res = await api.get<SlackStatusResponse>("/api/v1/chat/slack/me");
@@ -51,6 +66,22 @@ export const chatIntegrationApi = {
   },
 
   async disconnectTelegram(platformWorkspaceId: string): Promise<void> {
+    await api.delete(`/api/v1/chat/workspaces/${encodeURIComponent(platformWorkspaceId)}`);
+  },
+
+  async getZaloStatus(): Promise<ZaloStatusResponse> {
+    const res = await api.get<ZaloStatusResponse>("/api/v1/chat/zalo/me");
+    if (res.success && res.data) return res.data;
+    return { connected: false };
+  },
+
+  async generateZaloCode(): Promise<ZaloCodeResponse> {
+    const res = await api.post<ZaloCodeResponse>("/api/v1/chat/zalo/generate-code");
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || "Failed to generate Zalo code");
+  },
+
+  async disconnectZalo(platformWorkspaceId: string): Promise<void> {
     await api.delete(`/api/v1/chat/workspaces/${encodeURIComponent(platformWorkspaceId)}`);
   },
 };

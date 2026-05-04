@@ -117,6 +117,25 @@ class ConversationService {
     }
   }
 
+  async saveDashboardData(
+    conversationId: string,
+    dashboardId: string,
+    projectId: string,
+    dashboardData: Record<string, unknown>,
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await api.put<{ success: boolean }>(
+        `/api/v1/conversation/${conversationId}/dashboard/${dashboardId}/data`,
+        { project_id: projectId, dashboard_data: dashboardData },
+      );
+      if (response.success && response.data) return { success: true };
+      return { success: false, error: response.error || 'Failed to save dashboard' };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: msg };
+    }
+  }
+
   async stopWorkflow(conversationId: string, projectId: string): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
       const response = await api.post<{ success: boolean; message: string; conversation_id: string }>(

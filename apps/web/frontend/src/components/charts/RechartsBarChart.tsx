@@ -16,6 +16,8 @@ import {
 import { ChartConfiguration } from '@/types/dashboard';
 import { useChartTheme } from '@/hooks/useChartTheme';
 import { assignDatasetColors } from '@/utils/chartStyling';
+import EditableText from '@/components/charts/edit/EditableText';
+import { useEditableAxes } from '@/components/charts/edit/useEditableAxes';
 
 interface RechartsBarChartProps {
   title?: string;
@@ -44,16 +46,21 @@ interface RechartsBarChartProps {
   style?: React.CSSProperties;
 }
 
-const RechartsBarChart: React.FC<RechartsBarChartProps> = ({
+const RechartsBarChart: React.FC<RechartsBarChartProps & { axisConfig?: any }> = ({
   title = "Bar Chart",
   description,
   datasets = [],
   config = {},
   layout = {},
   styling,
+  axisConfig,
   className = "",
   style = {}
 }) => {
+  const { xAxisProps, yAxisProps } = useEditableAxes({
+    x: axisConfig?.x_axis?.label,
+    y: axisConfig?.y_axis?.label,
+  });
   const { assignColors, getStylingClasses } = useChartTheme({
     initialStyling: styling
   });
@@ -117,10 +124,22 @@ const RechartsBarChart: React.FC<RechartsBarChartProps> = ({
   return (
     <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '100%', display: 'flex', flexDirection: 'column', ...style }}>
       <div className="mb-4" style={{ flexShrink: 0 }}>
-        <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }}>{title}</h3>
-        {description && (
-          <p className="text-sm" style={{ color: 'var(--description-color)' }}>{description}</p>
-        )}
+        <EditableText
+          as="h3"
+          value={title}
+          path="title"
+          className="text-lg font-semibold mb-1"
+          style={{ color: 'var(--title-color)' }}
+          placeholder="Chart title"
+        />
+        <EditableText
+          as="p"
+          value={description}
+          path="description"
+          className="text-sm"
+          style={{ color: 'var(--description-color)' }}
+          placeholder="Add description"
+        />
       </div>
 
       <ResponsiveContainer width="100%" height="100%" style={{ flex: 1 }}>
@@ -133,18 +152,22 @@ const RechartsBarChart: React.FC<RechartsBarChartProps> = ({
             bottom: 20,
           }}
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            className="chart-grid"
-          />
+          {styling?.gridVisible !== false && (
+            <CartesianGrid
+              strokeDasharray="3 3"
+              className="chart-grid"
+            />
+          )}
           <XAxis
             dataKey="label"
             className="chart-axis"
             tick={{ fill: 'var(--element-color)' }}
+            {...xAxisProps}
           />
           <YAxis
             className="chart-axis"
             tick={{ fill: 'var(--element-color)' }}
+            {...yAxisProps}
           />
           <Tooltip content={<CustomTooltip />} />
           {styling?.legendPosition !== 'none' && (

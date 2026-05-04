@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, LayoutTemplate, Pencil, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
+import EditModeToolbar from "@/components/charts/edit/EditModeToolbar";
+import { useEditMode } from "@/hooks/useEditMode";
 import ChatInterface from "@/chat/ChatInterface";
 import DashboardPreview from "@/components/project-section/DashboardPreview";
 import CsvPreviewPanel from "@/components/project-section/CsvPreviewPanel";
@@ -177,6 +179,25 @@ export default function ProjectPage() {
   const setTemplateModalOpen = useChatStore((s) => s.setTemplateModalOpen);
   const isUpdatingDashboard = useChatStore((s) => s.isUpdatingDashboard);
   const currentWorkflowStep = useChatStore((s) => s.currentWorkflowStep);
+  const currentConversationId = useChatStore((s) => s.currentConversationId);
+
+  const isDirty = useEditMode((s) => s.isDirty);
+  const markSaved = useEditMode((s) => s.markSaved);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Live reference to the normalized + edits-applied components (kept in sync by
+  // DashboardPreview via the onEditedComponentsChange callback). We use refs so the
+  // save handler always sees the latest value without being in its dependency array.
+  const editedComponentsRef = useRef<any[]>([]);
+  const activeDashboardMetaRef = useRef<any>(null);
+
+  const handleEditedComponentsChange = useCallback(
+    (components: any[], activeDashboard: any | null) => {
+      editedComponentsRef.current = components;
+      activeDashboardMetaRef.current = activeDashboard;
+    },
+    []
+  );
 
   // Friendly step labels for the update overlay
   const UPDATING_STEP_MAP: Record<string, string> = {
@@ -477,6 +498,64 @@ export default function ProjectPage() {
     }
   }, [uploadedFiles]);
 
+  // Warn before leaving with unsaved edits
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
+  const handleSaveDashboard = useCallback(async () => {
+    if (!currentConversationId || !selectedDashboardId || !projectId || !processedData) return;
+    setIsSaving(true);
+    try {
+      // Use the already-normalized + edits-applied components captured by the ref.
+      // This avoids re-parsing the raw Morpheus payload (which has no `components` field)
+      // and losing the applied edits.
+      const mergedComponents = editedComponentsRef.current;
+      const meta = activeDashboardMetaRef.current;
+
+      // Build a normalized payload that the normalizeDashboard shortcut recognises:
+      // { components, layout, id } at the top level (and preserve any outer wrapper
+      // fields like `dashboard_config` if the original data used that shape).
+      const normalizedCore = {
+        id: meta?.id || 'processed_dashboard',
+        layout: meta?.layout || { type: 'grid', grid_columns: 12, grid_rows: 20 },
+        components: mergedComponents,
+      };
+
+      // Re-attach any non-dashboard fields from the original processedData so the
+      // backend receives a complete document.
+      const payload: Record<string, unknown> = processedData?.dashboard_config
+        ? { ...processedData, dashboard_config: normalizedCore }
+        : { ...processedData, ...normalizedCore };
+
+      const result = await conversationService.saveDashboardData(
+        currentConversationId,
+        selectedDashboardId,
+        projectId,
+        payload,
+      );
+      if (result.success) {
+        markSaved();
+        // Store the normalized-format data so normalizeDashboard takes the shortcut
+        // on the next render and doesn't rebuild from raw arrays, discarding the edits.
+        setProcessedData(payload);
+        toast({ title: 'Dashboard saved', duration: 2000 });
+      } else {
+        toast({ title: 'Save failed', description: result.error, variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'Save failed', description: String(e), variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [currentConversationId, selectedDashboardId, projectId, processedData, markSaved, toast]);
+
   return (
     <>
       {/* Loading overlay — renders on top of the page so components are visible behind */}
@@ -688,6 +767,9 @@ export default function ProjectPage() {
                       <LayoutTemplate className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Template</span>
                     </button>
+                    {!!processedData && !isProjectLoading && (
+                      <EditModeToolbar onSave={handleSaveDashboard} isSaving={isSaving} />
+                    )}
                     {isDashboardVisible && (
                       <button
                         onClick={() => setIsPublishOpen(true)}
@@ -765,6 +847,7 @@ export default function ProjectPage() {
                       processedData={processedData}
                       className="h-full overflow-y-auto"
                       showCardActionsMenu
+                      onEditedComponentsChange={handleEditedComponentsChange}
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full bg-black/5 dark:bg-white/5">

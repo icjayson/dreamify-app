@@ -1,6 +1,7 @@
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { getStyleVariantProps, type ChartStyleVariant } from "@/utils/chartStyling";
+import EditableText from "@/components/charts/edit/EditableText";
 
 interface MetricCardProps {
   title: string;
@@ -77,9 +78,9 @@ const MetricCard = ({
       <div className="flex items-stretch h-full">
         {/* Left Side: Text Content */}
         <div className="flex-1 flex flex-col justify-between pr-2 min-w-0">
-          <p className="text-sm" style={{ color: textColor }}>{title}</p>
+          <EditableText as="p" value={title} path="title" className="text-sm" style={{ color: textColor }} placeholder="Metric title" />
           <div>
-            <p className="text-2xl font-bold" style={{ color: valueColor }}>{value}</p>
+            <EditableText as="p" value={value} path="value" className="text-2xl font-bold" style={{ color: valueColor }} placeholder="0" />
             {(displayChange && direction) && (
               <div className="flex items-center gap-1.5 mt-1">
                 {direction === 'up' && (
@@ -91,9 +92,13 @@ const MetricCard = ({
                 {direction === 'stable' && (
                   <span className="inline-block w-2 h-2 rounded-full" style={{ background: textColor }} />
                 )}
-                <span className="text-xs font-medium" style={{ color: direction === 'up' ? trendUp : direction === 'down' ? trendDown : textColor }}>
-                  {displayChange}
-                </span>
+                <EditableText
+                  as="span"
+                  value={displayChange}
+                  path="change"
+                  className="text-xs font-medium"
+                  style={{ color: direction === 'up' ? trendUp : direction === 'down' ? trendDown : textColor }}
+                />
                 {periodLabel && (
                   <span className="text-[10px] opacity-75" style={{ color: textColor }}>{periodLabel}</span>
                 )}

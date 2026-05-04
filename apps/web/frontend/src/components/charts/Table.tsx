@@ -1,6 +1,7 @@
 import { TableColumn } from "@/types/dashboard";
 import { useState, useMemo } from "react";
 import { getStyleVariantProps, type ChartStyleVariant } from "@/utils/chartStyling";
+import EditableText from "@/components/charts/edit/EditableText";
 
 interface TopProductsTableProps {
   title: string;
@@ -122,10 +123,8 @@ const Table = ({
   return (
     <div className={`animate-fade-in h-full ${className}`} style={{ ...tileStyle, ...style, display: 'flex', flexDirection: 'column' }}>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold mb-1" style={{ color: titleColor }}>{title}</h3>
-        {description && (
-          <p className="text-sm" style={{ color: descriptionColor }}>{description}</p>
-        )}
+        <EditableText as="h3" value={title} path="title" className="text-lg font-semibold mb-1" style={{ color: titleColor }} placeholder="Table title" />
+        <EditableText as="p" value={description} path="description" className="text-sm" style={{ color: descriptionColor }} placeholder="Add description" />
       </div>
 
       {!hasStructure || !hasData ? (
@@ -145,7 +144,7 @@ const Table = ({
                   }}
                 >
                   <tr>
-                    {columns.map((column) => (
+                    {columns.map((column, colIdx) => (
                       <th
                         key={column.key}
                         className="h-12 px-4 text-left align-middle font-medium cursor-pointer hover:bg-opacity-80 transition-colors first:rounded-tl-md last:rounded-tr-md"
@@ -153,7 +152,12 @@ const Table = ({
                         onClick={() => handleSort(column.key)}
                       >
                         <div className="flex items-center gap-2">
-                          <span>{column.label}</span>
+                          <EditableText
+                            as="span"
+                            value={column.label}
+                            path={`columns.${colIdx}.label`}
+                            placeholder="Column"
+                          />
                           <span className="text-xs opacity-60">{getSortIcon(column.key)}</span>
                         </div>
                       </th>
@@ -161,7 +165,9 @@ const Table = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedData.map((row, index) => (
+                  {paginatedData.map((row, index) => {
+                    const originalIdx = data.indexOf(row);
+                    return (
                     <tr
                       key={index}
                       className="animate-slide-up border-b transition-colors hover:bg-opacity-50"
@@ -179,12 +185,29 @@ const Table = ({
                           style={{ textAlign: column.align || 'left' }}
                         >
                           <div className={`${column.key === 'name' ? 'font-medium truncate' : ''}`}>
-                            {formatCellValue(row[column.key], column.type)}
+                            {originalIdx >= 0 ? (
+                              <EditableText
+                                value={row[column.key]}
+                                path={`data.${originalIdx}.${column.key}`}
+                                format={(v) => formatCellValue(v, column.type)}
+                                parse={(raw) => {
+                                  if (column.type === 'number' || column.type === 'currency' || column.type === 'percentage') {
+                                    const cleaned = raw.replace(/[,\s$€£¥%]/g, '');
+                                    const n = parseFloat(cleaned);
+                                    return Number.isFinite(n) ? n : raw;
+                                  }
+                                  return raw;
+                                }}
+                              />
+                            ) : (
+                              formatCellValue(row[column.key], column.type)
+                            )}
                           </div>
                         </td>
                       ))}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

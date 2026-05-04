@@ -26,6 +26,10 @@ import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
+import { useEditMode, applyEditsToComponents } from "@/hooks/useEditMode";
+import { EditProvider } from "@/components/charts/edit/EditContext";
+import EditPanel from "@/components/charts/edit/EditPanel";
+import InlineSvgTextEditor from "@/components/charts/edit/InlineSvgTextEditor";
 import { useChatStore } from "@/chat/useChatStore";
 import { DashboardGenerationRequest, LayoutType, ChartType, DashboardConfiguration } from "@/types/dashboard";
 import {
@@ -77,6 +81,11 @@ interface DashboardPreviewProps {
   showCardActionsMenu?: boolean;
   /** projectId is used to uniquely store layouts for chat-generated (processed) dashboards without a real ID */
   projectId?: string;
+  /**
+   * Called whenever the final, edits-applied component list changes.
+   * project.tsx uses this to know the exact components to write on save.
+   */
+  onEditedComponentsChange?: (components: any[], activeDashboard: any | null) => void;
 }
 
 const DashboardPreview = ({
@@ -90,6 +99,7 @@ const DashboardPreview = ({
   onExportLayoutChange,
   showCardActionsMenu = false,
   projectId,
+  onEditedComponentsChange,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -100,6 +110,14 @@ const DashboardPreview = ({
 
   // Edit feedback loop state from store
   const changedComponentIds = useChatStore((s) => s.changedComponentIds);
+
+  // Manual-edit feature state
+  const editMode = useEditMode((s) => s.editMode);
+  const editsState = useEditMode((s) => s.edits);
+  const selectedComponentId = useEditMode((s) => s.selectedComponentId);
+  const setSelectedComponent = useEditMode((s) => s.setSelectedComponent);
+  const applyFieldEdit = useEditMode((s) => s.applyFieldEdit);
+  const hydrateEdits = useEditMode((s) => s.hydrate);
 
   // Track highlight fade-out timer
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
@@ -497,6 +515,21 @@ const DashboardPreview = ({
 
   const normalizeDashboard = (data: any, overrideId?: string) => {
     if (!data) return null;
+
+    // ── Shortcut: already-normalized data ──────────────────────────────────────
+    // When the user saves edits, handleSaveDashboard stores a normalized payload
+    // (with a top-level `components` array and a `layout` object) via setProcessedData.
+    // If we let the full parser run it would re-build from the raw Morpheus arrays
+    // (metrics/charts/tables), completely discarding the applied edits. Detect this
+    // case and pass the data straight through instead.
+    if (Array.isArray(data.components) && data.layout) {
+      return {
+        id: overrideId || data.id || 'processed_dashboard',
+        layout: data.layout,
+        components: data.components,
+      };
+    }
+
     const components: any[] = [];
     let componentId = 1;
 
@@ -860,6 +893,36 @@ const DashboardPreview = ({
         })();
     return base.filter((c: any) => !removedComponentIds.has(String(c.id)));
   }, [activeDashboard?.components, effectiveStyling, staticConfig, processedData, removedComponentIds]);
+
+  // Edits-feature: hydrate edits store when a dashboard becomes available, and
+  // apply deltas to the components so renderers see the merged config.
+  const editsDashboardId = useMemo(() => {
+    const baseId = activeDashboard?.id || 'processed_dashboard';
+    const suffix = (baseId === 'processed_dashboard' && projectId) ? `_${projectId}` : '';
+    return `${baseId}${suffix}`;
+  }, [activeDashboard?.id, projectId]);
+
+  useEffect(() => {
+    if (!activeDashboard) return;
+    void hydrateEdits(editsDashboardId);
+  }, [activeDashboard, editsDashboardId, hydrateEdits]);
+
+  const editedDisplayComponents = useMemo(() => {
+    if (!editsState) return displayComponents;
+    return applyEditsToComponents(displayComponents as any, editsState) as any[];
+  }, [displayComponents, editsState]);
+
+  // Notify parent whenever the final edits-applied component list (or the underlying
+  // activeDashboard metadata) changes. project.tsx uses this to build the save payload.
+  useEffect(() => {
+    if (onEditedComponentsChange) {
+      onEditedComponentsChange(editedDisplayComponents, activeDashboard ?? null);
+    }
+  }, [editedDisplayComponents, activeDashboard, onEditedComponentsChange]);
+
+  // Edit mode is allowed only on owned/processed dashboards (showCardActionsMenu is the
+  // existing signal for "user has authorship" — public exports keep showCardActionsMenu false).
+  const canEdit = !!showCardActionsMenu && !isExporting;
 
   // Helpers to build layouts per component list
   const getMinSizeForType = (type: string) => {
@@ -1295,7 +1358,7 @@ const DashboardPreview = ({
                 isBounded
                 compactType={null}
               >
-                {displayComponents.map((component: any) => (
+                {editedDisplayComponents.map((component: any) => (
                   <div key={String(component.id)} className="animate-fade-in">
                     <ChartRenderer
                       component={component}
@@ -1325,13 +1388,33 @@ const DashboardPreview = ({
                 onDragStop={handleDragResizeStop}
                 onResizeStop={handleDragResizeStop}
               >
-                {displayComponents.map((component: any) => {
+                {editedDisplayComponents.map((component: any) => {
                   const compId = component.component_config?.id || component.id;
                   const isHighlighted = highlightedIds.has(String(compId)) || highlightedIds.has(String(component.id));
                   const cellKey = String(component.id);
+                  const isSelectedForEdit = editMode && selectedComponentId === cellKey;
+                  const cardEditClass = editMode
+                    ? `cursor-pointer ${isSelectedForEdit ? 'ring-2 ring-offset-2 ring-blue-400/70' : 'ring-1 ring-blue-300/30 hover:ring-blue-400/60'}`
+                    : '';
                   return (
                     <div key={cellKey} className={`animate-fade-in h-full min-h-0 ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
-                      <div className="relative h-full min-h-0 rounded-md group/card transition-all duration-200 hover:shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.25)]" data-chart-id={cellKey}>
+                      <EditProvider
+                        editMode={editMode && canEdit}
+                        componentId={cellKey}
+                        isSelected={isSelectedForEdit}
+                        onApplyEdit={applyFieldEdit}
+                        onSelectComponent={setSelectedComponent}
+                      >
+                      <div
+                        className={`relative h-full min-h-0 rounded-md group/card transition-all duration-200 hover:shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.25)] ${cardEditClass}`}
+                        data-chart-id={cellKey}
+                        onMouseDownCapture={editMode && canEdit ? (e) => {
+                          // Click selects the component for the panel, but never on inputs/contentEditable text
+                          const target = e.target as HTMLElement;
+                          if (target.closest('input, textarea, [contenteditable="true"], [data-edit-control]')) return;
+                          setSelectedComponent(cellKey);
+                        } : undefined}
+                      >
                         {showCardActionsMenu && (
                           <div
                             className="absolute left-2 top-2 z-20 opacity-0 group-hover/card:opacity-40 transition-opacity duration-150 pointer-events-none"
@@ -1417,6 +1500,7 @@ const DashboardPreview = ({
                           onError={handleComponentError}
                         />
                       </div>
+                      </EditProvider>
                     </div>
                   );
                 })}
@@ -1436,6 +1520,8 @@ const DashboardPreview = ({
           </div>
         )}
       </div>
+      {canEdit && <EditPanel components={editedDisplayComponents} />}
+      {canEdit && editMode && <InlineSvgTextEditor />}
       <AlertDialog open={confirmRemoveId !== null} onOpenChange={(open) => { if (!open) setConfirmRemoveId(null); }}>
         <AlertDialogContent className="border-border dark:border-white/15 bg-background dark:bg-[#1a1a1a] text-foreground dark:text-white">
           <AlertDialogHeader>

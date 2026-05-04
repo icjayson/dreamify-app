@@ -23,6 +23,8 @@ import {
   LabelList,
 } from 'recharts';
 import { useChartTheme } from '@/hooks/useChartTheme';
+import EditableText from '@/components/charts/edit/EditableText';
+import { useEditableAxes } from '@/components/charts/edit/useEditableAxes';
 
 interface StackedBarDataPoint {
   label: string;
@@ -111,7 +113,7 @@ function normalizeRows(
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-const RechartsStackedBarChart: React.FC<RechartsStackedBarChartProps> = ({
+const RechartsStackedBarChart: React.FC<RechartsStackedBarChartProps & { axisConfig?: any }> = ({
   title = 'Stacked Chart',
   description,
   datasets = [],
@@ -121,7 +123,9 @@ const RechartsStackedBarChart: React.FC<RechartsStackedBarChartProps> = ({
   styling,
   className = '',
   style = {},
+  axisConfig
 }) => {
+  const { xAxisProps: editXAxisProps, yAxisProps: editYAxisProps } = useEditableAxes({ x: axisConfig?.x_axis?.label, y: axisConfig?.y_axis?.label });
   const { assignColors, getStylingClasses } = useChartTheme({ initialStyling: styling });
 
   // Resolve orientation: component prop > config.orientation > default 'vertical'
@@ -196,16 +200,6 @@ const RechartsStackedBarChart: React.FC<RechartsStackedBarChartProps> = ({
   //   orientation='horizontal' → stacked BAR (bars point rightward)   → layout="vertical"
   const rechartsLayout = orientation === 'horizontal' ? 'vertical' : 'horizontal';
 
-  const xAxisProps =
-    orientation === 'horizontal'
-      ? { type: 'number' as const, tick: { fill: 'var(--element-color)' }, tickFormatter: isNormalized ? (v: number) => `${v}%` : undefined }
-      : { dataKey: 'label', type: 'category' as const, tick: { fill: 'var(--element-color)' } };
-
-  const yAxisProps =
-    orientation === 'horizontal'
-      ? { dataKey: 'label', type: 'category' as const, tick: { fill: 'var(--element-color)' }, width: 100 }
-      : { type: 'number' as const, tick: { fill: 'var(--element-color)' }, tickFormatter: isNormalized ? (v: number) => `${v}%` : undefined };
-
   // ── Bar radius — round only the last (top-most) segment to avoid artifacts
   const lastIndex = coloredDatasets.length - 1;
 
@@ -216,14 +210,8 @@ const RechartsStackedBarChart: React.FC<RechartsStackedBarChartProps> = ({
     >
       {/* Header */}
       <div className="mb-4" style={{ flexShrink: 0 }}>
-        <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }}>
-          {title}
-        </h3>
-        {description && (
-          <p className="text-sm" style={{ color: 'var(--description-color)' }}>
-            {description}
-          </p>
-        )}
+        <EditableText as="h3" value={title} path="title" className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }} placeholder="Chart title" />
+        <EditableText as="p" value={description} path="description" className="text-sm" style={{ color: 'var(--description-color)' }} placeholder="Add description" />
       </div>
 
       <ResponsiveContainer width="100%" height="100%" style={{ flex: 1 }}>
@@ -243,19 +231,21 @@ const RechartsStackedBarChart: React.FC<RechartsStackedBarChartProps> = ({
           {/* XAxis */}
           <XAxis
             {...(orientation === 'horizontal'
-              ? { type: 'number', tick: { fill: 'var(--element-color)' }, tickFormatter: isNormalized ? (v: number) => `${v}%` : undefined }
-              : { dataKey: 'label', type: 'category', tick: { fill: 'var(--element-color)' } }
+              ? { type: 'number' as const, tick: { fill: 'var(--element-color)' }, tickFormatter: isNormalized ? (v: number) => `${v}%` : undefined }
+              : { dataKey: 'label', type: 'category' as const, tick: { fill: 'var(--element-color)' } }
             )}
             className="chart-axis"
+            {...editXAxisProps}
           />
 
           {/* YAxis */}
           <YAxis
             {...(orientation === 'horizontal'
-              ? { dataKey: 'label', type: 'category', tick: { fill: 'var(--element-color)' }, width: 100 }
-              : { type: 'number', tick: { fill: 'var(--element-color)' }, tickFormatter: isNormalized ? (v: number) => `${v}%` : undefined }
+              ? { dataKey: 'label', type: 'category' as const, tick: { fill: 'var(--element-color)' }, width: 100 }
+              : { type: 'number' as const, tick: { fill: 'var(--element-color)' }, tickFormatter: isNormalized ? (v: number) => `${v}%` : undefined }
             )}
             className="chart-axis"
+            {...editYAxisProps}
           />
 
           <Tooltip content={<CustomTooltip />} />

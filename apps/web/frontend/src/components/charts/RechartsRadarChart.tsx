@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { ChartConfiguration } from '@/types/dashboard';
 import { useChartTheme } from '@/hooks/useChartTheme';
+import EditableText from '@/components/charts/edit/EditableText';
 
 interface RechartsRadarChartProps {
   title?: string;
@@ -110,10 +111,8 @@ const RechartsRadarChart: React.FC<RechartsRadarChartProps> = ({
   return (
     <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '100%', display: 'flex', flexDirection: 'column', ...style }}>
       <div className="mb-4" style={{ flexShrink: 0 }}>
-        <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }}>{title}</h3>
-        {description && (
-          <p className="text-sm" style={{ color: 'var(--description-color)' }}>{description}</p>
-        )}
+        <EditableText as="h3" value={title} path="title" className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }} placeholder="Chart title" />
+        <EditableText as="p" value={description} path="description" className="text-sm" style={{ color: 'var(--description-color)' }} placeholder="Add description" />
       </div>
 
       <ResponsiveContainer width="100%" height="100%" style={{ flex: 1 }}>

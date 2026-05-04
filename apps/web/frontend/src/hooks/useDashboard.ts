@@ -11,6 +11,7 @@ import {
   DashboardHook 
 } from '@/types/dashboard';
 import { dashboardService } from '@/services/dashboardService';
+import { deepMerge } from '@/utils/deepMerge';
 
 export const useDashboard = (initialDashboardId?: string): DashboardHook => {
   const [dashboardState, setDashboardState] = useState<DashboardState>({
@@ -88,13 +89,19 @@ export const useDashboard = (initialDashboardId?: string): DashboardHook => {
 
       const updatedComponents = prev.configuration.components.map(component => {
         if (component.id === componentId) {
-          // If the config contains layout/position data, we should update the root component position as well
-          const positionUpdate = config.position ? { position: { ...component.position, ...config.position } } : {};
-          
-          return { 
-            ...component, 
+          // Position lives at the component root, not inside component_config
+          const { position: positionPatch, ...configPatch } = config || {};
+          const positionUpdate = positionPatch
+            ? { position: { ...component.position, ...positionPatch } }
+            : {};
+
+          return {
+            ...component,
             ...positionUpdate,
-            component_config: { ...component.component_config, ...config } 
+            component_config: deepMerge(
+              component.component_config as Record<string, any>,
+              configPatch as Record<string, any>
+            ),
           };
         }
         return component;

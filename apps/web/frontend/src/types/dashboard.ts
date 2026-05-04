@@ -220,3 +220,16 @@ export interface DashboardHook {
   updateComponent: (componentId: string, config: any) => void;
   resetDashboard: () => void;
 }
+
+// Manual-edit delta types (Phase 1 of edit feature)
+export interface ComponentEditDelta {
+  componentId: string;
+  edits: Partial<ChartConfiguration> & Partial<MetricConfiguration> & Partial<TableConfiguration> & Record<string, any>;
+  editedAt: number;
+}
+
+export interface DashboardEdits {
+  dashboardId: string;
+  deltas: Record<string, ComponentEditDelta>;
+  version: number;
+}

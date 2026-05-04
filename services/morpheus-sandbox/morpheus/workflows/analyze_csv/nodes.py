@@ -61,7 +61,7 @@ def _update_usage(state: AgentState, response: Any):
 
 # Import system prompts from original workflow
 # These will be refactored into separate prompts module later if needed
-QA_SYSTEM_PROMPT = """You are a helpful data analysis assistant. Your goal is to answer the user's questions textually based on the provided data and conversation history. Do not generate JSON dashboards.
+QA_SYSTEM_PROMPT = """You are Dreamify AI analytics assistant. Your goal is to answer the user's questions textually based on the provided data and conversation history. Do not generate JSON dashboards.
 
 🚨 CRITICAL TOOL RESTRICTIONS 🚨
 =================================
@@ -199,14 +199,18 @@ Track for each column:
 
 KEY METRICS COMPUTATION:
 ========================
-Prioritize metrics based on:
-1. Business relevance: Revenue, counts, rates, growth
-2. Statistical significance: High variance, strong correlations
-3. Actionability: Metrics that drive decisions
+FIRST: Print df.columns.tolist() and identify WHAT COLUMNS ACTUALLY EXIST.
+Metrics and chart titles MUST be derived from actual column names.
 
-For numeric columns, check keyword heuristics:
-- revenue/sales/amount/price → compute SUM, AVERAGE, COUNT
-- If time column exists → compute growth rates
+For numeric columns, apply keyword heuristics ONLY when the column name matches:
+- Column name contains revenue/sales/amount/price → metric title uses that column name, computes SUM
+- Column name contains user/dau/mau/nru/aru → metric title references that column
+- Column name is ambiguous (e.g. "A1", "A30", "col_7") → use the column name AS-IS or ask
+- If time column exists AND a numeric column exists → compute trend/growth for that numeric column
+
+DO NOT invent standard SaaS metrics (Revenue, ARPU, LTV, Churn, Ad Spend, Conversions,
+Industries, Countries, Campaign Types) unless the CSV has a column with that exact concept.
+"Business relevance" means: what IS in this specific dataset, not what a typical dashboard has.
 
 🚫 CRITICAL DATA EMBEDDING REQUIREMENT 🚫
 =========================================
@@ -594,9 +598,50 @@ def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
     reasoning node can act on it immediately.
     """
     logger.info("Running EXPLORE_FILES node")
-    
-    if (not state.assets_dict) or (len(state.assets_dict) <= 1):
-        logger.info("No assets or multiple assets to explore. Proceeding to ROUTING.")
+
+    if not state.assets_dict:
+        logger.info("No assets to explore. Proceeding to ROUTING.")
+        return state
+
+    if len(state.assets_dict) == 1:
+        # Single file: run a deterministic pandas profiler so the REASONING node
+        # receives accurate column/dtype/stats context instead of hallucinating.
+        filename, filepath = next(iter(state.assets_dict.items()))
+        try:
+            import pandas as pd, os, math
+
+            df = pd.read_csv(filepath)
+            rows, cols = df.shape
+            lines = [
+                f"File: {filename} ({rows:,} rows × {cols} columns)",
+                f"Columns: {', '.join(f'{c} ({df[c].dtype})' for c in df.columns)}",
+            ]
+
+            # Numeric summary
+            num_cols = df.select_dtypes(include="number").columns.tolist()
+            if num_cols:
+                desc = df[num_cols].describe()
+                lines.append("Numeric summary (min / mean / max):")
+                for c in num_cols:
+                    mn = desc.loc["min", c]
+                    av = desc.loc["mean", c]
+                    mx = desc.loc["max", c]
+                    lines.append(f"  {c}: min={mn:.2f}, mean={av:.2f}, max={mx:.2f}")
+
+            # Date/string columns — unique value count
+            other_cols = [c for c in df.columns if c not in num_cols]
+            for c in other_cols:
+                lines.append(f"  {c}: {df[c].nunique()} unique values, sample={df[c].iloc[0]}")
+
+            # 3-row sample
+            lines.append("Sample rows (first 3):")
+            lines.append(df.head(3).to_string(index=False))
+
+            state.data_profile = "\n".join(lines)
+            logger.info("Single-file profile generated for %s", filename)
+        except Exception as exc:
+            logger.warning("Single-file profiler failed for %s: %s", filename, exc)
+            state.data_profile = f"File: {filename} (profiling failed: {exc})"
         return state
         
     try:
@@ -1205,13 +1250,36 @@ print(df.columns.tolist())"""
         logger.info(f"Agent decided: {action_request.action_type} - {action_request.reasoning}")
         
     except Exception as e:
-        logger.error(f"Error in REASONING node: {str(e)}")
+        error_str = str(e)
+        logger.error(f"Error in REASONING node: {error_str}")
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+            state.working_memory.rate_limit_hits += 1
+            if state.working_memory.rate_limit_hits >= 3:
+                # Daily quota likely exhausted; fail fast with a clear message
+                logger.error("REASONING: 3 consecutive 429s — quota exhausted, aborting")
+                state.working_memory.qa_response = (
+                    "⚠️ The AI model hit its rate limit (quota exhausted). "
+                    "Please try again later or contact support to upgrade your API quota."
+                )
+                # Set FINISH action so edges route to SYNTHESIS, not EXECUTION
+                state.working_memory.tool_outputs["pending_action"] = {
+                    "action_type": "FINISH",
+                    "reasoning": "Aborting due to quota exhaustion",
+                }
+            else:
+                delay_match = re.search(r"retryDelay[\"':\s]+(\d+)s", error_str)
+                delay_s = int(delay_match.group(1)) if delay_match else 60
+                delay_s = max(10, min(delay_s, 120))
+                logger.warning(f"REASONING: rate limit (429) hit #{state.working_memory.rate_limit_hits}, sleeping {delay_s}s")
+                time.sleep(delay_s)
+        else:
+            state.working_memory.rate_limit_hits = 0
         state.working_memory.errors.append({
             "node": "REASONING",
-            "error": str(e),
+            "error": error_str,
             "timestamp": datetime.now().isoformat(),
         })
-    
+
     return state
 
 
@@ -1722,10 +1790,27 @@ Output ONLY the modified chart in "charts" array."""
                 })
 
     except Exception as e:
-        logger.error(f"Error in REASONING_INTERNAL node: {str(e)}", exc_info=True)
+        error_str = str(e)
+        logger.error(f"Error in REASONING_INTERNAL node: {error_str}", exc_info=True)
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+            state.working_memory.rate_limit_hits += 1
+            if state.working_memory.rate_limit_hits >= 3:
+                logger.error("REASONING_INTERNAL: 3 consecutive 429s — quota exhausted, aborting")
+                state.working_memory.qa_response = (
+                    "⚠️ The AI model hit its rate limit (quota exhausted). "
+                    "Please try again later or contact support to upgrade your API quota."
+                )
+            else:
+                delay_match = re.search(r"retryDelay[\"':\s]+(\d+)s", error_str)
+                delay_s = int(delay_match.group(1)) if delay_match else 60
+                delay_s = max(10, min(delay_s, 120))
+                logger.warning(f"REASONING_INTERNAL: rate limit (429) hit #{state.working_memory.rate_limit_hits}, sleeping {delay_s}s")
+                time.sleep(delay_s)
+        else:
+            state.working_memory.rate_limit_hits = 0
         state.working_memory.errors.append({
             "node": "REASONING_INTERNAL",
-            "error": str(e),
+            "error": error_str,
             "timestamp": datetime.now().isoformat(),
         })
 
@@ -2448,10 +2533,12 @@ def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
     # Also load actual data from CSV files for validation
     # This is important because LLM reads data directly via pandas
     all_csv_values = set()
+    actual_column_names: list[str] = []  # raw column names for title integrity check
     for file_path in (state.file_paths or []):
         if file_path and os.path.exists(file_path):
             try:
                 df = pd.read_csv(file_path, nrows=1000)  # Read first 1000 rows for validation
+                actual_column_names.extend([c.lower() for c in df.columns.tolist()])
                 for col in df.columns:
                     # Get unique string values from each column
                     unique_vals = df[col].dropna().astype(str).unique()
@@ -2460,8 +2547,32 @@ def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
                             all_csv_values.add(val.lower().strip())
             except Exception as e:
                 logger.warning(f"Could not read {file_path} for validation: {e}")
-    
+
     all_csv_values_str = " ".join(all_csv_values)
+
+    # --- Column-integrity check ---
+    # Detect fabricated metric/chart titles that have no link to actual column names.
+    # We flag well-known "invented SaaS metrics" that don't appear in the CSV columns.
+    FABRICATED_METRIC_KEYWORDS = {
+        "revenue", "ad spend", "ad_spend", "conversions", "impressions", "ctr",
+        "click-through", "roas", "cpm", "cpc", "ltv", "arpu", "mrr", "arr",
+        "churn", "campaign type", "industry", "country", "region",
+    }
+    if actual_column_names:
+        col_blob = " ".join(actual_column_names)
+        dashboard_metrics = dashboard_json.get("metrics", [])
+        dashboard_charts = dashboard_json.get("charts", [])
+        for item in [*dashboard_metrics, *dashboard_charts]:
+            title = (item.get("title") or "").lower()
+            for kw in FABRICATED_METRIC_KEYWORDS:
+                if kw in title:
+                    # Check whether the keyword has any foothold in the actual column names
+                    if kw not in col_blob and kw.replace(" ", "_") not in col_blob:
+                        warnings.append(
+                            f"Metric/chart title '{item.get('title')}' references '{kw}' "
+                            f"but no such column exists in the CSV (columns: {actual_column_names}). "
+                            f"This is likely hallucinated data."
+                        )
     
     if not all_outputs and not all_csv_values:
         errors.append("No tool outputs or data files found - dashboard data may be fabricated")

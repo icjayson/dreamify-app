@@ -10,6 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from utils.config import get_settings
 import logging
+import json
+from email.utils import formatdate
+from app.utils.timestamp_utils import validate_timestamp_fields
 
 settings = get_settings()
 
@@ -36,6 +39,25 @@ def create_app():
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def timestamp_validation_and_headers(request, call_next):
+        content_type = request.headers.get("content-type", "")
+        if request.method in {"POST", "PUT", "PATCH"} and "application/json" in content_type:
+            body_bytes = await request.body()
+            if body_bytes:
+                try:
+                    payload = json.loads(body_bytes)
+                    validate_timestamp_fields(payload)
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                except json.JSONDecodeError:
+                    pass
+
+        response = await call_next(request)
+        response.headers["X-Server-Timezone"] = "UTC"
+        response.headers["Date"] = formatdate(usegmt=True)
+        return response
     
     # Import and register routers
     try:

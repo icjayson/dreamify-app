@@ -1,11 +1,11 @@
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_user
 from app.services.integration_service import integration_service
@@ -67,6 +67,101 @@ class GoogleSheetSyncResponse(BaseModel):
 class GoogleTokenResponse(BaseModel):
     success: bool
     token: Optional[str]
+
+
+class ConnectorSelectedEntity(BaseModel):
+    id: str
+    name: str
+    type: Optional[str] = None
+
+
+class ConnectorOverviewItem(BaseModel):
+    connector_key: str
+    display_name: str
+    connected: bool
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+
+
+class ConnectorsOverviewResponse(BaseModel):
+    success: bool
+    connectors: List[ConnectorOverviewItem]
+
+
+class ConnectorEntityDetailResponse(BaseModel):
+    success: bool
+    connector_key: str
+    display_name: str
+    connected: bool
+    entity: ConnectorSelectedEntity
+    latest_asset: Optional[AssetResponse] = None
+    latest_schedule: Optional[Dict[str, Any]] = None
+    related_projects: List[Dict[str, Any]] = Field(default_factory=list)
+    last_synced_at: Optional[str] = None
+
+
+class ConnectorEntityRunItem(BaseModel):
+    run_id: str
+    schedule_id: Optional[str] = None
+    status: Optional[str] = None
+    triggered_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    rows_fetched: Optional[int] = None
+    columns_fetched: Optional[int] = None
+    asset_id: Optional[str] = None
+    asset_filename: Optional[str] = None
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+    config_snapshot: Optional[Dict[str, Any]] = None
+    sync_version_name: Optional[str] = None
+
+
+class ConnectorEntityHistoryResponse(BaseModel):
+    success: bool
+    runs: List[ConnectorEntityRunItem]
+
+
+class ConnectorSyncVersionNameUpdateRequest(BaseModel):
+    sync_version_name: str = ""
+
+
+class ConnectorSyncVersionNameUpdateResponse(BaseModel):
+    success: bool
+    run_id: str
+    sync_version_name: Optional[str] = None
+
+
+class ConnectorEntityRefreshResponse(BaseModel):
+    success: bool
+    message: str
+    asset: AssetResponse
+    row_count: int
+    column_count: int
+
+
+class ConnectorEntityRefreshRequest(BaseModel):
+    date_preset: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    campaign_ids: Optional[List[str]] = None
+    adset_ids: Optional[List[str]] = None
+
+
+class AddToNewProjectRequest(BaseModel):
+    project_name: Optional[str] = "Untitled Project"
+    prompt: Optional[str] = "Analyze this data and build a dashboard."
+    asset_id: Optional[str] = None
+
+
+class AddToNewProjectResponse(BaseModel):
+    success: bool
+    project: Dict[str, Any]
+    asset: AssetResponse
+    prompt: str
+
+
+class ConnectorEntityDeleteResponse(BaseModel):
+    success: bool
+    message: str
 
 
 @router.get(
@@ -144,6 +239,195 @@ async def get_google_token(user_id: str = Depends(require_user)):
         token = await integration_service._get_google_access_token(user_id)
         return GoogleTokenResponse(success=True, token=token)
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/connectors/overview", response_model=ConnectorsOverviewResponse)
+async def get_connectors_overview(user_id: str = Depends(require_user)):
+    """Get unified connector statuses with selected entities."""
+    try:
+        result = await integration_service.fetch_connectors_overview(user_id=user_id)
+        return ConnectorsOverviewResponse(
+            success=result.get("success", True),
+            connectors=result.get("connectors", []),
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch connectors overview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/connectors/{connector_key}/entities/{entity_id}/detail",
+    response_model=ConnectorEntityDetailResponse,
+)
+async def get_connector_entity_detail(
+    connector_key: str,
+    entity_id: str,
+    user_id: str = Depends(require_user),
+):
+    try:
+        result = await integration_service.get_connector_entity_detail(
+            user_id=user_id,
+            connector_key=connector_key,
+            entity_id=entity_id,
+        )
+        latest_asset = result.get("latest_asset")
+        return ConnectorEntityDetailResponse(
+            success=result.get("success", True),
+            connector_key=result.get("connector_key", connector_key),
+            display_name=result.get("display_name", connector_key),
+            connected=bool(result.get("connected", False)),
+            entity=result.get("entity", {"id": entity_id, "name": entity_id}),
+            latest_asset=_map_asset(latest_asset) if latest_asset else None,
+            latest_schedule=result.get("latest_schedule"),
+            related_projects=result.get("related_projects", []),
+            last_synced_at=result.get("last_synced_at"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch connector entity detail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/connectors/{connector_key}/entities/{entity_id}/history",
+    response_model=ConnectorEntityHistoryResponse,
+)
+async def get_connector_entity_history(
+    connector_key: str,
+    entity_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    user_id: str = Depends(require_user),
+):
+    try:
+        result = await integration_service.get_connector_entity_history(
+            user_id=user_id,
+            connector_key=connector_key,
+            entity_id=entity_id,
+            limit=limit,
+        )
+        return ConnectorEntityHistoryResponse(
+            success=result.get("success", True),
+            runs=result.get("runs", []),
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch connector entity history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch(
+    "/integration/connectors/{connector_key}/entities/{entity_id}/history/{run_id}/version-name",
+    response_model=ConnectorSyncVersionNameUpdateResponse,
+)
+async def update_connector_sync_version_name(
+    connector_key: str,
+    entity_id: str,
+    run_id: str,
+    request: ConnectorSyncVersionNameUpdateRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        result = await integration_service.update_connector_sync_version_name(
+            user_id=user_id,
+            connector_key=connector_key,
+            entity_id=entity_id,
+            run_id=run_id,
+            sync_version_name=request.sync_version_name,
+        )
+        return ConnectorSyncVersionNameUpdateResponse(
+            success=result.get("success", True),
+            run_id=result.get("run_id", run_id),
+            sync_version_name=result.get("sync_version_name"),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update sync version name: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/integration/connectors/{connector_key}/entities/{entity_id}/refresh",
+    response_model=ConnectorEntityRefreshResponse,
+)
+async def refresh_connector_entity(
+    connector_key: str,
+    entity_id: str,
+    request: ConnectorEntityRefreshRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        result = await integration_service.refresh_connector_entity(
+            user_id=user_id,
+            connector_key=connector_key,
+            entity_id=entity_id,
+            overrides=request.model_dump(exclude_none=True),
+        )
+        return ConnectorEntityRefreshResponse(
+            success=result.get("success", True),
+            message=result.get("message", "Refresh completed"),
+            asset=_map_asset(
+                result.get("asset"),
+                row_count=result.get("row_count"),
+                column_count=result.get("column_count"),
+            ),
+            row_count=result.get("row_count", 0),
+            column_count=result.get("column_count", 0),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to refresh connector entity: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/integration/connectors/{connector_key}/entities/{entity_id}/add-to-new-project",
+    response_model=AddToNewProjectResponse,
+)
+async def add_connector_entity_to_new_project(
+    connector_key: str,
+    entity_id: str,
+    request: AddToNewProjectRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        result = await integration_service.add_connector_entity_to_new_project(
+            user_id=user_id,
+            connector_key=connector_key,
+            entity_id=entity_id,
+            project_name=request.project_name or "Untitled Project",
+            prompt=request.prompt or "Analyze this data and build a dashboard.",
+            asset_id=request.asset_id,
+        )
+        return AddToNewProjectResponse(
+            success=result.get("success", True),
+            project=result.get("project", {}),
+            asset=_map_asset(result.get("asset")),
+            prompt=result.get("prompt", ""),
+        )
+    except Exception as e:
+        logger.error(f"Failed to add connector entity to new project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete(
+    "/integration/connectors/{connector_key}/entities/{entity_id}",
+    response_model=ConnectorEntityDeleteResponse,
+)
+async def delete_connector_entity(
+    connector_key: str,
+    entity_id: str,
+    user_id: str = Depends(require_user),
+):
+    try:
+        await integration_service.remove_connector_entity(
+            user_id=user_id,
+            connector_key=connector_key,
+            entity_id=entity_id,
+        )
+        return ConnectorEntityDeleteResponse(success=True, message="Connector entity deleted.")
+    except Exception as e:
+        logger.error(f"Failed to delete connector entity: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

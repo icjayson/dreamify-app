@@ -7,7 +7,7 @@ Schema:
 """
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from boto3.dynamodb.conditions import Key
@@ -19,7 +19,7 @@ _NOTIFICATION_TTL_DAYS = 30
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def create_notification(

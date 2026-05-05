@@ -3,14 +3,14 @@ Response models for API endpoints
 """
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class BaseResponse(BaseModel):
     """Base response model"""
     success: bool
     message: str
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ErrorResponse(BaseResponse):

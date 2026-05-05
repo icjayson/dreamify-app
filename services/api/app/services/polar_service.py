@@ -4,7 +4,7 @@ Polar service layer for handling payment operations.
 
 import logging
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from app.config.polar_config import polar_config, get_subscription_plan, SUBSCRIPTION_PLANS
 from app.models.polar_models import (
     CreateCheckoutSessionRequest, CreateCheckoutSessionResponse,
@@ -122,7 +122,7 @@ class PolarService:
                 monthly_credits_used=daily_used,
                 daily_credits_limit=DAILY_CREDIT_LIMIT,
                 monthly_credits_limit=DAILY_CREDIT_LIMIT,
-                last_reset_date=datetime.now(),
+                last_reset_date=datetime.now(timezone.utc),
                 can_use_credits=remaining > 0
             )
             

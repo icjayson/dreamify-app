@@ -3,7 +3,7 @@ Credit service for managing user credits based on subscription tiers.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 from botocore.exceptions import ClientError
 from fastapi import HTTPException
@@ -25,12 +25,12 @@ class CreditService:
         pass
 
     def get_credits_remaining(self, user_id: str) -> int:
-        month = datetime.utcnow().strftime("%Y-%m")
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
         used = credits_repo.get_credits_used(user_id, month)
         return max(0, MONTHLY_CREDIT_LIMIT - used)
 
     def consume_credits(self, user_id: str, amount: int) -> dict:
-        month = datetime.utcnow().strftime("%Y-%m")
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
         try:
             new_total = credits_repo.add_credits_atomic(
                 user_id, month, amount, MONTHLY_CREDIT_LIMIT
@@ -61,7 +61,7 @@ class CreditService:
         try:
             plan = get_subscription_plan(subscription_tier.value)
             monthly_credits_used = credits_repo.get_credits_used(
-                user_id, datetime.utcnow().strftime("%Y-%m")
+                user_id, datetime.now(timezone.utc).strftime("%Y-%m")
             )
             monthly_limit = plan["monthly_credits"]
             can_use_credits = (
@@ -73,7 +73,7 @@ class CreditService:
                 subscription_tier=subscription_tier,
                 monthly_credits_used=monthly_credits_used,
                 monthly_credits_limit=monthly_limit,
-                last_reset_date=datetime.now(),
+                last_reset_date=datetime.now(timezone.utc),
                 can_use_credits=can_use_credits,
             )
         except Exception as e:
@@ -96,6 +96,6 @@ class CreditService:
             subscription_tier=SubscriptionTier.PRO,
             monthly_credits_used=0,
             monthly_credits_limit=plan["monthly_credits"],
-            last_reset_date=datetime.now(),
+            last_reset_date=datetime.now(timezone.utc),
             can_use_credits=True,
         )

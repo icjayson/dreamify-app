@@ -2,7 +2,7 @@
 DynamoDB repository for project entities.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import logging
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def create_project(user_id: str, name: str, description: Optional[str] = None, allowed: Optional[List[Dict]] = None) -> Dict:

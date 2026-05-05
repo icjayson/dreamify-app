@@ -7,7 +7,7 @@ import uuid
 from typing import Dict, List, Any, Optional
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.dashboard_models import (
     DashboardConfiguration,
     DashboardLayout,
@@ -87,8 +87,8 @@ class DashboardService:
                 layout=layout,
                 components=components,
                 metadata=metadata,
-                created_at=datetime.now(),
-                updated_at=datetime.now()
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
             )
             
             # Cache the configuration
@@ -130,7 +130,7 @@ class DashboardService:
                 return new_config
             else:
                 # Just update timestamp
-                dashboard_config.updated_at = datetime.now()
+                dashboard_config.updated_at = datetime.now(timezone.utc)
                 return dashboard_config
                 
         except Exception as e:

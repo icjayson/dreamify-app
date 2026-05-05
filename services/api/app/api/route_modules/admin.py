@@ -2,7 +2,7 @@
 Admin monitoring endpoints for tracking and debugging AnalyzeCSVWorkflow LLM execution.
 """
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 
 from boto3.dynamodb.conditions import Attr
@@ -168,13 +168,13 @@ async def get_admin_metrics_timeseries(
         return cached_data[cache_key]
 
     try:
-        start_date = datetime.now() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
         start_date_iso = start_date.isoformat()
         
         # Initialize buckets
         buckets = {}
         for i in range(days):
-            d = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            d = (datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%d")
             buckets[d] = {
                 "date": d,
                 "messages": 0,

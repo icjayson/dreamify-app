@@ -4,7 +4,7 @@ Protected by X-Internal-Sync-Secret header instead of Clerk JWT.
 """
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
@@ -34,7 +34,7 @@ def _resolve_dates(date_range_preset: str, provider: str):
     if provider == "ga4":
         return f"{days}daysAgo", "today"
 
-    end = datetime.utcnow().date()
+    end = datetime.now(timezone.utc).date()
     start = end - timedelta(days=days)
     return start.isoformat(), end.isoformat()
 

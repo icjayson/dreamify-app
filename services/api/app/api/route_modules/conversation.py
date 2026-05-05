@@ -24,6 +24,7 @@ from utils.dynamodb.repos import workflow_nodes as workflow_nodes_repo
 from utils.s3.conversations import save_conversation, load_conversation
 from utils.s3.paths import build_conversation_key
 from utils.s3.client import download_bytes, upload_bytes
+from app.utils.timestamp_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ def _create_user_node(
     contents: List[Dict[str, Any]], metadata: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Create user node matching existing structure."""
-    now_iso = datetime.now().isoformat()
+    now_iso = utc_now_iso()
     node = {
         "node_id": f"node_{uuid.uuid4().hex[:8]}",
         "role": "user",
@@ -104,7 +105,7 @@ def _create_user_node(
 
 def _create_greeting_node() -> Dict[str, Any]:
     """Create initial greeting message node."""
-    now_iso = datetime.now().isoformat()
+    now_iso = utc_now_iso()
     return {
         "node_id": f"node_{uuid.uuid4().hex[:8]}",
         "role": "assistant",
@@ -126,7 +127,7 @@ def _update_conversation_with_user_node(
 ) -> Dict[str, Any]:
     """Append user node and update timestamps."""
     conversation.setdefault("nodes", []).append(user_node)
-    conversation["updated_at"] = datetime.now().isoformat()
+    conversation["updated_at"] = utc_now_iso()
     return conversation
 
 
@@ -255,7 +256,7 @@ async def conversation_chat(
     enriched_contents = _enrich_user_node_contents(request.user_node_contents, user_id)
 
     conversation_bucket = config.aws.s3.USER_ASSETS_BUCKET
-    now_iso = datetime.now().isoformat()
+    now_iso = utc_now_iso()
 
     model_alias = request.model or "fast"
     resolved_model = MODEL_ID_MAP.get(model_alias, MODEL_ID_MAP["fast"])
@@ -766,7 +767,7 @@ async def stop_workflow(
 
     # Write stop signal to a SEPARATE node_id so Morpheus progress updates
     # (which write to node_id="workflow") don't overwrite it
-    now_iso = datetime.now().isoformat()
+    now_iso = utc_now_iso()
     workflow_nodes_repo.upsert_node_status(
         conversation_id=conversation_id,
         node_id="stop_signal",

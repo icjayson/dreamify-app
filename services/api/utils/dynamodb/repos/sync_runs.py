@@ -6,7 +6,7 @@ Schema:
   GSI: user_id_triggered_at_index (PK: user_id, SK: triggered_at)
 """
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 import uuid
 
@@ -19,7 +19,7 @@ _RUN_TTL_DAYS = 90
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def create_run(schedule_id: str, user_id: str, provider: str) -> Dict:
@@ -52,6 +52,7 @@ def complete_run(
     duration_ms: Optional[int] = None,
     date_range_start: Optional[str] = None,
     date_range_end: Optional[str] = None,
+    config_snapshot: Optional[Dict] = None,
 ) -> None:
     """Mark a run as complete with outcome data."""
     table = get_table(tables.sync_runs)
@@ -69,6 +70,7 @@ def complete_run(
         "duration_ms": duration_ms,
         "date_range_start": date_range_start,
         "date_range_end": date_range_end,
+        "config_snapshot": config_snapshot,
     }
     for field, value in optional_fields.items():
         if value is not None:

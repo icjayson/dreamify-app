@@ -5,7 +5,7 @@ Stripe service layer for handling payment operations.
 import stripe
 import logging
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.config.stripe_config import stripe_config, get_subscription_plan
 from app.models.stripe_models import (
     CreateCustomerRequest, CreateCustomerResponse,
@@ -162,11 +162,11 @@ class StripeService:
                 user_id=subscription.metadata.get('user_id', ''),
                 status=SubscriptionStatus(subscription.status),
                 tier=tier,
-                current_period_start=datetime.fromtimestamp(subscription.current_period_start),
-                current_period_end=datetime.fromtimestamp(subscription.current_period_end),
+                current_period_start=datetime.fromtimestamp(subscription.current_period_start, tz=timezone.utc),
+                current_period_end=datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc),
                 cancel_at_period_end=subscription.cancel_at_period_end,
-                created_at=datetime.fromtimestamp(subscription.created),
-                updated_at=datetime.fromtimestamp(subscription.updated)
+                created_at=datetime.fromtimestamp(subscription.created, tz=timezone.utc),
+                updated_at=datetime.fromtimestamp(subscription.updated, tz=timezone.utc)
             )
             
             return SubscriptionResponse(
@@ -257,7 +257,7 @@ class StripeService:
                 monthly_credits_used=0,  # TODO: Get from database
                 daily_credits_limit=plan['daily_credits'],
                 monthly_credits_limit=plan['monthly_credits'],
-                last_reset_date=datetime.now(),
+                last_reset_date=datetime.now(timezone.utc),
                 can_use_credits=True  # TODO: Implement logic
             )
             

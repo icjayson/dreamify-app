@@ -442,6 +442,8 @@ async def get_workspace(platform_workspace_id: str):
 import secrets
 import string
 from datetime import datetime as _datetime
+from datetime import timezone as _timezone
+from app.utils.timestamp_utils import parse_timestamp_to_utc, utc_now_iso
 
 
 def _generate_telegram_code() -> str:
@@ -696,8 +698,8 @@ async def _handle_telegram_start(
     # Check expiry
     created_at_str = pending.get("created_at", "")
     try:
-        created_at = _datetime.fromisoformat(created_at_str)
-        age_seconds = (_datetime.now() - created_at).total_seconds()
+        created_at = parse_timestamp_to_utc(created_at_str)
+        age_seconds = (_datetime.now(_timezone.utc) - created_at).total_seconds()
         logger.info("Telegram code %s age: %.1fs (TTL: %d)", code, age_seconds, TELEGRAM_CODE_TTL)
     except Exception as exc:
         logger.error("Failed to parse created_at for code %s: %s", code, exc)
@@ -1127,8 +1129,8 @@ async def zalo_upload_info(token: str):
         return ZaloUploadInfoResponse(valid=False)
 
     try:
-        created_at = _datetime.fromisoformat(row.get("created_at", ""))
-        age = (_datetime.now() - created_at).total_seconds()
+        created_at = parse_timestamp_to_utc(row.get("created_at", ""))
+        age = (_datetime.now(_timezone.utc) - created_at).total_seconds()
     except Exception:
         return ZaloUploadInfoResponse(valid=False)
 
@@ -1159,8 +1161,8 @@ async def zalo_upload_file(token: str, request: Request):
         raise HTTPException(status_code=404, detail="Invalid or used upload token")
 
     try:
-        created_at = _datetime.fromisoformat(row.get("created_at", ""))
-        age = (_datetime.now() - created_at).total_seconds()
+        created_at = parse_timestamp_to_utc(row.get("created_at", ""))
+        age = (_datetime.now(_timezone.utc) - created_at).total_seconds()
     except Exception:
         age = ZALO_UPLOAD_TTL + 1
     if age > ZALO_UPLOAD_TTL:
@@ -1231,7 +1233,7 @@ async def zalo_upload_file(token: str, request: Request):
         "s3_bucket": bucket,
         "s3_key": s3_key,
         "extension": ext,
-        "queued_at": _datetime.now().isoformat(),
+        "queued_at": utc_now_iso(),
     }
     chat_platform_repo.append_pending_asset(target_id, asset_record)
     # Token is single-use
@@ -1276,8 +1278,8 @@ def _handle_zalo_start(
     # Check expiry
     created_at_str = pending.get("created_at", "")
     try:
-        created_at = _datetime.fromisoformat(created_at_str)
-        age_seconds = (_datetime.now() - created_at).total_seconds()
+        created_at = parse_timestamp_to_utc(created_at_str)
+        age_seconds = (_datetime.now(_timezone.utc) - created_at).total_seconds()
     except Exception:
         age_seconds = ZALO_CODE_TTL + 1  # treat malformed timestamp as expired
 

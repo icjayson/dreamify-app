@@ -2,7 +2,7 @@
 DynamoDB repository for conversation metadata.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from boto3.dynamodb.conditions import Key, Attr  # type: ignore
@@ -12,7 +12,7 @@ from utils.dynamodb.tables import tables
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def create_conversation(

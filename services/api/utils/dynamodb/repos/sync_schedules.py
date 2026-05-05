@@ -5,7 +5,7 @@ Schema:
   SK: schedule_id (String, UUID)
   GSI: schedule_id_index (PK: schedule_id) — for trigger lookup without user_id
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import uuid
 
@@ -16,7 +16,7 @@ from utils.dynamodb.tables import tables
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def create_schedule(
@@ -83,6 +83,46 @@ def list_schedules(user_id: str) -> List[Dict]:
     # Sort newest first
     items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return items
+
+
+def list_latest_active_schedules_by_provider(user_id: str) -> Dict[str, Dict]:
+    """
+    Return newest active schedule per provider for a user.
+
+    Uses `updated_at` when available, otherwise `created_at`.
+    """
+    items = list_schedules(user_id)
+    active_items = [item for item in items if item.get("status", "active") == "active"]
+    active_items.sort(
+        key=lambda x: x.get("updated_at") or x.get("created_at", ""),
+        reverse=True,
+    )
+
+    latest_by_provider: Dict[str, Dict] = {}
+    for item in active_items:
+        provider = item.get("provider")
+        if not provider or provider in latest_by_provider:
+            continue
+        latest_by_provider[provider] = item
+    return latest_by_provider
+
+
+def list_active_schedules_by_provider(user_id: str) -> Dict[str, List[Dict]]:
+    """Return all active schedules grouped by provider, newest first."""
+    items = list_schedules(user_id)
+    active_items = [item for item in items if item.get("status", "active") == "active"]
+    active_items.sort(
+        key=lambda x: x.get("updated_at") or x.get("created_at", ""),
+        reverse=True,
+    )
+
+    grouped: Dict[str, List[Dict]] = {}
+    for item in active_items:
+        provider = item.get("provider")
+        if not provider:
+            continue
+        grouped.setdefault(provider, []).append(item)
+    return grouped
 
 
 def update_schedule(user_id: str, schedule_id: str, **updates) -> Optional[Dict]:

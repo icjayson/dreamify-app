@@ -43,6 +43,7 @@ from utils.dynamodb.repos import projects as projects_repo
 from utils.dynamodb.repos import workflow_nodes as workflow_nodes_repo
 from utils.s3.conversations import load_conversation, save_conversation
 from utils.s3.paths import build_conversation_key
+from app.utils.timestamp_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ credit_service = CreditService()
 # ── Conversation helpers ──────────────────────────────────────────────────────
 
 def _now_iso() -> str:
-    return datetime.now().isoformat()
+    return utc_now_iso()
 
 
 def _make_user_node(query: str) -> Dict[str, Any]:
@@ -658,7 +659,7 @@ async def post_sync_to_slack(
 
     # 3. Create a new conversation with text prompt + asset content
     conversation_id = str(uuid.uuid4())
-    now_iso = datetime.now().isoformat()
+    now_iso = utc_now_iso()
     bucket = config.aws.s3.USER_ASSETS_BUCKET
     keys = _build_conversation_keys(user_id, project_id, conversation_id)
 
@@ -824,7 +825,7 @@ async def trigger_auto_refresh(
             conversation_meta["s3_bucket"], conversation_meta["s3_key"]
         )
 
-        now_iso = datetime.now().isoformat()
+        now_iso = utc_now_iso()
         asset_content = {
             "type": "asset",
             "data": {

@@ -7,9 +7,12 @@ import os
 import uuid
 import io
 import csv
+import re
+import unicodedata
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Request, status
 from fastapi.responses import RedirectResponse
@@ -520,22 +523,111 @@ def _get_asset_or_404(user_id: str, asset_id: str) -> dict:
     return asset
 
 
+def _resolve_accessible_asset_blob(user_id: str, asset: dict) -> tuple[dict, bytes]:
+    """
+    Return an asset record + bytes that can actually be downloaded from S3.
+
+    Some historical cloned assets point at a missing S3 key. In that case, fall back
+    to another user-owned asset with the same underlying file and repair the current
+    asset metadata in place.
+    """
+    try:
+        return asset, download_bytes(asset["s3_bucket"], asset["s3_key"])
+    except Exception:
+        pass
+
+    all_assets = assets_repo.list_assets(user_id=user_id)
+    current_asset_id = str(asset.get("asset_id", ""))
+    current_file_id = str(asset.get("file_id", ""))
+    current_checksum = str(asset.get("checksum_sha256", ""))
+    current_filename = str(asset.get("filename", ""))
+    current_size = asset.get("size_bytes")
+
+    def _candidate_score(candidate: dict) -> int:
+        score = 0
+        if str(candidate.get("file_id", "")) and str(candidate.get("file_id", "")) == current_file_id:
+            score += 100
+        if str(candidate.get("checksum_sha256", "")) and str(candidate.get("checksum_sha256", "")) == current_checksum:
+            score += 80
+        if str(candidate.get("filename", "")) == current_filename:
+            score += 20
+        if candidate.get("size_bytes") == current_size:
+            score += 10
+        if str(candidate.get("asset_type", "")) == str(asset.get("asset_type", "")):
+            score += 5
+        return score
+
+    candidates = [
+        candidate for candidate in all_assets
+        if str(candidate.get("asset_id", "")) != current_asset_id
+        and (
+            (current_file_id and str(candidate.get("file_id", "")) == current_file_id)
+            or (current_checksum and str(candidate.get("checksum_sha256", "")) == current_checksum)
+            or (
+                current_filename
+                and current_size is not None
+                and str(candidate.get("filename", "")) == current_filename
+                and candidate.get("size_bytes") == current_size
+            )
+        )
+    ]
+    candidates.sort(key=_candidate_score, reverse=True)
+
+    for candidate in candidates:
+        try:
+            blob = download_bytes(candidate["s3_bucket"], candidate["s3_key"])
+            assets_repo.update_asset_metadata(
+                user_id=user_id,
+                asset_id=current_asset_id,
+                metadata={
+                    "s3_bucket": candidate.get("s3_bucket"),
+                    "s3_key": candidate.get("s3_key"),
+                    "file_id": candidate.get("file_id") or candidate.get("asset_id"),
+                },
+            )
+            repaired = dict(asset)
+            repaired["s3_bucket"] = candidate.get("s3_bucket")
+            repaired["s3_key"] = candidate.get("s3_key")
+            repaired["file_id"] = candidate.get("file_id") or candidate.get("asset_id")
+            logger.info(
+                "Recovered missing asset blob for %s using candidate %s",
+                current_asset_id,
+                candidate.get("asset_id"),
+            )
+            return repaired, blob
+        except Exception:
+            continue
+
+    raise FileNotFoundError(
+        f"Object not found: s3://{asset.get('s3_bucket')}/{asset.get('s3_key')}"
+    )
+
+
 @router.get("/user/asset/{asset_id}/download-url")
 async def get_asset_download_url(
     asset_id: str,
     user_id: str = Depends(require_user),
 ):
     """Generate a short-lived presigned S3 URL that forces a file download."""
+    def _build_content_disposition(filename: str) -> str:
+        # S3 response headers are ISO-8859-1 only. Keep ASCII fallback + RFC5987 UTF-8.
+        normalized = unicodedata.normalize("NFKD", filename or "").encode("ascii", "ignore").decode("ascii")
+        sanitized = re.sub(r'[\\/\r\n"]+', "_", normalized).strip(" .")
+        fallback = sanitized or "download"
+        utf8_name = quote((filename or fallback).replace("\r", "").replace("\n", ""), safe="")
+        return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{utf8_name}"
+
     asset = _get_asset_or_404(user_id, asset_id)
     try:
+        resolved_asset, _ = _resolve_accessible_asset_blob(user_id, asset)
         s3 = get_s3_client()
-        filename = asset.get("filename", asset_id)
+        filename = resolved_asset.get("filename", asset_id)
         url = s3.generate_presigned_url(
             "get_object",
             Params={
-                "Bucket": asset["s3_bucket"],
-                "Key": asset["s3_key"],
-                "ResponseContentDisposition": f'attachment; filename="{filename}"',
+                "Bucket": resolved_asset["s3_bucket"],
+                "Key": resolved_asset["s3_key"],
+                "ResponseContentDisposition": _build_content_disposition(filename),
             },
             ExpiresIn=300,  # 5 minutes
         )
@@ -684,11 +776,17 @@ async def preview_file_endpoint(
             logger.warning(f"Preview requested for non-existent asset: {asset_id} for user {user_id}")
             raise HTTPException(status_code=404, detail="Asset not found")
             
-        # Download file data
+        # Download file data (with self-healing for missing S3 keys)
         try:
-            file_data = download_bytes(asset["s3_bucket"], asset["s3_key"])
+            asset, file_data = _resolve_accessible_asset_blob(user_id, asset)
+        except FileNotFoundError as e:
+            logger.warning(f"Preview requested for asset with missing blob {asset_id}: {e}")
+            raise HTTPException(
+                status_code=404,
+                detail="The underlying file for this asset is no longer available in storage.",
+            )
         except Exception as e:
-            logger.error(f"Failed to download asset {asset_id} from S3: {e}")
+            logger.error(f"Failed to download asset {asset_id} from S3: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to retrieve file from storage: {str(e)}")
             
         # Use CSVProcessor for robust reading

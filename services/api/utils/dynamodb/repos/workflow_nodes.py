@@ -1,7 +1,7 @@
 """
 DynamoDB repository for workflow node status tracking.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from boto3.dynamodb.conditions import Key
@@ -12,7 +12,7 @@ from utils.logger import logger
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def upsert_node_status(

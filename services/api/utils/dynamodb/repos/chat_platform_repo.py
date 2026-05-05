@@ -3,7 +3,7 @@ DynamoDB repository for chat platform workspace and session entities.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from boto3.dynamodb.conditions import Attr
@@ -13,7 +13,7 @@ from utils.dynamodb.tables import tables
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 # ── Workspaces ────────────────────────────────────────────────────────────────
@@ -89,17 +89,19 @@ def cleanup_expired_pending(platform: str, ttl_seconds: int, user_id: Optional[s
     ``user_id`` is provided to keep the scan small.
     Returns the number of rows deleted.
     """
-    from datetime import datetime
     table = get_table(tables.chat_workspaces)
     flt = Attr("platform").eq(platform)
     if user_id:
         flt = flt & Attr("user_id").eq(user_id)
     resp = table.scan(FilterExpression=flt, Limit=50)
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     deleted = 0
     for item in resp.get("Items", []):
         try:
-            created = datetime.fromisoformat(item.get("created_at", ""))
+            created_raw = item.get("created_at", "")
+            created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
             age = (now - created).total_seconds()
         except Exception:
             age = ttl_seconds + 1  # malformed timestamp → treat as expired

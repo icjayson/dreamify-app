@@ -2,8 +2,8 @@
 DynamoDB repository for asset entities.
 """
 import uuid
-from datetime import datetime
-from typing import Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Any
 
 from boto3.dynamodb.conditions import Attr, Key  # type: ignore
 
@@ -14,7 +14,7 @@ ASSET_ID_INDEX = "asset_id_index"
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def create_asset(
@@ -141,5 +141,52 @@ def set_processed_json_key_by_asset_id(asset_id: str, processed_key: str) -> Opt
     if not asset:
         return None
     return set_processed_json_key(asset["user_id"], asset_id, processed_key)
+
+
+def update_asset_metadata(user_id: str, asset_id: str, metadata: Dict[str, Any]) -> Optional[Dict]:
+    """Patch arbitrary metadata fields on an asset record."""
+    if not metadata:
+        return get_asset(user_id, asset_id)
+    table = get_table(tables.assets)
+    expr_parts = ["updated_at = :updated_at"]
+    expr_values: Dict[str, Any] = {":updated_at": _now_iso()}
+    expr_names: Dict[str, str] = {}
+
+    for idx, (key, value) in enumerate(metadata.items()):
+        name_key = f"#m_{idx}"
+        value_key = f":v_{idx}"
+        expr_names[name_key] = key
+        expr_values[value_key] = value
+        expr_parts.append(f"{name_key} = {value_key}")
+
+    resp = table.update_item(
+        Key={"user_id": user_id, "asset_id": asset_id},
+        UpdateExpression="SET " + ", ".join(expr_parts),
+        ExpressionAttributeNames=expr_names,
+        ExpressionAttributeValues=expr_values,
+        ReturnValues="ALL_NEW",
+    )
+    return resp.get("Attributes")
+
+
+def clone_asset_to_project(user_id: str, source_asset: Dict[str, Any], project_id: str) -> Dict:
+    """Create a new asset record in another project pointing to the same S3 object."""
+    return create_asset(
+        user_id=user_id,
+        project_id=project_id,
+        s3_bucket=source_asset.get("s3_bucket", ""),
+        s3_key=source_asset.get("s3_key", ""),
+        asset_type=source_asset.get("asset_type", ""),
+        size_bytes=int(source_asset.get("size_bytes", 0)),
+        checksum_sha256=source_asset.get("checksum_sha256"),
+        version=source_asset.get("version", ""),
+        content_type=source_asset.get("content_type"),
+        status=source_asset.get("status", "uploaded"),
+        file_id=source_asset.get("file_id") or source_asset.get("asset_id"),
+        original_filename=source_asset.get("filename"),
+        extension=source_asset.get("extension"),
+        row_count=source_asset.get("row_count"),
+        column_count=source_asset.get("column_count"),
+    )
 
 

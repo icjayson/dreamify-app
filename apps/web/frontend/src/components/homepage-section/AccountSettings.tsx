@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useUser, useSession, useSessionList } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Monitor, Smartphone, Tablet } from "lucide-react";
+import { formatToDisplay, getNow } from "@/utils/timestamp";
 
 // ── Provider helpers (module-level, not recreated on each render) ──────────
 
@@ -497,7 +498,7 @@ const AccountSettings: React.FC = () => {
                 <div className="text-sm text-muted-foreground dark:text-white/80 mt-1">
                   {ipInfo?.ip ? `${ipInfo.ip} ${ipInfo.city ? `(${ipInfo.city}, ${ipInfo.country || ""})` : ""}` : "IP unknown"}
                 </div>
-                <div className="text-sm text-muted-foreground dark:text-white/80 mt-1">{new Date().toLocaleString()}</div>
+                <div className="text-sm text-muted-foreground dark:text-white/80 mt-1">{formatToDisplay(getNow(), { format: "full" })}</div>
               </div>
 
               {/* Other sessions */}
@@ -515,7 +516,7 @@ const AccountSettings: React.FC = () => {
                       <span className="text-foreground dark:text-white">Device</span>
                     </div>
                     {s.lastActiveAt && (
-                      <div className="text-xs text-muted-foreground dark:text-white/60 mt-1">{new Date(s.lastActiveAt).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground dark:text-white/60 mt-1">{formatToDisplay(s.lastActiveAt, { format: "full" })}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-2">

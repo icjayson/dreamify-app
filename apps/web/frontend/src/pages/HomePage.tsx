@@ -1185,14 +1185,14 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       <Dialog open={showWelcome} onOpenChange={() => { }}>
         <DialogContent className="sm:max-w-md bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle className="text-xl sm:text-2xl font-bold text-white">Welcome to Dreamify! 🎉</DialogTitle>
+            <DialogTitle className="text-xl sm:text-2xl font-bold text-foreground">Welcome to Dreamify! 🎉</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <p className="text-sm sm:text-base text-white/70">
-              You're currently on the <strong className="text-white">Pro plan</strong> — enjoy full access while we're in early access.
+            <p className="text-sm sm:text-base text-muted-foreground">
+              You're currently on the <strong className="text-foreground">Pro plan</strong> — enjoy full access while we're in early access.
             </p>
-            <p className="text-sm sm:text-base text-white/70 mt-2">
-              You have <strong className="text-white">1,000 credits per month</strong> to analyze data and generate dashboards.
+            <p className="text-sm sm:text-base text-muted-foreground mt-2">
+              You have <strong className="text-foreground">1,000 credits per month</strong> to analyze data and generate dashboards.
             </p>
           </div>
           <DialogFooter>

@@ -4,14 +4,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { integrationService, StripeConnectionStatusResponse } from '@/services/integrationService';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, CalendarIcon } from 'lucide-react';
-import { format, subDays } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Loader2, AlertCircle, CalendarDays } from 'lucide-react';
+import { formatDateForApi, subtractDays } from '@/utils/timestamp';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
 import { fileService } from '@/services/fileService';
 import type { AssetRecord } from '@/services/fileService';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ConnectedEntitiesList } from './ConnectedEntitiesList';
 
 const DATE_PRESETS = [
   { value: 'last_7d', label: 'Last 7 days' },
@@ -50,7 +50,7 @@ export default function StripeIntegrationModal() {
 
   // Date state
   const [datePreset, setDatePreset] = useState<string>('last_30d');
-  const [startDate, setStartDate] = useState<Date | undefined>(subDays(new Date(), 30));
+  const [startDate, setStartDate] = useState<Date | undefined>(subtractDays(30));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
 
   // Sync state
@@ -62,6 +62,7 @@ export default function StripeIntegrationModal() {
     columnCount: number;
   } | null>(null);
   const [discardingEmpty, setDiscardingEmpty] = useState(false);
+  const [activeTab, setActiveTab] = useState<'new' | 'connected'>('new');
 
   const { getToken } = useAuth();
   const popupRef = useRef<Window | null>(null);
@@ -114,12 +115,13 @@ export default function StripeIntegrationModal() {
     setConnectionStatus(null);
     setReportType('charges');
     setDatePreset('last_30d');
-    setStartDate(subDays(new Date(), 30));
+    setStartDate(subtractDays(30));
     setEndDate(new Date());
     setError(null);
     setConnecting(false);
     setEmptyRowsDialog(null);
     setDiscardingEmpty(false);
+    setActiveTab('new');
   };
 
   // ── Connection check ─────────────────────────────────────────────────────
@@ -189,8 +191,8 @@ export default function StripeIntegrationModal() {
         reportType,
         currentProjectId || undefined,
         isCustomRange ? undefined : datePreset,
-        isCustomRange && startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-        isCustomRange && endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+        isCustomRange && startDate ? formatDateForApi(startDate) : undefined,
+        isCustomRange && endDate ? formatDateForApi(endDate) : undefined,
       );
 
       if (result.row_count > 0) {
@@ -228,6 +230,23 @@ export default function StripeIntegrationModal() {
     } finally {
       setSyncing(false);
     }
+  };
+
+  const handleSelectConnectedAsset = (run: any) => {
+    if (!run.asset_id) return;
+    const file = {
+      fileID: run.asset_id,
+      filename: run.asset_filename || 'data.csv',
+      size: run.config_snapshot?.size_bytes || 0,
+      ext: 'csv',
+      status: 'uploaded' as const,
+      sourceType: 'Stripe',
+      accountName: run.accountName || run.entityName || 'Stripe',
+      propertyName: run.entityName || 'Stripe',
+      syncVersionName: run.sync_version_name || run.version_name,
+    };
+    useChatStore.getState().addFiles([file]);
+    onClose();
   };
 
   const handleEmptyTryAnotherRange = async () => {
@@ -334,82 +353,81 @@ export default function StripeIntegrationModal() {
                       </Button>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-200">Report Type</label>
-                      <Select value={reportType} onValueChange={setReportType}>
-                        <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
-                          <SelectValue placeholder="Select report type" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                          {REPORT_TYPES.map((rt) => (
-                            <SelectItem key={rt.value} value={rt.value} className="focus:bg-white/10 focus:text-white">
-                              {rt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="mt-4">
+                      <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 p-1 rounded-lg mb-4">
+                        <TabsTrigger value="new" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Connect New</TabsTrigger>
+                        <TabsTrigger value="connected" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select Connected</TabsTrigger>
+                      </TabsList>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-200">Date Range</label>
-                      <Select value={datePreset} onValueChange={setDatePreset}>
-                        <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
-                          <SelectValue placeholder="Select date range" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                          {DATE_PRESETS.map((preset) => (
-                            <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
-                              {preset.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                      <TabsContent value="new" className="space-y-4 outline-none">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-200">Report Type</label>
+                          <Select value={reportType} onValueChange={setReportType}>
+                            <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                              <SelectValue placeholder="Select report type" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                              {REPORT_TYPES.map((rt) => (
+                                <SelectItem key={rt.value} value={rt.value} className="focus:bg-white/10 focus:text-white">
+                                  {rt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                    {isCustomRange && (
-                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-200">Start Date</label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  'w-full justify-start text-left font-normal bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white',
-                                  !startDate && 'text-muted-foreground',
-                                )}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                                <span className="truncate">{startDate ? format(startDate, 'dd/MM/yy') : 'Pick a date'}</span>
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                              <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
-                            </PopoverContent>
-                          </Popover>
+                          <label className="text-sm font-medium text-gray-200">Date Range</label>
+                          <Select value={datePreset} onValueChange={setDatePreset}>
+                            <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                              <SelectValue placeholder="Select date range" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                              {DATE_PRESETS.map((preset) => (
+                                <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
+                                  {preset.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-200">End Date</label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  'w-full justify-start text-left font-normal bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white',
-                                  !endDate && 'text-muted-foreground',
-                                )}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                                <span className="truncate">{endDate ? format(endDate, 'dd/MM/yy') : 'Pick a date'}</span>
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                              <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </div>
-                    )}
+
+                        {isCustomRange && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-gray-200">Start Date</label>
+                              <div className="relative">
+                                <input
+                                  type="date"
+                                  value={startDate ? formatDateForApi(startDate) : ''}
+                                  onChange={(e) => setStartDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
+                                  className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                />
+                                <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-gray-200">End Date</label>
+                              <div className="relative">
+                                <input
+                                  type="date"
+                                  value={endDate ? formatDateForApi(endDate) : ''}
+                                  onChange={(e) => setEndDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
+                                  className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                />
+                                <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </TabsContent>
+                      <TabsContent value="connected" className="outline-none">
+                        <ConnectedEntitiesList
+                          connectorKey="stripe"
+                          onSelectAsset={handleSelectConnectedAsset}
+                        />
+                      </TabsContent>
+                    </Tabs>
                   </>
                 )}
 
@@ -455,8 +473,8 @@ export default function StripeIntegrationModal() {
                   <Button
                     type="button"
                     onClick={handleSync}
-                    disabled={syncing}
-                    className="bg-[#635BFF] hover:bg-[#5248E8] text-white font-medium px-4 py-2 rounded-md transition-colors"
+                    disabled={activeTab === 'connected' || syncing}
+                    className={`bg-[#635BFF] hover:bg-[#5248E8] text-white font-medium px-4 py-2 rounded-md transition-colors ${activeTab === 'connected' ? 'opacity-0 pointer-events-none' : ''}`}
                   >
                     {syncing ? (
                       <>

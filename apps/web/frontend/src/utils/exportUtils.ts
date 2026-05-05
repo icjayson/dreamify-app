@@ -1,4 +1,6 @@
 
+import { getNow } from '@/utils/timestamp';
+
 // Simple PDF export function that captures the original dashboard directly
 export async function exportDashboardAsPdf() {
   // Wait for the hidden container to appear in the DOM
@@ -128,7 +130,7 @@ export async function exportDashboardAsPdf() {
   }
 
   console.log('Saving PDF...');
-  pdf.save(`dashboard-${new Date().toISOString().slice(0, 10)}.pdf`);
+  pdf.save(`dashboard-${getNow().slice(0, 10)}.pdf`);
   console.log('PDF saved successfully');
 }
 
@@ -184,7 +186,7 @@ export async function exportChartAsPng(element: HTMLElement, title: string): Pro
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const link = document.createElement('a');
-    link.download = `chart-${slug}-${new Date().toISOString().slice(0, 10)}.png`;
+    link.download = `chart-${slug}-${getNow().slice(0, 10)}.png`;
     link.href = dataUrl;
     link.click();
   } finally {
@@ -292,7 +294,7 @@ export async function exportDashboardAsPng() {
 
   console.log('Saving PNG...');
   const link = document.createElement('a');
-  link.download = `dashboard-${new Date().toISOString().slice(0, 10)}.png`;
+  link.download = `dashboard-${getNow().slice(0, 10)}.png`;
   link.href = canvas.toDataURL('image/png');
   link.click();
   console.log('PNG saved successfully');

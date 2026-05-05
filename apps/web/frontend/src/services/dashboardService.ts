@@ -3,6 +3,7 @@
  */
 
 import { api } from './api';
+import { getNow } from '@/utils/timestamp';
 import {
   DashboardConfiguration,
   DashboardGenerationRequest,
@@ -158,7 +159,7 @@ class DashboardService {
     try {
       localStorage.setItem(`dashboard_${dashboardId}`, JSON.stringify({
         config,
-        timestamp: Date.now()
+        cachedAtIso: getNow()
       }));
     } catch (error) {
       console.warn('Failed to cache dashboard:', error);
@@ -172,9 +173,10 @@ class DashboardService {
     try {
       const cached = localStorage.getItem(`dashboard_${dashboardId}`);
       if (cached) {
-        const { config, timestamp } = JSON.parse(cached);
+        const { config, cachedAtIso } = JSON.parse(cached);
+        const cachedAt = typeof cachedAtIso === 'string' ? Date.parse(cachedAtIso) : NaN;
         // Cache expires after 5 minutes
-        if (Date.now() - timestamp < 5 * 60 * 1000) {
+        if (Number.isFinite(cachedAt) && Date.now() - cachedAt < 5 * 60 * 1000) {
           return config;
         }
       }

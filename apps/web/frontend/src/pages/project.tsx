@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, LayoutTemplate, Pencil, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
+import { ArrowLeft, Download, LayoutTemplate, Pencil, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
 import EditModeToolbar from "@/components/charts/edit/EditModeToolbar";
 import { useEditMode } from "@/hooks/useEditMode";
 import ChatInterface from "@/chat/ChatInterface";
@@ -28,6 +28,7 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('projectId');
+  const dashboardIdFromQuery = searchParams.get('dashboardId');
   const [processedData, setProcessedData] = useState<any>(null);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'dashboard'>('chat');
@@ -306,6 +307,7 @@ export default function ProjectPage() {
   }, [setMessages, setCurrentConversationId, toast, setHasShownInitialDashboard]);
 
   const projectRef = useRef<string | null>(null);
+  const lastAppliedDashboardQueryRef = useRef<string | null>(null);
 
   // Reset and hydrate when project changes
   useEffect(() => {
@@ -424,6 +426,24 @@ export default function ProjectPage() {
       }
     };
   }, [projectId, hydrateConversation, toast]);
+
+  useEffect(() => {
+    if (!projectId || !dashboardIdFromQuery) return;
+    const queryKey = `${projectId}:${dashboardIdFromQuery}`;
+    if (lastAppliedDashboardQueryRef.current === queryKey) return;
+    if (selectedDashboardId === dashboardIdFromQuery) {
+      lastAppliedDashboardQueryRef.current = queryKey;
+      return;
+    }
+    lastAppliedDashboardQueryRef.current = queryKey;
+    selectDashboard(dashboardIdFromQuery, projectId).then((data) => {
+      if (!data) return;
+      setProcessedData(data);
+      setCsvPreview(null);
+      setIsDashboardOpen(true);
+      setActiveTab('dashboard');
+    });
+  }, [dashboardIdFromQuery, projectId, selectedDashboardId, selectDashboard]);
 
   // ── Post-redirect: auto-open connector modal after OAuth consent ────────────
   useEffect(() => {
@@ -555,6 +575,28 @@ export default function ProjectPage() {
       setIsSaving(false);
     }
   }, [currentConversationId, selectedDashboardId, projectId, processedData, markSaved, toast]);
+
+  const handleDownloadCsvPreview = useCallback(async () => {
+    if (!csvPreview) return;
+    try {
+      const res = await fileService.getDownloadUrl(csvPreview.assetId);
+      if (!res.url) {
+        throw new Error(res.error || "Could not get download link.");
+      }
+      const link = document.createElement("a");
+      link.href = res.url;
+      link.download = res.filename ?? csvPreview.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : "Failed to download file.",
+        variant: "destructive",
+      });
+    }
+  }, [csvPreview, toast]);
 
   return (
     <>
@@ -734,6 +776,14 @@ export default function ProjectPage() {
                   )}
                   <div className="ml-auto flex items-center gap-1.5 shrink-0">
                     <button
+                      onClick={handleDownloadCsvPreview}
+                      className="button-outline h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Download data file"
+                      title="Download data file"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => {
                         setCsvPreview(null);
                         setCsvPreviewMeta(null);
@@ -794,10 +844,12 @@ export default function ProjectPage() {
               <div className="flex-1 overflow-hidden relative">
                 {/* CSV data preview mode */}
                 {csvPreview ? (
-                  <CsvPreviewPanel
-                    assetId={csvPreview.assetId}
-                    onMetaLoaded={(meta) => setCsvPreviewMeta(meta)}
-                  />
+                  <div className="h-full min-h-0 flex flex-col">
+                    <CsvPreviewPanel
+                      assetId={csvPreview.assetId}
+                      onMetaLoaded={(meta) => setCsvPreviewMeta(meta)}
+                    />
+                  </div>
                 ) : !shouldShowDashboard ? (
                   <BlankState
                     subtexts={[

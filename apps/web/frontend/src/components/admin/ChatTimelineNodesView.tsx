@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AdminDashboardPreview } from './AdminDashboardPreview';
 import { AdminDatasetPreview } from './AdminDatasetPreview';
+import { formatToDisplay } from '@/utils/timestamp';
 
 interface ChatTimelineNodesViewProps {
     nodes: Array<Record<string, any>>;
@@ -138,7 +139,7 @@ export function ChatTimelineNodesView({ nodes, conversationId, projectId }: Chat
                                     {isUser ? 'User' : 'Assistant'}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground/60">
-                                    {node.created_at ? new Date(node.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                    {node.created_at ? formatToDisplay(node.created_at, { format: 'time' }) : ''}
                                 </span>
                             </div>
 

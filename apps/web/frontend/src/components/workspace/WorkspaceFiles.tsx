@@ -17,6 +17,7 @@ import {
   X,
   FolderPlus,
   Eye,
+  Check,
 } from "lucide-react";
 import CsvPreviewPanel from "@/components/project-section/CsvPreviewPanel";
 import { useUser } from "@clerk/clerk-react";
@@ -527,12 +528,7 @@ export default function WorkspaceFiles() {
           className="grid items-center px-4 py-2.5 border-b border-border/30 bg-muted/20"
           style={{ gridTemplateColumns: "2.5rem 1fr 6.5rem 9rem 6rem" }}
         >
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={toggleAll}
-            className="w-4 h-4 rounded-full border-border/60 accent-primary cursor-pointer"
-          />
+          <RoundCheckbox checked={allSelected} onChange={toggleAll} />
           <ColHeader label="Name" field="filename" current={sortField} dir={sortDir} onSort={handleSort} />
           <ColHeader label="Size" field="size" current={sortField} dir={sortDir} onSort={handleSort} />
           <ColHeader label="Uploaded Time" field="created_at" current={sortField} dir={sortDir} onSort={handleSort} />
@@ -588,12 +584,7 @@ export default function WorkspaceFiles() {
                 style={{ gridTemplateColumns: "2.5rem 1fr 6.5rem 9rem 6rem" }}
               >
                 {/* Checkbox */}
-                <input
-                  type="checkbox"
-                  checked={selected.has(file.fileID)}
-                  onChange={() => toggleFile(file.fileID)}
-                  className="w-4 h-4 rounded-full border-border/60 accent-primary cursor-pointer"
-                />
+                <RoundCheckbox checked={selected.has(file.fileID)} onChange={() => toggleFile(file.fileID)} />
 
                 {/* Name + badge */}
                 <div className="flex items-center gap-2.5 min-w-0 pr-2">
@@ -802,6 +793,34 @@ function DropdownItem({
   );
 }
 
+function RoundCheckbox({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={(e) => {
+        onChange();
+        e.currentTarget.blur();
+      }}
+      className={cn(
+        "flex h-4 w-4 items-center justify-center rounded-full border transition-colors outline-none focus:outline-none focus-visible:outline-none",
+        checked
+          ? "border-primary bg-primary"
+          : "border-muted-foreground/40 bg-transparent hover:border-primary/40"
+      )}
+    >
+      {checked && <Check className="h-3 w-3 text-primary-foreground/80" />}
+    </button>
+  );
+}
+
 // ─── File Preview Modal ────────────────────────────────────────────────────────
 
 function FilePreviewModal({
@@ -829,7 +848,7 @@ function FilePreviewModal({
 
       {/* Panel */}
       <div
-        className="relative w-full max-w-5xl flex flex-col rounded-2xl border border-border/50 bg-background shadow-2xl animate-zoom-in overflow-hidden"
+        className="relative w-full max-w-[90vw] flex flex-col rounded-2xl border border-border/50 bg-background shadow-2xl animate-zoom-in overflow-hidden"
         style={{ zIndex: 100000, maxHeight: "90vh" }}
       >
         {/* Header */}

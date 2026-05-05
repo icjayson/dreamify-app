@@ -12,6 +12,7 @@ import { adminService } from '@/services/adminService';
 import { ChatTimelineNodesView } from './ChatTimelineNodesView';
 import { AdminDashboardPreview } from './AdminDashboardPreview';
 import { useToast } from '@/hooks/use-toast';
+import { formatToDisplay } from '@/utils/timestamp';
 
 interface SplitPaneChatViewProps {
     conversations: ConversationListItem[];
@@ -170,10 +171,7 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                                     {/* Timestamp & Metrics */}
                                     <div className="flex flex-col items-end gap-1 ml-auto mt-1 shrink-0">
                                         <div className="text-[10px] text-muted-foreground whitespace-nowrap">
-                                            {new Date(conv.created_at).toLocaleDateString(undefined, {
-                                                month: 'short',
-                                                day: 'numeric'
-                                            })}
+                                            {formatToDisplay(conv.created_at, { format: 'date' })}
                                         </div>
                                         {conv.chat_mode && (
                                             <span className="text-[8px] font-semibold bg-primary/10 text-primary px-1 rounded uppercase">
@@ -343,7 +341,7 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                                             <div>
                                                 <div className="text-xs font-medium text-muted-foreground mb-1">Created At</div>
                                                 <div className="text-xs bg-muted/50 p-2 rounded">
-                                                    {selectedConvMeta?.created_at ? new Date(selectedConvMeta.created_at).toLocaleString() : 'N/A'}
+                                                    {selectedConvMeta?.created_at ? formatToDisplay(selectedConvMeta.created_at, { format: 'full' }) : 'N/A'}
                                                 </div>
                                             </div>
                                             <div>

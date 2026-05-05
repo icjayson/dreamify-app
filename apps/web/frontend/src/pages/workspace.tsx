@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
 import VideoBackground from '@/components/homepage-section/VideoBackground';
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Plus,
   Home,
@@ -14,6 +14,10 @@ import {
   Sparkles,
   User as UserIcon,
   Settings,
+  RefreshCw,
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import { useToast } from "@/hooks/use-toast";
@@ -24,7 +28,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import WorkspaceSidebar from "@/components/project-section/WorkspaceSidebar";
+import CsvPreviewPanel from "@/components/project-section/CsvPreviewPanel";
 import WorkspaceNewChat from "@/components/workspace/WorkspaceNewChat";
 import AccountSettings from "@/components/homepage-section/AccountSettings";
 import { PlansCreditsContent, PreferencesContent } from "@/components/homepage-section/AccountCenterModal";
@@ -32,9 +39,19 @@ import { PrivacyContent, PRIVACY_METADATA, PRIVACY_TOC } from "@/pages/Privacy";
 import { TermsContent, TERMS_METADATA, TERMS_TOC } from "@/pages/Terms";
 import HiddenDashboardCapturer from "@/components/workspace/HiddenDashboardCapturer";
 import WorkspaceFiles from "@/components/workspace/WorkspaceFiles";
+import ConnectorEntityDetailView from "@/components/workspace/ConnectorEntityDetailView";
+import ProductNewsModal, {
+  WORKSPACE_NEWS_ITEMS,
+  type WorkspaceNewsItem,
+} from "@/components/workspace/ProductNewsModal";
 import { useProjects } from "@/hooks/useProjects";
 import { projectService, type ProjectRecord } from "@/services/projectService";
-import { integrationService } from "@/services/integrationService";
+import {
+  integrationService,
+  type ConnectorOverviewItem,
+  type ConnectorEntityDetailResponse,
+  type ConnectorEntityRunItem,
+} from "@/services/integrationService";
 import { CONNECTORS, CONNECTOR_CATEGORIES } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
 import { SlackIntegrationCard } from "@/components/integrations/SlackIntegrationCard";
@@ -42,6 +59,7 @@ import { TelegramIntegrationCard } from "@/components/integrations/TelegramInteg
 import { ZaloIntegrationCard } from "@/components/integrations/ZaloIntegrationCard";
 import { ScheduleManager } from "@/components/schedules/ScheduleManager";
 import { toast as sonnerToast } from "sonner";
+import { formatToDisplay } from "@/utils/timestamp";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ConnectorStatus {
@@ -81,8 +99,20 @@ const SOURCE_COLORS: Record<string, string> = {
   CSV: "bg-foreground/10 text-foreground/60",
 };
 
+const CONNECTOR_CARD_DESCRIPTIONS: Record<string, string> = {
+  "Meta Ads": "Sync ad campaign, ad set, and performance metrics.",
+  "TikTok Ads": "Sync ad campaign, ad set, and performance metrics.",
+  "Google Ads": "Sync ad campaign, ad set, and performance metrics.",
+  "GA4": "Sync website and app behavior events.",
+  "Google Sheets": "Use spreadsheet data as a live source for dashboards.",
+  "AppsFlyer": "Sync mobile attribution and install metrics.",
+  "Stripe": "Sync subscription and payment metrics.",
+  "Firebase": "Sync app analytics and product signals.",
+};
+
 type Tab = "new-chat" | "projects" | "connectors" | "dashboards" | "schedules" | "files" | "settings" | "privacy" | "terms";
 type SettingsSection = "plans" | "account" | "preferences";
+const NEWS_MODAL_COOLDOWN_MS = 3 * 60 * 60 * 1000;
 
 // ─── WorkspaceDocsView ────────────────────────────────────────────────────────
 // Mirrors DocsLayout visually but tracks scroll on the workspace <main> element
@@ -211,17 +241,23 @@ function WorkspaceDocsView({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function WorkspacePage() {
+  const routeParams = useParams<{ connectorKey?: string; entityId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as Tab | null;
 
   const [activeTab, setActiveTab] = useState<Tab>(
-    tabParam && ["new-chat", "projects", "connectors", "dashboards", "schedules", "files", "settings", "privacy", "terms"].includes(tabParam) ? tabParam : "new-chat"
+    routeParams.connectorKey && routeParams.entityId
+      ? "connectors"
+      : tabParam && ["new-chat", "projects", "connectors", "dashboards", "schedules", "files", "settings", "privacy", "terms"].includes(tabParam)
+        ? tabParam
+        : "new-chat"
   );
   const [collapsed, setCollapsed] = useState(false);
 
   const mainRef = useRef<HTMLElement>(null);
 
   const sectionParam = searchParams.get("section") as SettingsSection | null;
+  const detailTabParam = searchParams.get("detailTab");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(
     sectionParam && ["plans", "account", "preferences"].includes(sectionParam) ? sectionParam : "account"
   );
@@ -229,6 +265,8 @@ export default function WorkspacePage() {
   const { toast } = useToast();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [dialog, setDialog] = useState({ open: false, mode: 'rename', itemId: '', itemTitle: '', value: '' });
+  const [newsModalOpen, setNewsModalOpen] = useState(false);
+  const [activeNewsItem, setActiveNewsItem] = useState<WorkspaceNewsItem | null>(null);
 
   const navigate = useNavigate();
   const { user } = useUser();
@@ -247,14 +285,16 @@ export default function WorkspacePage() {
   // ── Sync active tab with URL ─────────────────────────────────────────────────
   useEffect(() => {
     const tab = searchParams.get("tab") as Tab | null;
-    if (tab && ["new-chat", "projects", "connectors", "dashboards", "schedules", "files", "settings", "privacy", "terms"].includes(tab)) {
+    if (routeParams.connectorKey && routeParams.entityId) {
+      setActiveTab("connectors");
+    } else if (tab && ["new-chat", "projects", "connectors", "dashboards", "schedules", "files", "settings", "privacy", "terms"].includes(tab)) {
       setActiveTab(tab);
     }
     const section = searchParams.get("section") as SettingsSection | null;
     if (section && ["plans", "account", "preferences"].includes(section)) {
       setSettingsSection(section);
     }
-  }, [searchParams]);
+  }, [searchParams, routeParams.connectorKey, routeParams.entityId]);
 
   // ── Handle Slack OAuth return ────────────────────────────────────────────────
   useEffect(() => {
@@ -279,6 +319,15 @@ export default function WorkspacePage() {
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
     setSearchParams({ tab });
+  };
+
+  const handleNewsExplore = (feature: WorkspaceNewsItem) => {
+    setNewsModalOpen(false);
+    if (feature.id === "templates") {
+      setSearchParams({ tab: "new-chat", openTemplate: "1" });
+      return;
+    }
+    handleTabChange(feature.targetTab as Tab);
   };
 
   // ── Dashboard data ───────────────────────────────────────────────────────────
@@ -321,6 +370,7 @@ export default function WorkspacePage() {
 
   const handlePreviewGenerated = useCallback((projectId: string, url: string) => {
     setPreviewUrls((prev) => ({ ...prev, [projectId]: url }));
+    setRelatedProjectPreviewUrls((prev) => ({ ...prev, [projectId]: url }));
     // Update local state so we don't try to capture it again this session
     setAllProjects((prev) =>
       prev.map((p) =>
@@ -335,7 +385,49 @@ export default function WorkspacePage() {
 
   // ── Connector status ─────────────────────────────────────────────────────────
   const [connectorStatus, setConnectorStatus] = useState<Record<string, ConnectorStatus>>({});
+  const [connectorOverview, setConnectorOverview] = useState<ConnectorOverviewItem[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
+  const [selectedConnectorCard, setSelectedConnectorCard] = useState<{
+    connectorKey: string;
+    connectorName: string;
+    entityId: string;
+    entityName: string;
+  } | null>(null);
+  const [detailTab, setDetailTab] = useState<"overview" | "data-table">(
+    detailTabParam === "data-table" ? "data-table" : "overview"
+  );
+  const [connectorDetail, setConnectorDetail] = useState<ConnectorEntityDetailResponse | null>(null);
+  const [connectorHistory, setConnectorHistory] = useState<ConnectorEntityRunItem[]>([]);
+  const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
+  const [selectedHistoryRunId, setSelectedHistoryRunId] = useState<string | null>(null);
+  const [relatedProjectPreviewUrls, setRelatedProjectPreviewUrls] = useState<Record<string, string>>({});
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
+  const [refreshModalOpen, setRefreshModalOpen] = useState(false);
+  const [refreshDatePreset, setRefreshDatePreset] = useState("last_30d");
+  const [refreshStartDate, setRefreshStartDate] = useState("");
+  const [refreshEndDate, setRefreshEndDate] = useState("");
+  const [refreshCampaignIds, setRefreshCampaignIds] = useState("");
+  const [refreshAdsetIds, setRefreshAdsetIds] = useState("");
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [refreshingData, setRefreshingData] = useState(false);
+  const connectorKey = selectedConnectorCard?.connectorKey || "";
+  const isGoogleSheetsConnector = connectorKey === "google_sheets";
+  const isMetaAdsConnector = connectorKey === "meta_ads";
+  const relatedProjectIds = useMemo(
+    () => new Set((connectorDetail?.related_projects || []).map((project) => project.project_id)),
+    [connectorDetail?.related_projects]
+  );
+  const relatedProjectsNeedingPreview = useMemo(
+    () =>
+      allProjects.filter(
+        (p) =>
+          relatedProjectIds.has(p.id) &&
+          p.latest_dashboard_id &&
+          p.latest_conversation_id &&
+          !p.dashboard_preview_key
+      ),
+    [allProjects, relatedProjectIds]
+  );
 
   const {
     setGA4ModalOpen,
@@ -378,15 +470,15 @@ export default function WorkspacePage() {
         try {
           const metaAccounts = await integrationService.fetchMetaAdAccounts();
           const firstMetaAccount = metaAccounts.ad_accounts?.[0];
-          results["Meta"] = {
+          results["Meta Ads"] = {
             connected: true,
             info: firstMetaAccount ? `Account: ${firstMetaAccount.name}` : "Account: Meta Ads",
           };
         } catch (_) {
-          results["Meta"] = { connected: true, info: "Account: Meta Ads" };
+          results["Meta Ads"] = { connected: true, info: "Account: Meta Ads" };
         }
       } else {
-        results["Meta"] = { connected: false };
+        results["Meta Ads"] = { connected: false };
       }
 
       const tiktokStatus = await integrationService.getTikTokConnectionStatus();
@@ -394,15 +486,15 @@ export default function WorkspacePage() {
         try {
           const ttAccounts = await integrationService.fetchTikTokAdAccounts();
           const firstTTAccount = ttAccounts.ad_accounts?.[0];
-          results["TikTok"] = {
+          results["TikTok Ads"] = {
             connected: true,
             info: firstTTAccount ? `Account: ${firstTTAccount.name}` : "Account: TikTok Ads",
           };
         } catch (_) {
-          results["TikTok"] = { connected: true, info: "Account: TikTok Ads" };
+          results["TikTok Ads"] = { connected: true, info: "Account: TikTok Ads" };
         }
       } else {
-        results["TikTok"] = { connected: false };
+        results["TikTok Ads"] = { connected: false };
       }
 
       const googleToken = await integrationService.getGoogleOAuthToken();
@@ -424,9 +516,13 @@ export default function WorkspacePage() {
         const info = googleEmail ? `Account: ${googleEmail}` : fallbackAccountInfo;
         results["GA4"] = { connected: true, info };
         results["Google Sheets"] = { connected: true, info };
+        results["Google Ads"] = { connected: true, info };
+        results["Firebase"] = { connected: true, info };
       } else {
         results["GA4"] = { connected: false };
         results["Google Sheets"] = { connected: false };
+        results["Google Ads"] = { connected: false };
+        results["Firebase"] = { connected: false };
       }
 
       const appsflyerStatus = await integrationService.getAppsFlyerStatus();
@@ -440,8 +536,12 @@ export default function WorkspacePage() {
         : { connected: false };
 
       setConnectorStatus(results);
+
+      const overview = await integrationService.fetchConnectorsOverview();
+      setConnectorOverview(overview.success ? overview.connectors : []);
     } catch (e) {
       console.error("Failed to fetch connector statuses:", e);
+      setConnectorOverview([]);
     } finally {
       setConnectorsLoading(false);
     }
@@ -451,7 +551,325 @@ export default function WorkspacePage() {
     if (activeTab === "connectors") fetchConnectorStatuses();
   }, [activeTab, fetchConnectorStatuses]);
 
+  useEffect(() => {
+    const handleConnectorSynced = () => {
+      if (activeTab !== "connectors") return;
+      fetchConnectorStatuses();
+    };
+    window.addEventListener("dreamify:connector-synced", handleConnectorSynced);
+    return () => window.removeEventListener("dreamify:connector-synced", handleConnectorSynced);
+  }, [activeTab, fetchConnectorStatuses]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const storageKey = `dreamify:workspace:news:last-shown:${user.id}`;
+    const lastShownAtRaw = localStorage.getItem(storageKey);
+    const lastShownAt = Number(lastShownAtRaw ?? "0");
+    if (Number.isFinite(lastShownAt) && Date.now() - lastShownAt < NEWS_MODAL_COOLDOWN_MS) {
+      return;
+    }
+
+    const randomItem = WORKSPACE_NEWS_ITEMS[Math.floor(Math.random() * WORKSPACE_NEWS_ITEMS.length)];
+    setActiveNewsItem(randomItem);
+    setNewsModalOpen(true);
+    localStorage.setItem(storageKey, String(Date.now()));
+  }, [user?.id]);
+
   const displayName = user?.fullName || user?.firstName || "My Workspace";
+  const myConnectedCards = useMemo(
+    () =>
+      connectorOverview
+        .filter((item) => item.connected)
+        .flatMap((item) =>
+          (item.selected_entities ?? []).map((entity) => ({
+            connectorKey: item.connector_key,
+            connectorName: item.display_name,
+            entityId: entity.id,
+            entityName: entity.name,
+          }))
+        ),
+    [connectorOverview]
+  );
+
+  const updateWorkspaceParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        Object.entries(updates).forEach(([key, value]) => {
+          if (value == null || value === "") {
+            next.delete(key);
+            return;
+          }
+          next.set(key, value);
+        });
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
+
+  const loadConnectorDetail = useCallback(async (connectorKey: string, entityId: string) => {
+    setDetailLoading(true);
+    try {
+      const [detailRes, historyRes] = await Promise.all([
+        integrationService.fetchConnectorEntityDetail(connectorKey, entityId),
+        integrationService.fetchConnectorEntityHistory(connectorKey, entityId, 30),
+      ]);
+      setConnectorDetail(detailRes.success ? detailRes : null);
+      const normalizedRuns = historyRes.success ? [...(historyRes.runs || [])] : [];
+      if (normalizedRuns.length === 0 && detailRes.success && detailRes.latest_asset?.asset_id) {
+        normalizedRuns.push({
+          run_id: `asset-${detailRes.latest_asset.asset_id}`,
+          status: "success",
+          completed_at: detailRes.latest_asset.created_at,
+          rows_fetched: detailRes.latest_asset.row_count,
+          columns_fetched: detailRes.latest_asset.column_count,
+          asset_id: detailRes.latest_asset.asset_id,
+          asset_filename: detailRes.latest_asset.filename,
+          config_snapshot: {
+            entity_id: entityId,
+            entity_name: detailRes.entity?.name || entityId,
+            rows: detailRes.latest_asset.row_count,
+            columns: detailRes.latest_asset.column_count,
+            size_bytes: detailRes.latest_asset.size_bytes,
+          },
+        });
+      }
+      setConnectorHistory(normalizedRuns);
+      const latestAssetId = detailRes.latest_asset?.asset_id || normalizedRuns.find((run) => !!run.asset_id)?.asset_id || null;
+      setActiveAssetId(latestAssetId || null);
+      const selectedRun = historyRes.success
+        ? normalizedRuns.find((run) => run.asset_id === latestAssetId) || normalizedRuns[0]
+        : null;
+      setSelectedHistoryRunId(selectedRun?.run_id || null);
+      setRelatedProjectPreviewUrls({});
+    } catch (error) {
+      console.error("Failed to load connector detail:", error);
+      setConnectorDetail(null);
+      setConnectorHistory([]);
+      setActiveAssetId(null);
+      setSelectedHistoryRunId(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const handleSelectConnectorCard = useCallback(
+    async (
+      card: { connectorKey: string; connectorName: string; entityId: string; entityName: string },
+      options?: { syncRoute?: boolean; tab?: "overview" | "data-table" }
+    ) => {
+      const detailTabToUse = options?.tab ?? "overview";
+      setSelectedConnectorCard(card);
+      setDetailTab(detailTabToUse);
+      if (options?.syncRoute !== false) {
+        const encodedConnectorKey = encodeURIComponent(card.connectorKey);
+        const encodedEntityId = encodeURIComponent(card.entityId);
+        navigate(`/workspace/connectors/${encodedConnectorKey}/${encodedEntityId}?detailTab=${detailTabToUse}`);
+      }
+      await loadConnectorDetail(card.connectorKey, card.entityId);
+    },
+    [loadConnectorDetail, navigate]
+  );
+
+  const handleDetailTabChange = useCallback(
+    (tab: "overview" | "data-table") => {
+      setDetailTab(tab);
+      if (!selectedConnectorCard) return;
+      updateWorkspaceParams({ detailTab: tab });
+    },
+    [selectedConnectorCard, updateWorkspaceParams]
+  );
+
+  useEffect(() => {
+    if (!connectorDetail?.related_projects?.length) return;
+    const withDashboard = connectorDetail.related_projects.filter((project) => project.latest_dashboard_id);
+    if (withDashboard.length === 0) return;
+    let cancelled = false;
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    void fetchAllProjects();
+    Promise.allSettled(
+      withDashboard.map(async (project) => {
+        const maxAttempts = 4;
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          if (cancelled) return;
+          const result = await projectService.getDashboardPreviewUrl(project.project_id);
+          if (!cancelled && result.url) {
+            setPreviewUrls((prev) => ({ ...prev, [project.project_id]: result.url! }));
+            setRelatedProjectPreviewUrls((prev) => ({ ...prev, [project.project_id]: result.url! }));
+            return;
+          }
+          if (attempt < maxAttempts - 1) {
+            await sleep(1200 * (attempt + 1));
+          }
+        }
+      })
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [connectorDetail?.related_projects, fetchAllProjects]);
+
+  useEffect(() => {
+    const schedule = connectorDetail?.latest_schedule as Record<string, unknown> | undefined;
+    if (!schedule) return;
+    setRefreshDatePreset(String(schedule.date_range_preset || "last_30d"));
+    const cfg = (schedule.connector_config || {}) as Record<string, unknown>;
+    const campaignIds = Array.isArray(cfg.campaign_ids) ? cfg.campaign_ids.join(",") : "";
+    const adsetIds = Array.isArray(cfg.adset_ids) ? cfg.adset_ids.join(",") : "";
+    setRefreshCampaignIds(campaignIds);
+    setRefreshAdsetIds(adsetIds);
+    setRefreshStartDate("");
+    setRefreshEndDate("");
+  }, [connectorDetail?.latest_schedule]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const connectorKeyParam = routeParams.connectorKey ?? searchParams.get("connectorKey");
+    const entityIdParam = routeParams.entityId ?? searchParams.get("entityId");
+    const detailTabQuery = searchParams.get("detailTab");
+    const initialDetailTab = detailTabQuery === "data-table" ? "data-table" : "overview";
+    const isConnectorRoute = Boolean(routeParams.connectorKey && routeParams.entityId);
+    if (!isConnectorRoute && tab !== "connectors") return;
+    if (!connectorKeyParam || !entityIdParam) return;
+    const matchedCard = myConnectedCards.find(
+      (card) => card.connectorKey === connectorKeyParam && card.entityId === entityIdParam
+    );
+    if (!matchedCard) return;
+    if (
+      selectedConnectorCard?.connectorKey === matchedCard.connectorKey &&
+      selectedConnectorCard?.entityId === matchedCard.entityId
+    ) {
+      return;
+    }
+    handleSelectConnectorCard(matchedCard, { syncRoute: false, tab: initialDetailTab });
+  }, [
+    searchParams,
+    routeParams.connectorKey,
+    routeParams.entityId,
+    myConnectedCards,
+    selectedConnectorCard,
+    handleSelectConnectorCard,
+  ]);
+
+  const handleRefreshConnectorData = useCallback(async (payload?: {
+    date_preset?: string;
+    start_date?: string;
+    end_date?: string;
+    campaign_ids?: string[];
+    adset_ids?: string[];
+  }) => {
+    if (!selectedConnectorCard) return;
+    setRefreshingData(true);
+    try {
+      const result = await integrationService.refreshConnectorEntity(
+        selectedConnectorCard.connectorKey,
+        selectedConnectorCard.entityId,
+        payload
+      );
+      if (!result.success) {
+        throw new Error(result.error || "Failed to refresh data");
+      }
+      await loadConnectorDetail(selectedConnectorCard.connectorKey, selectedConnectorCard.entityId);
+      await fetchConnectorStatuses();
+      setRefreshModalOpen(false);
+    } catch (error) {
+      sonnerToast.error(error instanceof Error ? error.message : "Failed to refresh connector data");
+    } finally {
+      setRefreshingData(false);
+    }
+  }, [selectedConnectorCard, loadConnectorDetail, fetchConnectorStatuses]);
+
+  const handleSubmitRefreshModal = useCallback(async () => {
+    const payload: {
+      date_preset?: string;
+      start_date?: string;
+      end_date?: string;
+      campaign_ids?: string[];
+      adset_ids?: string[];
+    } = {};
+    if (!isGoogleSheetsConnector) {
+      if (refreshDatePreset === "custom") {
+        if (refreshStartDate) payload.start_date = refreshStartDate;
+        if (refreshEndDate) payload.end_date = refreshEndDate;
+      } else {
+        payload.date_preset = refreshDatePreset;
+      }
+    }
+    if (isMetaAdsConnector && refreshCampaignIds.trim()) {
+      payload.campaign_ids = refreshCampaignIds.split(",").map((v) => v.trim()).filter(Boolean);
+    }
+    if (isMetaAdsConnector && refreshAdsetIds.trim()) {
+      payload.adset_ids = refreshAdsetIds.split(",").map((v) => v.trim()).filter(Boolean);
+    }
+    await handleRefreshConnectorData(payload);
+  }, [
+    refreshDatePreset,
+    refreshStartDate,
+    refreshEndDate,
+    refreshCampaignIds,
+    refreshAdsetIds,
+    isGoogleSheetsConnector,
+    isMetaAdsConnector,
+    handleRefreshConnectorData,
+  ]);
+
+  const handleAddToNewProject = useCallback(async (assetId?: string, syncVersionName?: string) => {
+    if (!selectedConnectorCard) return;
+    try {
+      const projectName = `${selectedConnectorCard.entityName} Project`;
+      const defaultPrompt = "Analyze this data and build a dashboard.";
+      const result = await integrationService.addConnectorEntityToNewProject(
+        selectedConnectorCard.connectorKey,
+        selectedConnectorCard.entityId,
+        { project_name: projectName, prompt: defaultPrompt, asset_id: assetId }
+      );
+      if (!result.success || !result.project?.project_id || !result.asset?.asset_id) {
+        throw new Error(result.error || "Failed to create project from connector");
+      }
+      const pendingFile = {
+        fileID: result.asset.asset_id,
+        filename: result.asset.filename,
+        size: result.asset.size_bytes || 0,
+        ext: result.asset.extension || "csv",
+        status: "uploaded" as const,
+        projectId: result.project.project_id,
+        sourceType: selectedConnectorCard.connectorName,
+        accountName: selectedConnectorCard.connectorName,
+        propertyName: selectedConnectorCard.entityName,
+        syncVersionName,
+        rowCount: result.asset.row_count,
+        columnCount: result.asset.column_count,
+      };
+      useChatStore.getState().setPendingFilesForNewChat([pendingFile]);
+      navigate("/workspace?tab=new-chat");
+    } catch (error) {
+      sonnerToast.error(error instanceof Error ? error.message : "Failed to add data to new project");
+    }
+  }, [selectedConnectorCard, navigate]);
+
+  const handleDeleteConnectorEntity = useCallback(async () => {
+    if (!selectedConnectorCard) return;
+    try {
+      const result = await integrationService.deleteConnectorEntity(
+        selectedConnectorCard.connectorKey,
+        selectedConnectorCard.entityId
+      );
+      if (!result.success) throw new Error(result.error || "Failed to delete connector entity");
+      sonnerToast.success("Connector entity deleted");
+      setSelectedConnectorCard(null);
+      navigate("/workspace?tab=connectors");
+      await fetchConnectorStatuses();
+    } catch (error) {
+      sonnerToast.error(error instanceof Error ? error.message : "Failed to delete connector entity");
+    }
+  }, [selectedConnectorCard, fetchConnectorStatuses, navigate]);
+
+  const selectedHistoryRun =
+    connectorHistory.find((run) => run.run_id === selectedHistoryRunId) ||
+    connectorHistory.find((run) => run.asset_id === activeAssetId) ||
+    null;
 
   // ── Post-redirect: auto-open connector modal after OAuth consent ────────────
   useEffect(() => {
@@ -520,7 +938,7 @@ export default function WorkspacePage() {
             onClick={() => navigate('/workspace?tab=new-chat')}
             className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'new-chat' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}
           >
-            New Chat
+            New Project
           </button>
           <button
             onClick={() => navigate('/workspace?tab=projects')}
@@ -611,7 +1029,7 @@ export default function WorkspacePage() {
                       <h3 className="font-medium text-sm mb-1 truncate">{project.title}</h3>
                       {project.updated_at && (
                         <p className="text-xs text-muted-foreground">
-                          {new Date(project.updated_at).toLocaleDateString()}
+                          {formatToDisplay(project.updated_at, { format: "date" })}
                         </p>
                       )}
                     </CardContent>
@@ -638,7 +1056,7 @@ export default function WorkspacePage() {
                       </div>
                       <div className="flex flex-col min-w-0">
                         <span className="text-sm font-medium text-foreground truncate">{item.title}</span>
-                        {item.updated_at && <span className="text-xs text-muted-foreground">{new Date(item.updated_at).toLocaleDateString()}</span>}
+                        {item.updated_at && <span className="text-xs text-muted-foreground">{formatToDisplay(item.updated_at, { format: "date" })}</span>}
                       </div>
                     </div>
 
@@ -686,93 +1104,189 @@ export default function WorkspacePage() {
         {/* ════ CONNECTORS TAB ════ */}
         {activeTab === "connectors" && (
           <div>
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-foreground dark:text-white mb-1">Connectors</h2>
-              <p className="text-sm text-muted-foreground">Connect your data sources to build dashboards faster.</p>
-            </div>
-            {/* ── Integrations (chat platforms) ── */}
-            <div className="mb-6">
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Integrations</h3>
-              <div className="flex flex-col gap-3">
-                <SlackIntegrationCard />
-                <TelegramIntegrationCard />
-                <ZaloIntegrationCard />
-              </div>
-            </div>
-
-            <Separator className="mb-6" />
-
-            {connectorsLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Array.from({ length: CONNECTORS.length }).map((_, i) => (
-                  <Card key={i} className="animate-pulse p-4 h-[80px]" />
-                ))}
-              </div>
+            {selectedConnectorCard ? (
+              <>
+                {detailTab === "overview" && (
+                  <HiddenDashboardCapturer
+                    projectsNeedingPreview={relatedProjectsNeedingPreview}
+                    onPreviewGenerated={handlePreviewGenerated}
+                  />
+                )}
+                <ConnectorEntityDetailView
+                  selectedConnectorCard={selectedConnectorCard}
+                  detailTab={detailTab}
+                  setDetailTab={handleDetailTabChange}
+                  onBack={() => {
+                    setSelectedConnectorCard(null);
+                    navigate("/workspace?tab=connectors");
+                  }}
+                  onAddToNewProject={handleAddToNewProject}
+                  onAddSelectedHistoryToNewProject={(assetId, syncVersionName) => handleAddToNewProject(assetId, syncVersionName)}
+                  onDeleteEntity={handleDeleteConnectorEntity}
+                  detailLoading={detailLoading}
+                  connectorDetail={connectorDetail}
+                  relatedProjectPreviewUrls={relatedProjectPreviewUrls}
+                  activeAssetId={activeAssetId}
+                  refreshingData={refreshingData}
+                  onOpenRefreshModal={() => setRefreshModalOpen(true)}
+                  selectedHistoryRun={selectedHistoryRun}
+                  connectorHistory={connectorHistory}
+                  selectedHistoryRunId={selectedHistoryRunId}
+                  setSelectedHistoryRunId={setSelectedHistoryRunId}
+                  setActiveAssetId={setActiveAssetId}
+                  isHistoryExpanded={isHistoryExpanded}
+                  setIsHistoryExpanded={setIsHistoryExpanded}
+                  refreshModalOpen={refreshModalOpen}
+                  setRefreshModalOpen={setRefreshModalOpen}
+                  refreshDatePreset={refreshDatePreset}
+                  setRefreshDatePreset={setRefreshDatePreset}
+                  refreshStartDate={refreshStartDate}
+                  setRefreshStartDate={setRefreshStartDate}
+                  refreshEndDate={refreshEndDate}
+                  setRefreshEndDate={setRefreshEndDate}
+                  refreshCampaignIds={refreshCampaignIds}
+                  setRefreshCampaignIds={setRefreshCampaignIds}
+                  refreshAdsetIds={refreshAdsetIds}
+                  setRefreshAdsetIds={setRefreshAdsetIds}
+                  onSubmitRefreshModal={handleSubmitRefreshModal}
+                  onOpenRelatedProject={(projectId, dashboardId) => {
+                    const dashboardQuery = dashboardId ? `&dashboardId=${encodeURIComponent(dashboardId)}` : "";
+                    navigate(`/workspace/project?projectId=${projectId}${dashboardQuery}`);
+                  }}
+                />
+              </>
             ) : (
-              <div className="space-y-8">
-                {CONNECTOR_CATEGORIES.map((category) => {
-                  const categoryConnectors = CONNECTORS.filter(c => c.category === category);
-                  if (categoryConnectors.length === 0) return null;
-                  return (
-                    <div key={category}>
-                      <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{category}</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {categoryConnectors.map((connector) => {
-                          const status = connectorStatus[connector.name];
-                          const isConnected = status?.connected ?? false;
-                          const isSoon = !connector.isActive;
-
-                          return (
-                            <Card
-                              key={connector.name}
-                              onClick={() => !isSoon && handleIntegrationClick(connector.name)}
-                              className={`p-4 h-[80px] transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40 cursor-pointer"}`}
-                            >
-                              <div className="flex items-center justify-between h-full">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${connector.iconBg ?? 'bg-muted dark:bg-white/5'}`}>
+              <>
+                <div className="mb-6">
+                  <h2 className="text-lg font-semibold text-foreground dark:text-white mb-1">Connectors</h2>
+                  <p className="text-sm text-muted-foreground">Connect your data sources to build dashboards faster.</p>
+                </div>
+                <div className="mb-8">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">My connector</h3>
+                  {myConnectedCards.length === 0 ? (
+                    <Card className="p-4 border-dashed border-border/60 bg-muted/20">
+                      <p className="text-sm text-muted-foreground">Connect a source and select data to see it here.</p>
+                    </Card>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {myConnectedCards.map((card) => {
+                        const connectorMeta = CONNECTORS.find((connector) => connector.name === card.connectorName);
+                        return (
+                          <Card
+                            key={`${card.connectorKey}-${card.entityId}`}
+                            onClick={() => handleSelectConnectorCard(card)}
+                            className="p-4 hover:border-primary/40 cursor-pointer transition-all"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${connectorMeta?.iconBg ?? 'bg-muted dark:bg-white/5'}`}>
+                                  {connectorMeta?.icon ? (
                                     <img
-                                      src={connector.icon}
-                                      alt={connector.name}
-                                      className={`w-7 h-7 object-contain ${connector.name === 'TikTok Ads' ? 'scale-125' : ''}`}
+                                      src={connectorMeta.icon}
+                                      alt={card.connectorName}
+                                      className={`w-7 h-7 object-contain ${card.connectorName === "TikTok Ads" ? "scale-125" : ""}`}
                                       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                                     />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <h3 className="font-medium text-sm text-foreground">{connector.name}</h3>
-                                    {isSoon ? (
-                                      <Badge variant="secondary" className="text-xs font-normal mt-0.5">Coming soon</Badge>
-                                    ) : isConnected ? (
-                                      <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                                        <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
-                                        <span className="truncate">
-                                          {status?.info ? status.info.replace(/^Account:\s*/i, "").replace(" connected", "") : connector.name}
-                                        </span>
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">Not connected</span>
+                                  ) : (
+                                    <Plug className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <h3 className="font-medium text-sm text-foreground truncate">{card.entityName}</h3>
+                                  <span className="text-xs text-muted-foreground">{card.connectorName}</span>
+                                </div>
+                              </div>
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-1" />
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                {/* ── Integrations (chat platforms) ── */}
+                <div className="mb-8">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Integrations</h3>
+                  <div className="flex flex-col gap-3">
+                    <SlackIntegrationCard />
+                    <TelegramIntegrationCard />
+                    <ZaloIntegrationCard />
+                  </div>
+                </div>
+                <Separator className="mb-6" />
+
+                {connectorsLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Array.from({ length: CONNECTORS.length }).map((_, i) => (
+                      <Card key={i} className="animate-pulse p-4 h-[80px]" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    {CONNECTOR_CATEGORIES.map((category) => {
+                      const categoryConnectors = CONNECTORS.filter(c => c.category === category);
+                      if (categoryConnectors.length === 0) return null;
+                      return (
+                        <div key={category}>
+                          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{category}</h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {categoryConnectors.map((connector) => {
+                              const status = connectorStatus[connector.name];
+                              const overviewMatch = connectorOverview.find(
+                                (item) => item.display_name === connector.name
+                              );
+                              const isConnected = Boolean(status?.connected || overviewMatch?.connected);
+                              const isSoon = !connector.isActive;
+                              const connectorDescription =
+                                CONNECTOR_CARD_DESCRIPTIONS[connector.name] || "Connect this data source to build dashboards faster.";
+
+                              return (
+                                <Card
+                                  key={connector.name}
+                                  onClick={() => !isSoon && handleIntegrationClick(connector.name)}
+                                  className={`p-4 h-[80px] transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40 cursor-pointer"}`}
+                                >
+                                  <div className="flex items-center justify-between h-full">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${connector.iconBg ?? 'bg-muted dark:bg-white/5'}`}>
+                                        <img
+                                          src={connector.icon}
+                                          alt={connector.name}
+                                          className={`w-7 h-7 object-contain ${connector.name === 'TikTok Ads' ? 'scale-125' : ''}`}
+                                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                        />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <h3 className="font-medium text-sm text-foreground">{connector.name}</h3>
+                                        {isSoon ? (
+                                          <Badge variant="secondary" className="text-xs font-normal mt-0.5">Coming soon</Badge>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground">{connectorDescription}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {isConnected && !isSoon && (
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                                    )}
+                                    {!isSoon && !isConnected && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleIntegrationClick(connector.name); }}
+                                        className="w-fit px-4 py-1.5 button-outline text-xs rounded-md inline-flex items-center justify-center mt-1"
+                                      >
+                                        Connect
+                                      </button>
                                     )}
                                   </div>
-                                </div>
-                                {!isSoon && !isConnected && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => { e.stopPropagation(); handleIntegrationClick(connector.name); }}
-                                    className="text-xs flex-shrink-0"
-                                  >
-                                    Connect
-                                  </Button>
-                                )}
-                              </div>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -896,8 +1410,8 @@ export default function WorkspacePage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {[...dashboardProjects]
                     .sort((a, b) => {
-                      const tA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-                      const tB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+                      const tA = a.updated_at ? Date.parse(a.updated_at) : 0;
+                      const tB = b.updated_at ? Date.parse(b.updated_at) : 0;
                       return tB - tA; // newest first
                     })
                     .map((project) => {
@@ -905,9 +1419,7 @@ export default function WorkspacePage() {
                     const source = getSource(project);
                     const previewUrl = previewUrls[project.id];
                     const createdAt = project.updated_at
-                      ? new Date(project.updated_at).toLocaleDateString(undefined, {
-                          month: 'short', day: 'numeric', year: 'numeric',
-                        })
+                      ? formatToDisplay(project.updated_at, { format: "full" })
                       : null;
 
                     return (
@@ -1068,6 +1580,12 @@ export default function WorkspacePage() {
       </div>
     )
   }
+    <ProductNewsModal
+      open={newsModalOpen}
+      feature={activeNewsItem}
+      onClose={() => setNewsModalOpen(false)}
+      onExplore={handleNewsExplore}
+    />
     </div >
   );
 }

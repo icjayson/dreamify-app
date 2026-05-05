@@ -3,22 +3,60 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { integrationService, GA4Account } from '@/services/integrationService';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, CalendarIcon, ShieldCheck } from 'lucide-react';
-import { format, subDays } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { Loader2, AlertCircle, ShieldCheck, CalendarDays } from 'lucide-react';
+import { formatDateForApi, subtractDays } from '@/utils/timestamp';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useChatStore } from '@/chat/useChatStore';
 import { useGoogleConnectorAuth } from '@/hooks/useGoogleConnectorAuth';
 import { GOOGLE_CONNECTOR_SCOPES } from '@/constants/googleScopes';
 import { sanitizeConnectorError, isOAuthScopeError } from '@/utils/connectorErrors';
+import { ConnectedEntitiesList } from './ConnectedEntitiesList';
+
+const DATE_PRESETS = [
+  { value: 'last_7d', label: 'Last 7 days' },
+  { value: 'last_30d', label: 'Last 30 days' },
+  { value: 'last_90d', label: 'Last 90 days' },
+  { value: 'this_month', label: 'This month' },
+  { value: 'last_month', label: 'Last month' },
+  { value: 'this_year', label: 'This year' },
+  { value: 'last_year', label: 'Last year' },
+  { value: 'custom', label: 'Custom range' },
+];
+
+const getPresetRange = (preset: string): { from: Date; to: Date } => {
+  const now = new Date();
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (preset) {
+    case 'last_7d':
+      return { from: subtractDays(7), to };
+    case 'last_90d':
+      return { from: subtractDays(90), to };
+    case 'this_month':
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to };
+    case 'last_month': {
+      const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastOfLastMonth = new Date(firstOfThisMonth.getTime() - 24 * 60 * 60 * 1000);
+      return {
+        from: new Date(lastOfLastMonth.getFullYear(), lastOfLastMonth.getMonth(), 1),
+        to: new Date(lastOfLastMonth.getFullYear(), lastOfLastMonth.getMonth(), lastOfLastMonth.getDate()),
+      };
+    }
+    case 'this_year':
+      return { from: new Date(now.getFullYear(), 0, 1), to };
+    case 'last_year':
+      return { from: new Date(now.getFullYear() - 1, 0, 1), to: new Date(now.getFullYear() - 1, 11, 31) };
+    case 'last_30d':
+    default:
+      return { from: subtractDays(30), to };
+  }
+};
 
 export default function GA4IntegrationModal() {
-  const { 
-    isGA4ModalOpen: isOpen, 
-    setGA4ModalOpen: setOpen, 
+  const {
+    isGA4ModalOpen: isOpen,
+    setGA4ModalOpen: setOpen,
     currentProjectId,
-    syncGA4 
+    syncGA4
   } = useChatStore();
 
   const {
@@ -38,8 +76,11 @@ export default function GA4IntegrationModal() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
 
-  const [startDate, setStartDate] = useState<Date | undefined>(subDays(new Date(), 30));
+  const [datePreset, setDatePreset] = useState<string>('last_30d');
+  const [startDate, setStartDate] = useState<Date | undefined>(subtractDays(30));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+
+  const [activeTab, setActiveTab] = useState<'new' | 'connected'>('new');
 
   const onClose = () => setOpen(false);
 
@@ -50,11 +91,13 @@ export default function GA4IntegrationModal() {
       setAccounts([]);
       setSelectedAccountId('');
       setSelectedPropertyId('');
-      setStartDate(subDays(new Date(), 30));
+      setDatePreset('last_30d');
+      setStartDate(subtractDays(30));
       setEndDate(new Date());
       setError(null);
       setNeedsScopes(false);
       clearAuthError();
+      setActiveTab('new');
     }
   }, [isOpen]);
 
@@ -108,8 +151,8 @@ export default function GA4IntegrationModal() {
       await syncGA4(
         selectedPropertyId,
         currentProjectId || undefined,
-        startDate ? format(startDate, 'yyyy-MM-dd') : '30daysAgo',
-        endDate ? format(endDate, 'yyyy-MM-dd') : 'today',
+        startDate ? formatDateForApi(startDate) : '30daysAgo',
+        endDate ? formatDateForApi(endDate) : 'today',
         selectedAccount?.account_name,
         selectedProperty?.display_name
       );
@@ -121,13 +164,32 @@ export default function GA4IntegrationModal() {
     }
   };
 
+  const handleSelectConnectedAsset = (run: any) => {
+    if (!run.asset_id) return;
+    const selectedAccountName = accounts.find(a => a.account_id === selectedAccountId)?.account_name || run.accountName;
+    const file = {
+      fileID: run.asset_id,
+      filename: run.asset_filename || 'data.csv',
+      size: run.config_snapshot?.size_bytes || 0,
+      ext: 'csv',
+      status: 'uploaded' as const,
+      sourceType: 'GA4',
+      accountName: selectedAccountName,
+      propertyName: run.entityName || run.config_snapshot?.entity_name,
+      syncVersionName: run.sync_version_name || run.version_name,
+    };
+    useChatStore.getState().addFiles([file]);
+    onClose();
+  };
+
   const selectedAccount = accounts.find(a => a.account_id === selectedAccountId);
   const availableProperties = selectedAccount?.properties || [];
   const displayError = authError || error;
+  const isCustomRange = datePreset === 'custom';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent 
+      <DialogContent
         className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]"
       >
         <DialogHeader>
@@ -206,87 +268,103 @@ export default function GA4IntegrationModal() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-200">Property</label>
-                <Select
-                  value={selectedPropertyId}
-                  onValueChange={setSelectedPropertyId}
-                  disabled={!selectedAccountId || availableProperties.length === 0}
-                >
-                  <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
-                    <SelectValue placeholder="Select a property" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#2A2A2A] border-white/10 text-white max-h-60 z-[201]">
-                    {availableProperties.map((property) => (
-                      <SelectItem key={property.property_id} value={property.property_id} className="focus:bg-white/10 focus:text-white">
-                        {property.display_name}
-                      </SelectItem>
-                    ))}
-                    {availableProperties.length === 0 && (
-                      <div className="px-2 py-4 text-center text-sm text-gray-400">
-                        No properties found
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="mt-4">
+                <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 p-1 rounded-lg">
+                  <TabsTrigger value="new" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Connect New Property</TabsTrigger>
+                  <TabsTrigger value="connected" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select Connected Property</TabsTrigger>
+                </TabsList>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-200">Start Date</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white",
-                          !startDate && "text-muted-foreground"
+                <TabsContent value="new" className="space-y-4 mt-4 outline-none">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-200">Property</label>
+                    <Select
+                      value={selectedPropertyId}
+                      onValueChange={setSelectedPropertyId}
+                      disabled={!selectedAccountId || availableProperties.length === 0}
+                    >
+                      <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                        <SelectValue placeholder="Select a property" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#2A2A2A] border-white/10 text-white max-h-60 z-[201]">
+                        {availableProperties.map((property) => (
+                          <SelectItem key={property.property_id} value={property.property_id} className="focus:bg-white/10 focus:text-white">
+                            {property.display_name}
+                          </SelectItem>
+                        ))}
+                        {availableProperties.length === 0 && (
+                          <div className="px-2 py-4 text-center text-sm text-gray-400">
+                            No properties found
+                          </div>
                         )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                        <span className="truncate">
-                          {startDate ? format(startDate, "dd/MM/yy") : "Pick a date"}
-                        </span>
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                      <Calendar
-                        mode="single"
-                        selected={startDate}
-                        onSelect={setStartDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-200">End Date</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white",
-                          !endDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                        <span className="truncate">
-                          {endDate ? format(endDate, "dd/MM/yy") : "Pick a date"}
-                        </span>
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                      <Calendar
-                        mode="single"
-                        selected={endDate}
-                        onSelect={setEndDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-200">Date Range</label>
+                    <Select
+                      value={datePreset}
+                      onValueChange={(value) => {
+                        setDatePreset(value);
+                        if (value !== 'custom') {
+                          const range = getPresetRange(value);
+                          setStartDate(range.from);
+                          setEndDate(range.to);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                        <SelectValue placeholder="Select date range" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                        {DATE_PRESETS.map((preset) => (
+                          <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
+                            {preset.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {isCustomRange && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-200">Start Date</label>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            value={startDate ? formatDateForApi(startDate) : ''}
+                            onChange={(e) => setStartDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
+                            className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                          />
+                          <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-200">End Date</label>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            value={endDate ? formatDateForApi(endDate) : ''}
+                            onChange={(e) => setEndDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
+                            className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                          />
+                          <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="connected" className="mt-4 outline-none">
+                  <ConnectedEntitiesList
+                    connectorKey="ga4"
+                    filterAccountName={selectedAccount?.account_name}
+                    availableEntityIds={selectedAccount?.properties.map(p => p.property_id)}
+                    onSelectAsset={handleSelectConnectedAsset}
+                  />
+                </TabsContent>
+              </Tabs>
             </>
           )}
 
@@ -312,8 +390,8 @@ export default function GA4IntegrationModal() {
           <Button
             type="button"
             onClick={handleSync}
-            disabled={loading || syncing || !selectedPropertyId || accounts.length === 0 || needsScopes}
-            className="bg-orange-500 hover:bg-orange-600 text-white font-medium px-4 py-2 rounded-md transition-colors"
+            disabled={activeTab === 'connected' || loading || syncing || !selectedPropertyId || accounts.length === 0 || needsScopes}
+            className={`bg-orange-500 hover:bg-orange-600 text-white font-medium px-4 py-2 rounded-md transition-colors ${activeTab === 'connected' ? 'opacity-0 pointer-events-none' : ''}`}
           >
             {syncing ? (
               <>

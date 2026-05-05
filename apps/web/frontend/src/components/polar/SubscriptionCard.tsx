@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Settings
 } from 'lucide-react';
+import { formatToDisplay } from '@/utils/timestamp';
 
 interface SubscriptionInfo {
   subscription_id: string;
@@ -81,7 +82,7 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return formatToDisplay(dateString, { format: 'date' });
   };
 
   const getMonthlyProgress = () => {

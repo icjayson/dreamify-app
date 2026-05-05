@@ -12,6 +12,7 @@ import {
 } from '@/types/dashboard';
 import { dashboardService } from '@/services/dashboardService';
 import { deepMerge } from '@/utils/deepMerge';
+import { getNow } from '@/utils/timestamp';
 
 export const useDashboard = (initialDashboardId?: string): DashboardHook => {
   const [dashboardState, setDashboardState] = useState<DashboardState>({
@@ -33,7 +34,7 @@ export const useDashboard = (initialDashboardId?: string): DashboardHook => {
           configuration: response.dashboard_config,
           loading: false,
           error: null,
-          lastUpdated: new Date().toISOString()
+          lastUpdated: getNow()
         });
       } else {
         setDashboardState(prev => ({
@@ -64,7 +65,7 @@ export const useDashboard = (initialDashboardId?: string): DashboardHook => {
           configuration: response.dashboard_config,
           loading: false,
           error: null,
-          lastUpdated: new Date().toISOString()
+          lastUpdated: getNow()
         }));
       } else {
         setDashboardState(prev => ({

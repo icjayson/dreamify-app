@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, CalendarIcon, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2, Pencil } from "lucide-react";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
+import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2, Pencil, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +23,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DateRange } from "react-day-picker";
-import { format } from "date-fns";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useEditMode, applyEditsToComponents } from "@/hooks/useEditMode";
@@ -48,6 +47,46 @@ import type { ChartChipData } from "@/components/chat/ChartPreviewChip";
 import { exportChartAsPng } from "@/utils/exportUtils";
 
 const SELECT_CHART_CONTEXT_EVENT = "dreamify:select-chart-context";
+
+const DATE_PRESETS = [
+  { value: "full_range", label: "Full range" },
+  { value: "last_7d", label: "Last 7 days" },
+  { value: "last_30d", label: "Last 30 days" },
+  { value: "last_90d", label: "Last 90 days" },
+  { value: "this_month", label: "This month" },
+  { value: "last_month", label: "Last month" },
+  { value: "this_year", label: "This year" },
+  { value: "last_year", label: "Last year" },
+  { value: "custom", label: "Custom range" },
+];
+
+function getPresetRange(preset: string): { from: Date; to: Date } {
+  const now = new Date();
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (preset) {
+    case "last_7d":
+      return { from: new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000), to };
+    case "last_90d":
+      return { from: new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000), to };
+    case "this_month":
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to };
+    case "last_month": {
+      const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastOfLastMonth = new Date(firstOfThisMonth.getTime() - 24 * 60 * 60 * 1000);
+      return {
+        from: new Date(lastOfLastMonth.getFullYear(), lastOfLastMonth.getMonth(), 1),
+        to: new Date(lastOfLastMonth.getFullYear(), lastOfLastMonth.getMonth(), lastOfLastMonth.getDate()),
+      };
+    }
+    case "this_year":
+      return { from: new Date(now.getFullYear(), 0, 1), to };
+    case "last_year":
+      return { from: new Date(now.getFullYear() - 1, 0, 1), to: new Date(now.getFullYear() - 1, 11, 31) };
+    case "last_30d":
+    default:
+      return { from: new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000), to };
+  }
+}
 
 function dashboardComponentToChartChip(component: any): ChartChipData {
   const cfg = component.component_config ?? {};
@@ -103,6 +142,7 @@ const DashboardPreview = ({
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
+  const [datePreset, setDatePreset] = useState<string>("full_range");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   // Pass undefined to useDashboard if staticConfig or processedData exists so it doesn't try to fetch
   const { dashboardState, generateDashboard, refreshDashboard, resetDashboard, updateComponent } = useDashboard(staticConfig || processedData ? undefined : dashboardId);
@@ -834,24 +874,51 @@ const DashboardPreview = ({
     }
   }, [effectiveStyling]);
 
-  // Helper function to get dashboard theme styles as inline CSS properties
-  const getDashboardThemeStyles = (styling: any): React.CSSProperties => {
-    if (!styling) return {};
-    const theme = styling.presetTheme as ChartPresetTheme;
-    const themeColors = CHART_THEME_COLORS[theme] || CHART_THEME_COLORS.monochrome;
-    return {
-      backgroundColor: themeColors['bg-card-color'],
-      borderColor: themeColors['border-card-color'],
-      color: themeColors['title-color'],
-    };
-  };
-
   // Filter processedData by date range
+  const rawDataForDateRange = useMemo(() => {
+    return processedData || (configuration && !configuration.components ? configuration : null);
+  }, [processedData, configuration]);
+
+  const sourceDateRangeBounds = useMemo(() => {
+    const data = rawDataForDateRange;
+    if (!data || !Array.isArray(data.charts)) return undefined;
+
+    let min: Date | undefined;
+    let max: Date | undefined;
+
+    for (const chart of data.charts) {
+      if (!Array.isArray(chart?.datasets)) continue;
+      for (const dataset of chart.datasets) {
+        if (!Array.isArray(dataset?.data)) continue;
+        for (const item of dataset.data) {
+          const rawLabel = item?.label ?? item?.name;
+          if (rawLabel == null) continue;
+          const parsed = parseDateLabel(String(rawLabel));
+          if (!parsed) continue;
+          if (!min || parsed < min) min = parsed;
+          if (!max || parsed > max) max = parsed;
+        }
+      }
+    }
+
+    if (!min || !max) return undefined;
+    return { from: min, to: max };
+  }, [rawDataForDateRange]);
+
+  useEffect(() => {
+    if (datePreset === "custom") return;
+    if (datePreset === "full_range") {
+      setDateRange(sourceDateRangeBounds);
+      return;
+    }
+    setDateRange(getPresetRange(datePreset));
+  }, [datePreset, sourceDateRangeBounds]);
+
   const filteredProcessedData = useMemo(() => {
-    const dataToFilter = processedData || (configuration && !configuration.components ? configuration : null);
+    const dataToFilter = rawDataForDateRange;
     if (!dataToFilter) return null;
     return filterDataByDateRange(dataToFilter, dateRange);
-  }, [processedData, configuration, dateRange]);
+  }, [rawDataForDateRange, dateRange]);
 
   // Grid layout config
   const ResponsiveGridLayout = useMemo(() => WidthProvider(Responsive), []);
@@ -1222,43 +1289,76 @@ const DashboardPreview = ({
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
-                        className="flex items-center gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity"
+                        className="h-9 text-sm rounded-md border flex items-center gap-2"
                         style={{
-                          color: 'var(--highlight-color)',
-                          backgroundColor: 'var(--bg-card-color)',
-                          borderColor: 'var(--border-card-color)'
+                          color: "var(--highlight-color)",
+                          backgroundColor: "var(--bg-card-color)",
+                          borderColor: "var(--border-card-color)",
                         }}
                       >
-                        <CalendarIcon className="w-4 h-4" />
-                        <span>
-                          {dateRange?.from ? (
-                            dateRange.to ? (
-                              <>
-                                {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
-                              </>
-                            ) : (
-                              format(dateRange.from, "MMM dd, yyyy")
-                            )
-                          ) : (
-                            "Select Dates"
-                          )}
-                        </span>
+                        <CalendarDays className="h-4 w-4" />
+                        <span>Date Range</span>
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent
-                      className={`w-auto p-0 [&]:!bg-[var(--bg-card-color)] ${getChartStylingClasses(effectiveStyling || getDefaultChartStyling() as any)}`}
-                      align="end"
-                      style={getDashboardThemeStyles(effectiveStyling)}
-                    >
-                      <Calendar
-                        initialFocus
-                        mode="range"
-                        defaultMonth={dateRange?.from}
-                        selected={dateRange}
-                        onSelect={setDateRange}
-                        numberOfMonths={2}
-                        themeStyles={getDashboardThemeStyles(effectiveStyling)}
-                      />
+                    <PopoverContent className="w-[280px] z-[201] p-3 space-y-3" align="end">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Range preset</label>
+                        <Select
+                          value={datePreset}
+                          onValueChange={(value) => {
+                            setDatePreset(value);
+                            if (value === "custom") {
+                              setDateRange(undefined);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Select date range" />
+                          </SelectTrigger>
+                          <SelectContent className="z-[202]">
+                            {DATE_PRESETS.map((preset) => (
+                              <SelectItem key={preset.value} value={preset.value}>
+                                {preset.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {datePreset === "custom" && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">Start</label>
+                            <div className="relative">
+                              <input
+                                type="date"
+                                value={dateRange?.from ? dateRange.from.toISOString().split("T")[0] : ""}
+                                onChange={(e) => {
+                                  const nextFrom = e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined;
+                                  setDateRange((prev) => ({ from: nextFrom, to: prev?.to }));
+                                }}
+                                className="date-input-themed w-full h-9 px-2 pr-9 rounded-md border border-border/60 bg-background text-sm"
+                              />
+                              <CalendarDays className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">End</label>
+                            <div className="relative">
+                              <input
+                                type="date"
+                                value={dateRange?.to ? dateRange.to.toISOString().split("T")[0] : ""}
+                                onChange={(e) => {
+                                  const nextTo = e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined;
+                                  setDateRange((prev) => ({ from: prev?.from, to: nextTo }));
+                                }}
+                                className="date-input-themed w-full h-9 px-2 pr-9 rounded-md border border-border/60 bg-background text-sm"
+                              />
+                              <CalendarDays className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </PopoverContent>
                   </Popover>
                 )}

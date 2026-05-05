@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { BUILTIN_TEMPLATES } from "@/constants/builtinTemplates";
 import TemplateColorPreview from "@/components/templates/TemplateColorPreview";
+import { createPortal } from "react-dom";
 
 interface TemplateModalProps {
   open: boolean;
@@ -132,13 +133,14 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
   };
 
   if (!open) return null;
+  if (typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <>
       {/* Mobile: Single Sheet (sm:hidden) */}
       {open && !isDesktop && (
         <Sheet open={open} onOpenChange={(v) => { if (!v) { setIsShowingMobileContent(false); onClose(); } }}>
-          <SheetContent side="bottom" className="sm:hidden h-[80vh] w-full bg-muted border-t border-border rounded-t-2xl overflow-hidden p-0">
+          <SheetContent side="bottom" className="sm:hidden h-[80vh] w-full bg-muted border-t border-border rounded-t-2xl overflow-hidden p-0 z-[520]">
             {/* Drag Handle */}
             <div
               className="w-full flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing select-none"
@@ -238,7 +240,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
       )}
 
       {/* Desktop/Tablet Centered Dialog (hidden on mobile) */}
-      <div className="hidden sm:flex fixed inset-0 z-[260] items-center justify-center p-4">
+      <div className="hidden sm:flex fixed inset-0 z-[520] items-center justify-center p-4">
         <div className="fixed inset-0 bg-black/80 hidden sm:block" onClick={onClose} />
         <div className="relative z-10 w-full max-w-6xl h-[80vh] bg-muted rounded-2xl border border-border shadow-xl overflow-hidden">
           <button
@@ -335,6 +337,8 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
         </div>
       </div>
     </>
+    ,
+    document.body
   );
 };
 

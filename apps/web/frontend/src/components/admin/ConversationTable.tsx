@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowUpDown, Eye, LayoutTemplate } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { ConversationListItem } from '@/services/adminService';
+import { formatToDisplay } from '@/utils/timestamp';
 
 interface ConversationTableProps {
   conversations: ConversationListItem[];
@@ -44,7 +45,7 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
 
   const formatDate = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleString();
+      return formatToDisplay(dateString, { format: 'full' });
     } catch {
       return dateString;
     }

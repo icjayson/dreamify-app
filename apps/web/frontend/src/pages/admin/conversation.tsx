@@ -11,6 +11,7 @@ import { adminService } from '@/services/adminService';
 import { useState, useMemo } from 'react';
 import { PanelLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { formatToDisplay } from '@/utils/timestamp';
 
 export default function AdminConversationPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -207,13 +208,13 @@ export default function AdminConversationPage() {
                       <div>
                         <span className="font-medium">Created:</span>
                         <span className="ml-2">
-                          {new Date(conversation.created_at).toLocaleString()}
+                          {formatToDisplay(conversation.created_at, { format: 'full' })}
                         </span>
                       </div>
                       <div>
                         <span className="font-medium">Updated:</span>
                         <span className="ml-2">
-                          {new Date(conversation.updated_at).toLocaleString()}
+                          {formatToDisplay(conversation.updated_at, { format: 'full' })}
                         </span>
                       </div>
                     </CardContent>

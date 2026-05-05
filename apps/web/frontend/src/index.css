@@ -975,3 +975,25 @@ html::-webkit-scrollbar-thumb:hover {
   box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.9) !important;
   background-color: rgba(96, 165, 250, 0.08);
 }
+
+/* Ensure date input calendar icon follows text tone on dark UIs */
+.date-input-themed {
+  color-scheme: dark;
+}
+
+.date-input-themed::-webkit-calendar-picker-indicator {
+  opacity: 0 !important;
+  position: absolute;
+  right: 0;
+  width: 2.5rem;
+  height: 100%;
+  cursor: pointer;
+}
+
+.date-input-themed::-webkit-datetime-edit,
+.date-input-themed::-webkit-datetime-edit-text,
+.date-input-themed::-webkit-datetime-edit-month-field,
+.date-input-themed::-webkit-datetime-edit-day-field,
+.date-input-themed::-webkit-datetime-edit-year-field {
+  color: inherit;
+}

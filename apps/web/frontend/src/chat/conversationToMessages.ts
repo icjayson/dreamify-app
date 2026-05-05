@@ -9,6 +9,7 @@ export interface ConversationNodesToMessagesOptions {
     sourceType?: string;
     accountName?: string;
     propertyName?: string;
+    syncVersionName?: string;
   };
 }
 
@@ -148,6 +149,7 @@ export function conversationNodesToMessages(
           sourceType,
           accountName: assetContent?.data?.accountName,
           propertyName: assetContent?.data?.propertyName,
+          syncVersionName: assetContent?.data?.syncVersionName || assetContent?.data?.sync_version_name,
         };
       } else if (isLastUser && options?.lastUserMessageAttachment) {
         normalized.attachment = options.lastUserMessageAttachment;

@@ -12,6 +12,7 @@ export interface Message {
     sourceType?: string;
     accountName?: string;
     propertyName?: string;
+    syncVersionName?: string;
   };
   /** Charts referenced via @chart mention */
   chartMentions?: Array<{

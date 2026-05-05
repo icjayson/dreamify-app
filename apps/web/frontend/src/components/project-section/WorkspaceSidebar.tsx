@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 type Tab = "new-chat" | "connectors" | "dashboards" | "files" | "schedules";
 
 const NAV_ITEMS: { tab: Tab; label: string; Icon: React.ElementType }[] = [
-  { tab: "new-chat", label: "New Chat", Icon: MessageSquarePlus },
+  { tab: "new-chat", label: "New Project", Icon: MessageSquarePlus },
   { tab: "connectors", label: "Connectors", Icon: Plug },
   { tab: "dashboards", label: "My Dashboards", Icon: LayoutDashboard },
   { tab: "files", label: "Files", Icon: FolderOpen },
@@ -302,9 +302,12 @@ export default function WorkspaceSidebar({
           </div>
           {!collapsed && (
             <>
-              <span className="text-sm font-medium text-foreground min-w-0 pr-2 truncate" title={displayName}>
-                {displayName}
-              </span>
+              <div className="min-w-0 pr-2">
+                <span className="block text-sm font-medium text-foreground truncate" title={displayName}>
+                  {displayName}
+                </span>
+                <span className="block text-xs text-muted-foreground truncate">Pro Plan</span>
+              </div>
               <ChevronsUpDown className="w-4 h-4 text-foreground/70 ml-auto flex-shrink-0" />
             </>
           )}

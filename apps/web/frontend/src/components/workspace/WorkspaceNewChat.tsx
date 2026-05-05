@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import {
   CornerRightUp,
@@ -33,6 +33,7 @@ import { ChevronRight } from "lucide-react";
 
 export default function WorkspaceNewChat() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isSignedIn } = useAuth();
   const { user } = useUser();
   const userName = user?.firstName || user?.fullName?.split(" ")[0] || "there";
@@ -123,6 +124,17 @@ export default function WorkspaceNewChat() {
     }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  // ── Auto-open template modal from query flag ────────────────────────────────
+  useEffect(() => {
+    if (searchParams.get("openTemplate") !== "1") return;
+    setTemplateModalOpen(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("openTemplate");
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // ── Close dropdowns on outside click ────────────────────────────────────────
   useEffect(() => {

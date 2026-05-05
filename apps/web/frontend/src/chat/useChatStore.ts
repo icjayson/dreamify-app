@@ -49,6 +49,15 @@ function resolveTemplate(templateId: string | null): SelectedTemplate | null {
   };
 }
 
+function emitConnectorSynced(connector: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent('dreamify:connector-synced', {
+      detail: { connector, at: Date.now() },
+    })
+  );
+}
+
 
 export interface UploadedFile {
   fileID: string;
@@ -71,6 +80,8 @@ export interface UploadedFile {
   accountName?: string;
   /** GA4 property display name */
   propertyName?: string;
+  /** Human-readable sync version label from connector history */
+  syncVersionName?: string;
   /** True when user chose to keep a header-only / zero-row integration export (not sufficient for analysis) */
   schemaOnly?: boolean;
 }
@@ -234,7 +245,7 @@ interface ChatState {
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: (preserveTemplate?: boolean) => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string; syncVersionName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => Promise<void>;
   stopGeneration: () => Promise<void>;
   resumeWorkflowPolling: (projectId: string, conversationId: string, onProcessedDataChange?: (data: any) => void) => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<any>;
@@ -467,6 +478,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         setGoogleSheetsFileId(null);
         setGoogleSheetsFileName(null);
         setGoogleSheetsModalOpen(false);
+        emitConnectorSynced('Google Sheets');
       } else {
         throw new Error(response.error || 'Failed to sync Google Sheets');
       }
@@ -503,6 +515,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
         addFiles([newFile]);
         setGA4ModalOpen(false);
+        emitConnectorSynced('GA4');
       } else {
         throw new Error(response.error || 'Failed to sync GA4');
       }
@@ -527,6 +540,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
 
       if (response.success && response.asset) {
+        emitConnectorSynced('Meta Ads');
         return {
           success: true as const,
           row_count: response.row_count ?? 0,
@@ -555,6 +569,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
 
       if (response.success && response.asset) {
+        emitConnectorSynced('TikTok Ads');
         return {
           success: true as const,
           row_count: response.row_count ?? 0,
@@ -583,6 +598,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       if (response.success && response.asset) {
+        emitConnectorSynced('AppsFlyer');
         return {
           success: true as const,
           row_count: response.row_count ?? 0,
@@ -610,6 +626,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       if (response.success && response.asset) {
+        emitConnectorSynced('Stripe');
         return {
           success: true as const,
           row_count: response.row_count ?? 0,
@@ -637,6 +654,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       if (response.success && response.asset) {
+        emitConnectorSynced('Google Ads');
         return {
           success: true as const,
           row_count: response.row_count ?? 0,
@@ -664,6 +682,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       if (response.success && response.asset) {
+        emitConnectorSynced('Firebase');
         return {
           success: true as const,
           row_count: response.row_count ?? 0,
@@ -694,6 +713,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         sourceType: get().uploadedFiles[0].sourceType,
         accountName: get().uploadedFiles[0].accountName,
         propertyName: get().uploadedFiles[0].propertyName,
+        syncVersionName: get().uploadedFiles[0].syncVersionName,
       } : undefined,
       template: get().selectedTemplate || undefined,
     };
@@ -706,7 +726,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string; syncVersionName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => {
     const state = get();
     const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
 
@@ -767,6 +787,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sourceType: uploadedFiles.length === 1 ? uploadedFiles[0].sourceType : 'Multiple',
             accountName: uploadedFiles.length === 1 ? uploadedFiles[0].accountName : undefined,
             propertyName: uploadedFiles.length === 1 ? uploadedFiles[0].propertyName : undefined,
+            syncVersionName: uploadedFiles.length === 1 ? uploadedFiles[0].syncVersionName : undefined,
           } : undefined),
           chartMentions: mentionedCharts && mentionedCharts.length > 0
             ? mentionedCharts.map(c => ({ title: c.title, type: c.type, componentId: c.componentId || c.id }))
@@ -821,6 +842,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   extension: assetData.extension,
                   filename: assetData.filename,
                   sourceType: assetData?.asset_type || '',
+                  accountName: file.accountName,
+                  propertyName: file.propertyName,
+                  syncVersionName: file.syncVersionName,
                 }
               });
             }
@@ -843,6 +867,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   filename: mentionedFile.filename,
                   kind: mentionedFile.ext === 'csv' ? 'csv' : 'file',
                   sourceType: mentionedFile?.sourceType || '',
+                  accountName: mentionedFile.accountName,
+                  propertyName: mentionedFile.propertyName,
+                  syncVersionName: mentionedFile.syncVersionName,
                 }
               });
             }
@@ -1006,7 +1033,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     mime: 'text/csv',
                     sourceType: firstFile.sourceType,
                     accountName: firstFile.accountName,
-                    propertyName: firstFile.propertyName
+                    propertyName: firstFile.propertyName,
+                    syncVersionName: firstFile.syncVersionName,
                   } : undefined
                 });
                 if (restoredMessages.length) {
@@ -1186,6 +1214,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sourceType: uploadedFiles.length === 1 ? firstUploadedFile.sourceType : 'Multiple',
           accountName: uploadedFiles.length === 1 ? firstUploadedFile.accountName : undefined,
           propertyName: uploadedFiles.length === 1 ? firstUploadedFile.propertyName : undefined,
+          syncVersionName: uploadedFiles.length === 1 ? firstUploadedFile.syncVersionName : undefined,
         } : undefined),
         chartMentions: mentionedCharts && mentionedCharts.length > 0
           ? mentionedCharts.map(c => ({ title: c.title, type: c.type, componentId: c.componentId || c.id }))
@@ -1229,6 +1258,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 extension: assetData.extension,
                 filename: assetData.filename,
                 sourceType: assetData?.asset_type || '',
+                accountName: file.accountName,
+                propertyName: file.propertyName,
+                syncVersionName: file.syncVersionName,
               }
             });
           }
@@ -1250,6 +1282,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 filename: mentionedFile.filename,
                 kind: mentionedFile.ext === 'csv' ? 'csv' : 'file',
                 sourceType: mentionedFile?.sourceType || '',
+                accountName: mentionedFile.accountName,
+                propertyName: mentionedFile.propertyName,
+                syncVersionName: mentionedFile.syncVersionName,
               }
             });
           }
@@ -1412,6 +1447,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   sourceType: currentFiles[0].sourceType,
                   accountName: currentFiles[0].accountName,
                   propertyName: currentFiles[0].propertyName,
+                  syncVersionName: currentFiles[0].syncVersionName,
                 } : undefined,
               });
               if (restoredMessages.length) {

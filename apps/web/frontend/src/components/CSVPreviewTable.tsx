@@ -323,13 +323,31 @@ export default function CSVPreviewTable({
 
         {/* Pagination — always pinned at bottom */}
         {sortedRows.length > 0 && (
-          <div className="flex flex-shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-0">
-            <div className="w-full text-sm text-muted-foreground text-right lg:w-auto lg:text-left">
-              Showing {startRow} to {endRow} of {sortedRows.length} entries
-            </div>
-            <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-end lg:w-auto lg:flex-row lg:items-center lg:gap-4">
-              <Pagination className="w-full overflow-x-auto lg:w-auto">
-                <PaginationContent className="justify-center lg:justify-start flex-wrap">
+          <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t bg-muted/50 px-4 py-3">
+            {onPageSizeChange ? (
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="whitespace-nowrap text-sm text-muted-foreground">Rows per page:</span>
+                <Select
+                  value={String(effectivePageSize)}
+                  onValueChange={(v) => onPageSizeChange(Number(v))}
+                >
+                  <SelectTrigger className="h-9 w-[100px] bg-background" aria-label="Rows per page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent side="top" className="z-[200000]">
+                    {pageSizeOptions.map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n.toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div />
+            )}
+            <Pagination className="w-auto overflow-x-auto">
+              <PaginationContent className="justify-end flex-wrap">
                   <PaginationItem>
                     <PaginationPrevious
                       onClick={handlePreviousPage}
@@ -364,27 +382,6 @@ export default function CSVPreviewTable({
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
-              {onPageSizeChange && (
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="whitespace-nowrap text-sm text-muted-foreground">Rows per page:</span>
-                  <Select
-                    value={String(effectivePageSize)}
-                    onValueChange={(v) => onPageSizeChange(Number(v))}
-                  >
-                    <SelectTrigger className="h-9 w-[100px] bg-background" aria-label="Rows per page">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent side="top" className="z-[200000]">
-                      {pageSizeOptions.map((n) => (
-                        <SelectItem key={n} value={String(n)}>
-                          {n.toLocaleString()}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
           </div>
         )}
       </div>
@@ -480,19 +477,10 @@ export default function CSVPreviewTable({
 
         {/* Footer — same pagination layout as before; optional rows-per-page on the right */}
         {sortedRows.length > 0 && (
-          <div className="flex flex-shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-0">
-            <div className="w-full text-sm text-muted-foreground text-right lg:w-auto lg:text-left">
-              Showing {startRow} to {endRow} of {sortedRows.length} entries
-              {!compact && totalRows > sortedRows.length && (
-                <span className="ml-2 text-amber-600 dark:text-amber-500">
-                  ({totalRows.toLocaleString()} total in file)
-                </span>
-              )}
-            </div>
-
-            <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-end lg:w-auto lg:flex-row lg:items-center lg:gap-4">
-              <Pagination className="w-full overflow-x-auto lg:w-auto">
-                <PaginationContent className="justify-center lg:justify-start flex-wrap">
+          <div className="flex flex-shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3">
+            <div className="w-full">
+              <Pagination className="w-full overflow-x-auto">
+                <PaginationContent className="justify-center flex-wrap">
                   <PaginationItem>
                     <PaginationPrevious
                       onClick={handlePreviousPage}
@@ -530,7 +518,17 @@ export default function CSVPreviewTable({
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
+            </div>
 
+            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-muted-foreground">
+                Showing {startRow} to {endRow} of {sortedRows.length} entries
+                {!compact && totalRows > sortedRows.length && (
+                  <span className="ml-2 text-amber-600 dark:text-amber-500">
+                    ({totalRows.toLocaleString()} total in file)
+                  </span>
+                )}
+              </div>
               {onPageSizeChange && (
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="whitespace-nowrap text-sm text-muted-foreground">Rows per page:</span>

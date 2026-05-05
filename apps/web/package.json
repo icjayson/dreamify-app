@@ -13,6 +13,8 @@
     "build": "cd frontend && npm run build",
     "install:all": "npm install && cd frontend && npm install",
     "lint": "cd frontend && npm run lint",
+    "check:timestamp": "cd ../dreamify-backend && python scripts/check_timestamp_policy.py && cd ../dreamify-frontend/frontend && npm run check:timestamp",
+    "ci:check": "npm run lint && npm run check:timestamp && npm run test",
     "test": "cd ../dreamify-backend && pytest",
     "format": "cd ../dreamify-backend && black .",
     "clean": "rm -rf frontend/node_modules frontend/dist ../dreamify-backend/__pycache__"

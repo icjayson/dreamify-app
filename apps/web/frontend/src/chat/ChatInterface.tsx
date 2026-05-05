@@ -25,6 +25,7 @@ import type { DashboardComponent } from "@/types/dashboard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import { useTheme } from "@/hooks/useTheme";
+import { formatToDisplay } from "@/utils/timestamp";
 
 
 // Creative phrase variants per backend step — each key maps to a real Morpheus workflow step
@@ -805,7 +806,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           name: displayName,
           sourceType: activeFiles.length === 1 ? activeFiles[0].sourceType : (activeFiles.length > 1 ? 'Multiple' : undefined),
           accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
-          propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined
+          propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined,
+          syncVersionName: activeFiles.length === 1 ? activeFiles[0].syncVersionName : undefined,
         };
       } else if (projectAssets.length > 0 && finalMentionedIds.length === 0 && !hasChartMentions) {
         // No explicit files selected and no chart mentions — treat as "all assets" and show badge with count
@@ -879,7 +881,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           name: displayName,
           sourceType: activeFiles.length === 1 ? activeFiles[0].sourceType : (activeFiles.length > 1 ? 'Multiple' : undefined),
           accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
-          propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined
+          propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined,
+          syncVersionName: activeFiles.length === 1 ? activeFiles[0].syncVersionName : undefined,
         };
       } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
         activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
@@ -1433,6 +1436,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           } else {
                             secondaryText = message.attachment.name.replace(/\.[^/.]+$/, "");
                           }
+                          const syncVersionLabel = message.attachment.syncVersionName?.trim();
+                          if (!isMultiple && syncVersionLabel) {
+                            secondaryText = secondaryText ? `${secondaryText} - ${syncVersionLabel}` : syncVersionLabel;
+                          }
                           const isIntegration = isGA4 || isSheets || isMeta || isTikTok || isGoogleAds || isFirebase || isAppsFlyer || isStripe;
                           const matchedAsset = projectAssets.find(a => a.name === message.attachment?.name);
                           const isCsvOrExcel = !isIntegration && !isMultiple && (
@@ -1738,7 +1745,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     })()}
                     <div className="flex items-center justify-between mt-1">
                       <span className="text-xs text-muted-foreground">
-                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatToDisplay(
+                          message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
+                          { format: "full" },
+                        )}
                       </span>
                       <div className="flex items-center gap-1">
                         {message.content && (() => {

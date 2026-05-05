@@ -2,6 +2,7 @@ import { TableColumn } from "@/types/dashboard";
 import { useState, useMemo } from "react";
 import { getStyleVariantProps, type ChartStyleVariant } from "@/utils/chartStyling";
 import EditableText from "@/components/charts/edit/EditableText";
+import { formatToDisplay } from "@/utils/timestamp";
 
 interface TopProductsTableProps {
   title: string;
@@ -45,7 +46,7 @@ const formatCellValue = (value: any, type: TableColumn["type"]) => {
     }
     case "date": {
       const d = value instanceof Date ? value : new Date(value);
-      return isNaN(d.getTime()) ? String(value) : d.toLocaleDateString();
+      return isNaN(d.getTime()) ? String(value) : formatToDisplay(d.toISOString(), { format: "date" });
     }
     case "string":
     default:

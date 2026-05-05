@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/Login.tsx";
 import Signup from "./pages/Signup.tsx";
 import WorkspacePage from "./pages/workspace";
+import WorkspaceNewsPreviewPage from "./pages/WorkspaceNewsPreviewPage";
 import ProjectPage from "./pages/project";
 import PreviewPage from "./pages/preview.tsx";
 import FilePreviewPage from "./pages/FilePreviewPage";
@@ -95,14 +96,44 @@ const AppContent = () => {
         <Route path="/waitlist" element={<WaitlistPage />} />
         <Route path="/zalo-upload/:token" element={<ZaloUploadPage />} />
         <Route path="/workspace" element={
-          <SignedIn>
-            <WorkspacePage />
-          </SignedIn>
+          <>
+            <SignedIn>
+              <WorkspacePage />
+            </SignedIn>
+            <SignedOut>
+              <Login />
+            </SignedOut>
+          </>
+        } />
+        <Route path="/workspace/connectors/:connectorKey/:entityId" element={
+          <>
+            <SignedIn>
+              <WorkspacePage />
+            </SignedIn>
+            <SignedOut>
+              <Login />
+            </SignedOut>
+          </>
         } />
         <Route path="/workspace/project" element={
-          <SignedIn>
-            <ProjectPage />
-          </SignedIn>
+          <>
+            <SignedIn>
+              <ProjectPage />
+            </SignedIn>
+            <SignedOut>
+              <Login />
+            </SignedOut>
+          </>
+        } />
+        <Route path="/workspace/news-preview" element={
+          <>
+            <SignedIn>
+              <WorkspaceNewsPreviewPage />
+            </SignedIn>
+            <SignedOut>
+              <Login />
+            </SignedOut>
+          </>
         } />
         <Route path="/workspace/project/preview" element={<PreviewPage />} />
         <Route path="/preview/:assetId" element={<FilePreviewPage />} />

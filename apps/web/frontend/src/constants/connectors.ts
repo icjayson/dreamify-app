@@ -61,4 +61,6 @@ export const CONNECTORS: ConnectorItem[] = [
   { name: "Airtable",               icon: "/airtable.png",                             category: "Operations & Database" },
   { name: "HubSpot",                icon: "/hubspot.png",                              category: "Operations & Database" },
   { name: "PostgreSQL",             icon: "/PostgreSQL.png",                           category: "Operations & Database" },
+  { name: "Snowflake",              icon: "/snowflake.png",                            category: "Operations & Database" },
+  { name: "Oracle",                 icon: "/oracle.png",                               category: "Operations & Database" },
 ];

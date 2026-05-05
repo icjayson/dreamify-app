@@ -3,6 +3,7 @@ import { useScheduleStore } from '@/chat/useScheduleStore';
 import { SyncRun } from '@/services/scheduleService';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatToDisplay } from '@/utils/timestamp';
 
 interface SyncRunHistoryProps {
   scheduleId: string;
@@ -23,9 +24,7 @@ function runStatusBadge(status: SyncRun['status']) {
 
 function fmtDate(iso?: string) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString(undefined, {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
+  return formatToDisplay(iso, { format: 'full' });
 }
 
 export function SyncRunHistory({ scheduleId }: SyncRunHistoryProps) {

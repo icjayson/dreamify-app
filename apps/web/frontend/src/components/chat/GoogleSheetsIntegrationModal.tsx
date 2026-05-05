@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { useGoogleConnectorAuth } from '@/hooks/useGoogleConnectorAuth';
 import { GOOGLE_CONNECTOR_SCOPES } from '@/constants/googleScopes';
 import { sanitizeConnectorError, isOAuthScopeError } from '@/utils/connectorErrors';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ConnectedEntitiesList } from './ConnectedEntitiesList';
 
 declare global {
   interface Window {
@@ -17,8 +19,8 @@ declare global {
 }
 
 export default function GoogleSheetsIntegrationModal() {
-  const { 
-    isGoogleSheetsModalOpen: isOpen, 
+  const {
+    isGoogleSheetsModalOpen: isOpen,
     setGoogleSheetsModalOpen: setOpen,
     googleSheetsFileId: selectedFileId,
     googleSheetsFileName: selectedFileName,
@@ -43,6 +45,7 @@ export default function GoogleSheetsIntegrationModal() {
   const [oauthToken, setOAuthToken] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
   const [needsScopes, setNeedsScopes] = useState(false);
+  const [activeTab, setActiveTab] = useState<'new' | 'connected'>('new');
 
   const onClose = () => setOpen(false);
 
@@ -82,6 +85,7 @@ export default function GoogleSheetsIntegrationModal() {
       setError(null);
       setNeedsScopes(false);
       clearAuthError();
+      setActiveTab('new');
     }
   }, [isOpen, selectedFileName, isGoogleLinked, hasScopes]);
 
@@ -120,7 +124,7 @@ export default function GoogleSheetsIntegrationModal() {
       setError('Google OAuth token is missing. Cannot open picker.');
       return;
     }
-    
+
     if (!window.google || !window.google.picker) {
       setError('Google Picker API not loaded yet. Please try again in a moment.');
       return;
@@ -131,7 +135,7 @@ export default function GoogleSheetsIntegrationModal() {
       const view = new window.google.picker.DocsView(window.google.picker.ViewId.SPREADSHEETS);
       view.setMimeTypes('application/vnd.google-apps.spreadsheet');
       view.setMode(window.google.picker.DocsViewMode.GRID);
-      
+
       const developerKey = import.meta.env.VITE_GOOGLE_PICKER_API_KEY as string;
 
       const picker = new window.google.picker.PickerBuilder()
@@ -145,13 +149,13 @@ export default function GoogleSheetsIntegrationModal() {
             const doc = data.docs[0];
             console.log('Picker: selection made, ensuring modal stay open');
             setIsPicking(false);
-            setOpen(true); 
-            
+            setOpen(true);
+
             setTimeout(() => {
               console.log('Picker data received, updating state:', doc.name, doc.id);
               setGoogleSheetsFileId(doc.id);
               setGoogleSheetsFileName(doc.name);
-              setOpen(true); 
+              setOpen(true);
               setError(null);
             }, 500);
           } else if (data.action === 'cancel' || data.action === 'close' || (window.google.picker.Action && (data.action === window.google.picker.Action.CANCEL))) {
@@ -163,7 +167,7 @@ export default function GoogleSheetsIntegrationModal() {
           }
         })
         .build();
-      
+
       picker.setVisible(true);
     } catch (err: any) {
       console.error('Error in handleOpenPicker:', err);
@@ -190,6 +194,23 @@ export default function GoogleSheetsIntegrationModal() {
     }
   };
 
+  const handleSelectConnectedAsset = (run: any) => {
+    if (!run.asset_id) return;
+    const file = {
+      fileID: run.asset_id,
+      filename: run.asset_filename || 'data.csv',
+      size: run.config_snapshot?.size_bytes || 0,
+      ext: 'csv',
+      status: 'uploaded' as const,
+      sourceType: 'Google Sheets',
+      accountName: run.accountName || 'Google Account',
+      propertyName: run.entityName || run.config_snapshot?.entity_name,
+      syncVersionName: run.sync_version_name || run.version_name,
+    };
+    useChatStore.getState().addFiles([file]);
+    onClose();
+  };
+
   const displayError = authError || error;
 
   return (
@@ -197,7 +218,7 @@ export default function GoogleSheetsIntegrationModal() {
       if (!open && isPicking) return;
       if (!open) onClose();
     }}>
-      <DialogContent 
+      <DialogContent
         className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]"
       >
         <DialogHeader>
@@ -249,49 +270,63 @@ export default function GoogleSheetsIntegrationModal() {
               </Button>
             </div>
           ) : (
-            <div className="space-y-4">
-              {selectedFileName ? (
-                <div 
-                  className="flex items-center justify-between p-3 border border-green-500/30 rounded-lg bg-green-500/10 animate-in fade-in slide-in-from-bottom-2 duration-300"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-md bg-green-500/20 flex items-center justify-center shrink-0">
-                      <FileSpreadsheet className="w-4 h-4 text-green-500" />
-                    </div>
-                    <span className="text-sm font-medium truncate max-w-[250px] text-white">
-                      {selectedFileName}
-                    </span>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
-                    onClick={() => {
-                      setGoogleSheetsFileId(null);
-                      setGoogleSheetsFileName(null);
-                    }}
-                    title="Change spreadsheet"
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
+              <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 p-1 rounded-lg">
+                <TabsTrigger value="new" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select New Sheet</TabsTrigger>
+                <TabsTrigger value="connected" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select Connected Sheet</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="new" className="space-y-4 outline-none">
+                {selectedFileName ? (
+                  <div
+                    className="flex items-center justify-between p-3 border border-green-500/30 rounded-lg bg-green-500/10 animate-in fade-in slide-in-from-bottom-2 duration-300"
                   >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div 
-                  onClick={handleOpenPicker}
-                  className={cn(
-                    "flex items-center justify-between p-3 border border-white/10 rounded-lg bg-[#222] hover:bg-white/5 transition-colors cursor-pointer group",
-                    !oauthToken && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-md bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
-                      <FileSpreadsheet className="w-4 h-4 text-gray-400" />
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-md bg-green-500/20 flex items-center justify-center shrink-0">
+                        <FileSpreadsheet className="w-4 h-4 text-green-500" />
+                      </div>
+                      <span className="text-sm font-medium truncate max-w-[250px] text-white">
+                        {selectedFileName}
+                      </span>
                     </div>
-                    <span className="text-sm text-gray-300">Select a spreadsheet from Drive</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+                      onClick={() => {
+                        setGoogleSheetsFileId(null);
+                        setGoogleSheetsFileName(null);
+                      }}
+                      title="Change spreadsheet"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <Plus className="w-4 h-4 text-gray-500 group-hover:text-gray-300 transition-colors" />
-                </div>
-              )}
+                ) : (
+                  <div
+                    onClick={handleOpenPicker}
+                    className={cn(
+                      "flex items-center justify-between p-3 border border-white/10 rounded-lg bg-[#222] hover:bg-white/5 transition-colors cursor-pointer group",
+                      !oauthToken && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-md bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
+                        <FileSpreadsheet className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <span className="text-sm text-gray-300">Select a spreadsheet from Drive</span>
+                    </div>
+                    <Plus className="w-4 h-4 text-gray-500 group-hover:text-gray-300 transition-colors" />
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="connected" className="outline-none">
+                <ConnectedEntitiesList
+                  connectorKey="google_sheets"
+                  onSelectAsset={handleSelectConnectedAsset}
+                />
+              </TabsContent>
 
               {displayError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm mt-2">
@@ -299,7 +334,7 @@ export default function GoogleSheetsIntegrationModal() {
                   <p>{displayError}</p>
                 </div>
               )}
-            </div>
+            </Tabs>
           )}
         </div>
 
@@ -316,8 +351,8 @@ export default function GoogleSheetsIntegrationModal() {
           <Button
             type="button"
             onClick={handleSync}
-            disabled={!selectedFileId || syncing || needsScopes}
-            className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-md transition-colors"
+            disabled={activeTab === 'connected' || !selectedFileId || syncing || needsScopes}
+            className={`bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-md transition-colors ${activeTab === 'connected' ? 'opacity-0 pointer-events-none' : ''}`}
           >
             {syncing ? (
               <>

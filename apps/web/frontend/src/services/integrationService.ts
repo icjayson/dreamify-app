@@ -36,8 +36,236 @@ export interface GA4SyncResponse {
   error?: string;
 }
 
+export interface ConnectorSelectedEntity {
+  id: string;
+  name: string;
+  type?: string;
+  account_name?: string;
+}
+
+export interface ConnectorOverviewItem {
+  connector_key: string;
+  display_name: string;
+  connected: boolean;
+  selected_entities: ConnectorSelectedEntity[];
+}
+
+export interface ConnectorsOverviewResponse {
+  success: boolean;
+  connectors: ConnectorOverviewItem[];
+  error?: string;
+}
+
+export interface ConnectorRelatedProject {
+  project_id: string;
+  project_name: string;
+  project_created_at?: string;
+  latest_dashboard_id?: string;
+  dashboard_title?: string;
+  dashboard_preview_key?: string;
+  conversation_id?: string;
+  input_data_file_name?: string;
+  sync_version_name?: string;
+}
+
+export interface ConnectorEntityDetailResponse {
+  success: boolean;
+  connector_key: string;
+  display_name: string;
+  connected: boolean;
+  entity: ConnectorSelectedEntity;
+  latest_asset?: AssetRecord;
+  latest_schedule?: Record<string, unknown> | null;
+  related_projects: ConnectorRelatedProject[];
+  last_synced_at?: string;
+  account_name?: string;
+  error?: string;
+}
+
+export interface ConnectorEntityRunItem {
+  run_id: string;
+  schedule_id?: string;
+  status?: string;
+  triggered_at?: string;
+  completed_at?: string;
+  rows_fetched?: number;
+  columns_fetched?: number;
+  asset_id?: string;
+  asset_filename?: string;
+  date_range_start?: string;
+  date_range_end?: string;
+  config_snapshot?: Record<string, unknown>;
+  sync_version_name?: string;
+}
+
+export interface ConnectorEntityHistoryResponse {
+  success: boolean;
+  runs: ConnectorEntityRunItem[];
+  error?: string;
+}
+
+export interface AddToNewProjectResponse {
+  success: boolean;
+  project: {
+    project_id: string;
+    name?: string;
+  };
+  asset: AssetRecord;
+  prompt: string;
+  error?: string;
+}
+
+export interface DeleteConnectorEntityResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface UpdateSyncVersionNameResponse {
+  success: boolean;
+  run_id: string;
+  sync_version_name?: string;
+  error?: string;
+}
+
 class IntegrationService {
   private baseUrl = '/api/v1/integration';
+
+  async fetchConnectorsOverview(): Promise<ConnectorsOverviewResponse> {
+    try {
+      const res = await api.get<ConnectorsOverviewResponse>(`${this.baseUrl}/connectors/overview`);
+      if (res.success && res.data) return res.data;
+      return { success: false, connectors: [], error: res.error || 'Failed to fetch connectors overview' };
+    } catch (error) {
+      return { success: false, connectors: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchConnectorEntityDetail(connectorKey: string, entityId: string): Promise<ConnectorEntityDetailResponse> {
+    try {
+      const res = await api.get<ConnectorEntityDetailResponse>(
+        `${this.baseUrl}/connectors/${encodeURIComponent(connectorKey)}/entities/${encodeURIComponent(entityId)}/detail`
+      );
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        connector_key: connectorKey,
+        display_name: connectorKey,
+        connected: false,
+        entity: { id: entityId, name: entityId },
+        related_projects: [],
+        error: res.error || 'Failed to fetch connector detail',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        connector_key: connectorKey,
+        display_name: connectorKey,
+        connected: false,
+        entity: { id: entityId, name: entityId },
+        related_projects: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async fetchConnectorEntityHistory(
+    connectorKey: string,
+    entityId: string,
+    limit = 20
+  ): Promise<ConnectorEntityHistoryResponse> {
+    try {
+      const res = await api.get<ConnectorEntityHistoryResponse>(
+        `${this.baseUrl}/connectors/${encodeURIComponent(connectorKey)}/entities/${encodeURIComponent(entityId)}/history?limit=${limit}`
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, runs: [], error: res.error || 'Failed to fetch connector history' };
+    } catch (error) {
+      return { success: false, runs: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async refreshConnectorEntity(
+    connectorKey: string,
+    entityId: string,
+    payload?: {
+      date_preset?: string;
+      start_date?: string;
+      end_date?: string;
+      campaign_ids?: string[];
+      adset_ids?: string[];
+    }
+  ): Promise<GA4SyncResponse> {
+    try {
+      const res = await api.post<GA4SyncResponse>(
+        `${this.baseUrl}/connectors/${encodeURIComponent(connectorKey)}/entities/${encodeURIComponent(entityId)}/refresh`,
+        payload ?? {}
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to refresh connector data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async updateConnectorSyncVersionName(
+    connectorKey: string,
+    entityId: string,
+    runId: string,
+    syncVersionName: string
+  ): Promise<UpdateSyncVersionNameResponse> {
+    try {
+      const res = await api.patch<UpdateSyncVersionNameResponse>(
+        `${this.baseUrl}/connectors/${encodeURIComponent(connectorKey)}/entities/${encodeURIComponent(entityId)}/history/${encodeURIComponent(runId)}/version-name`,
+        { sync_version_name: syncVersionName }
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, run_id: runId, error: res.error || "Failed to update sync version name" };
+    } catch (error) {
+      return { success: false, run_id: runId, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
+
+  async addConnectorEntityToNewProject(
+    connectorKey: string,
+    entityId: string,
+    payload: { project_name?: string; prompt?: string; asset_id?: string }
+  ): Promise<AddToNewProjectResponse> {
+    try {
+      const res = await api.post<AddToNewProjectResponse>(
+        `${this.baseUrl}/connectors/${encodeURIComponent(connectorKey)}/entities/${encodeURIComponent(entityId)}/add-to-new-project`,
+        payload
+      );
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        project: { project_id: '' },
+        asset: {} as AssetRecord,
+        prompt: payload.prompt || '',
+        error: res.error || 'Failed to create project from connector data',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        project: { project_id: '' },
+        asset: {} as AssetRecord,
+        prompt: payload.prompt || '',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async deleteConnectorEntity(connectorKey: string, entityId: string): Promise<DeleteConnectorEntityResponse> {
+    try {
+      const res = await api.delete<DeleteConnectorEntityResponse>(
+        `${this.baseUrl}/connectors/${encodeURIComponent(connectorKey)}/entities/${encodeURIComponent(entityId)}`
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || "Failed to delete connector entity" };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
 
   async fetchGoogleAnalyticsProperties(): Promise<GA4PropertiesResponse> {
     try {
@@ -328,6 +556,10 @@ class IntegrationService {
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
+  }
+
+  async disconnectStripe(): Promise<void> {
+    await api.delete(`${this.baseUrl}/stripe/disconnect`);
   }
 
   async fetchGoogleAdsAccounts(): Promise<GoogleAdsAccountsResponse> {

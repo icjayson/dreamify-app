@@ -4,14 +4,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { integrationService, TikTokAdAccount, TikTokConnectionStatusResponse } from '@/services/integrationService';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, CalendarIcon, Link2, Link2Off, SearchX } from 'lucide-react';
-import { format, subDays } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Loader2, AlertCircle, CalendarDays, Link2, Link2Off, SearchX } from 'lucide-react';
+import { formatDateForApi, subtractDays } from '@/utils/timestamp';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
 import { fileService } from '@/services/fileService';
 import type { AssetRecord } from '@/services/fileService';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ConnectedEntitiesList } from './ConnectedEntitiesList';
 
 const DATE_PRESETS = [
   { value: 'last_7d', label: 'Last 7 days' },
@@ -44,7 +44,7 @@ export default function TikTokIntegrationModal() {
 
   // Date state
   const [datePreset, setDatePreset] = useState<string>('last_30d');
-  const [startDate, setStartDate] = useState<Date | undefined>(subDays(new Date(), 30));
+  const [startDate, setStartDate] = useState<Date | undefined>(subtractDays(30));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
 
   // Sync state
@@ -57,6 +57,7 @@ export default function TikTokIntegrationModal() {
     columnCount: number;
   } | null>(null);
   const [discardingEmpty, setDiscardingEmpty] = useState(false);
+  const [activeTab, setActiveTab] = useState<'new' | 'connected'>('new');
 
   const { getToken } = useAuth();
   const popupRef = useRef<Window | null>(null);
@@ -112,12 +113,13 @@ export default function TikTokIntegrationModal() {
     setAdAccounts([]);
     setSelectedAccountId('');
     setDatePreset('last_30d');
-    setStartDate(subDays(new Date(), 30));
+    setStartDate(subtractDays(30));
     setEndDate(new Date());
     setError(null);
     setConnecting(false);
     setEmptyRowsDialog(null);
     setDiscardingEmpty(false);
+    setActiveTab('new');
   };
 
   // ── Connection check + ad account load ───────────────────────────────────
@@ -212,8 +214,8 @@ export default function TikTokIntegrationModal() {
         selectedAccountId,
         currentProjectId || undefined,
         isCustomRange ? undefined : datePreset,
-        isCustomRange && startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-        isCustomRange && endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+        isCustomRange && startDate ? formatDateForApi(startDate) : undefined,
+        isCustomRange && endDate ? formatDateForApi(endDate) : undefined,
         accountLabel,
       );
 
@@ -248,6 +250,23 @@ export default function TikTokIntegrationModal() {
     } finally {
       setSyncing(false);
     }
+  };
+
+  const handleSelectConnectedAsset = (run: any) => {
+    if (!run.asset_id) return;
+    const file = {
+      fileID: run.asset_id,
+      filename: run.asset_filename || 'data.csv',
+      size: run.config_snapshot?.size_bytes || 0,
+      ext: 'csv',
+      status: 'uploaded' as const,
+      sourceType: 'TikTok Ads',
+      accountName: run.accountName || run.entityName || 'TikTok Ads',
+      propertyName: 'Campaigns',
+      syncVersionName: run.sync_version_name || run.version_name,
+    };
+    useChatStore.getState().addFiles([file]);
+    onClose();
   };
 
   const handleEmptyDiscard = async () => {
@@ -309,214 +328,224 @@ export default function TikTokIntegrationModal() {
 
   return (
     <>
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]">
-        {!emptyRowsDialog ? (
-          <>
-        <DialogHeader>
-          <div className="flex items-center gap-3 mb-1">
-            <img src="/tiktok.png" alt="TikTok Logo" className="w-8 h-8 object-contain" />
-            <DialogTitle className="text-xl font-semibold">Connect TikTok Ads</DialogTitle>
-          </div>
-          <DialogDescription className="text-gray-400 text-sm">
-            Import campaign insights directly from your TikTok Ads account.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="py-6 space-y-4">
-
-          {/* ── Connection UI ── */}
-          {isConnected && !loadingAccounts ? (
-            <div className="flex items-center justify-between p-3 border border-pink-500/30 rounded-lg bg-pink-500/10 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-md bg-pink-500/20 flex items-center justify-center shrink-0">
-                  <Link2 className="w-4 h-4 text-pink-500" />
-                </div>
-                <span className="text-sm font-medium truncate text-white">
-                  TikTok account connected
-                </span>
-              </div>
-              <Button 
-                type="button"
-                variant="ghost" 
-                size="sm" 
-                className="h-8 text-gray-400 hover:text-white hover:bg-white/10 px-2"
-                onClick={handleDisconnect}
-                disabled={disconnecting}
-              >
-                {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-              </Button>
-            </div>
-          ) : !isConnected ? (
-            <div 
-              onClick={!connecting ? handleConnect : undefined}
-              className={cn(
-                "flex items-center justify-between p-3 border border-white/10 rounded-lg bg-[#222] hover:bg-white/5 transition-colors cursor-pointer group",
-                connecting && "opacity-50 cursor-not-allowed"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-md bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
-                  {connecting ? <Loader2 className="w-4 h-4 text-gray-400 animate-spin" /> : <img src="/tiktok.png" alt="" className="w-4 h-4 object-contain opacity-70 group-hover:opacity-100 transition-opacity whitespace-nowrap" />}
-                </div>
-                <span className="text-sm text-gray-300">Connect with TikTok</span>
-              </div>
-            </div>
-          ) : null}
-
-          {/* ── Error banner ── */}
-          {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
-              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* ── Connected: ad account + date pickers ── */}
-          {isConnected && (
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]">
+          {!emptyRowsDialog ? (
             <>
-              {loadingAccounts ? (
-                <div className="flex flex-col items-center py-6 text-gray-400">
-                  <Loader2 className="w-6 h-6 animate-spin mb-2 text-pink-500" />
-                  <p className="text-sm">Loading ad accounts…</p>
+              <DialogHeader>
+                <div className="flex items-center gap-3 mb-1">
+                  <img src="/tiktok.png" alt="TikTok Logo" className="w-8 h-8 object-contain" />
+                  <DialogTitle className="text-xl font-semibold">Connect TikTok Ads</DialogTitle>
                 </div>
-              ) : adAccounts.length === 0 ? (
-                <div className="text-center py-5 text-gray-400 text-sm border border-white/10 rounded-lg bg-white/5">
-                  No ad accounts found. Make sure your account has access to at least one TikTok Ads account.
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-200">Ad Account</label>
-                    <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                      <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
-                        <SelectValue placeholder="Select an ad account" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                        <SelectGroup>
-                          <SelectLabel className="text-xs text-gray-500 uppercase tracking-wide px-2 py-1">
-                            Ad Accounts
-                          </SelectLabel>
-                          {adAccounts.map((a) => (
-                            <SelectItem key={a.id} value={a.id} className="focus:bg-white/10 focus:text-white">
-                              {a.name}{a.currency ? ` (${a.currency})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <DialogDescription className="text-gray-400 text-sm">
+                  Import campaign insights directly from your TikTok Ads account.
+                </DialogDescription>
+              </DialogHeader>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-200">Date Range</label>
-                    <Select value={datePreset} onValueChange={setDatePreset}>
-                      <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
-                        <SelectValue placeholder="Select date range" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                        {DATE_PRESETS.map((preset) => (
-                          <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
-                            {preset.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              <div className="py-6 space-y-4">
 
-                  {isCustomRange && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-200">Start Date</label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className={cn("w-full justify-start text-left font-normal bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white", !startDate && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                              <span className="truncate">{startDate ? format(startDate, 'dd/MM/yy') : 'Pick a date'}</span>
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0 bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                            <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
-                          </PopoverContent>
-                        </Popover>
+                {/* ── Connection UI ── */}
+                {isConnected && !loadingAccounts ? (
+                  <div className="flex items-center justify-between p-3 border border-pink-500/30 rounded-lg bg-pink-500/10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-md bg-pink-500/20 flex items-center justify-center shrink-0">
+                        <Link2 className="w-4 h-4 text-pink-500" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-200">End Date</label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className={cn("w-full justify-start text-left font-normal bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white", !endDate && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                              <span className="truncate">{endDate ? format(endDate, 'dd/MM/yy') : 'Pick a date'}</span>
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0 bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                            <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
+                      <span className="text-sm font-medium truncate text-white">
+                        TikTok account connected
+                      </span>
                     </div>
-                  )}
-                </>
-              )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-gray-400 hover:text-white hover:bg-white/10 px-2"
+                      onClick={handleDisconnect}
+                      disabled={disconnecting}
+                    >
+                      {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                    </Button>
+                  </div>
+                ) : !isConnected ? (
+                  <div
+                    onClick={!connecting ? handleConnect : undefined}
+                    className={cn(
+                      "flex items-center justify-between p-3 border border-white/10 rounded-lg bg-[#222] hover:bg-white/5 transition-colors cursor-pointer group",
+                      connecting && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-md bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
+                        {connecting ? <Loader2 className="w-4 h-4 text-gray-400 animate-spin" /> : <img src="/tiktok.png" alt="" className="w-4 h-4 object-contain opacity-70 group-hover:opacity-100 transition-opacity whitespace-nowrap" />}
+                      </div>
+                      <span className="text-sm text-gray-300">Connect with TikTok</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* ── Error banner ── */}
+                {error && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                {/* ── Connected: ad account + date pickers ── */}
+                {isConnected && (
+                  <>
+                    {loadingAccounts ? (
+                      <div className="flex flex-col items-center py-6 text-gray-400">
+                        <Loader2 className="w-6 h-6 animate-spin mb-2 text-pink-500" />
+                        <p className="text-sm">Loading ad accounts…</p>
+                      </div>
+                    ) : adAccounts.length === 0 ? (
+                      <div className="text-center py-5 text-gray-400 text-sm border border-white/10 rounded-lg bg-white/5">
+                        No ad accounts found. Make sure your account has access to at least one TikTok Ads account.
+                      </div>
+                    ) : (
+                      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+                        <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 p-1 rounded-lg mb-4">
+                          <TabsTrigger value="new" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Connect New Ad Account</TabsTrigger>
+                          <TabsTrigger value="connected" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select Connected Ad Account</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="new" className="space-y-4 outline-none">
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-200">Ad Account</label>
+                            <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                                <SelectValue placeholder="Select an ad account" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                                <SelectGroup>
+                                  <SelectLabel className="text-xs text-gray-500 uppercase tracking-wide px-2 py-1">
+                                    Ad Accounts
+                                  </SelectLabel>
+                                  {adAccounts.map((a) => (
+                                    <SelectItem key={a.id} value={a.id} className="focus:bg-white/10 focus:text-white">
+                                      {a.name}{a.currency ? ` (${a.currency})` : ''}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-200">Date Range</label>
+                            <Select value={datePreset} onValueChange={setDatePreset}>
+                              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                                <SelectValue placeholder="Select date range" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                                {DATE_PRESETS.map((preset) => (
+                                  <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
+                                    {preset.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {isCustomRange && (
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-200">Start Date</label>
+                                <div className="relative">
+                                  <input
+                                    type="date"
+                                    value={startDate ? formatDateForApi(startDate) : ''}
+                                    onChange={(e) => setStartDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
+                                    className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                  />
+                                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-200">End Date</label>
+                                <div className="relative">
+                                  <input
+                                    type="date"
+                                    value={endDate ? formatDateForApi(endDate) : ''}
+                                    onChange={(e) => setEndDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
+                                    className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                  />
+                                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        <TabsContent value="connected" className="outline-none">
+                          <ConnectedEntitiesList
+                            connectorKey="tiktok_ads"
+                            onSelectAsset={handleSelectConnectedAsset}
+                          />
+                        </TabsContent>
+                      </Tabs>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <DialogFooter className="sm:justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={onClose} className="text-gray-400 hover:text-white hover:bg-white/10" disabled={syncing}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSync}
+                  disabled={activeTab === 'connected' || !isConnected || syncing || !selectedAccountId || adAccounts.length === 0}
+                  className={`bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors ${activeTab === 'connected' ? 'opacity-0 pointer-events-none' : ''}`}
+                >
+                  {syncing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Syncing…
+                    </>
+                  ) : 'Connect & Sync'}
+                </Button>
+              </DialogFooter>
             </>
+          ) : (
+            <div className="flex flex-col items-center py-6 animate-in fade-in zoom-in-95 duration-300">
+              <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-6">
+                <SearchX className="w-8 h-8 text-orange-400" />
+              </div>
+
+              <h2 className="text-xl font-semibold text-white mb-2">No insights found</h2>
+
+              <p className="text-center text-sm text-gray-400 mb-8 max-w-[300px]">
+                TikTok returned no campaign insights for the selected date range. The export only contains schema headers.
+              </p>
+
+              <div className="w-full space-y-3">
+                <Button
+                  type="button"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 shadow-lg shadow-blue-900/20 transition-all font-medium"
+                  onClick={() => void handleEmptyTryAnotherRange()}
+                  disabled={discardingEmpty}
+                >
+                  {discardingEmpty ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarIcon className="w-4 h-4 mr-2" />}
+                  Try another date range
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10 transition-all font-medium"
+                  onClick={handleEmptyKeepSchema}
+                  disabled={discardingEmpty}
+                >
+                  Keep schema
+                </Button>
+              </div>
+            </div>
           )}
-        </div>
-
-        <DialogFooter className="sm:justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose} className="text-gray-400 hover:text-white hover:bg-white/10" disabled={syncing}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSync}
-            disabled={!isConnected || syncing || !selectedAccountId || adAccounts.length === 0}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md transition-colors"
-          >
-            {syncing ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Syncing…
-              </>
-            ) : 'Connect & Sync'}
-          </Button>
-        </DialogFooter>
-          </>
-        ) : (
-          <div className="flex flex-col items-center py-6 animate-in fade-in zoom-in-95 duration-300">
-            <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-6">
-              <SearchX className="w-8 h-8 text-orange-400" />
-            </div>
-            
-            <h2 className="text-xl font-semibold text-white mb-2">No insights found</h2>
-            
-            <p className="text-center text-sm text-gray-400 mb-8 max-w-[300px]">
-              TikTok returned no campaign insights for the selected date range. The export only contains schema headers.
-            </p>
-
-            <div className="w-full space-y-3">
-              <Button 
-                type="button"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 shadow-lg shadow-blue-900/20 transition-all font-medium"
-                onClick={() => void handleEmptyTryAnotherRange()}
-                disabled={discardingEmpty}
-              >
-                {discardingEmpty ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarIcon className="w-4 h-4 mr-2" />}
-                Try another date range
-              </Button>
-              
-              <Button 
-                type="button"
-                variant="outline"
-                className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10 transition-all font-medium"
-                onClick={handleEmptyKeepSchema}
-                disabled={discardingEmpty}
-              >
-                Keep schema
-              </Button>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

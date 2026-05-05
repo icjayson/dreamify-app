@@ -9,6 +9,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { formatToDisplay } from '@/utils/timestamp';
 
 interface ConversationNodesViewProps {
   nodes: Array<Record<string, any>>;
@@ -47,7 +48,7 @@ export function ConversationNodesView({ nodes }: ConversationNodesViewProps) {
 
   const formatDate = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleString();
+      return formatToDisplay(dateString, { format: 'full' });
     } catch {
       return dateString;
     }

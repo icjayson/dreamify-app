@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Eye, Calendar, User, Folder, LayoutTemplate } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { ConversationListItem } from '@/services/adminService';
+import { formatToDisplay } from '@/utils/timestamp';
 
 interface ConversationCardProps {
   conversation: ConversationListItem;
@@ -13,7 +14,7 @@ export function ConversationCard({ conversation }: ConversationCardProps) {
 
   const formatDate = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleString();
+      return formatToDisplay(dateString, { format: 'full' });
     } catch {
       return dateString;
     }

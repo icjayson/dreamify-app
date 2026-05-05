@@ -12,6 +12,7 @@ import {
 import { fileService, type FileItem } from "@/services/fileService";
 import { useChatStore, type UploadedFile } from "@/chat/useChatStore";
 import { cn } from "@/lib/utils";
+import { formatToDisplay } from "@/utils/timestamp";
 
 interface FileAttachDropdownProps {
   /** Called when the user chooses "Upload" */
@@ -31,11 +32,7 @@ function fileIcon(ext: string) {
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return "";
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatToDisplay(dateStr, { format: "date", locale: "en-US" });
 }
 
 export default function FileAttachDropdown({
@@ -107,6 +104,9 @@ export default function FileAttachDropdown({
       size: file.size,
       ext: file.ext || "",
       status: "uploaded",
+      projectId: file.asset?.project_id,
+      rowCount: file.asset?.row_count,
+      columnCount: file.asset?.column_count,
     };
     addFiles([uploaded]);
     setOpen(false);

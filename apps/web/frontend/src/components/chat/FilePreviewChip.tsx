@@ -89,7 +89,14 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
     return file.filename;
   };
 
-  const tooltipText = isGA4 ? `${file.accountName} / ${file.propertyName}` : file.filename;
+  const baseContextText = getContextText();
+  const syncVersionLabel = file.syncVersionName?.trim();
+  const contextWithSyncVersion = syncVersionLabel
+    ? `${baseContextText} - ${syncVersionLabel}`
+    : baseContextText;
+  const tooltipText = isGA4
+    ? `${file.accountName} / ${file.propertyName}${syncVersionLabel ? ` - ${syncVersionLabel}` : ""}`
+    : file.filename;
 
   return (
     <Tooltip>
@@ -104,14 +111,14 @@ const FilePreviewChip = ({ file, onRemove }: FilePreviewChipProps) => {
                   {getAppShortName()}
                 </span>
                 <span className="flex-shrink-0 font-light text-muted-foreground/30">•</span>
-                <span className="min-w-0 flex-1 truncate text-muted-foreground dark:text-gray-400" title={getContextText()}>
-                  {getContextText()}
+                <span className="min-w-0 flex-1 truncate text-muted-foreground dark:text-gray-400" title={contextWithSyncVersion}>
+                  {contextWithSyncVersion}
                 </span>
               </div>
             )}
             {!isIntegration && (
-              <span className="min-w-0 flex-1 truncate text-muted-foreground dark:text-gray-400" title={getContextText()}>
-                {getContextText()}
+              <span className="min-w-0 flex-1 truncate text-muted-foreground dark:text-gray-400" title={contextWithSyncVersion}>
+                {contextWithSyncVersion}
               </span>
             )}
             {isLocalUploading && (

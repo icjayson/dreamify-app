@@ -136,8 +136,8 @@ const Table = ({
         </div>
       ) : (
         <>
-          <div className="flex-1 overflow-y-auto">
-            <div className="rounded-md border" style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}>
+          <div className="flex-1 overflow-auto">
+            <div className="rounded-md border w-max min-w-full" style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}>
               <table className="w-full">
                 <thead
                   className="sticky top-0 z-10"

@@ -108,6 +108,12 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
     return assignColors(datasets);
   }, [datasets, assignColors]);
 
+  // Total for manual % calculation — recharts does NOT include `percent` in tooltipPayload
+  const total = React.useMemo(
+    () => displayData.reduce((s, d) => s + d.value, 0),
+    [displayData]
+  );
+
   // Get colors for pie slices
   const colors = React.useMemo(() => {
     const colorPalette = styling?.colorPalette || ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -134,7 +140,7 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
             Value: {data.value}
           </p>
           <p style={{ color: data.payload.fill }}>
-            Percentage: {data.percent ? (data.percent * 100).toFixed(1) : 0}%
+            Percentage: {total > 0 ? ((data.value / total) * 100).toFixed(1) : '0'}%
           </p>
         </div>
       );

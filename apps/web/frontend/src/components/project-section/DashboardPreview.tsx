@@ -1481,7 +1481,7 @@ const DashboardPreview = ({
                 isResizable
                 compactType={compactTypeMode === "none" ? null : "vertical"}
                 resizeHandles={['se', 'e', 's', 'w', 'n']}
-                {...(showCardActionsMenu ? { draggableCancel: ".dashboard-card-menu-trigger" } : {})}
+                draggableCancel="button, input, select, textarea, a, [contenteditable], .dashboard-card-menu-trigger, .react-resizable-handle"
                 onLayoutChange={handleLayoutChange}
                 onBreakpointChange={handleBreakpointChange}
                 onDragStart={() => setCompactTypeMode("vertical")}

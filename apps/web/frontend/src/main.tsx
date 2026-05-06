@@ -49,7 +49,7 @@ const AppWithRouter = () => {
       <ClerkProvider
         publishableKey={PUBLISHABLE_KEY}
         afterSignOutUrl="/"
-        afterSignInUrl="/"
+        afterSignInUrl="/workspace?tab=new-chat"
       >
         <TokenBridge />
           <App />

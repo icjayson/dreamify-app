@@ -6,7 +6,7 @@ import WaveBackground from "../../../src/ui/lightswind/wave-background";
 import VideoBackground from "@/components/homepage-section/VideoBackground";
 import { useTheme } from "@/hooks/useTheme";
 
-const REDIRECT_AFTER_AUTH = "/workspace";
+const REDIRECT_AFTER_AUTH = "/workspace?tab=new-chat";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -91,7 +91,7 @@ const Login = () => {
                     animations: true,
                   }
                 }}
-                redirectUrl="/"
+                redirectUrl="/workspace?tab=new-chat"
               />
             </div>
           </div>

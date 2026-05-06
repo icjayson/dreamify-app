@@ -25,15 +25,15 @@ export default function SSOCallbackPage() {
         navigate(finalDest, { replace: true });
       } else {
         // Fallback: go to workspace
-        navigate('/workspace', { replace: true });
+        navigate('/workspace?tab=new-chat', { replace: true });
       }
     }
   }, [callbackDone, navigate]);
 
   return (
     <AuthenticateWithRedirectCallback
-      afterSignInUrl="/workspace"
-      afterSignUpUrl="/workspace"
+      afterSignInUrl="/workspace?tab=new-chat"
+      afterSignUpUrl="/workspace?tab=new-chat"
     />
   );
 }

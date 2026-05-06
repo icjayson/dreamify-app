@@ -1126,7 +1126,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         open={projectsOpen}
         onClose={closeProjects}
         isLoading={projectsLoading}
-        onNewProject={() => createNewProject()}
+        onNewProject={() => navigate('/workspace?tab=new-chat')}
         recents={projects}
         onOpenProject={openProject}
         onRenameProject={renameProject}

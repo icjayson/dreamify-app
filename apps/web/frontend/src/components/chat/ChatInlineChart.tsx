@@ -209,9 +209,11 @@ export function ChatInlineChart({ artifact, variant = "inline", compact = false 
   const datasets = getDatasets(config);
   const rows = useCartesianData(datasets);
   const palette = getPalette(config);
-  const heightClass = variant === "modal" ? "h-full" : compact ? "h-[184px]" : "h-[272px]";
+  const heightClass = variant === "modal" ? "h-full" : "h-[272px]";
   const labelCount = rows.length;
-  const xInterval = labelCount > 12 ? Math.ceil(labelCount / 10) - 1 : 0;
+  const xInterval = compact
+    ? (labelCount > 5 ? Math.ceil(labelCount / 5) - 1 : 0)
+    : (labelCount > 12 ? Math.ceil(labelCount / 10) - 1 : 0);
   const hasLongLabels = rows.some((row) => String(row.label).length > 12);
   const bottomMargin = hasLongLabels ? 34 : 14;
   const commonAxisProps = {
@@ -241,7 +243,7 @@ export function ChatInlineChart({ artifact, variant = "inline", compact = false 
     }));
     const showLegend = pieData.length > 1;
     const showLabels = pieData.length <= 5 && !showLegend;
-    const pieHeight = variant === "modal" ? "100%" : compact ? 184 : 256;
+    const pieHeight = variant === "modal" ? "100%" : 256;
 
     return (
       <div className={`flex min-h-0 items-center gap-3 rounded-lg bg-background/70 p-2 dark:bg-black/20 ${heightClass}`}>

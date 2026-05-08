@@ -97,7 +97,7 @@ export function ChatVisualArtifact({ artifact, isSidePanelOpen = false }: ChatVi
             </Tooltip>
           </div>
         </div>
-        <div className={`${isTable ? (isSidePanelOpen ? "h-[260px]" : "h-[350px]") : (isSidePanelOpen ? "h-[200px]" : "h-[292px]")} p-2 min-h-0`}>
+        <div className={`${isTable ? "h-[350px] p-2" : "h-[292px] p-2"} min-h-0`}>
           {isTable ? (
             <ChatInlineTable artifact={artifact} />
           ) : (

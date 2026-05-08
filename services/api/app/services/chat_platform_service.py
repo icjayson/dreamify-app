@@ -516,7 +516,7 @@ async def handle_slack_query(
         # so we can skip the S3 load entirely.
         metrics: list = []
         dashboard_json: Optional[Dict[str, Any]] = None
-        if final_meta.get("response_type") == "message" and final_meta.get("content"):
+        if final_meta.get("response_type") in ("message", "answer_with_visual") and final_meta.get("content"):
             narrative = final_meta["content"]
             dashboard_url = None
             logger.info("Using inline narrative from workflow metadata (len=%d)", len(narrative))
@@ -760,7 +760,7 @@ async def post_sync_to_slack(
     # 6. Extract result and update Slack message
     metrics: list = []
     dashboard_url: Optional[str] = None
-    if final_meta.get("response_type") == "message" and final_meta.get("content"):
+    if final_meta.get("response_type") in ("message", "answer_with_visual") and final_meta.get("content"):
         narrative = final_meta["content"]
     else:
         try:
@@ -1124,7 +1124,7 @@ async def handle_telegram_query(
         dashboard_url: Optional[str] = None
         dashboard_json: Optional[Dict[str, Any]] = None
 
-        if final_meta.get("response_type") == "message" and final_meta.get("content"):
+        if final_meta.get("response_type") in ("message", "answer_with_visual") and final_meta.get("content"):
             narrative = final_meta["content"]
             logger.info("Using inline narrative from Telegram workflow metadata (len=%d)", len(narrative))
         else:
@@ -1448,7 +1448,7 @@ async def handle_zalo_query(
         dashboard_url: Optional[str] = None
         dashboard_json: Optional[Dict[str, Any]] = None
 
-        if final_meta.get("response_type") == "message" and final_meta.get("content"):
+        if final_meta.get("response_type") in ("message", "answer_with_visual") and final_meta.get("content"):
             narrative = final_meta["content"]
             logger.info("Using inline narrative from Zalo workflow metadata (len=%d)", len(narrative))
         else:

@@ -167,15 +167,47 @@ class ChartFactory {
               type: 'string'
             }));
           } else if (tableConfig.columns[0] && typeof tableConfig.columns[0] === 'object') {
-            // Transform columns that have 'id' field to use 'key' field instead
+            // Normalize columns: LLM may return columns as {id, label, type}.
+            // Table.tsx reads row[column.key], so we must resolve 'key' to whichever
+            // candidate actually appears as a property in the data rows.
+            //
+            // Priority:
+            //   1. col.key  — already set, trust it
+            //   2. col.id   — if it matches a key in the first data row (old format)
+            //   3. col.label — if it matches a key in the first data row (new LLM format: id="col1")
+            //   4. col.id   — last-resort fallback (preserves old behaviour)
+            const typeAliasMap: Record<string, string> = {
+              temporal: 'date',
+              numeric: 'number',
+              text: 'string',
+              integer: 'number',
+              float: 'number',
+              decimal: 'number',
+              percent: 'percentage',
+            };
+            const firstRow: Record<string, any> =
+              Array.isArray(tableConfig.data) && tableConfig.data.length > 0
+                ? tableConfig.data[0]
+                : {};
+            const dataKeys = new Set(Object.keys(firstRow));
             normalizedColumns = tableConfig.columns.map((col: any) => {
-              if (col.id && !col.key) {
-                return {
-                  ...col,
-                  key: col.id
-                };
+              const rawType = ((col.type as string) || 'string').toLowerCase();
+              const normalizedType = typeAliasMap[rawType] ?? rawType;
+              let resolvedKey: string;
+              if (col.key) {
+                resolvedKey = col.key;
+              } else if (col.id && dataKeys.has(col.id)) {
+                resolvedKey = col.id;
+              } else if (col.label && dataKeys.has(col.label)) {
+                resolvedKey = col.label;
+              } else {
+                resolvedKey = col.id ?? col.label ?? col.name ?? '';
               }
-              return col;
+              return {
+                ...col,
+                key: resolvedKey,
+                type: normalizedType,
+              };
             });
           }
         }

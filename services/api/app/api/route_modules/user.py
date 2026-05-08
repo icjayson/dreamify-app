@@ -153,6 +153,28 @@ class AssetListResponse(BaseModel):
     assets: List[AssetResponse]
 
 
+class AssetAddToNewProjectRequest(BaseModel):
+    asset_ids: List[str]
+    project_name: Optional[str] = None
+
+
+class AssetAddToNewProjectResponse(BaseModel):
+    success: bool
+    project: ProjectResponse
+    assets: List[AssetResponse]
+
+
+class AssetAddToProjectRequest(BaseModel):
+    asset_ids: List[str]
+    project_id: str
+
+
+class AssetAddToProjectResponse(BaseModel):
+    success: bool
+    project: ProjectResponse
+    assets: List[AssetResponse]
+
+
 class AssetDeleteResponse(BaseModel):
     success: bool
 
@@ -516,6 +538,96 @@ async def list_assets_endpoint(
     return AssetListResponse(assets=[_map_asset(item) for item in assets])
 
 
+@router.post("/user/asset/add-to-new-project", response_model=AssetAddToNewProjectResponse)
+async def add_assets_to_new_project_endpoint(
+    request: AssetAddToNewProjectRequest,
+    user_id: str = Depends(require_user),
+):
+    source_assets = []
+    seen_asset_ids = set()
+    for asset_id in request.asset_ids:
+        trimmed_asset_id = str(asset_id or "").strip()
+        if not trimmed_asset_id or trimmed_asset_id in seen_asset_ids:
+            continue
+        seen_asset_ids.add(trimmed_asset_id)
+        source_assets.append(_get_asset_or_404(user_id, trimmed_asset_id))
+
+    if not source_assets:
+        raise HTTPException(status_code=400, detail="At least one asset is required")
+
+    default_name = source_assets[0].get("filename") or "Data"
+    project = projects_repo.create_project(
+        user_id=user_id,
+        name=request.project_name or f"{default_name} Project",
+        description="Created from an existing file",
+    )
+    cloned_assets = []
+    for source_asset in source_assets:
+        cloned = assets_repo.clone_asset_to_project(
+            user_id=user_id,
+            source_asset=source_asset,
+            project_id=project["project_id"],
+        )
+        patched = assets_repo.update_asset_metadata(
+            user_id=user_id,
+            asset_id=cloned["asset_id"],
+            metadata={
+                "cloned_from_asset_id": str(source_asset.get("asset_id", "")),
+            },
+        )
+        cloned_assets.append(patched or cloned)
+
+    return AssetAddToNewProjectResponse(
+        success=True,
+        project=_map_project(project),
+        assets=[_map_asset(item) for item in cloned_assets],
+    )
+
+
+@router.post("/user/asset/add-to-project", response_model=AssetAddToProjectResponse)
+async def add_assets_to_project_endpoint(
+    request: AssetAddToProjectRequest,
+    user_id: str = Depends(require_user),
+):
+    project = _get_project_or_404(user_id, request.project_id)
+    source_assets = []
+    seen_asset_ids = set()
+    for asset_id in request.asset_ids:
+        trimmed_asset_id = str(asset_id or "").strip()
+        if not trimmed_asset_id or trimmed_asset_id in seen_asset_ids:
+            continue
+        seen_asset_ids.add(trimmed_asset_id)
+        source_assets.append(_get_asset_or_404(user_id, trimmed_asset_id))
+
+    if not source_assets:
+        raise HTTPException(status_code=400, detail="At least one asset is required")
+
+    cloned_assets = []
+    for source_asset in source_assets:
+        if str(source_asset.get("project_id", "")) == request.project_id and source_asset.get("cloned_from_asset_id"):
+            cloned_assets.append(source_asset)
+            continue
+        cloned = assets_repo.clone_asset_to_project(
+            user_id=user_id,
+            source_asset=source_asset,
+            project_id=request.project_id,
+        )
+        patched = assets_repo.update_asset_metadata(
+            user_id=user_id,
+            asset_id=cloned["asset_id"],
+            metadata={
+                "cloned_from_asset_id": str(source_asset.get("asset_id", "")),
+            },
+        )
+        cloned_assets.append(patched or cloned)
+
+    return AssetAddToProjectResponse(
+        success=True,
+        project=_map_project(project),
+        assets=[_map_asset(item) for item in cloned_assets],
+    )
+
+
 def _get_asset_or_404(user_id: str, asset_id: str) -> dict:
     asset = assets_repo.get_asset(user_id, asset_id)
     if not asset:
@@ -865,5 +977,3 @@ async def compatibility_preview_redirect(
         redirect_url += f"?{query_params}"
     
     return RedirectResponse(url=redirect_url)
-
-

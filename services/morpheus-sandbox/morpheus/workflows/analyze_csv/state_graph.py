@@ -319,6 +319,10 @@ class StatefulAnalyzeCSVWorkflow:
                     elif output_type == "message":
                         # Q&A response
                         content = state.output.get("content", "Analysis complete")
+                    elif output_type == "answer_with_visual":
+                        # Server persists QA visual responses as a custom assistant
+                        # node with both text and visual_artifacts content.
+                        return None
 
                     else:
                         content = "✨ Analysis complete"
@@ -766,7 +770,13 @@ class StatefulAnalyzeCSVWorkflow:
 
         route_decision = state.working_memory.tool_outputs.get("route_decision", {})
         mode = route_decision.get("next_step", "dashboard")
-        system_prompt = QA_SYSTEM_PROMPT if mode == "qa" else DASHBOARD_SYSTEM_PROMPT
+        if mode == "dashboard":
+            system_prompt = DASHBOARD_SYSTEM_PROMPT
+        elif mode == "qa_visual":
+            from .nodes import QA_VISUAL_SYSTEM_PROMPT
+            system_prompt = QA_VISUAL_SYSTEM_PROMPT
+        else:
+            system_prompt = QA_SYSTEM_PROMPT
         workflow_output.add_message(SystemMessage(content=system_prompt))
 
         # === ADD TOOL EXECUTION MESSAGES ===
@@ -874,6 +884,11 @@ class StatefulAnalyzeCSVWorkflow:
                 qa_content = state.output.get("content", "")
                 if qa_content:
                     workflow_output.add_message(AIMessage(content=qa_content))
+            elif state.output.get("type") == "answer_with_visual":
+                workflow_output.output_data = {
+                    "content": state.output.get("content"),
+                    "artifacts": state.output.get("artifacts", []),
+                }
 
         # Add error if failed
         if state.status == "ERROR":

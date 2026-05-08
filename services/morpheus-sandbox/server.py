@@ -914,6 +914,54 @@ def _process_conversation_background(
                 result["type"] = "dashboard_config"
                 response_type = "dashboard_config"
 
+        # Handle QA visual responses (text + inline chart/table artifacts, no dashboard artifact)
+        if response_type == "answer_with_visual":
+            logger.info("Processing QA visual response - skipping dashboard generation")
+
+            qa_content = result.get("content", "I've processed your question.")
+            artifacts = result.get("artifacts", []) or []
+
+            visual_node = {
+                "node_id": f"node_{uuid.uuid4().hex[:8]}",
+                "role": "assistant",
+                "status": "completed",
+                "created_at": datetime.now().isoformat(),
+                "contents": [
+                    {
+                        "type": "text",
+                        "data": {"text": qa_content},
+                    },
+                    {
+                        "type": "visual_artifacts",
+                        "data": {"artifacts": artifacts},
+                    },
+                ],
+            }
+            conversation.setdefault("nodes", []).append(visual_node)
+            conversation["updated_at"] = datetime.now().isoformat()
+            _persist_conversation(
+                conversation_uri, conversation_backup_uri, conversation
+            )
+
+            file_identifier = (
+                assets[0].get("file_id") or assets[0].get("asset_id")
+                if assets
+                else conversation_id
+            )
+            _post_node_status_sync(
+                conversation_id,
+                "completed",
+                {
+                    "fileID": file_identifier,
+                    "response_type": "answer_with_visual",
+                    "content": qa_content,
+                    "artifact_count": len(artifacts),
+                },
+            )
+
+            logger.info(f"QA visual workflow completed for conversation {conversation_id}")
+            return
+
         # Handle Q&A responses (type == "message")
         if response_type == "message":
             logger.info("Processing Q&A response - skipping dashboard generation")

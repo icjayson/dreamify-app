@@ -52,6 +52,7 @@ class WorkingMemory(BaseModel):
     dashboard_json: Optional[Dict[str, Any]] = Field(default=None, description="Generated dashboard configuration")
     dashboard_summary: Optional[str] = Field(default=None, description="Summary text explaining the generated dashboard")
     qa_response: Optional[str] = Field(default=None, description="Generated Q&A text response")
+    visual_artifacts: List[Dict[str, Any]] = Field(default_factory=list, description="Inline chart/table artifacts for Q&A visual responses")
     
     # Error tracking
     errors: List[Dict[str, Any]] = Field(default_factory=list, description="Error history with context")
@@ -63,7 +64,7 @@ class WorkingMemory(BaseModel):
 
 class RouteDecision(BaseModel):
     """Router decision model for workflow routing."""
-    next_step: Literal["dashboard", "qa"] = Field(..., description="The next workflow to run based on user intent.")
+    next_step: Literal["dashboard", "qa", "qa_visual"] = Field(..., description="The next workflow to run based on user intent.")
     reasoning: str = Field(..., description="Brief reason for this routing decision.")
 
 

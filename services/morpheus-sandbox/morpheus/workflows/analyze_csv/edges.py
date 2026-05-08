@@ -108,7 +108,12 @@ def decide_next_node(state: AgentState) -> str:
     elif current == "REASONING_INTERNAL":
         # Self-contained node (replaces REASONING + EXECUTION)
         # Goes to shared SYNTHESIS node to build state.output
-        if state.working_memory.errors and not state.working_memory.dashboard_json and not state.working_memory.qa_response:
+        if (
+            state.working_memory.errors
+            and not state.working_memory.dashboard_json
+            and not state.working_memory.qa_response
+            and not state.working_memory.visual_artifacts
+        ):
             return "ERROR"
         return "SYNTHESIS"
     

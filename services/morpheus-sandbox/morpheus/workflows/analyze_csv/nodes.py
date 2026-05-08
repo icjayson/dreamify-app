@@ -89,6 +89,120 @@ IMPORTANT TOOL USAGE GUIDELINES:
 - For questions about the data file, use python_repl to read and analyze the CSV
 - If the question is not related to the data file, answer directly without using tools"""
 
+QA_VISUAL_SYSTEM_PROMPT = """You are Dreamify AI analytics assistant in QA Visual Mode. Your goal is to answer the user's focused data question with concise text AND 1-3 inline chart/table artifacts. Do not create a dashboard.
+
+🚨 CRITICAL TOOL RESTRICTIONS 🚨
+=================================
+AVAILABLE TOOLS (ONLY THESE TWO):
+1. 'Python_REPL' - To execute Python code (use 'query' parameter)
+2. 'get_available_chart_types' - To get chart type information
+
+FORBIDDEN TOOL NAMES (DO NOT USE):
+- 'run' ❌
+- 'execute' ❌
+- 'code' ❌
+- 'code_interpreter' ❌
+- 'python' ❌
+- ANY other tool name ❌
+
+CRITICAL WORKFLOW REQUIREMENT:
+==============================
+You MUST use Python_REPL before answering. Load the data, inspect the relevant columns, compute every value you will mention or render, and print the computed results.
+
+Use QA Visual Mode for compact supporting visuals:
+- Trend questions -> one line/area/bar chart
+- Comparison questions -> one bar/line/composed chart
+- Ranking/top/bottom questions -> one bar chart or table
+- Detailed row/list questions -> one table
+
+OUTPUT FORMAT:
+==============
+Return ONLY a JSON code block with this exact top-level shape:
+
+```json
+{
+  "answer": "Concise natural language answer grounded in the computed data.",
+  "artifacts": [
+    {
+      "id": "artifact_001",
+      "kind": "chart",
+      "chart_type": "line",
+      "title": "Short chart title",
+      "description": "Optional one-line description",
+      "datasets": [
+        {
+          "label": "Series label",
+          "data": [
+            {"label": "2026-01-01", "value": 123}
+          ]
+        }
+      ],
+      "config": {"animation": true, "showGrid": true, "showLegend": true},
+      "styling": {
+        "theme": "monochrome",
+        "title": "title-color",
+        "description": "description-color",
+        "cartesianGrid": "element-color/75",
+        "xAxis": "element-color",
+        "yAxis": "element-color",
+        "legend": "highlight-color",
+        "dataElements": "highlight-color",
+        "tile": {
+          "background": "bg-card-color",
+          "borderColor": "border-card-color",
+          "borderWidth": 1,
+          "borderRadius": 12
+        }
+      }
+    }
+  ]
+}
+```
+
+For table artifacts, use:
+```json
+{
+  "id": "artifact_001",
+  "kind": "table",
+  "title": "Short table title",
+  "description": "Optional one-line description",
+  "columns": [
+    {"key": "channel", "label": "Channel", "type": "string"},
+    {"key": "value", "label": "Value", "type": "number"}
+  ],
+  "data": [
+    {"channel": "Facebook", "value": 123}
+  ],
+  "styling": {
+    "theme": "monochrome",
+    "title": "title-color",
+    "description": "description-color",
+    "headerBg": "highlight-color/10",
+    "headerText": "title-color",
+    "rowBg": "transparent",
+    "rowAltBg": "highlight-color/5",
+    "borderColor": "element-color",
+    "tile": {
+      "background": "bg-card-color",
+      "borderColor": "border-card-color",
+      "borderWidth": 1,
+      "borderRadius": 12
+    }
+  }
+}
+```
+
+CRITICAL OUTPUT RULES:
+- Do NOT output a dashboard object.
+- Do NOT include metrics cards.
+- Use 1-3 artifacts maximum.
+- Every number and label must come from Python_REPL output.
+- Chart datasets must not be empty.
+- Table columns and data must not be empty.
+- For chart artifacts, keep titles short, avoid long descriptions, prefer 1-2 datasets, and limit categorical charts to the top 8-12 categories unless the user asks for more.
+- For table artifacts, prefer 3-6 important columns and enough rows to answer the question; keep descriptions short because chat renders tables compactly.
+- Prefer the smallest useful visual that directly supports the answer."""
+
 DASHBOARD_SYSTEM_PROMPT = """You are Morpheus, an expert data analysis AI assistant in Dashboard Mode. Your task is to generate comprehensive dashboard configurations.
 
 🚨 CRITICAL TOOL RESTRICTIONS 🚨
@@ -502,18 +616,23 @@ CONTEXT VARIABLES:
 
 ROUTING RULES:
 1. Route to 'dashboard' if the user:
-   - Explicitly asks to visualize, plot, chart, create a dashboard, or generate charts
-   - Asks to see data in a visual format
-   - Requests specific chart types (bar chart, line chart, pie chart, etc.)
-   - If an asset exists but no dashboards have been created yet, lean towards 'dashboard' mode if the user asks for general data views
+   - Explicitly asks to create/build/generate a dashboard, report, reusable view, or overview
+   - Requests multiple coordinated visuals, metrics, sections, or a broad exploratory dashboard
+   - References an existing dashboard/chart for modification
 
-2. Route to 'qa' if the user:
-   - Asks specific questions about values, trends, causes, or wants calculations
-   - Requests information or explanations (not visualizations)
-   - Asks follow-up questions about existing dashboards
+2. Route to 'qa_visual' if the user asks a data-related question where a compact chart or table would help:
+   - Trends over time, comparisons, rankings, distributions, outliers, top/bottom lists
+   - Uses words like show, plot, chart, table, visualize, trend, compare, top, best, worst
+   - Asks a focused analytical question that can be answered with 1-3 inline visuals
+   - Tie-breaker: when data exists and the request is not clearly a dashboard, prefer qa_visual over qa
+
+3. Route to 'qa' only if the user:
+   - Asks a non-data/general question
+   - Needs a clarification because data is missing or insufficient
+   - Asks a simple scalar/calculation/explanation where a visual would add little value
    - Asks about capabilities or general questions
 
-Remember: When in doubt, consider if the user wants to SEE data (dashboard) or KNOW information (qa)."""
+Remember: Bias toward 'qa_visual' for data questions. Use 'dashboard' only for saved/reusable multi-visual dashboard work."""
 
 
 def _file_has_at_least_one_data_row(file_path: str) -> bool:
@@ -888,17 +1007,19 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
             if "dashboard" in content.lower():
                 next_step = "dashboard"
                 reasoning = "Fallback routing based on content analysis"
+            elif "qa_visual" in content.lower() or "visual" in content.lower():
+                next_step = "qa_visual"
+                reasoning = "Fallback routing based on content analysis"
             elif "qa" in content.lower():
                 next_step = "qa"
                 reasoning = "Fallback routing based on content analysis"
             else:
-                # Default to dashboard
-                next_step = "dashboard"
+                next_step = "qa_visual" if has_asset else "qa"
                 reasoning = "Default fallback routing"
     
     except Exception as e:
-        logger.error(f"Router error: {str(e)}, defaulting to dashboard")
-        next_step = "dashboard"
+        logger.error(f"Router error: {str(e)}, defaulting based on asset availability")
+        next_step = "qa_visual" if has_asset else "qa"
         reasoning = f"Error fallback: {str(e)}"
     
     # Store decision in working memory
@@ -945,6 +1066,8 @@ def node_reasoning(state: AgentState, model=None, model_with_tools=None, **kwarg
     # Select system prompt based on mode
     if mode == "dashboard":
         base_prompt = DASHBOARD_SYSTEM_PROMPT
+    elif mode == "qa_visual":
+        base_prompt = QA_VISUAL_SYSTEM_PROMPT
     else:
         base_prompt = QA_SYSTEM_PROMPT
     
@@ -1078,6 +1201,8 @@ CRITICAL RULES:
 - You MUST output the JSON code block — do NOT just describe the changes in text."""
             elif mode == "dashboard":
                 instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
+            elif mode == "qa_visual":
+                instruction = f"User asks a focused data question that should be answered with text plus inline chart/table artifact(s): {state.input_prompt}\n\n{file_info}"
             else:
                 instruction = f"User question: {state.input_prompt}\n\n{file_info}"
 
@@ -1103,12 +1228,12 @@ CRITICAL RULES:
         state.working_memory.tool_outputs.pop("force_more_tools", None)
     
     # 🔥 DATA GROUNDING: If we have tool executions and in dashboard mode, add grounding reminder
-    if mode == "dashboard" and len(state.working_memory.python_execution_results) >= 1:
+    if mode in ("dashboard", "qa_visual") and len(state.working_memory.python_execution_results) >= 1:
         grounding_reminder = """
-REMINDER: When you generate your dashboard JSON:
+REMINDER: When you generate your JSON:
 - Use ONLY values that came from your Python analysis above
 - Every number must be traceable to a print() statement you executed
-- If you did not compute a value with Python, do NOT include it in the dashboard"""
+- If you did not compute a value with Python, do NOT include it in the output"""
         messages.append(HumanMessage(content=grounding_reminder))
     
     # Call LLM
@@ -1196,6 +1321,14 @@ REMINDER: When you generate your dashboard JSON:
                 else:
                     # No JSON found - text response
                     logger.info("No JSON found in dashboard mode, treating as Q&A")
+                    state.working_memory.qa_response = str(response.content)
+            elif mode == "qa_visual":
+                visual_payload = _extract_qa_visual_from_content(str(response.content))
+                if visual_payload:
+                    state.working_memory.qa_response = visual_payload.get("answer", "")
+                    state.working_memory.visual_artifacts = visual_payload.get("artifacts", [])
+                else:
+                    logger.info("No QA visual JSON found, treating as text Q&A")
                     state.working_memory.qa_response = str(response.content)
             else:
                 state.working_memory.qa_response = str(response.content)
@@ -1507,7 +1640,12 @@ def node_reasoning_internal(state: AgentState, model=None, python_tool=None, **k
     is_chart_mod = route_decision.get("is_chart_modification", False)
 
     # --- Build messages (same inputs as node_reasoning) ---
-    base_prompt = DASHBOARD_SYSTEM_PROMPT if mode == "dashboard" else QA_SYSTEM_PROMPT
+    if mode == "dashboard":
+        base_prompt = DASHBOARD_SYSTEM_PROMPT
+    elif mode == "qa_visual":
+        base_prompt = QA_VISUAL_SYSTEM_PROMPT
+    else:
+        base_prompt = QA_SYSTEM_PROMPT
     state_context = _format_state_for_prompt_basic(state)
 
     system_prompt = f"""{base_prompt}
@@ -1588,6 +1726,8 @@ Populate datasets with REAL computed data from Python analysis (never empty arra
 Output ONLY the modified chart in "charts" array."""
             elif mode == "dashboard":
                 instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
+            elif mode == "qa_visual":
+                instruction = f"User asks a focused data question that should be answered with text plus inline chart/table artifact(s): {state.input_prompt}\n\n{file_info}"
             else:
                 instruction = f"User question: {state.input_prompt}\n\n{file_info}"
 
@@ -1608,11 +1748,11 @@ Output ONLY the modified chart in "charts" array."""
         state.working_memory.tool_outputs.pop("force_more_tools", None)
 
     # Data grounding reminder if we already have some tool executions
-    if mode == "dashboard" and len(state.working_memory.python_execution_results) >= 1:
+    if mode in ("dashboard", "qa_visual") and len(state.working_memory.python_execution_results) >= 1:
         messages.append(HumanMessage(content="""REMINDER: When you generate your dashboard JSON:
 - Use ONLY values that came from your Python analysis above
 - Every number must be traceable to a print() statement you executed
-- If you did not compute a value with Python, do NOT include it in the dashboard"""))
+- If you did not compute a value with Python, do NOT include it in the output"""))
 
     # --- Internal tool execution loop ---
     max_turns = 30
@@ -1758,6 +1898,13 @@ Output ONLY the modified chart in "charts" array."""
                     else:
                         # No JSON → treat as Q&A text
                         state.working_memory.qa_response = content
+                elif mode == "qa_visual":
+                    visual_payload = _extract_qa_visual_from_content(content)
+                    if visual_payload:
+                        state.working_memory.qa_response = visual_payload.get("answer", "")
+                        state.working_memory.visual_artifacts = visual_payload.get("artifacts", [])
+                    else:
+                        state.working_memory.qa_response = content
                 else:
                     # QA mode
                     state.working_memory.qa_response = content
@@ -1777,6 +1924,13 @@ Output ONLY the modified chart in "charts" array."""
                         json_data = _extract_json_from_content(last_content)
                         if json_data:
                             state.working_memory.dashboard_json = json_data
+                        else:
+                            state.working_memory.qa_response = last_content
+                    elif mode == "qa_visual":
+                        visual_payload = _extract_qa_visual_from_content(last_content)
+                        if visual_payload:
+                            state.working_memory.qa_response = visual_payload.get("answer", "")
+                            state.working_memory.visual_artifacts = visual_payload.get("artifacts", [])
                         else:
                             state.working_memory.qa_response = last_content
                     else:
@@ -1897,6 +2051,31 @@ def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
                 "timestamp": datetime.now().isoformat(),
             })
             logger.error("Failed to synthesize dashboard output")
+
+    elif mode == "qa_visual":
+        qa_response = state.working_memory.qa_response
+        artifacts = state.working_memory.visual_artifacts
+
+        if qa_response and artifacts:
+            state.output = {
+                "type": "answer_with_visual",
+                "content": qa_response,
+                "artifacts": artifacts,
+            }
+            logger.info(f"QA visual synthesis complete with {len(artifacts)} artifact(s)")
+        elif qa_response:
+            state.output = {
+                "type": "message",
+                "content": qa_response,
+            }
+            logger.info("QA visual synthesis fell back to text-only message")
+        else:
+            state.working_memory.errors.append({
+                "node": "SYNTHESIS",
+                "error": "Failed to extract QA visual response",
+                "timestamp": datetime.now().isoformat(),
+            })
+            logger.error("Failed to synthesize QA visual output")
     
     else:  # qa mode
         qa_response = state.working_memory.qa_response
@@ -2036,6 +2215,8 @@ It's better to have fewer charts with REAL data than more charts with FAKE data.
     elif output_type == "message":
         # Validate QA response
         validation_result = _validate_qa_response(state.output.get("content"))
+    elif output_type == "answer_with_visual":
+        validation_result = _validate_answer_with_visual(state.output, state)
     else:
         validation_result = {"valid": False, "error": f"Unknown output type: {output_type}"}
 
@@ -2267,6 +2448,51 @@ def _extract_json_from_content(content: str) -> Dict[str, Any]:
         return None
 
 
+def _extract_qa_visual_from_content(content: str) -> Dict[str, Any]:
+    """Extract and normalize QA visual JSON from LLM response content."""
+    parsed = _extract_json_from_content(content)
+    if not parsed or not isinstance(parsed, dict):
+        return None
+
+    answer = parsed.get("answer") or parsed.get("content") or parsed.get("response")
+    artifacts = parsed.get("artifacts") or parsed.get("visual_artifacts") or []
+
+    # Be forgiving if the model returned a single artifact directly.
+    if not artifacts and parsed.get("kind") in ("chart", "table"):
+        artifacts = [parsed]
+
+    if not isinstance(answer, str) or not isinstance(artifacts, list):
+        return None
+
+    normalized = []
+    for idx, artifact in enumerate(artifacts[:3]):
+        if not isinstance(artifact, dict):
+            continue
+        normalized_artifact = dict(artifact)
+        kind = str(normalized_artifact.get("kind") or "").lower()
+        if kind not in ("chart", "table"):
+            if normalized_artifact.get("columns") and normalized_artifact.get("data"):
+                kind = "table"
+            elif normalized_artifact.get("datasets"):
+                kind = "chart"
+        if kind not in ("chart", "table"):
+            continue
+        normalized_artifact["kind"] = kind
+        normalized_artifact["id"] = normalized_artifact.get("id") or f"artifact_{idx + 1:03d}"
+        if kind == "chart":
+            normalized_artifact["chart_type"] = (
+                normalized_artifact.get("chart_type")
+                or normalized_artifact.get("type")
+                or "bar"
+            )
+        normalized.append(normalized_artifact)
+
+    if not normalized:
+        return None
+
+    return {"answer": answer.strip(), "artifacts": normalized}
+
+
 def _validate_dashboard_json(data: Dict[str, Any]) -> Dict[str, Any]:
     """Validate dashboard JSON structure."""
     if not data:
@@ -2312,6 +2538,54 @@ def _validate_qa_response(content: str) -> Dict[str, Any]:
     if len(content.strip()) < 10:
         return {"valid": False, "error": "Q&A response is too short"}
     
+    return {"valid": True}
+
+
+def _validate_answer_with_visual(output: Dict[str, Any], state: AgentState) -> Dict[str, Any]:
+    """Validate inline QA visual response shape."""
+    content_validation = _validate_qa_response(output.get("content"))
+    if not content_validation.get("valid"):
+        return content_validation
+
+    if state.file_paths:
+        successful_python_calls = [
+            result for result in state.working_memory.python_execution_results
+            if result.get("success") and str(result.get("tool_name", "")).lower() == "python_repl"
+        ]
+        if not successful_python_calls:
+            state.working_memory.tool_outputs["force_more_tools"] = (
+                "You must use Python_REPL to load and analyze the data before producing "
+                "a QA visual response. Compute and print every value that appears in "
+                "the answer or visual artifacts, then return the required JSON."
+            )
+            return {"valid": False, "error": "QA visual response was generated without Python analysis"}
+
+    artifacts = output.get("artifacts")
+    if not isinstance(artifacts, list) or not artifacts:
+        return {"valid": False, "error": "QA visual response has no artifacts"}
+
+    if len(artifacts) > 3:
+        return {"valid": False, "error": "QA visual response has more than 3 artifacts"}
+
+    for idx, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            return {"valid": False, "error": f"Artifact {idx + 1} is not an object"}
+        kind = artifact.get("kind")
+        if kind == "chart":
+            datasets = artifact.get("datasets") or []
+            if not isinstance(datasets, list) or not datasets:
+                return {"valid": False, "error": f"Chart artifact {idx + 1} has no datasets"}
+            has_points = any(isinstance(ds, dict) and ds.get("data") for ds in datasets)
+            if not has_points:
+                return {"valid": False, "error": f"Chart artifact {idx + 1} has no data points"}
+        elif kind == "table":
+            columns = artifact.get("columns") or []
+            rows = artifact.get("data") or []
+            if not columns or not rows:
+                return {"valid": False, "error": f"Table artifact {idx + 1} has no columns or rows"}
+        else:
+            return {"valid": False, "error": f"Artifact {idx + 1} has unsupported kind: {kind}"}
+
     return {"valid": True}
 
 
@@ -2710,4 +2984,3 @@ def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
     valid = len(errors) == 0
     
     return {"valid": valid, "warnings": warnings, "metric_warnings": metric_warnings, "errors": errors}
-

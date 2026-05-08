@@ -1,4 +1,5 @@
 import type { Message } from '@/types/message';
+import { ChartType, type DashboardComponent } from '@/types/dashboard';
 
 export interface ConversationNodesToMessagesOptions {
   sourceFileName?: string;
@@ -10,6 +11,101 @@ export interface ConversationNodesToMessagesOptions {
     accountName?: string;
     propertyName?: string;
     syncVersionName?: string;
+  };
+}
+
+type MessageVisualArtifact = NonNullable<Message['visualArtifacts']>[number];
+type VisualArtifactPayload = Record<string, unknown>;
+
+function asPayload(value: unknown): VisualArtifactPayload | null {
+  return value && typeof value === 'object' ? value as VisualArtifactPayload : null;
+}
+
+function normalizeVisualArtifact(raw: unknown, index: number): MessageVisualArtifact | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const artifact = raw as VisualArtifactPayload;
+
+  const existingComponent = artifact.component && typeof artifact.component === 'object'
+    ? artifact.component as DashboardComponent
+    : null;
+  const existingConfig = asPayload(existingComponent?.component_config);
+  const kind = (artifact.kind || existingComponent?.type || '').toString().toLowerCase();
+  const normalizedKind = kind === 'table' ? 'table' : 'chart';
+  const id = String(artifact.id || existingComponent?.id || `artifact_${index + 1}`);
+  const title = String(
+    artifact.title ||
+    existingConfig?.title ||
+    (normalizedKind === 'table' ? 'Table' : 'Chart')
+  );
+  const description = (artifact.description || existingConfig?.description) as string | undefined;
+
+  if (existingComponent) {
+    return {
+      id,
+      kind: normalizedKind,
+      title,
+      description,
+      component: existingComponent,
+    };
+  }
+
+  const position = artifact.position || artifact.layout || {
+    x: 0,
+    y: 0,
+    width: normalizedKind === 'table' ? 24 : 18,
+    height: normalizedKind === 'table' ? 10 : 12,
+  };
+
+  if (normalizedKind === 'table') {
+    const columns = Array.isArray(artifact.columns) ? artifact.columns : [];
+    const data = Array.isArray(artifact.data) ? artifact.data : [];
+    if (columns.length === 0 || data.length === 0) return null;
+    return {
+      id,
+      kind: 'table',
+      title,
+      description,
+      component: {
+        id,
+        type: 'table',
+        position,
+        component_config: {
+          id,
+          title,
+          description,
+          columns,
+          data,
+          styling: artifact.styling,
+        },
+      },
+    };
+  }
+
+  const chartType = String(artifact.chart_type || artifact.type || ChartType.BAR) as ChartType;
+  const datasets = Array.isArray(artifact.datasets) ? artifact.datasets : [];
+  if (datasets.length === 0) return null;
+
+  return {
+    id,
+    kind: 'chart',
+    title,
+    description,
+    component: {
+      id,
+      type: 'chart',
+      position,
+      component_config: {
+        id,
+        type: chartType,
+        title,
+        description,
+        datasets,
+        config: artifact.config || {},
+        layout: artifact.layout,
+        styling: artifact.styling,
+        metadata: artifact.metadata,
+      },
+    },
   };
 }
 
@@ -66,6 +162,7 @@ export function conversationNodesToMessages(
       const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
       const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
       const todoTasksContent = node?.contents?.find?.((c: any) => c?.type === 'todo_tasks');
+      const visualArtifactsContent = node?.contents?.find?.((c: any) => c?.type === 'visual_artifacts');
       const assetContents = node?.contents?.filter?.(
         (c: any) =>
           c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file' || c?.type === 'mention'
@@ -103,6 +200,14 @@ export function conversationNodesToMessages(
       }
       if (todoTasksContent?.data?.tasks && Array.isArray(todoTasksContent.data.tasks)) {
         normalized.todoTasks = todoTasksContent.data.tasks;
+      }
+      if (Array.isArray(visualArtifactsContent?.data?.artifacts)) {
+        const artifacts = visualArtifactsContent.data.artifacts
+          .map((artifact: any, artifactIndex: number) => normalizeVisualArtifact(artifact, artifactIndex))
+          .filter(Boolean);
+        if (artifacts.length > 0) {
+          normalized.visualArtifacts = artifacts;
+        }
       }
       // Include attachment field for messages with asset content
       // This shows "Attached file" badge for @mentioned files in QnA mode

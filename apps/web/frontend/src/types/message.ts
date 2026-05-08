@@ -1,3 +1,5 @@
+import type { DashboardComponent } from "@/types/dashboard";
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
@@ -35,6 +37,13 @@ export interface Message {
     accountName?: string;
     sourceType?: string;
   };
+  visualArtifacts?: Array<{
+    id: string;
+    kind: "chart" | "table";
+    title: string;
+    description?: string;
+    component: DashboardComponent;
+  }>;
   todoTasks?: Array<{
     id: string;
     text: string;

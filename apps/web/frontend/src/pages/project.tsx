@@ -175,6 +175,7 @@ export default function ProjectPage() {
   const selectedDashboardId = useChatStore((s) => s.selectedDashboardId);
   const isDashboardOpen = useChatStore((s) => s.isDashboardOpen);
   const setIsDashboardOpen = useChatStore((s) => s.setIsDashboardOpen);
+  const isSidePanelOpen = (shouldShowDashboard && isDashboardOpen) || !!csvPreview;
   const isDashboardVisible = (shouldShowDashboard && isDashboardOpen) || (activeTab === 'dashboard');
   const selectedTemplate = useChatStore((s) => s.selectedTemplate);
   const setTemplateModalOpen = useChatStore((s) => s.setTemplateModalOpen);
@@ -710,8 +711,8 @@ export default function ProjectPage() {
         </div>
 
         {/* Content */}
-        <div className={`grid grid-cols-1 ${(shouldShowDashboard && isDashboardOpen) || csvPreview ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} flex-1 lg:flex-none lg:h-[calc(100vh-4rem)] min-h-0`}>
-          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${(shouldShowDashboard && isDashboardOpen) || csvPreview ? 'lg:col-span-1 lg:w-full' : 'lg:w-[800px] lg:max-w-full w-full mx-auto'} lg:block transition-all duration-300 h-full lg:h-auto min-h-0`}>
+        <div className={`grid grid-cols-1 ${isSidePanelOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} flex-1 lg:flex-none lg:h-[calc(100vh-4rem)] min-h-0`}>
+          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${isSidePanelOpen ? 'lg:col-span-1 lg:w-full' : 'w-full mx-auto lg:w-[1000px] lg:max-w-[calc(100vw-3rem)]'} lg:block transition-all duration-300 h-full lg:h-auto min-h-0`}>
             <div className="bg-muted h-full lg:h-[calc(100vh-4rem)] min-h-0 flex flex-col lg:block">
               <div className="flex-1 min-h-0 h-full lg:h-auto lg:block">
                 <div className="px-1 h-full lg:h-[calc(100vh-4rem)] flex flex-col lg:block" data-chat-root>
@@ -762,6 +763,7 @@ export default function ProjectPage() {
                       setActiveTab('dashboard');
                     }}
                     dashboardComponents={dashboardComponents}
+                    isSidePanelOpen={isSidePanelOpen}
                   />
                 </div>
               </div>
@@ -769,7 +771,7 @@ export default function ProjectPage() {
           </div>
 
           {/* dashboard columns */}
-          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${(shouldShowDashboard && isDashboardOpen) || csvPreview ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative h-full lg:h-auto min-h-0`}>
+          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${isSidePanelOpen ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative h-full lg:h-auto min-h-0`}>
             <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-border h-full lg:h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
               {/* Panel header — CSV preview mode */}
               {csvPreview && (

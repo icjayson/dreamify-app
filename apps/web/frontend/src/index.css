@@ -106,6 +106,15 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --chat-chart-1: #334155;
+    --chat-chart-2: #0f766e;
+    --chat-chart-3: #a16207;
+    --chat-chart-4: #6d5d99;
+    --chat-chart-5: #64748b;
+    --chat-chart-6: #155e75;
+    --chat-chart-7: #9a3412;
+    --chat-chart-8: #475569;
   }
 
   /* Dark mode — Direction A "Midnight Refined" tokens */
@@ -151,6 +160,15 @@
     --sidebar-accent-foreground: 0 0% 95%;
     --sidebar-border: 220 15% 18%;
     --sidebar-ring: 221 65% 48%;
+
+    --chat-chart-1: #94a3b8;
+    --chat-chart-2: #5eead4;
+    --chat-chart-3: #d6a85f;
+    --chat-chart-4: #a89cc8;
+    --chat-chart-5: #64748b;
+    --chat-chart-6: #67b7c7;
+    --chat-chart-7: #c28a73;
+    --chat-chart-8: #cbd5e1;
   }
 }
 

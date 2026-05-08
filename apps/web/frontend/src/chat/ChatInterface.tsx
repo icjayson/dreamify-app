@@ -17,6 +17,7 @@ import FilePreviewChip from "../components/chat/FilePreviewChip";
 import InlineCsvPreview from "../components/chat/InlineCsvPreview";
 import ChartPreviewChip from "../components/chat/ChartPreviewChip";
 import type { ChartChipData } from "../components/chat/ChartPreviewChip";
+import { ChatVisualArtifact } from "@/components/chat/ChatVisualArtifact";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
 import CreditIcon from "./CreditIcon";
 import ModelSelector from "./ModelSelector";
@@ -196,9 +197,10 @@ interface DeepThinkingTasksProps {
   savedTasks?: Array<{ id: string; text: string }>;
   initialSteps?: Array<{ id: string; text: string }>;
   inline?: boolean;
+  compactSurface?: boolean;
 }
 
-const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialSteps, inline }: DeepThinkingTasksProps) => {
+const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialSteps, inline, compactSurface = false }: DeepThinkingTasksProps) => {
   const [isExpanded, setIsExpanded] = useState(!savedTasks);
 
   // Parse tasks from /run prompt (live mode only)
@@ -264,9 +266,10 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
 
   const isLiveMode = !inline;
 
+  const compactSurfaceClass = compactSurface ? "max-w-[720px]" : "max-w-full";
   const wrapperClass = inline
-    ? "w-full mt-3 bg-card dark:bg-[#1E1E1E] border border-border dark:border-white/10 rounded-xl overflow-hidden shadow-md dark:shadow-sm"
-    : "w-full max-w-[85%] mt-3 ml-[38px] bg-card dark:bg-[#1E1E1E] border border-border dark:border-white/10 rounded-xl overflow-hidden shadow-md dark:shadow-sm";
+    ? `w-full ${compactSurfaceClass} mt-3 bg-card dark:bg-[#1E1E1E] border border-border dark:border-white/10 rounded-xl overflow-hidden shadow-md dark:shadow-sm`
+    : `w-full ${compactSurface ? "max-w-[720px]" : "max-w-[85%]"} mt-3 ml-[38px] bg-card dark:bg-[#1E1E1E] border border-border dark:border-white/10 rounded-xl overflow-hidden shadow-md dark:shadow-sm`;
 
   const headerClass = isLiveMode
     ? "grid grid-cols-[1fr_auto] items-center px-4 py-2 bg-secondary/50 dark:bg-[#18181B] border-b border-border dark:border-white/5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/[0.02] transition-colors"
@@ -444,9 +447,10 @@ interface ChatInterfaceProps {
   onSwitchToDashboard?: (dashboardId?: string) => void;
   onShowCsvPreview?: (assetId: string, filename: string) => void;
   dashboardComponents?: DashboardComponent[];
+  isSidePanelOpen?: boolean;
 }
 
-const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, dashboardComponents }: ChatInterfaceProps) => {
+const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, dashboardComponents, isSidePanelOpen = false }: ChatInterfaceProps) => {
   const { resolvedTheme } = useTheme();
   const logoFavicon = "/logo-favicon.png";
 
@@ -1355,12 +1359,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           const isAssistant = !isUser && !isSystem;
           const messageGap = isAssistant ? "gap-1" : "gap-2";
           const avatarContainerSize = isAssistant ? "w-5 h-5" : "w-6 h-6";
+          const messageWidthClass = isAssistant && !isSidePanelOpen ? "w-full max-w-full" : "max-w-[90%]";
+          const bubbleWidthClass = isAssistant && !isSidePanelOpen ? "flex-1" : "";
+          const textContentWidthClass = isAssistant && !isSidePanelOpen ? "max-w-[860px]" : "max-w-full";
+          const compactSurfaceWidthClass = isAssistant && !isSidePanelOpen ? "max-w-[720px]" : "max-w-full";
           return (
             <div key={message.id} className="space-y-1">
               <div
                 className={`chat-enter flex ${isUser ? "justify-end" : "justify-start"}`}
               >
-                <div className={`max-w-[90%] min-w-0 flex ${messageGap} ${bubbleLayoutClass}`}>
+                <div className={`${messageWidthClass} min-w-0 flex ${messageGap} ${bubbleLayoutClass}`}>
                   <div className={`${avatarContainerSize} rounded-md flex items-center justify-center flex-shrink-0 ${avatarClass}`}>
                     {isUser ? (
                       <User className="w-3 h-3 text-white" />
@@ -1373,7 +1381,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     )}
                   </div>
 
-                  <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words overflow-hidden ${bubbleBgClass}`}>
+                  <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words overflow-hidden ${bubbleWidthClass} ${bubbleBgClass}`}>
                     {/* Attachment badge (file) — hide full badge when chart mentions are present (compact version shown below instead) */}
                     {message.attachment && !message.chartMentions?.length && (
                       <div className="mb-2">
@@ -1616,13 +1624,36 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       const isLong = lineCount > 10 || message.content.length > 600;
                       const isExpanded = expandedMessageIds.has(message.id);
                       return (
-                        <div className="relative">
-                          <div
-                            className={`text-foreground dark:text-white leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere] transition-all duration-300 ${isLong && !isExpanded ? 'max-h-[15em] overflow-hidden' : ''}`}
-                            dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
-                          />
-                          {isLong && !isExpanded && (
-                            <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${message.role === 'assistant' ? 'from-background dark:from-[#18181A] via-background/80 dark:via-[#18181A]/80' : 'from-muted dark:from-black/100 via-muted/80 dark:via-black/80'} to-transparent pointer-events-none`} />
+                        <div className={`relative ${textContentWidthClass}`}>
+                          <div className="relative">
+                            <div
+                              className={`text-foreground dark:text-white leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere] transition-all duration-300 ${isLong && !isExpanded ? 'max-h-[15em] overflow-hidden' : ''}`}
+                              dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
+                            />
+                            {isLong && !isExpanded && (
+                              <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${message.role === 'assistant' ? 'from-background dark:from-[#18181A] via-background/80 dark:via-[#18181A]/80' : 'from-muted dark:from-black/100 via-muted/80 dark:via-black/80'} to-transparent pointer-events-none`} />
+                            )}
+                          </div>
+                          {isLong && (
+                            <button
+                              onClick={() => {
+                                setExpandedMessageIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(message.id)) {
+                                    next.delete(message.id);
+                                  } else {
+                                    next.add(message.id);
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="mt-1 inline-flex items-center gap-1 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground dark:text-white/40 dark:hover:text-white"
+                              title={isExpanded ? 'Collapse response' : 'Expand response'}
+                              type="button"
+                            >
+                              <span>{isExpanded ? 'Show less' : 'Show more'}</span>
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
                           )}
                         </div>
                       );
@@ -1662,7 +1693,19 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         savedTasks={message.todoTasks}
                         isActive={false}
                         inline
+                        compactSurface={!isSidePanelOpen}
                       />
+                    )}
+                    {message.role === 'assistant' && message.visualArtifacts && message.visualArtifacts.length > 0 && (
+                      <div className="space-y-3">
+                        {message.visualArtifacts.map((artifact) => (
+                          <ChatVisualArtifact
+                            key={artifact.id}
+                            artifact={artifact}
+                            isSidePanelOpen={isSidePanelOpen}
+                          />
+                        ))}
+                      </div>
                     )}
                     {/* Render dashboard card if present */}
                     {message.role === 'assistant' && message.dashboardCard && (() => {
@@ -1691,7 +1734,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                               aria-label="Open dashboard"
                               onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
-                              className={`group relative flex w-full max-w-full cursor-pointer items-center justify-between rounded-xl border border-border dark:border-white/10 bg-white/[0.03] p-4 shadow-sm outline-none transition-all select-none hover:border-border/80 dark:hover:border-white/20 hover:bg-white/[0.06] ${message.content ? 'mt-3' : ''}`}
+                              className={`group relative flex w-full ${compactSurfaceWidthClass} cursor-pointer items-center justify-between rounded-xl border border-border dark:border-white/10 bg-white/[0.03] p-4 shadow-sm outline-none transition-all select-none hover:border-border/80 dark:hover:border-white/20 hover:bg-white/[0.06] ${message.content ? 'mt-3' : ''}`}
                             >
                               <div className="flex min-w-0 flex-1 items-center gap-3.5">
                                 <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-violet-500/20 via-blue-500/15 to-cyan-500/10 transition-all duration-300 group-hover:from-violet-500/30 group-hover:via-blue-500/25 group-hover:to-cyan-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
@@ -1749,37 +1792,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
                           { format: "full" },
                         )}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {message.content && (() => {
-                          const lineCount = message.content.split('\n').length;
-                          const isLong = lineCount > 10 || message.content.length > 600;
-                          const isExpanded = expandedMessageIds.has(message.id);
-                          if (!isLong) return null;
-                          return (
-                            <button
-                              onClick={() => {
-                                setExpandedMessageIds(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(message.id)) {
-                                    next.delete(message.id);
-                                  } else {
-                                    next.add(message.id);
-                                  }
-                                  return next;
-                                });
-                              }}
-                              className="flex items-center gap-1 rounded-md text-muted-foreground hover:text-foreground dark:text-white/40 dark:hover:text-white transition-colors"
-                              title={isExpanded ? 'Collapse' : 'Expand'}
-                              type="button"
-                            >
-                              <span className="text-xs">{isExpanded ? 'Show less' : 'Show more'}</span>
-                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-                            </button>
-                          );
-                        })()}
-                        {message.content && !message.isError && (
-                          <button
+	                      </span>
+	                      <div className="flex items-center gap-1">
+	                        {message.content && !message.isError && (
+	                          <button
                             onClick={() => {
                               navigator.clipboard.writeText(message.content);
                               toast({ title: "Copied", description: "Message copied to clipboard" });
@@ -1803,6 +1819,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     isActive={true}
                     currentStep={currentWorkflowStep}
                     initialSteps={priorWorkflowSteps.map(s => ({ id: s, text: mapStepToDisplayText(s) }))}
+                    compactSurface={!isSidePanelOpen}
                   />
                 </div>
               )}

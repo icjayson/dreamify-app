@@ -177,7 +177,7 @@ class ProcessingService {
           // Check response type from workflow status
           const responseType = status.data?.workflow_status?.metadata?.response_type;
 
-          if (responseType === 'message' || !responseType) {
+          if (responseType === 'message' || responseType === 'answer_with_visual' || !responseType) {
             // Q&A response - DON'T fetch dashboard (it's redundant and causes UI confusion)
             // Return completed without dashboard_data
             return {
@@ -188,7 +188,7 @@ class ProcessingService {
                 fileID: assetId,
                 conversation_id: conversationId,
                 workflow_status: status.data?.workflow_status,
-                response_type: 'message', // Explicitly mark as QnA response
+                response_type: responseType || 'message', // Explicitly mark as QnA response
               },
             };
           } else {

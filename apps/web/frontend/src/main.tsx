@@ -25,6 +25,11 @@ if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Clerk Publishable Key")
 }
 
+const CLERK_SIGN_IN_FORCE_REDIRECT_URL = import.meta.env.VITE_CLERK_SIGN_IN_FORCE_REDIRECT_URL ?? "/workspace";
+const CLERK_SIGN_UP_FORCE_REDIRECT_URL = import.meta.env.VITE_CLERK_SIGN_UP_FORCE_REDIRECT_URL ?? "/workspace";
+const CLERK_SIGN_IN_FALLBACK_REDIRECT_URL = import.meta.env.VITE_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL ?? "/workspace";
+const CLERK_SIGN_UP_FALLBACK_REDIRECT_URL = import.meta.env.VITE_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL ?? "/workspace";
+
 const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_ID;
 if (GA_MEASUREMENT_ID) {
   ReactGA.initialize(GA_MEASUREMENT_ID);
@@ -49,7 +54,10 @@ const AppWithRouter = () => {
       <ClerkProvider
         publishableKey={PUBLISHABLE_KEY}
         afterSignOutUrl="/"
-        afterSignInUrl="/workspace?tab=new-chat"
+        signInForceRedirectUrl={CLERK_SIGN_IN_FORCE_REDIRECT_URL}
+        signUpForceRedirectUrl={CLERK_SIGN_UP_FORCE_REDIRECT_URL}
+        signInFallbackRedirectUrl={CLERK_SIGN_IN_FALLBACK_REDIRECT_URL}
+        signUpFallbackRedirectUrl={CLERK_SIGN_UP_FALLBACK_REDIRECT_URL}
       >
         <TokenBridge />
           <App />

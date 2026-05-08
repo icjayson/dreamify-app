@@ -2,8 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Routes, Route, useLocation } from "react-router-dom";
-import { SignedIn, SignedOut, AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { SignedIn, SignedOut, AuthenticateWithRedirectCallback, useAuth } from "@clerk/clerk-react";
 import { PolarProvider } from "./contexts/PolarContext";
 import ReactGA from "react-ga4";
 import { useEffect } from "react";
@@ -49,6 +49,7 @@ const AppContent = () => {
   const { messages } = useChatStore();
   const isStarted = messages.length > 1; // Check if user has started chatting
   const location = useLocation();
+  const { isSignedIn, isLoaded } = useAuth();
 
   useEffect(() => {
     ReactGA.send({ hitType: "pageview", page: location.pathname + location.search });
@@ -79,6 +80,37 @@ const AppContent = () => {
   const isTermsPath = location.pathname === "/terms";
   const isDocsPath = location.pathname === "/docs";
   const isPreviewPath = location.pathname.startsWith("/preview/");
+
+  const isAllowedSignedInPath =
+    location.pathname.startsWith("/workspace") ||
+    location.pathname.startsWith("/admin") ||
+    location.pathname.startsWith("/preview") ||
+    location.pathname.startsWith("/templates") ||
+    location.pathname === "/docs" ||
+    location.pathname === "/sso-callback" ||
+    location.pathname === "/cancel" ||
+    location.pathname === "/success" ||
+    location.pathname.startsWith("/zalo-upload");
+
+  const isPublicLandingPath =
+    location.pathname === "/" ||
+    location.pathname === "/about" ||
+    location.pathname === "/pricing" ||
+    location.pathname === "/finance" ||
+    location.pathname === "/privacy" ||
+    location.pathname === "/terms" ||
+    location.pathname === "/docs" ||
+    location.pathname === "/login" ||
+    location.pathname === "/signup";
+
+  // Prevent public page flash while Clerk is still resolving auth state.
+  if (!isLoaded && isPublicLandingPath) {
+    return null;
+  }
+
+  if (isLoaded && isSignedIn && !isAllowedSignedInPath) {
+    return <Navigate to="/workspace" replace />;
+  }
 
   return (
     <>

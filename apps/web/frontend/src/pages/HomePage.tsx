@@ -23,7 +23,7 @@ import VideoBackground from '@/components/homepage-section/VideoBackground';
 import ProjectsSection from '@/components/homepage-section/ProjectsSection';
 import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
 import TemplateModal from '@/components/homepage-section/TemplateModal';
-import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { ToastAction } from "@/components/ui/toast";
 import { CONNECTORS, CONNECTOR_CATEGORIES, type ConnectorItem } from '@/constants/connectors';
 import FilePreviewChip from '@/components/chat/FilePreviewChip';
@@ -304,20 +304,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     navigate(`/workspace/project?projectId=${firstUploadedFile.projectId}`);
   };
 
-  const storageKey = `dreamify_welcomed_${clerkUser?.id}`;
-  const [showWelcome, setShowWelcome] = useState(false);
-
-  useEffect(() => {
-    if (isSignedIn && clerkUser?.id && !localStorage.getItem(storageKey)) {
-      setShowWelcome(true);
-    }
-  }, [isSignedIn, clerkUser?.id, storageKey]);
-
-  const handleDismissWelcome = () => {
-    localStorage.setItem(storageKey, "true");
-    setShowWelcome(false);
-  };
-
   const handleFileUpload = (files: FileList | null) => {
     // Upload alone should not navigate; navigation happens on prompt submit
     if (files && files.length > 0) {
@@ -395,8 +381,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       return;
     }
 
+    let batchProjectId = uploadedFiles.find((file) => file.projectId)?.projectId;
     for (const file of files) {
-      await processFileUpload(file);
+      const uploadedProjectId = await processFileUpload(file, batchProjectId);
+      if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
     }
   };
 
@@ -437,12 +425,14 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       });
       return;
     }
+    let batchProjectId = uploadedFiles.find((file) => file.projectId)?.projectId;
     for (const file of files) {
-      await processFileUpload(file);
+      const uploadedProjectId = await processFileUpload(file, batchProjectId);
+      if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
     }
   };
 
-  const processFileUpload = async (file: File) => {
+  const processFileUpload = async (file: File, projectIdOverride?: string): Promise<string | undefined> => {
     if (!isSignedIn) {
       toast({
         title: "Authentication Required",
@@ -454,13 +444,13 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           </ToastAction>
         ),
       });
-      return;
+      return undefined;
     }
 
     const validationError = validateClientFile(file);
     if (validationError) {
       toast({ title: "Upload error", description: validationError, variant: "destructive" });
-      return;
+      return undefined;
     }
 
     const tempId = `pending-${Date.now()}-${Math.random()}`;
@@ -480,23 +470,25 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
           description: "You can only upload up to 5 files at a time.",
           variant: "destructive"
         });
-        return;
+        return undefined;
       }
       addFiles([newFile]);
 
       const res: UploadResponse = await fileService.uploadFile(file, {
+        projectId: projectIdOverride,
         onProgress: (percent) => updateFile(tempId, { uploadProgress: Math.min(percent, 95) }),
       });
       if (!res.success || !res.fileID || !res.ext || res.size === undefined || !res.filename) {
         removeFile(tempId);
         addFiles([{ ...newFile, status: 'error', uploadProgress: undefined }]);
         toast({ title: "Upload failed", description: res.error || 'Upload failed', variant: "destructive" });
-        return;
+        return undefined;
       }
 
       const fallbackFilename = res.filename ?? file.name;
       const fallbackSize = res.size ?? file.size;
       const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
+      const uploadedProjectId = res.asset?.project_id || projectIdOverride;
 
       removeFile(tempId);
       addFiles([{
@@ -505,7 +497,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         size: fallbackSize,
         ext: fallbackExt,
         status: 'uploaded',
-        projectId: res.asset?.project_id
+        projectId: uploadedProjectId
       }]);
       ReactGA.event({
         category: "File",
@@ -513,6 +505,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         label: fallbackFilename
       });
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
+      return uploadedProjectId;
     } catch (_e) {
       removeFile(tempId);
       addFiles([{
@@ -523,6 +516,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         status: 'error'
       }]);
       toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
+      return undefined;
     }
   };
 
@@ -541,8 +535,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       return;
     }
 
+    let batchProjectId = uploadedFiles.find((file) => file.projectId)?.projectId;
     for (const file of files) {
-      await processFileUpload(file);
+      const uploadedProjectId = await processFileUpload(file, batchProjectId);
+      if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
     }
 
     // Reset input
@@ -813,7 +809,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                             Template
                           </span>
                           <span className="flex-shrink-0 font-light text-accent/30">•</span>
-                          <span className="min-w-0 flex-1 truncate text-white" title={selectedTemplate.title}>
+                          <span className="min-w-0 flex-1 truncate text-foreground dark:text-white/90" title={selectedTemplate.title}>
                             {selectedTemplate.title}
                           </span>
                         </div>
@@ -915,6 +911,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                   <FileAttachDropdown
                     onUpload={handleAttachClick}
                     disabled={uploadState.isUploading}
+                    cloneToProject
                   />
 
                   <button
@@ -1179,25 +1176,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showWelcome} onOpenChange={() => { }}>
-        <DialogContent className="sm:max-w-md bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle className="text-xl sm:text-2xl font-bold text-foreground">Welcome to Dreamify! 🎉</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm sm:text-base text-muted-foreground">
-              You're currently on the <strong className="text-foreground">Pro plan</strong> — enjoy full access while we're in early access.
-            </p>
-            <p className="text-sm sm:text-base text-muted-foreground mt-2">
-              You have <strong className="text-foreground">1,000 credits per month</strong> to analyze data and generate dashboards.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleDismissWelcome} className="w-full button-gradient py-2 rounded-xl h-auto text-sm sm:text-base">Start exploring</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

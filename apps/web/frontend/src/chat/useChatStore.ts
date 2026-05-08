@@ -256,7 +256,7 @@ interface ChatState {
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: (preserveTemplate?: boolean) => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string; syncVersionName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => Promise<void>;
   stopGeneration: () => Promise<void>;
   resumeWorkflowPolling: (projectId: string, conversationId: string, onProcessedDataChange?: (data: any) => void) => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<any>;
@@ -739,7 +739,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: { kind: 'csv' | 'file'; name: string; sourceType?: string; accountName?: string; propertyName?: string; syncVersionName?: string }, mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => {
     const state = get();
     const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
 

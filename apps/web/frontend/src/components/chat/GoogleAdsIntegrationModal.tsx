@@ -141,10 +141,11 @@ export default function GoogleAdsIntegrationModal() {
     try {
       const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
       const accountLabel = selectedAccount?.name || 'Google Ads';
+      const promptProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
 
       const result = await syncGoogleAds(
         selectedAccountId,
-        currentProjectId || undefined,
+        promptProjectId || undefined,
         isCustomRange && startDate ? formatDateForApi(startDate) : undefined,
         isCustomRange && endDate ? formatDateForApi(endDate) : undefined,
         accountLabel
@@ -187,14 +188,48 @@ export default function GoogleAdsIntegrationModal() {
     }
   };
 
-  const handleSelectConnectedAsset = (run: any) => {
+  const handleSelectConnectedAsset = async (run: any) => {
     if (!run.asset_id) return;
+    const existingProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
+    let resolvedProjectId = existingProjectId || undefined;
+    let selectedAsset: any = null;
+    if (run.connectorKey && run.entityId) {
+      try {
+        if (existingProjectId) {
+          const result = await fileService.addAssetsToProject([run.asset_id], existingProjectId);
+          if (!result.success || !result.project?.id || !result.assets[0]?.asset_id) {
+            throw new Error(result.error || 'Failed to add connected data to the current project.');
+          }
+          selectedAsset = result.assets[0];
+          resolvedProjectId = result.project.id;
+        } else {
+          const projectName = `${run.entityName || run.accountName || 'Connected Data'} Project`;
+          const defaultPrompt = 'Analyze this data and build a dashboard.';
+          const result = await integrationService.addConnectorEntityToNewProject(
+            run.connectorKey,
+            run.entityId,
+            { project_name: projectName, prompt: defaultPrompt, asset_id: run.asset_id }
+          );
+          if (!result.success || !result.project?.project_id || !result.asset?.asset_id) {
+            throw new Error(result.error || 'Failed to create project context from connected data.');
+          }
+          selectedAsset = result.asset;
+          resolvedProjectId = result.project.project_id;
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to create project context from connected data.');
+        return;
+      }
+    } else {
+      resolvedProjectId = run.project_id || resolvedProjectId;
+    }
     const file = {
-      fileID: run.asset_id,
-      filename: run.asset_filename || 'data.csv',
-      size: run.config_snapshot?.size_bytes || 0,
-      ext: 'csv',
+      fileID: selectedAsset?.asset_id || run.asset_id,
+      filename: selectedAsset?.filename || run.asset_filename || 'data.csv',
+      size: selectedAsset?.size_bytes || run.config_snapshot?.size_bytes || 0,
+      ext: selectedAsset?.extension || 'csv',
       status: 'uploaded' as const,
+      projectId: resolvedProjectId,
       sourceType: 'Google Ads',
       accountName: run.accountName || run.entityName || 'Google Ads',
       propertyName: 'Campaigns',
@@ -246,7 +281,7 @@ export default function GoogleAdsIntegrationModal() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]">
+        <DialogContent className="sm:max-w-[425px] bg-background text-foreground border-border outline-none z-[200]">
           {!emptyRowsDialog ? (
             <>
               <DialogHeader>
@@ -254,7 +289,7 @@ export default function GoogleAdsIntegrationModal() {
                   <img src="/google-ads.png" alt="Google Ads Logo" className="w-8 h-8 object-contain" />
                   <DialogTitle className="text-xl font-semibold">Connect Google Ads</DialogTitle>
                 </div>
-                <DialogDescription className="text-gray-400 text-sm">
+            <DialogDescription className="text-muted-foreground text-sm">
                   Import campaigns, adsets, and performance metrics from your Google Ads account.
                 </DialogDescription>
               </DialogHeader>
@@ -336,7 +371,7 @@ export default function GoogleAdsIntegrationModal() {
                                 </SelectTrigger>
                                 <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
                                   {accounts.map((acct) => (
-                                    <SelectItem key={acct.id} value={acct.id} className="focus:bg-white/10 focus:text-white">
+                                    <SelectItem key={acct.id} value={acct.id} className="data-[highlighted]:bg-blue-500/15 data-[highlighted]:text-blue-700 dark:data-[highlighted]:text-blue-300">
                                       <div className="flex flex-col">
                                         <span>{acct.name}</span>
                                         <span className="text-[10px] text-gray-400 uppercase tracking-wider">{acct.source_type} account</span>
@@ -355,7 +390,7 @@ export default function GoogleAdsIntegrationModal() {
                                 </SelectTrigger>
                                 <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
                                   {DATE_PRESETS.map((preset) => (
-                                    <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
+                                    <SelectItem key={preset.value} value={preset.value} className="data-[highlighted]:bg-blue-500/15 data-[highlighted]:text-blue-700 dark:data-[highlighted]:text-blue-300">
                                       {preset.label}
                                     </SelectItem>
                                   ))}

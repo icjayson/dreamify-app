@@ -1010,8 +1010,12 @@ html::-webkit-scrollbar-thumb:hover {
   background-color: rgba(96, 165, 250, 0.08);
 }
 
-/* Ensure date input calendar icon follows text tone on dark UIs */
+/* Match native date picker popup with current theme */
 .date-input-themed {
+  color-scheme: light;
+}
+
+.dark .date-input-themed {
   color-scheme: dark;
 }
 

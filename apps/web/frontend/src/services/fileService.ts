@@ -37,6 +37,26 @@ export interface FilesListResponse {
   error?: string;
 }
 
+export interface AddAssetsToNewProjectResponse {
+  success: boolean;
+  project?: {
+    id: string;
+    name?: string;
+  };
+  assets: AssetRecord[];
+  error?: string;
+}
+
+export interface AddAssetsToProjectResponse {
+  success: boolean;
+  project?: {
+    id: string;
+    name?: string;
+  };
+  assets: AssetRecord[];
+  error?: string;
+}
+
 export interface FileItem {
   fileID: string;
   filename: string;
@@ -100,6 +120,44 @@ class FileService {
       return { success: true, files };
     }
     return { success: false, files: [], error: res.error || 'Failed to list files' };
+  }
+
+  async addAssetsToNewProject(assetIds: string[], projectName?: string): Promise<AddAssetsToNewProjectResponse> {
+    const res = await api.post<{
+      success: boolean;
+      project: { id: string; name?: string };
+      assets: AssetRecord[];
+    }>(`${this.baseUrl}/add-to-new-project`, {
+      asset_ids: assetIds,
+      project_name: projectName,
+    });
+    if (res.success && res.data) {
+      return {
+        success: true,
+        project: res.data.project,
+        assets: res.data.assets || [],
+      };
+    }
+    return { success: false, assets: [], error: res.error || 'Failed to add files to a new project' };
+  }
+
+  async addAssetsToProject(assetIds: string[], projectId: string): Promise<AddAssetsToProjectResponse> {
+    const res = await api.post<{
+      success: boolean;
+      project: { id: string; name?: string };
+      assets: AssetRecord[];
+    }>(`${this.baseUrl}/add-to-project`, {
+      asset_ids: assetIds,
+      project_id: projectId,
+    });
+    if (res.success && res.data) {
+      return {
+        success: true,
+        project: res.data.project,
+        assets: res.data.assets || [],
+      };
+    }
+    return { success: false, assets: [], error: res.error || 'Failed to add files to the project' };
   }
 
   async deleteFile(fileID: string): Promise<DeleteResponse> {

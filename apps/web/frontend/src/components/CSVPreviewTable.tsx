@@ -1,6 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Search, SlidersHorizontal, Columns3, X } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Pagination,
   PaginationContent,
@@ -17,6 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export interface CSVPreviewTableProps {
   columns: string[];
@@ -58,25 +68,97 @@ export default function CSVPreviewTable({
   isLoadingMore = false,
   loadedRows,
 }: CSVPreviewTableProps) {
+  const normalizeColumnName = (name: string) => name.toLowerCase().replace(/[_\s]+/g, ' ').trim();
+  const getDateFormatted = (raw: string) => {
+    const d = String(raw).trim();
+    if (!/^\d{8}$/.test(d)) return raw;
+    const parsed = new Date(Number(d.slice(0, 4)), Number(d.slice(4, 6)) - 1, Number(d.slice(6, 8)));
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  const toTitleCase = (v: string) => v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
+
   const effectivePageSize = pageSizeProp ?? 100;
   const [currentPage, setCurrentPage] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deviceFilters, setDeviceFilters] = useState<string[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<number[]>([]);
+  const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
 
   useEffect(() => {
     setCurrentPage(0);
-  }, [effectivePageSize, rows]);
+  }, [effectivePageSize, rows, searchTerm, deviceFilters]);
+
+  useEffect(() => {
+    setVisibleColumns(columns.map((_, idx) => idx));
+  }, [columns]);
+  useEffect(() => {
+    setColumnWidths({});
+  }, [columns]);
   const [sortConfig, setSortConfig] = useState<{
     column: number | null;
     direction: 'asc' | 'desc';
   } | null>(null);
   const isMobile = useIsMobile();
+  const normalizedColumns = useMemo(() => columns.map(normalizeColumnName), [columns]);
+  const regionColumnIndex = useMemo(
+    () => normalizedColumns.findIndex((name) => name.includes('region')),
+    [normalizedColumns]
+  );
+  const sessionSourceColumnIndex = useMemo(
+    () => normalizedColumns.findIndex((name) => name.includes('session source') || name === 'source'),
+    [normalizedColumns]
+  );
+  const deviceCategoryColumnIndex = useMemo(
+    () => normalizedColumns.findIndex((name) => name.includes('device category') || name === 'device'),
+    [normalizedColumns]
+  );
+  const bounceRateColumnIndex = useMemo(
+    () => normalizedColumns.findIndex((name) => name.includes('bounce rate')),
+    [normalizedColumns]
+  );
+  const dateColumnIndexes = useMemo(
+    () =>
+      normalizedColumns
+        .map((name, idx) => ({ name, idx }))
+        .filter((entry) => entry.name.includes('date'))
+        .map((entry) => entry.idx),
+    [normalizedColumns]
+  );
+
+  const availableDeviceValues = useMemo(() => {
+    if (deviceCategoryColumnIndex < 0) return [];
+    const values = new Set<string>();
+    rows.forEach((row) => {
+      const value = String(row[deviceCategoryColumnIndex] ?? '').trim().toLowerCase();
+      if (value) values.add(value);
+    });
+    return Array.from(values);
+  }, [rows, deviceCategoryColumnIndex]);
+
+  const filteredRows = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (query) {
+        const regionValue = regionColumnIndex >= 0 ? String(row[regionColumnIndex] ?? '').toLowerCase() : '';
+        const sourceValue = sessionSourceColumnIndex >= 0 ? String(row[sessionSourceColumnIndex] ?? '').toLowerCase() : '';
+        if (!regionValue.includes(query) && !sourceValue.includes(query)) return false;
+      }
+      if (deviceFilters.length > 0 && deviceCategoryColumnIndex >= 0) {
+        const deviceValue = String(row[deviceCategoryColumnIndex] ?? '').trim().toLowerCase();
+        if (!deviceFilters.includes(deviceValue)) return false;
+      }
+      return true;
+    });
+  }, [rows, searchTerm, deviceFilters, regionColumnIndex, sessionSourceColumnIndex, deviceCategoryColumnIndex]);
 
   // Sort rows
   const sortedRows = useMemo(() => {
     if (!sortConfig || sortConfig.column === null) {
-      return rows;
+      return filteredRows;
     }
 
-    return [...rows].sort((a, b) => {
+    return [...filteredRows].sort((a, b) => {
       const aValue = a[sortConfig.column!] ?? '';
       const bValue = b[sortConfig.column!] ?? '';
 
@@ -101,7 +183,7 @@ export default function CSVPreviewTable({
       }
       return 0;
     });
-  }, [rows, sortConfig]);
+  }, [filteredRows, sortConfig]);
 
   // Paginate sorted rows
   const paginatedRows = useMemo(() => {
@@ -149,6 +231,102 @@ export default function CSVPreviewTable({
 
   const handlePageClick = (page: number) => {
     setCurrentPage(page);
+  };
+
+  const toggleVisibleColumn = (columnIndex: number, checked: boolean) => {
+    setVisibleColumns((prev) => {
+      if (checked) return [...prev, columnIndex].sort((a, b) => a - b);
+      if (prev.length <= 1) return prev;
+      return prev.filter((idx) => idx !== columnIndex);
+    });
+  };
+
+  const toggleDeviceFilter = (value: string, checked: boolean) => {
+    setDeviceFilters((prev) => {
+      if (checked) return [...prev, value];
+      return prev.filter((item) => item !== value);
+    });
+  };
+
+  const getColumnStyle = useCallback(
+    (colIdx: number) => (columnWidths[colIdx] ? { width: `${columnWidths[colIdx]}px`, minWidth: `${columnWidths[colIdx]}px` } : undefined),
+    [columnWidths]
+  );
+
+  const handleColumnResizeStart = (event: React.MouseEvent<HTMLButtonElement>, colIdx: number) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const th = (event.currentTarget.closest('th') as HTMLTableCellElement | null);
+    if (!th) return;
+
+    const startX = event.clientX;
+    const startWidth = th.getBoundingClientRect().width;
+    const minWidth = 90;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const nextWidth = Math.max(minWidth, Math.round(startWidth + delta));
+      setColumnWidths((prev) => ({ ...prev, [colIdx]: nextWidth }));
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const renderCellValue = (value: string, colIdx: number) => {
+    const normalized = normalizedColumns[colIdx] ?? '';
+    const text = String(value ?? '');
+
+    if (colIdx === bounceRateColumnIndex) {
+      const parsed = Number.parseFloat(text);
+      if (!Number.isFinite(parsed)) return text;
+      const percentage = parsed * 100;
+      const display = `${percentage.toFixed(1)}%`;
+      const clamped = Math.max(0, Math.min(100, percentage));
+      return (
+        <div className="min-w-[110px]">
+          <div className="text-sm">{display}</div>
+          <div className="mt-1 h-[3px] w-full rounded-full bg-muted overflow-hidden">
+            <div className="h-full rounded-full bg-sky-500" style={{ width: `${clamped}%` }} />
+          </div>
+        </div>
+      );
+    }
+
+    if (colIdx === deviceCategoryColumnIndex) {
+      const lower = text.trim().toLowerCase();
+      if (lower === 'mobile' || lower === 'desktop') {
+        const isMobileCategory = lower === 'mobile';
+        return (
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${isMobileCategory ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-800'}`}>
+            {toTitleCase(lower)}
+          </span>
+        );
+      }
+      return text;
+    }
+
+    if (dateColumnIndexes.includes(colIdx) && /^\d{8}$/.test(text.trim())) {
+      return getDateFormatted(text);
+    }
+
+    const parsedNumeric = Number.parseFloat(text);
+    if (!Number.isNaN(parsedNumeric) && Number.isFinite(parsedNumeric) && text.includes('.')) {
+      const decimals = text.split('.')[1]?.length ?? 0;
+      if (decimals > 2) return parsedNumeric.toFixed(2);
+    }
+
+    if (normalized.includes('rows') || normalized.includes('count')) {
+      const numericValue = Number.parseInt(text, 10);
+      if (!Number.isNaN(numericValue) && Number.isFinite(numericValue)) return numericValue.toLocaleString();
+    }
+
+    return text;
   };
 
   // Generate page numbers to display
@@ -271,6 +449,92 @@ export default function CSVPreviewTable({
           </div>
         )}
 
+        <div className="border-b bg-background/80 p-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[240px] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by region, source…"
+                className="h-9 pl-8"
+                aria-label="Search by region or session source"
+              />
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <SlidersHorizontal className="mr-1.5 h-4 w-4" />
+                  Filter
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Device category</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {availableDeviceValues.length === 0 ? (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">No values</div>
+                ) : (
+                  availableDeviceValues.map((value) => (
+                    <DropdownMenuCheckboxItem
+                      key={value}
+                      checked={deviceFilters.includes(value)}
+                      onCheckedChange={(checked) => toggleDeviceFilter(value, Boolean(checked))}
+                    >
+                      {toTitleCase(value)}
+                    </DropdownMenuCheckboxItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <Columns3 className="mr-1.5 h-4 w-4" />
+                  Columns
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Visible columns</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {columns.map((col, idx) => (
+                  <DropdownMenuCheckboxItem
+                    key={idx}
+                    checked={visibleColumns.includes(idx)}
+                    onCheckedChange={(checked) => toggleVisibleColumn(idx, Boolean(checked))}
+                  >
+                    {col || `Column ${idx + 1}`}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {(deviceFilters.length > 0 || searchTerm.trim()) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {deviceFilters.map((filterValue) => (
+                <button
+                  key={filterValue}
+                  type="button"
+                  onClick={() => toggleDeviceFilter(filterValue, false)}
+                  className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800"
+                >
+                  {toTitleCase(filterValue)}
+                  <X className="h-3 w-3" />
+                </button>
+              ))}
+              {searchTerm.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
+                >
+                  Search: {searchTerm}
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Scrollable table — thead sticky, only tbody scrolls */}
         <div className="flex-1 min-h-0 overflow-auto">
           <table className="min-w-full divide-y divide-border">
@@ -279,16 +543,27 @@ export default function CSVPreviewTable({
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/80">
                   #
                 </th>
-                {columns.map((col, idx) => (
+                {visibleColumns.map((idx) => (
                   <th
                     key={idx}
                     onClick={() => handleSort(idx)}
-                    className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/80 cursor-pointer hover:bg-muted transition-colors select-none"
+                    style={getColumnStyle(idx)}
+                    className="relative px-4 py-3 text-left text-xs font-medium text-muted-foreground bg-muted/80 cursor-pointer hover:bg-muted transition-colors select-none whitespace-normal break-words"
                   >
-                    <div className="flex items-center">
-                      {col || `Column ${idx + 1}`}
+                    <div className="flex items-center pr-2">
+                      {normalizedColumns[idx] === 'bounce rate' ? 'Bounce rate' : (columns[idx] || `Column ${idx + 1}`)}
                       {getSortIcon(idx)}
                     </div>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => handleColumnResizeStart(e, idx)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="group absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none"
+                      aria-label={`Resize column ${columns[idx] || idx + 1}`}
+                      title="Drag to resize column"
+                    >
+                      <span className="pointer-events-none absolute inset-y-2 left-1/2 -translate-x-1/2 w-px bg-border/70 group-hover:bg-primary/70 transition-colors" />
+                    </button>
                   </th>
                 ))}
               </tr>
@@ -297,7 +572,7 @@ export default function CSVPreviewTable({
               {paginatedRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={columns.length + 1}
+                    colSpan={visibleColumns.length + 1}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     No data rows found
@@ -309,9 +584,9 @@ export default function CSVPreviewTable({
                     <td className="px-4 py-2 text-sm text-muted-foreground bg-muted/30 font-mono">
                       {startRow + rowIdx}
                     </td>
-                    {columns.map((_, colIdx) => (
-                      <td key={colIdx} className="px-4 py-2 text-sm whitespace-nowrap">
-                        {row[colIdx] ?? ''}
+                    {visibleColumns.map((colIdx) => (
+                      <td key={colIdx} style={getColumnStyle(colIdx)} className="px-4 py-2 text-sm whitespace-nowrap">
+                        {renderCellValue(row[colIdx] ?? '', colIdx)}
                       </td>
                     ))}
                   </tr>
@@ -324,28 +599,9 @@ export default function CSVPreviewTable({
         {/* Pagination — always pinned at bottom */}
         {sortedRows.length > 0 && (
           <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t bg-muted/50 px-4 py-3">
-            {onPageSizeChange ? (
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="whitespace-nowrap text-sm text-muted-foreground">Rows per page:</span>
-                <Select
-                  value={String(effectivePageSize)}
-                  onValueChange={(v) => onPageSizeChange(Number(v))}
-                >
-                  <SelectTrigger className="h-9 w-[100px] bg-background" aria-label="Rows per page">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent side="top" className="z-[200000]">
-                    {pageSizeOptions.map((n) => (
-                      <SelectItem key={n} value={String(n)}>
-                        {n.toLocaleString()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <div />
-            )}
+            <div className="text-sm text-muted-foreground">
+              Showing {startRow.toLocaleString()}-{endRow.toLocaleString()} of {sortedRows.length.toLocaleString()} rows
+            </div>
             <Pagination className="w-auto overflow-x-auto">
               <PaginationContent className="justify-end flex-wrap">
                   <PaginationItem>
@@ -367,7 +623,7 @@ export default function CSVPreviewTable({
                         <PaginationLink
                           onClick={(e) => { e.preventDefault(); handlePageClick(page); }}
                           isActive={currentPage === page}
-                          className="cursor-pointer"
+                          className={`cursor-pointer ${currentPage === page ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
                         >
                           {page + 1}
                         </PaginationLink>
@@ -382,6 +638,26 @@ export default function CSVPreviewTable({
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
+            {onPageSizeChange && (
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="whitespace-nowrap text-sm text-muted-foreground">Rows per page:</span>
+                <Select
+                  value={String(effectivePageSize)}
+                  onValueChange={(v) => onPageSizeChange(Number(v))}
+                >
+                  <SelectTrigger className="h-9 w-[100px] bg-background" aria-label="Rows per page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent side="top" className="z-[200000]">
+                    {pageSizeOptions.map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n.toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -417,6 +693,92 @@ export default function CSVPreviewTable({
           </div>
         )}
 
+      <div className="border-b bg-background/80 p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by region, source…"
+              className="h-9 pl-8"
+              aria-label="Search by region or session source"
+            />
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                <SlidersHorizontal className="mr-1.5 h-4 w-4" />
+                Filter
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Device category</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {availableDeviceValues.length === 0 ? (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">No values</div>
+              ) : (
+                availableDeviceValues.map((value) => (
+                  <DropdownMenuCheckboxItem
+                    key={value}
+                    checked={deviceFilters.includes(value)}
+                    onCheckedChange={(checked) => toggleDeviceFilter(value, Boolean(checked))}
+                  >
+                    {toTitleCase(value)}
+                  </DropdownMenuCheckboxItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                <Columns3 className="mr-1.5 h-4 w-4" />
+                Columns
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Visible columns</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {columns.map((col, idx) => (
+                <DropdownMenuCheckboxItem
+                  key={idx}
+                  checked={visibleColumns.includes(idx)}
+                  onCheckedChange={(checked) => toggleVisibleColumn(idx, Boolean(checked))}
+                >
+                  {col || `Column ${idx + 1}`}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        {(deviceFilters.length > 0 || searchTerm.trim()) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {deviceFilters.map((filterValue) => (
+              <button
+                key={filterValue}
+                type="button"
+                onClick={() => toggleDeviceFilter(filterValue, false)}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800"
+              >
+                {toTitleCase(filterValue)}
+                <X className="h-3 w-3" />
+              </button>
+            ))}
+            {searchTerm.trim() && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
+              >
+                Search: {searchTerm}
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Table Container */}
       <div className="flex-1 overflow-auto">
         <div className="min-w-full inline-block">
@@ -426,16 +788,27 @@ export default function CSVPreviewTable({
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/80">
                   #
                 </th>
-                {columns.map((col, idx) => (
+                {visibleColumns.map((idx) => (
                   <th
                     key={idx}
                     onClick={() => handleSort(idx)}
-                    className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/80 cursor-pointer hover:bg-muted transition-colors select-none"
+                    style={getColumnStyle(idx)}
+                    className="relative px-4 py-3 text-left text-xs font-medium text-muted-foreground bg-muted/80 cursor-pointer hover:bg-muted transition-colors select-none whitespace-normal break-words"
                   >
-                    <div className="flex items-center">
-                      {col || `Column ${idx + 1}`}
+                    <div className="flex items-center pr-2">
+                      {normalizedColumns[idx] === 'bounce rate' ? 'Bounce rate' : (columns[idx] || `Column ${idx + 1}`)}
                       {getSortIcon(idx)}
                     </div>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => handleColumnResizeStart(e, idx)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="group absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none"
+                      aria-label={`Resize column ${columns[idx] || idx + 1}`}
+                      title="Drag to resize column"
+                    >
+                      <span className="pointer-events-none absolute inset-y-2 left-1/2 -translate-x-1/2 w-px bg-border/70 group-hover:bg-primary/70 transition-colors" />
+                    </button>
                   </th>
                 ))}
               </tr>
@@ -444,7 +817,7 @@ export default function CSVPreviewTable({
               {paginatedRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={columns.length + 1}
+                    colSpan={visibleColumns.length + 1}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     No data rows found
@@ -459,12 +832,13 @@ export default function CSVPreviewTable({
                     <td className="px-4 py-2 text-sm text-muted-foreground bg-muted/30 font-mono">
                       {startRow + rowIdx}
                     </td>
-                    {columns.map((_, colIdx) => (
+                    {visibleColumns.map((colIdx) => (
                       <td
                         key={colIdx}
+                        style={getColumnStyle(colIdx)}
                         className="px-4 py-2 text-sm whitespace-nowrap"
                       >
-                        {row[colIdx] ?? ''}
+                        {renderCellValue(row[colIdx] ?? '', colIdx)}
                       </td>
                     ))}
                   </tr>
@@ -503,7 +877,7 @@ export default function CSVPreviewTable({
                             handlePageClick(page);
                           }}
                           isActive={currentPage === page}
-                          className="cursor-pointer"
+                          className={`cursor-pointer ${currentPage === page ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
                         >
                           {page + 1}
                         </PaginationLink>
@@ -522,7 +896,7 @@ export default function CSVPreviewTable({
 
             <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-muted-foreground">
-                Showing {startRow} to {endRow} of {sortedRows.length} entries
+                Showing {startRow.toLocaleString()}-{endRow.toLocaleString()} of {sortedRows.length.toLocaleString()} rows
                 {!compact && totalRows > sortedRows.length && (
                   <span className="ml-2 text-amber-600 dark:text-amber-500">
                     ({totalRows.toLocaleString()} total in file)

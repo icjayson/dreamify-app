@@ -139,11 +139,12 @@ export default function FirebaseIntegrationModal() {
     try {
       const selectedProject = projects.find((p) => p.id === selectedProjectId);
       const projectLabel = selectedProject?.name || 'Firebase';
+      const promptProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
 
       const result = await syncFirebase(
         selectedProjectId,
         projectLabel,
-        currentProjectId || undefined,
+        promptProjectId || undefined,
         isCustomRange && startDate ? formatDateForApi(startDate) : undefined,
         isCustomRange && endDate ? formatDateForApi(endDate) : undefined
       );
@@ -185,14 +186,48 @@ export default function FirebaseIntegrationModal() {
     }
   };
 
-  const handleSelectConnectedAsset = (run: any) => {
+  const handleSelectConnectedAsset = async (run: any) => {
     if (!run.asset_id) return;
+    const existingProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
+    let resolvedProjectId = existingProjectId || undefined;
+    let selectedAsset: any = null;
+    if (run.connectorKey && run.entityId) {
+      try {
+        if (existingProjectId) {
+          const result = await fileService.addAssetsToProject([run.asset_id], existingProjectId);
+          if (!result.success || !result.project?.id || !result.assets[0]?.asset_id) {
+            throw new Error(result.error || 'Failed to add connected data to the current project.');
+          }
+          selectedAsset = result.assets[0];
+          resolvedProjectId = result.project.id;
+        } else {
+          const projectName = `${run.entityName || run.accountName || 'Connected Data'} Project`;
+          const defaultPrompt = 'Analyze this data and build a dashboard.';
+          const result = await integrationService.addConnectorEntityToNewProject(
+            run.connectorKey,
+            run.entityId,
+            { project_name: projectName, prompt: defaultPrompt, asset_id: run.asset_id }
+          );
+          if (!result.success || !result.project?.project_id || !result.asset?.asset_id) {
+            throw new Error(result.error || 'Failed to create project context from connected data.');
+          }
+          selectedAsset = result.asset;
+          resolvedProjectId = result.project.project_id;
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to create project context from connected data.');
+        return;
+      }
+    } else {
+      resolvedProjectId = run.project_id || resolvedProjectId;
+    }
     const file = {
-      fileID: run.asset_id,
-      filename: run.asset_filename || 'data.csv',
-      size: run.config_snapshot?.size_bytes || 0,
-      ext: 'csv',
+      fileID: selectedAsset?.asset_id || run.asset_id,
+      filename: selectedAsset?.filename || run.asset_filename || 'data.csv',
+      size: selectedAsset?.size_bytes || run.config_snapshot?.size_bytes || 0,
+      ext: selectedAsset?.extension || 'csv',
       status: 'uploaded' as const,
+      projectId: resolvedProjectId,
       sourceType: 'Firebase',
       accountName: run.accountName || run.entityName || 'Firebase',
       propertyName: 'Analytics',
@@ -244,7 +279,7 @@ export default function FirebaseIntegrationModal() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]">
+        <DialogContent className="sm:max-w-[425px] bg-background text-foreground border-border outline-none z-[200]">
           {!emptyRowsDialog ? (
             <>
               <DialogHeader>
@@ -252,7 +287,7 @@ export default function FirebaseIntegrationModal() {
                   <img src="/firebase.png" alt="Firebase Logo" className="w-8 h-8 object-contain" />
                   <DialogTitle className="text-xl font-semibold">Connect Firebase</DialogTitle>
                 </div>
-                <DialogDescription className="text-gray-400 text-sm">
+            <DialogDescription className="text-muted-foreground text-sm">
                   Import analytics and user engagement events from your Firebase project.
                 </DialogDescription>
               </DialogHeader>
@@ -333,7 +368,7 @@ export default function FirebaseIntegrationModal() {
                               </SelectTrigger>
                               <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
                                 {projects.map((proj) => (
-                                  <SelectItem key={proj.id} value={proj.id} className="focus:bg-white/10 focus:text-white">
+                                  <SelectItem key={proj.id} value={proj.id} className="data-[highlighted]:bg-amber-500/15 data-[highlighted]:text-amber-700 dark:data-[highlighted]:text-amber-300">
                                     <div className="flex flex-col">
                                       <span>{proj.name}</span>
                                       <span className="text-[10px] text-gray-400 uppercase tracking-wider">{proj.source_type}</span>
@@ -352,7 +387,7 @@ export default function FirebaseIntegrationModal() {
                               </SelectTrigger>
                               <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
                                 {DATE_PRESETS.map((preset) => (
-                                  <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
+                                  <SelectItem key={preset.value} value={preset.value} className="data-[highlighted]:bg-amber-500/15 data-[highlighted]:text-amber-700 dark:data-[highlighted]:text-amber-300">
                                     {preset.label}
                                   </SelectItem>
                                 ))}

@@ -450,6 +450,16 @@ interface ChatInterfaceProps {
   isSidePanelOpen?: boolean;
 }
 
+type AttachmentFileItem = {
+  id: string;
+  name: string;
+  ext?: string;
+  sourceType?: string;
+  accountName?: string;
+  propertyName?: string;
+  syncVersionName?: string;
+};
+
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, dashboardComponents, isSidePanelOpen = false }: ChatInterfaceProps) => {
   const { resolvedTheme } = useTheme();
   const logoFavicon = "/logo-favicon.png";
@@ -475,6 +485,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     name: string;
     ext: string;
     projectId: string;
+    sourceType?: string;
     asset: AssetRecord;
   }>>([]);
   const [mentionCursorPos, setMentionCursorPos] = useState(0);
@@ -812,10 +823,29 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
           propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined,
           syncVersionName: activeFiles.length === 1 ? activeFiles[0].syncVersionName : undefined,
+          files: activeFiles.map((file) => ({
+            id: file.fileID,
+            name: file.filename,
+            ext: file.ext,
+            sourceType: file.sourceType,
+            accountName: file.accountName,
+            propertyName: file.propertyName,
+            syncVersionName: file.syncVersionName,
+          })),
         };
       } else if (projectAssets.length > 0 && finalMentionedIds.length === 0 && !hasChartMentions) {
         // No explicit files selected and no chart mentions — treat as "all assets" and show badge with count
-        activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
+        activeFileAttachment = {
+          kind: 'csv',
+          name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files`,
+          sourceType: projectAssets.length > 1 ? 'Multiple' : projectAssets[0]?.sourceType,
+          files: projectAssets.map((asset) => ({
+            id: asset.id,
+            name: asset.name,
+            ext: asset.ext,
+            sourceType: asset.sourceType,
+          })),
+        };
       }
 
       try {
@@ -887,9 +917,28 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
           propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined,
           syncVersionName: activeFiles.length === 1 ? activeFiles[0].syncVersionName : undefined,
+          files: activeFiles.map((file) => ({
+            id: file.fileID,
+            name: file.filename,
+            ext: file.ext,
+            sourceType: file.sourceType,
+            accountName: file.accountName,
+            propertyName: file.propertyName,
+            syncVersionName: file.syncVersionName,
+          })),
         };
       } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
-        activeFileAttachment = { kind: 'csv', name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files` };
+        activeFileAttachment = {
+          kind: 'csv',
+          name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files`,
+          sourceType: projectAssets.length > 1 ? 'Multiple' : projectAssets[0]?.sourceType,
+          files: projectAssets.map((asset) => ({
+            id: asset.id,
+            name: asset.name,
+            ext: asset.ext,
+            sourceType: asset.sourceType,
+          })),
+        };
       }
 
       await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, undefined, undefined, refreshSubscription);
@@ -1026,16 +1075,18 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       });
       return;
     }
+    let batchProjectId = projectId || uploadedFiles.find((file) => file.projectId)?.projectId;
     for (const file of files) {
-      await processFileUpload(file);
+      const uploadedProjectId = await processFileUpload(file, batchProjectId);
+      if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
     }
   };
 
-  const processFileUpload = async (file: File) => {
+  const processFileUpload = async (file: File, projectIdOverride?: string): Promise<string | undefined> => {
     const validationError = validateClientFile(file);
     if (validationError) {
       toast({ title: "Upload error", description: validationError, variant: "destructive" });
-      return;
+      return undefined;
     }
     const tempId = `pending-${Date.now()}-${Math.random()}`;
     try {
@@ -1060,12 +1111,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           description: "You can only upload up to 5 files at a time.",
           variant: "destructive"
         });
-        return;
+        return undefined;
       }
       addFiles([newFile]);
 
       const res: UploadResponse = await fileService.uploadFile(file, {
-        projectId: projectId ?? undefined,
+        projectId: projectIdOverride || projectId || undefined,
         onProgress: (percent) => updateFile(tempId, { uploadProgress: Math.min(percent, 95) }),
       });
       if (!res.success || !res.fileID || res.asset?.status !== 'uploaded') {
@@ -1076,12 +1127,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           description: res.error || `Unexpected upload status: ${res.asset?.status ?? 'unknown'}`,
           variant: "destructive"
         });
-        return;
+        return undefined;
       }
 
       const fallbackFilename = res.filename ?? file.name;
       const fallbackSize = res.size ?? file.size;
       const fallbackExt = res.ext || (file.name.split('.').pop() || '').toLowerCase();
+      const uploadedProjectId = res.asset?.project_id || projectIdOverride || projectId;
 
       removeFile(tempId);
       addFiles([{
@@ -1090,7 +1142,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         size: fallbackSize,
         ext: fallbackExt,
         status: 'uploaded',
-        projectId: res.asset?.project_id,
+        projectId: uploadedProjectId,
         rowCount: res.rowCount,
         columnCount: res.columnCount,
         sourceType
@@ -1107,6 +1159,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       } catch (_err) { }
 
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
+      return uploadedProjectId;
 
     } catch (_e) {
       removeFile(tempId);
@@ -1118,6 +1171,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         status: 'error'
       }]);
       toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
+      return undefined;
     }
   };
 
@@ -1188,8 +1242,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       });
       return;
     }
+    let batchProjectId = projectId || uploadedFiles.find((file) => file.projectId)?.projectId;
     for (const file of files) {
-      await processFileUpload(file);
+      const uploadedProjectId = await processFileUpload(file, batchProjectId);
+      if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
     }
   };
 
@@ -1462,6 +1518,33 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                               window.open(`/preview/${matchedAsset.id}`, '_blank');
                             }
                           };
+                          const attachmentFiles: AttachmentFileItem[] = message.attachment.files?.length
+                            ? message.attachment.files
+                            : isMultiple
+                              ? projectAssets.map((asset) => ({
+                                id: asset.id,
+                                name: asset.name,
+                                ext: asset.ext,
+                                sourceType: asset.sourceType,
+                              }))
+                              : [];
+                          const isMultiExpanded = expandedMessageIds.has(message.id);
+                          const toggleMultiExpanded = () => {
+                            setExpandedMessageIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(message.id)) next.delete(message.id);
+                              else next.add(message.id);
+                              return next;
+                            });
+                          };
+                          const openAttachmentFilePreview = (file: AttachmentFileItem) => {
+                            if (!file.id) return;
+                            if (onShowCsvPreview) {
+                              onShowCsvPreview(file.id, file.name);
+                            } else {
+                              window.open(`/preview/${file.id}`, '_blank');
+                            }
+                          };
 
                           if (isCsvOrExcel) {
                             return (
@@ -1505,6 +1588,70 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                                 {/* Inline CSV/Excel data preview */}
                                 {matchedAsset && (
                                   <InlineCsvPreview assetId={matchedAsset.id} />
+                                )}
+                              </div>
+                            );
+                          }
+
+                          if (isMultiple) {
+                            return (
+                              <div className="overflow-hidden rounded-lg border border-border dark:border-white/10 bg-card dark:bg-white/5 text-foreground dark:text-white/90 shadow-sm max-w-full">
+                                <button
+                                  type="button"
+                                  onClick={toggleMultiExpanded}
+                                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all hover:bg-muted dark:hover:bg-white/10 outline-none"
+                                  aria-expanded={isMultiExpanded}
+                                >
+                                  <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md p-2 ${logoBg}`}>
+                                    <Database className="h-5 w-5 text-emerald-400" />
+                                  </div>
+                                  <div className="flex min-w-0 flex-1 flex-col leading-tight">
+                                    <span className="truncate text-sm font-medium text-foreground dark:text-white">
+                                      {displayName}
+                                    </span>
+                                    <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground dark:text-gray-400">
+                                      <span className="min-w-0 truncate">{secondaryText}</span>
+                                      {isMultiExpanded ? (
+                                        <ChevronUp className="ml-auto h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                                      ) : (
+                                        <ChevronDown className="ml-auto h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                                      )}
+                                    </span>
+                                  </div>
+                                </button>
+
+                                {isMultiExpanded && (
+                                  <div className="border-t border-border/60 dark:border-white/10 py-1">
+                                    {attachmentFiles.length === 0 ? (
+                                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                                        No file details available.
+                                      </div>
+                                    ) : (
+                                      attachmentFiles.map((file) => (
+                                        <button
+                                          key={file.id || file.name}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openAttachmentFilePreview(file);
+                                          }}
+                                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-muted dark:hover:bg-white/10 outline-none"
+                                        >
+                                          <FileText className="h-4 w-4 flex-shrink-0 text-emerald-500" />
+                                          <div className="min-w-0 flex-1">
+                                            <div className="truncate text-xs font-medium text-foreground dark:text-white">
+                                              {file.name}
+                                            </div>
+                                            {file.sourceType && (
+                                              <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                                {file.sourceType}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             );
@@ -1631,7 +1778,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                               dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
                             />
                             {isLong && !isExpanded && (
-                              <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${message.role === 'assistant' ? 'from-background dark:from-[#18181A] via-background/80 dark:via-[#18181A]/80' : 'from-muted dark:from-black/100 via-muted/80 dark:via-black/80'} to-transparent pointer-events-none`} />
+                              <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${message.role === 'assistant' ? 'from-muted dark:from-[#18181A] via-muted/80 dark:via-[#18181A]/80' : 'from-muted dark:from-black/100 via-muted/80 dark:via-black/80'} to-transparent pointer-events-none`} />
                             )}
                           </div>
                           {isLong && (
@@ -1792,10 +1939,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
                           { format: "full" },
                         )}
-	                      </span>
-	                      <div className="flex items-center gap-1">
-	                        {message.content && !message.isError && (
-	                          <button
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {message.content && !message.isError && (
+                          <button
                             onClick={() => {
                               navigator.clipboard.writeText(message.content);
                               toast({ title: "Copied", description: "Message copied to clipboard" });
@@ -2076,6 +2223,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 <FileAttachDropdown
                   onUpload={handleFileUpload}
                   compact
+                  cloneToProject
                 />
 
                 {/* Project Context Button */}
@@ -2246,8 +2394,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               e.target.value = '';
               return;
             }
+            let batchProjectId = projectId || uploadedFiles.find((file) => file.projectId)?.projectId;
             for (const file of files) {
-              await processFileUpload(file);
+              const uploadedProjectId = await processFileUpload(file, batchProjectId);
+              if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
             }
             e.target.value = '';
           }}

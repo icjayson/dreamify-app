@@ -227,7 +227,7 @@ export default function WorkspaceNewChat() {
   };
 
   // ── File upload helpers ──────────────────────────────────────────────────────
-  const processFileUpload = async (file: File) => {
+  const processFileUpload = async (file: File, projectIdOverride?: string): Promise<string | undefined> => {
     if (!isSignedIn) {
       toast({
         title: "Authentication Required",
@@ -239,12 +239,12 @@ export default function WorkspaceNewChat() {
           </ToastAction>
         ),
       });
-      return;
+      return undefined;
     }
     const validationError = validateClientFile(file);
     if (validationError) {
       toast({ title: "Upload error", description: validationError, variant: "destructive" });
-      return;
+      return undefined;
     }
     const tempId = `pending-${Date.now()}-${Math.random()}`;
     try {
@@ -258,32 +258,36 @@ export default function WorkspaceNewChat() {
       };
       if (uploadedFiles.length >= 5) {
         toast({ title: "Maximum files reached", description: "You can only upload up to 5 files at a time.", variant: "destructive" });
-        return;
+        return undefined;
       }
       addFiles([newFile]);
       const res: UploadResponse = await fileService.uploadFile(file, {
+        projectId: projectIdOverride,
         onProgress: (percent) => updateFile(tempId, { uploadProgress: Math.min(percent, 95) }),
       });
       if (!res.success || !res.fileID || !res.ext || res.size === undefined || !res.filename) {
         removeFile(tempId);
         addFiles([{ ...newFile, status: "error", uploadProgress: undefined }]);
         toast({ title: "Upload failed", description: res.error || "Upload failed", variant: "destructive" });
-        return;
+        return undefined;
       }
       removeFile(tempId);
+      const uploadedProjectId = res.asset?.project_id || projectIdOverride;
       addFiles([{
         fileID: res.fileID,
         filename: res.filename ?? file.name,
         size: res.size ?? file.size,
         ext: res.ext || (file.name.split(".").pop() || "").toLowerCase(),
         status: "uploaded",
-        projectId: res.asset?.project_id,
+        projectId: uploadedProjectId,
       }]);
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
+      return uploadedProjectId;
     } catch (_e) {
       removeFile(tempId);
       addFiles([{ fileID: "error", filename: file.name, size: file.size, ext: (file.name.split(".").pop() || "").toLowerCase(), status: "error" }]);
       toast({ title: "Upload error", description: "Failed to upload file. Please try again.", variant: "destructive" });
+      return undefined;
     }
   };
 
@@ -296,7 +300,11 @@ export default function WorkspaceNewChat() {
       event.target.value = "";
       return;
     }
-    for (const file of files) await processFileUpload(file);
+    let batchProjectId = uploadedFiles.find((file) => file.projectId)?.projectId;
+    for (const file of files) {
+      const uploadedProjectId = await processFileUpload(file, batchProjectId);
+      if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
+    }
     event.target.value = "";
   };
 
@@ -311,7 +319,11 @@ export default function WorkspaceNewChat() {
       toast({ title: "Too many files", description: `Maximum 5 files allowed. You can add ${remainingSlots} more file(s).`, variant: "destructive" });
       return;
     }
-    for (const file of files) await processFileUpload(file);
+    let batchProjectId = uploadedFiles.find((file) => file.projectId)?.projectId;
+    for (const file of files) {
+      const uploadedProjectId = await processFileUpload(file, batchProjectId);
+      if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
+    }
   };
 
   const handlePaste = async (e: React.ClipboardEvent) => {
@@ -324,7 +336,11 @@ export default function WorkspaceNewChat() {
       toast({ title: "Too many files", description: `Maximum 5 files allowed. You can add ${remainingSlots} more file(s).`, variant: "destructive" });
       return;
     }
-    for (const file of files) await processFileUpload(file);
+    let batchProjectId = uploadedFiles.find((file) => file.projectId)?.projectId;
+    for (const file of files) {
+      const uploadedProjectId = await processFileUpload(file, batchProjectId);
+      if (!batchProjectId && uploadedProjectId) batchProjectId = uploadedProjectId;
+    }
   };
 
   const removeUploadedFile = async (fileID: string) => {
@@ -444,7 +460,7 @@ export default function WorkspaceNewChat() {
                     <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
                       <span className="flex-shrink-0 font-semibold text-accent">Template</span>
                       <span className="flex-shrink-0 font-light text-accent/30">•</span>
-                      <span className="min-w-0 flex-1 truncate text-white" title={selectedTemplate.title}>{selectedTemplate.title}</span>
+                      <span className="min-w-0 flex-1 truncate text-foreground dark:text-white/90" title={selectedTemplate.title}>{selectedTemplate.title}</span>
                     </div>
                     <button
                       type="button"
@@ -506,6 +522,7 @@ export default function WorkspaceNewChat() {
               <FileAttachDropdown
                 onUpload={handleAttachClick}
                 disabled={uploadState.isUploading}
+                cloneToProject
               />
 
               {/* Template */}

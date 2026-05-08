@@ -44,6 +44,7 @@ import ProductNewsModal, {
   WORKSPACE_NEWS_ITEMS,
   type WorkspaceNewsItem,
 } from "@/components/workspace/ProductNewsModal";
+import OnboardingModal from "@/components/workspace/OnboardingModal";
 import { useProjects } from "@/hooks/useProjects";
 import { projectService, type ProjectRecord } from "@/services/projectService";
 import {
@@ -52,7 +53,7 @@ import {
   type ConnectorEntityDetailResponse,
   type ConnectorEntityRunItem,
 } from "@/services/integrationService";
-import { CONNECTORS, CONNECTOR_CATEGORIES } from "@/constants/connectors";
+import { CONNECTORS } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
 import { SlackIntegrationCard } from "@/components/integrations/SlackIntegrationCard";
 import { TelegramIntegrationCard } from "@/components/integrations/TelegramIntegrationCard";
@@ -60,6 +61,9 @@ import { ZaloIntegrationCard } from "@/components/integrations/ZaloIntegrationCa
 import { ScheduleManager } from "@/components/schedules/ScheduleManager";
 import { toast as sonnerToast } from "sonner";
 import { formatToDisplay } from "@/utils/timestamp";
+import { useSubscription } from "@/hooks/useSubscription";
+import HeaderCreditBadge from "@/components/ui/HeaderCreditBadge";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ConnectorStatus {
@@ -241,6 +245,7 @@ function WorkspaceDocsView({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function WorkspacePage() {
+  type MarketplaceTab = "all" | "analytics" | "advertising" | "operations" | "finance" | "e-commerce";
   const routeParams = useParams<{ connectorKey?: string; entityId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as Tab | null;
@@ -267,9 +272,11 @@ export default function WorkspacePage() {
   const [dialog, setDialog] = useState({ open: false, mode: 'rename', itemId: '', itemTitle: '', value: '' });
   const [newsModalOpen, setNewsModalOpen] = useState(false);
   const [activeNewsItem, setActiveNewsItem] = useState<WorkspaceNewsItem | null>(null);
+  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
 
   const navigate = useNavigate();
   const { user } = useUser();
+  const { creditsRemaining, creditUsage } = useSubscription();
   const [layoutStyle] = useLayoutStyle();
   const { resolvedTheme } = useTheme();
 
@@ -387,6 +394,7 @@ export default function WorkspacePage() {
   const [connectorStatus, setConnectorStatus] = useState<Record<string, ConnectorStatus>>({});
   const [connectorOverview, setConnectorOverview] = useState<ConnectorOverviewItem[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
+  const [marketplaceTab, setMarketplaceTab] = useState<MarketplaceTab>("all");
   const [selectedConnectorCard, setSelectedConnectorCard] = useState<{
     connectorKey: string;
     connectorName: string;
@@ -563,6 +571,13 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!user?.id) return;
 
+    const onboardingStorageKey = `dreamify:workspace:onboarding:seen:${user.id}`;
+    const hasSeenOnboarding = localStorage.getItem(onboardingStorageKey) === "true";
+    if (!hasSeenOnboarding) {
+      setOnboardingModalOpen(true);
+      return;
+    }
+
     const storageKey = `dreamify:workspace:news:last-shown:${user.id}`;
     const lastShownAtRaw = localStorage.getItem(storageKey);
     const lastShownAt = Number(lastShownAtRaw ?? "0");
@@ -574,6 +589,13 @@ export default function WorkspacePage() {
     setActiveNewsItem(randomItem);
     setNewsModalOpen(true);
     localStorage.setItem(storageKey, String(Date.now()));
+  }, [user?.id]);
+
+  const handleDismissOnboarding = useCallback(() => {
+    if (!user?.id) return;
+    const onboardingStorageKey = `dreamify:workspace:onboarding:seen:${user.id}`;
+    localStorage.setItem(onboardingStorageKey, "true");
+    setOnboardingModalOpen(false);
   }, [user?.id]);
 
   const displayName = user?.fullName || user?.firstName || "My Workspace";
@@ -591,6 +613,24 @@ export default function WorkspacePage() {
         ),
     [connectorOverview]
   );
+  const marketplaceConnectors = useMemo(() => {
+    if (marketplaceTab === "all") {
+      return [...CONNECTORS].sort((a, b) => {
+        const aAvailable = Boolean(a.isActive);
+        const bAvailable = Boolean(b.isActive);
+        if (aAvailable === bAvailable) return a.name.localeCompare(b.name);
+        return aAvailable ? -1 : 1;
+      });
+    }
+    const tabCategoryMap: Record<Exclude<MarketplaceTab, "all">, string> = {
+      analytics: "Analytics Platform",
+      advertising: "Advertising Platform",
+      operations: "Operations & Database",
+      finance: "Payment & Finance",
+      "e-commerce": "E-commerce",
+    };
+    return CONNECTORS.filter((connector) => connector.category === tabCategoryMap[marketplaceTab as Exclude<MarketplaceTab, "all">]);
+  }, [marketplaceTab]);
 
   const updateWorkspaceParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -932,6 +972,14 @@ export default function WorkspacePage() {
           MAIN CONTENT
       ══════════════════════════════════════════════════════════════════════ */}
       <div className="flex-1 flex flex-col min-w-0 relative z-[2]">
+        <div className="hidden md:flex items-center absolute top-4 right-6 z-50">
+          <HeaderCreditBadge
+            creditsRemaining={creditsRemaining}
+            monthlyCreditsUsed={creditUsage?.monthly_credits_used}
+          />
+          <NotificationBell />
+        </div>
+
         {/* Mobile Navigation Tabs */}
         <div className="md:hidden flex items-center justify-around border-b border-border/30 bg-muted/95 sticky top-0 z-40 backdrop-blur-sm">
           <button
@@ -1162,13 +1210,14 @@ export default function WorkspacePage() {
                   <p className="text-sm text-muted-foreground">Connect your data sources to build dashboards faster.</p>
                 </div>
                 <div className="mb-8">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">My connector</h3>
+                  <h3 className="text-sm font-semibold text-foreground mb-1">Active Data Connectors</h3>
+                  <p className="text-sm text-muted-foreground mb-3">Connected sources powering your dashboards</p>
                   {myConnectedCards.length === 0 ? (
                     <Card className="p-4 border-dashed border-border/60 bg-muted/20">
                       <p className="text-sm text-muted-foreground">Connect a source and select data to see it here.</p>
                     </Card>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       {myConnectedCards.map((card) => {
                         const connectorMeta = CONNECTORS.find((connector) => connector.name === card.connectorName);
                         return (
@@ -1206,7 +1255,7 @@ export default function WorkspacePage() {
                 </div>
                 {/* ── Integrations (chat platforms) ── */}
                 <div className="mb-8">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Integrations</h3>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Integrations</h3>
                   <div className="flex flex-col gap-3">
                     <SlackIntegrationCard />
                     <TelegramIntegrationCard />
@@ -1215,6 +1264,34 @@ export default function WorkspacePage() {
                 </div>
                 <Separator className="mb-6" />
 
+                <div className="mb-8">
+                  <h3 className="text-sm font-semibold text-foreground mb-1">Add a Connector</h3>
+                  <p className="text-sm text-muted-foreground mb-3">Browse and connect data sources</p>
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    {[
+                      { key: "all", label: "All" },
+                      { key: "analytics", label: "Analytics" },
+                      { key: "advertising", label: "Advertising" },
+                      { key: "operations", label: "Operations" },
+                      { key: "finance", label: "Finance" },
+                      { key: "e-commerce", label: "E-Commerce" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setMarketplaceTab(tab.key as MarketplaceTab)}
+                        className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                          marketplaceTab === tab.key
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {connectorsLoading ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Array.from({ length: CONNECTORS.length }).map((_, i) => (
@@ -1222,66 +1299,50 @@ export default function WorkspacePage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-8">
-                    {CONNECTOR_CATEGORIES.map((category) => {
-                      const categoryConnectors = CONNECTORS.filter(c => c.category === category);
-                      if (categoryConnectors.length === 0) return null;
-                      return (
-                        <div key={category}>
-                          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{category}</h3>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {categoryConnectors.map((connector) => {
-                              const status = connectorStatus[connector.name];
-                              const overviewMatch = connectorOverview.find(
-                                (item) => item.display_name === connector.name
-                              );
-                              const isConnected = Boolean(status?.connected || overviewMatch?.connected);
-                              const isSoon = !connector.isActive;
-                              const connectorDescription =
-                                CONNECTOR_CARD_DESCRIPTIONS[connector.name] || "Connect this data source to build dashboards faster.";
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {marketplaceConnectors.map((connector) => {
+                      const status = connectorStatus[connector.name];
+                      const overviewMatch = connectorOverview.find(
+                        (item) => item.display_name === connector.name
+                      );
+                      const isConnected = Boolean(status?.connected || overviewMatch?.connected);
+                      const isSoon = !connector.isActive;
+                      const connectorDescription =
+                        CONNECTOR_CARD_DESCRIPTIONS[connector.name] || "Connect this data source to build dashboards faster.";
 
-                              return (
-                                <Card
-                                  key={connector.name}
-                                  onClick={() => !isSoon && handleIntegrationClick(connector.name)}
-                                  className={`p-4 h-[80px] transition-all ${isSoon ? "opacity-50" : "hover:border-primary/40 cursor-pointer"}`}
-                                >
-                                  <div className="flex items-center justify-between h-full">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${connector.iconBg ?? 'bg-muted dark:bg-white/5'}`}>
-                                        <img
-                                          src={connector.icon}
-                                          alt={connector.name}
-                                          className={`w-7 h-7 object-contain ${connector.name === 'TikTok Ads' ? 'scale-125' : ''}`}
-                                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                                        />
-                                      </div>
-                                      <div className="min-w-0">
-                                        <h3 className="font-medium text-sm text-foreground">{connector.name}</h3>
-                                        {isSoon ? (
-                                          <Badge variant="secondary" className="text-xs font-normal mt-0.5">Coming soon</Badge>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">{connectorDescription}</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {isConnected && !isSoon && (
-                                      <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                                    )}
-                                    {!isSoon && !isConnected && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleIntegrationClick(connector.name); }}
-                                        className="w-fit px-4 py-1.5 button-outline text-xs rounded-md inline-flex items-center justify-center mt-1"
-                                      >
-                                        Connect
-                                      </button>
-                                    )}
-                                  </div>
-                                </Card>
-                              );
-                            })}
+                      return (
+                        <Card
+                          key={connector.name}
+                          onClick={() => !isSoon && handleIntegrationClick(connector.name)}
+                          className={`p-4 h-[92px] transition-all ${isSoon ? "opacity-55" : "hover:border-primary/40 cursor-pointer"}`}
+                        >
+                          <div className="flex items-center justify-between h-full">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${connector.iconBg ?? 'bg-muted dark:bg-white/5'} ${isSoon ? "grayscale" : ""}`}>
+                                <img
+                                  src={connector.icon}
+                                  alt={connector.name}
+                                  className={`w-7 h-7 object-contain ${connector.name === 'TikTok Ads' ? 'scale-125' : ''}`}
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <h3 className="font-medium text-sm text-foreground">{connector.name}</h3>
+                                <span className="text-xs text-muted-foreground block truncate">{connectorDescription}</span>
+                              </div>
+                            </div>
+                            {isSoon ? (
+                              <Badge variant="secondary" className="text-xs font-normal">Coming soon</Badge>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleIntegrationClick(connector.name); }}
+                                className="w-fit px-4 py-1.5 button-outline text-xs rounded-md inline-flex items-center justify-center mt-1"
+                              >
+                                Connect
+                              </button>
+                            )}
                           </div>
-                        </div>
+                        </Card>
                       );
                     })}
                   </div>
@@ -1585,6 +1646,10 @@ export default function WorkspacePage() {
       feature={activeNewsItem}
       onClose={() => setNewsModalOpen(false)}
       onExplore={handleNewsExplore}
+    />
+    <OnboardingModal
+      open={onboardingModalOpen}
+      onDismiss={handleDismissOnboarding}
     />
     </div >
   );

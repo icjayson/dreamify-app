@@ -29,6 +29,13 @@ interface EditableTextProps {
   readOnly?: boolean;
   /** Optional placeholder when value is empty. */
   placeholder?: string;
+  /**
+   * Optional commit override. When provided, replaces the default
+   * `ctx.applyEdit(setAtPath({}, path, parsed))` behavior. Used by Table
+   * cells to emit full-array patches (`applyEdit({ data: [...] })`) instead
+   * of nested-path patches that deepMerge would corrupt.
+   */
+  onCommit?: (parsed: unknown) => void;
 }
 
 const splitPath = (path: string): (string | number)[] =>
@@ -45,17 +52,20 @@ const EditableText: React.FC<EditableTextProps> = ({
   style,
   readOnly = false,
   placeholder,
+  onCommit,
 }) => {
   const ctx = useEditContext();
   const ref = useRef<HTMLElement | null>(null);
   const display = format ? format(value) : (value === null || value === undefined ? '' : String(value));
   const editable = !!ctx?.editMode && !readOnly;
 
-  // When not in edit mode and value is empty, render nothing — preserves
-  // existing layout (e.g. description hidden when missing).
-  if (!editable && !display) return null;
-
-  // Keep DOM in sync with prop when not focused (edit changes external)
+  // Hooks MUST run on every render to satisfy Rules of Hooks. The early
+  // return below is conditional on `editable`+`display`, which can flip
+  // between renders (e.g. view→edit on an empty table cell). Putting the
+  // effect after the return caused React to throw "Rendered more hooks
+  // than during the previous render." The internal `if (!el) return`
+  // handles the null-DOM case when the component is currently returning
+  // null.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -64,10 +74,25 @@ const EditableText: React.FC<EditableTextProps> = ({
     }
   }, [display]);
 
+  // When not in edit mode and value is empty, render nothing — preserves
+  // existing layout (e.g. description hidden when missing).
+  if (!editable && !display) return null;
+
   const commit = () => {
     if (!ctx) return;
     const raw = ref.current?.textContent ?? '';
     const stored = parse ? parse(raw) : raw;
+    // No-op: blur without any actual change must not emit a patch — otherwise
+    // every time the user clicks a cell and clicks away (e.g. to hit Save),
+    // a redundant write fires that can corrupt array fields via deepMerge.
+    // Compare against the canonical display so format-only diffs don't trip us.
+    const incomingDisplay = stored === null || stored === undefined ? '' : String(stored);
+    const currentDisplay = value === null || value === undefined ? '' : String(value);
+    if (incomingDisplay === currentDisplay) return;
+    if (onCommit) {
+      onCommit(stored);
+      return;
+    }
     const next = setAtPath({}, splitPath(path), stored);
     ctx.applyEdit(next);
   };

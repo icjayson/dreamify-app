@@ -6,6 +6,11 @@ import { ConversationChatRequest } from '@/services/conversationService';
 import type { AssetRecord } from '@/services/fileService';
 import { BUILTIN_TEMPLATES } from '@/constants/builtinTemplates';
 
+// Monotonic request counter for selectDashboard. When two dashboard cards
+// are clicked in rapid succession, only the latest fetch's result is
+// applied; older in-flight resolutions are discarded by request-id check.
+let selectDashboardSeq = 0;
+
 // ---------------------------------------------------------------------------
 // Per-dashboard template persistence
 // Each dashboard's template ID is stored in a map so it survives page refresh.
@@ -151,6 +156,11 @@ interface ChatState {
 
   // Dashboard update feedback state
   isUpdatingDashboard: boolean;
+  // True while `selectDashboard` is awaiting the GET /dashboard fetch.
+  // Drives the in-place loading pill, dim/freeze, and sidebar-disable in
+  // project.tsx so the user gets immediate feedback instead of a 1–3 s
+  // silent gap that ends in a layout snap.
+  isSwitchingDashboard: boolean;
   previousDashboardData: any | null;
   changedComponentIds: Set<string>;
   dashboardThumbnails: Record<string, string>;
@@ -217,6 +227,7 @@ interface ChatState {
   setIsInitialLoading: (flag: boolean) => void;
   setIsDashboardOpen: (open: boolean) => void;
   setIsUpdatingDashboard: (updating: boolean) => void;
+  setIsSwitchingDashboard: (switching: boolean) => void;
   setPreviousDashboardData: (data: any | null) => void;
   setChangedComponentIds: (ids: Set<string>) => void;
   setDashboardThumbnail: (dashboardId: string, thumbnailUrl: string) => void;
@@ -321,6 +332,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isInitialLoading: false,
   isDashboardOpen: false,
   isUpdatingDashboard: false,
+  isSwitchingDashboard: false,
   previousDashboardData: null,
   changedComponentIds: new Set<string>(),
   dashboardThumbnails: {},
@@ -390,6 +402,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsInitialLoading: (flag) => set({ isInitialLoading: flag }),
   setIsDashboardOpen: (open) => set({ isDashboardOpen: open }),
   setIsUpdatingDashboard: (updating) => set({ isUpdatingDashboard: updating }),
+  setIsSwitchingDashboard: (switching) => set({ isSwitchingDashboard: switching }),
   setPreviousDashboardData: (data) => set({ previousDashboardData: data }),
   setChangedComponentIds: (ids) => set({ changedComponentIds: ids }),
   setDashboardThumbnail: (dashboardId, thumbnailUrl) => set((state) => ({
@@ -1746,6 +1759,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentConversationId, updateFile } = get();
     if (!currentConversationId) return null;
 
+    // Monotonic request id for cancel-and-replace: rapid clicks on different
+    // dashboards must end with only the latest result applied. We stash the
+    // counter on the module-scoped guard below.
+    //
+    // NOTE: We deliberately do NOT short-circuit when
+    // `dashboardId === selectedDashboardId`. Several auto-open paths
+    // (useChatStore lines ~1131, 1520, 1686) call `set({ selectedDashboardId })`
+    // *before* invoking selectDashboard to fetch the data — short-circuiting
+    // here would skip the fetch and leave the panel empty.
+    selectDashboardSeq += 1;
+    const myReq = selectDashboardSeq;
+
+    set({ isSwitchingDashboard: true });
     try {
       const { conversationService } = await import('@/services/conversationService');
       const response = await conversationService.getDashboardData(
@@ -1753,6 +1779,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         projectId,
         dashboardId
       );
+
+      // A newer click superseded this one — discard.
+      if (myReq !== selectDashboardSeq) return null;
 
       if (response?.dashboard_data) {
         // Prefer template_id baked into the dashboard JSON (server source of truth),
@@ -1772,6 +1801,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } catch (error) {
       console.error('Failed to load dashboard:', error);
+    } finally {
+      // Only the latest request can clear the flag — stale resolves must not
+      // un-spin a still-running newer fetch.
+      if (myReq === selectDashboardSeq) {
+        set({ isSwitchingDashboard: false });
+      }
     }
     return null;
   },

@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Database } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { DashboardComponent, ChartConfiguration, MetricConfiguration, TableConfiguration } from '@/types/dashboard';
+import PanelEmptyState from './PanelEmptyState';
 
 interface DataPanelProps {
   component: DashboardComponent;
@@ -85,7 +87,13 @@ const TableDataEditor: React.FC<DataPanelProps> = ({ component, onApplyEdit }) =
     : [];
 
   if (cols.length === 0) {
-    return <div className="text-sm text-muted-foreground">Edit table cells directly in the table to modify values.</div>;
+    return (
+      <PanelEmptyState
+        icon={Database}
+        title="Inline editing only"
+        hint="Click any cell directly in the table to edit its value."
+      />
+    );
   }
 
   return (
@@ -127,7 +135,13 @@ const ChartDatasetsEditor: React.FC<DataPanelProps> = ({ component, onApplyEdit 
   const [activeIdx, setActiveIdx] = useState(0);
 
   if (datasets.length === 0) {
-    return <div className="text-sm text-muted-foreground">No datasets to edit.</div>;
+    return (
+      <PanelEmptyState
+        icon={Database}
+        title="No datasets to edit"
+        hint="Use the Structure tab to add a dataset to this chart."
+      />
+    );
   }
 
   const ds = datasets[Math.min(activeIdx, datasets.length - 1)];

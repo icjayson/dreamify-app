@@ -2,6 +2,7 @@ import { TableColumn } from "@/types/dashboard";
 import { useState, useMemo } from "react";
 import { getStyleVariantProps, type ChartStyleVariant } from "@/utils/chartStyling";
 import EditableText from "@/components/charts/edit/EditableText";
+import { useEditContext } from "@/components/charts/edit/EditContext";
 import { formatToDisplay } from "@/utils/timestamp";
 
 interface TopProductsTableProps {
@@ -52,6 +53,20 @@ const formatCellValue = (value: any, type: TableColumn["type"]) => {
     default:
       return String(value);
   }
+};
+
+/**
+ * Parse a raw user-typed string for a numeric-typed column. Strips currency
+ * markers and grouping separators; falls back to the raw string if not a
+ * finite number.
+ */
+const parseCellInput = (raw: string, type: TableColumn["type"]) => {
+  if (type === "number" || type === "currency" || type === "percentage") {
+    const cleaned = raw.replace(/[,\s$€£¥%]/g, "");
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : raw;
+  }
+  return raw;
 };
 
 const Table = ({
@@ -155,11 +170,10 @@ const Table = ({
                         onClick={() => handleSort(column.key)}
                       >
                         <div className="flex items-center gap-2">
-                          <EditableText
-                            as="span"
+                          <EditableTableHeaderLabel
                             value={column.label}
-                            path={`columns.${colIdx}.label`}
-                            placeholder="Column"
+                            colIdx={colIdx}
+                            columns={columns}
                           />
                           <span className="text-xs opacity-60">{getSortIcon(column.key)}</span>
                         </div>
@@ -189,18 +203,11 @@ const Table = ({
                         >
                           <div className={`${column.key === 'name' ? 'font-medium truncate' : ''}`}>
                             {originalIdx >= 0 ? (
-                              <EditableText
+                              <EditableTableCell
                                 value={row[column.key]}
-                                path={`data.${originalIdx}.${column.key}`}
-                                format={(v) => formatCellValue(v, column.type)}
-                                parse={(raw) => {
-                                  if (column.type === 'number' || column.type === 'currency' || column.type === 'percentage') {
-                                    const cleaned = raw.replace(/[,\s$€£¥%]/g, '');
-                                    const n = parseFloat(cleaned);
-                                    return Number.isFinite(n) ? n : raw;
-                                  }
-                                  return raw;
-                                }}
+                                column={column}
+                                rowIdx={originalIdx}
+                                data={data}
                               />
                             ) : (
                               formatCellValue(row[column.key], column.type)
@@ -248,6 +255,76 @@ const Table = ({
         </>
       )}
     </div>
+  );
+};
+
+/**
+ * EditableTableCell — emits a FULL-array patch on commit (`{ data: newArray }`)
+ * instead of a nested-path patch (`data.X.colKey`). This is required because
+ * `deepMerge` replaces arrays wholesale; a sparse-key patch like
+ * `{ data: { '2': {...} } }` would type-flip the array into an object and
+ * cause the table to render "No data available".
+ */
+interface EditableTableCellProps {
+  value: unknown;
+  column: TableColumn;
+  rowIdx: number;
+  data: Record<string, unknown>[];
+}
+const EditableTableCell: React.FC<EditableTableCellProps> = ({ value, column, rowIdx, data }) => {
+  const ctx = useEditContext();
+  // Coerce to the narrow display-value union EditableText accepts.
+  const displayValue: string | number | null | undefined =
+    value === null || value === undefined
+      ? value
+      : typeof value === 'number' || typeof value === 'string'
+        ? value
+        : String(value);
+  return (
+    <EditableText
+      value={displayValue}
+      // Path is unused once `onCommit` is supplied, but EditableText's
+      // contract still requires it. Keep it informative for debugging.
+      path={`data.${rowIdx}.${column.key}`}
+      format={(v) => formatCellValue(v, column.type)}
+      parse={(raw) => parseCellInput(raw, column.type)}
+      onCommit={(parsed) => {
+        if (!ctx) return;
+        const nextData = data.map((row, i) =>
+          i === rowIdx ? { ...row, [column.key]: parsed } : row,
+        );
+        ctx.applyEdit({ data: nextData });
+      }}
+    />
+  );
+};
+
+/**
+ * EditableTableHeaderLabel — same full-array contract for column header
+ * rename. Patches the entire `columns` array to keep deltas immune to
+ * deepMerge's array-replacement rule.
+ */
+interface EditableTableHeaderLabelProps {
+  value: string;
+  colIdx: number;
+  columns: TableColumn[];
+}
+const EditableTableHeaderLabel: React.FC<EditableTableHeaderLabelProps> = ({ value, colIdx, columns }) => {
+  const ctx = useEditContext();
+  return (
+    <EditableText
+      as="span"
+      value={value}
+      path={`columns.${colIdx}.label`}
+      placeholder="Column"
+      onCommit={(parsed) => {
+        if (!ctx) return;
+        const nextColumns = columns.map((c, i) =>
+          i === colIdx ? { ...c, label: String(parsed ?? '') } : c,
+        );
+        ctx.applyEdit({ columns: nextColumns });
+      }}
+    />
   );
 };
 

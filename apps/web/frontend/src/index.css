@@ -443,6 +443,22 @@
     }
   }
 
+  /* Indeterminate horizontal progress bar — used in dashboard panel during
+     dashboard switch (the few-second /dashboard fetch). */
+  @keyframes loadingbar {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    50% {
+      transform: translateX(150%);
+    }
+
+    100% {
+      transform: translateX(400%);
+    }
+  }
+
   /* Pulse glow animation */
   .animate-pulse-glow {
     animation: pulseGlow 2s ease-in-out infinite;

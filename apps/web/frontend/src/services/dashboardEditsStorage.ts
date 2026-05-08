@@ -5,6 +5,7 @@
  * The async signatures already match a fetch boundary so the swap is contained here.
  */
 import type { DashboardEdits, ComponentEditDelta } from '@/types/dashboard';
+import { deepMerge } from '@/utils/deepMerge';
 
 const EDITS_VERSION = 1;
 const STORAGE_PREFIX = 'dreamify_dashboard_edits_';
@@ -51,9 +52,13 @@ export function upsertDelta(
   patch: Record<string, unknown>
 ): DashboardEdits {
   const prev: ComponentEditDelta | undefined = edits.deltas[componentId];
+  // Deep-merge so a later patch can't type-flip an earlier one (e.g.
+  // `{ data: [...] }` clobbered by a stray `{ data: { '2': {...} } }` from a
+  // setAtPath emit). Arrays are still replaced wholesale by deepMerge —
+  // intentional, matches how component_config consumes them.
   const merged: ComponentEditDelta = {
     componentId,
-    edits: { ...(prev?.edits || {}), ...patch },
+    edits: deepMerge(prev?.edits || {}, patch),
     editedAt: Date.now(),
   };
   return { ...edits, deltas: { ...edits.deltas, [componentId]: merged } };

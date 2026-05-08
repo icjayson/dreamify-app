@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Download, LayoutTemplate, Pencil, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
+import { ArrowLeft, Download, LayoutTemplate, Loader2, Pencil, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
 import EditModeToolbar from "@/components/charts/edit/EditModeToolbar";
 import { useEditMode } from "@/hooks/useEditMode";
 import ChatInterface from "@/chat/ChatInterface";
@@ -181,6 +181,7 @@ export default function ProjectPage() {
   const isUpdatingDashboard = useChatStore((s) => s.isUpdatingDashboard);
   const currentWorkflowStep = useChatStore((s) => s.currentWorkflowStep);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
+  const isSwitchingDashboard = useChatStore((s) => s.isSwitchingDashboard);
 
   const isDirty = useEditMode((s) => s.isDirty);
   const markSaved = useEditMode((s) => s.markSaved);
@@ -736,10 +737,18 @@ export default function ProjectPage() {
                     }}
                     onSwitchToDashboard={(dashboardId) => {
                       if (dashboardId && projectId) {
+                        // Always fetch on click — auto-open flows in
+                        // useChatStore set selectedDashboardId before the
+                        // data has loaded, so a "same id" guard would
+                        // wrongly skip the necessary fetch and leave the
+                        // panel empty. Rapid different-id clicks are still
+                        // handled correctly via selectDashboardSeq.
                         selectDashboard(dashboardId, projectId).then((data) => {
-                          if (data) {
-                            setProcessedData(data);
-                          }
+                          // null can mean stale-supersede or genuine
+                          // failure — selectDashboard logs the error case
+                          // to the console; we don't toast here to avoid
+                          // noisy false positives on supersede.
+                          if (data) setProcessedData(data);
                         });
                       }
                       setCsvPreview(null);
@@ -807,6 +816,16 @@ export default function ProjectPage() {
                   <span className="text-sm font-medium text-foreground/80 truncate min-w-0">
                     {dashboardTitle || 'Dashboard'}
                   </span>
+                  {isSwitchingDashboard && (
+                    <span
+                      role="status"
+                      aria-live="polite"
+                      className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full bg-muted/70 dark:bg-white/10 text-xs text-muted-foreground dark:text-white/80"
+                    >
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Loading dashboard…</span>
+                    </span>
+                  )}
                   <div className="ml-auto flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => setTemplateModalOpen(true, 'header')}
@@ -893,14 +912,34 @@ export default function ProjectPage() {
                   isProjectLoading ? (
                     <DashboardLoading title="Restoring your dashboard..." description="Wait a few seconds" durationSec={5} />
                   ) : processedData ? (
-                    <DashboardPreview
-                      dashboardId={selectedDashboardId || undefined}
-                      projectId={projectId || undefined}
-                      processedData={processedData}
-                      className="h-full overflow-y-auto"
-                      showCardActionsMenu
-                      onEditedComponentsChange={handleEditedComponentsChange}
-                    />
+                    <div className="relative h-full">
+                      {/* Indeterminate top progress bar — visible only during dashboard switch.
+                          Mirrors the YouTube/GitHub pattern: cheap, in-place signal that
+                          something is loading without a jarring full-screen overlay. */}
+                      {isSwitchingDashboard && (
+                        <div
+                          aria-hidden="true"
+                          className="absolute top-0 left-0 right-0 h-0.5 z-30 overflow-hidden bg-primary/10 dark:bg-white/10"
+                        >
+                          <div className="h-full w-1/3 bg-primary dark:bg-white/70 animate-[loadingbar_1.2s_ease-in-out_infinite]" />
+                        </div>
+                      )}
+                      <div
+                        className={`h-full transition-opacity duration-200 ${
+                          isSwitchingDashboard ? 'opacity-60 pointer-events-none' : ''
+                        }`}
+                        aria-busy={isSwitchingDashboard || undefined}
+                      >
+                        <DashboardPreview
+                          dashboardId={selectedDashboardId || undefined}
+                          projectId={projectId || undefined}
+                          processedData={processedData}
+                          className="h-full overflow-y-auto"
+                          showCardActionsMenu
+                          onEditedComponentsChange={handleEditedComponentsChange}
+                        />
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-center h-full bg-black/5 dark:bg-white/5">
                       <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-background dark:bg-black/70 border border-border shadow-lg backdrop-blur-md">

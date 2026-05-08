@@ -8,8 +8,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Palette } from 'lucide-react';
 import type { DashboardComponent, ChartConfiguration } from '@/types/dashboard';
 import ColorPicker from './ColorPicker';
+import PanelEmptyState from './PanelEmptyState';
 
 interface StylePanelProps {
   component: DashboardComponent;
@@ -44,6 +46,16 @@ const StylePanel: React.FC<StylePanelProps> = ({ component, onApplyEdit }) => {
     onApplyEdit(component.id, { datasets: nextDatasets });
     patchPaletteAt(index, color);
   };
+
+  if (!isChart) {
+    return (
+      <PanelEmptyState
+        icon={Palette}
+        title={component.type === 'metric' ? 'No style options for metrics yet' : 'No style options for tables yet'}
+        hint="Use the Data tab to edit values, or the dashboard-level template to change colors."
+      />
+    );
+  }
 
   return (
     <div className="space-y-5 text-sm">

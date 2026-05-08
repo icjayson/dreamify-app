@@ -1,12 +1,13 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Layers } from 'lucide-react';
 import {
   type DashboardComponent,
   type ChartConfiguration,
   ChartType,
 } from '@/types/dashboard';
+import PanelEmptyState from './PanelEmptyState';
 
 interface StructurePanelProps {
   component: DashboardComponent;
@@ -32,7 +33,15 @@ const isCompatible = (t: ChartType): boolean =>
 
 const StructurePanel: React.FC<StructurePanelProps> = ({ component, onApplyEdit }) => {
   if (component.type !== 'chart') {
-    return <div className="text-sm text-muted-foreground">Structure edits available for charts only.</div>;
+    return (
+      <PanelEmptyState
+        icon={Layers}
+        title="Structure edits are only for charts"
+        hint={component.type === 'table'
+          ? 'For tables, use the Data tab to add or remove rows.'
+          : 'Metrics have no structural options — edit the value directly via the Data tab.'}
+      />
+    );
   }
 
   const cfg = component.component_config as ChartConfiguration;

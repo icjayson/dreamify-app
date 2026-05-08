@@ -571,6 +571,17 @@ const DashboardPreview = ({
       };
     }
 
+    // Defensive: a `components` array WITHOUT a `layout` field means a
+    // round-trip somewhere stripped one of them — typically the post-save
+    // payload. The fall-through path below will rebuild from raw arrays and
+    // silently discard edits. Surface this in dev so regressions don't hide.
+    if (Array.isArray(data.components) && !data.layout) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[normalizeDashboard] components present but layout missing — falling back to raw rebuild; saved edits may be lost.',
+      );
+    }
+
     const components: any[] = [];
     let componentId = 1;
 
@@ -1470,6 +1481,12 @@ const DashboardPreview = ({
               </Responsive>
             ) : (
               <ResponsiveGridLayout
+                // Force a clean remount when the dashboard identity changes.
+                // Without this, RGL retains its internal per-item position
+                // cache from the previous dashboard, causing items in the new
+                // dashboard to fall through to w=1/h=1 (the "stretched
+                // vertical strip" bug) on dashboard switch and after save.
+                key={storageKey}
                 className="layout"
                 layouts={layouts}
                 breakpoints={breakpoints}
@@ -1510,9 +1527,31 @@ const DashboardPreview = ({
                         className={`relative h-full min-h-0 rounded-md group/card transition-all duration-200 hover:shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.25)] ${cardEditClass}`}
                         data-chart-id={cellKey}
                         onMouseDownCapture={editMode && canEdit ? (e) => {
-                          // Click selects the component for the panel, but never on inputs/contentEditable text
+                          // Click selects the component for the panel — but
+                          // skip when the click is on an editable control,
+                          // OR on an element rendered inside a Radix
+                          // portal/popper (DropdownMenu, Select, Tooltip…).
+                          //
+                          // React events bubble through the React tree even
+                          // from portals — so a click on a menu item
+                          // (DOM-rooted at body level) STILL fires this
+                          // capture handler, with `target` being the menu
+                          // item. Walking the DOM ancestry (target.closest)
+                          // wouldn't find the trigger button's
+                          // `[data-edit-control]` because the menu is in a
+                          // portal subtree. We therefore also match the
+                          // Radix popper wrapper and ARIA roles those
+                          // components use.
                           const target = e.target as HTMLElement;
-                          if (target.closest('input, textarea, [contenteditable="true"], [data-edit-control]')) return;
+                          if (target.closest(
+                            'input, textarea, ' +
+                            '[contenteditable="true"], ' +
+                            '[data-edit-control], ' +
+                            '[data-radix-popper-content-wrapper], ' +
+                            '[role="menu"], [role="menuitem"], ' +
+                            '[role="listbox"], [role="option"], ' +
+                            '[role="dialog"], [role="tooltip"]'
+                          )) return;
                           setSelectedComponent(cellKey);
                         } : undefined}
                       >
@@ -1535,6 +1574,14 @@ const DashboardPreview = ({
                                 <button
                                   type="button"
                                   aria-label="Card actions"
+                                  // The card's onMouseDownCapture handler
+                                  // (selecting the component for the edit
+                                  // panel) bypasses any element matching
+                                  // [data-edit-control]. Without this attr,
+                                  // clicking the 3-dots in edit mode would
+                                  // hijack each menu action — opening the
+                                  // panel instead of running the action.
+                                  data-edit-control="card-menu"
                                   className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background/50 dark:border-white/10 dark:bg-black/30 text-foreground/80 dark:text-white/80 backdrop-blur-sm outline-none transition-colors hover:bg-muted dark:hover:bg-black/55 hover:text-foreground dark:hover:text-white focus-visible:ring-2 focus-visible:ring-primary/30"
                                 >
                                   <MoreVertical className="h-3.5 w-3.5" strokeWidth={2} />
@@ -1545,56 +1592,70 @@ const DashboardPreview = ({
                                 sideOffset={6}
                                 className="min-w-[11rem] rounded-xl border border-border dark:border-white/10 bg-popover/95 dark:bg-[#161616]/95 backdrop-blur-md text-popover-foreground dark:text-white shadow-xl"
                               >
-                                <DropdownMenuItem
-                                  className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
-                                  onSelect={() => {
-                                    setEditMode(true);
-                                    setSelectedComponent(cellKey);
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4 shrink-0 text-blue-400" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
-                                  onSelect={() => {
-                                    window.dispatchEvent(
-                                      new CustomEvent(SELECT_CHART_CONTEXT_EVENT, {
-                                        detail: dashboardComponentToChartChip(component),
-                                      })
-                                    );
-                                  }}
-                                >
-                                  <MessageSquare className="h-4 w-4 shrink-0 text-purple-400" />
-                                  Fix in chat
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
-                                  disabled={exportingIds.has(cellKey)}
-                                  onSelect={async () => {
-                                    const cardEl = document.querySelector<HTMLElement>(
-                                      `[data-chart-id="${cellKey}"]`
-                                    );
-                                    if (!cardEl) return;
-                                    setExportingIds(prev => new Set(prev).add(cellKey));
-                                    try {
-                                      const chartTitle = component.component_config?.title || 'chart';
-                                      await exportChartAsPng(cardEl, chartTitle);
-                                    } finally {
-                                      setExportingIds(prev => {
-                                        const next = new Set(prev);
-                                        next.delete(cellKey);
-                                        return next;
-                                      });
-                                    }
-                                  }}
-                                >
-                                  {exportingIds.has(cellKey)
-                                    ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-400" />
-                                    : <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />}
-                                  Export to PNG
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-border dark:bg-white/10" />
+                                {/* In edit mode, only the destructive Remove
+                                    action is available. Edit / Fix in chat
+                                    / Export PNG are intentionally hidden:
+                                    - Edit is meaningless (already editing).
+                                    - Fix in chat opens a separate AI flow
+                                      that conflicts with manual edits.
+                                    - Export PNG would capture edit-mode
+                                      affordances (cell input borders, edit
+                                      ring) into the PNG. View mode is the
+                                      only safe state to export from. */}
+                                {!editMode && (
+                                  <>
+                                    <DropdownMenuItem
+                                      className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
+                                      onSelect={() => {
+                                        setEditMode(true);
+                                        setSelectedComponent(cellKey);
+                                      }}
+                                    >
+                                      <Pencil className="h-4 w-4 shrink-0 text-blue-400" />
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
+                                      onSelect={() => {
+                                        window.dispatchEvent(
+                                          new CustomEvent(SELECT_CHART_CONTEXT_EVENT, {
+                                            detail: dashboardComponentToChartChip(component),
+                                          })
+                                        );
+                                      }}
+                                    >
+                                      <MessageSquare className="h-4 w-4 shrink-0 text-purple-400" />
+                                      Fix in chat
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
+                                      disabled={exportingIds.has(cellKey)}
+                                      onSelect={async () => {
+                                        const cardEl = document.querySelector<HTMLElement>(
+                                          `[data-chart-id="${cellKey}"]`
+                                        );
+                                        if (!cardEl) return;
+                                        setExportingIds(prev => new Set(prev).add(cellKey));
+                                        try {
+                                          const chartTitle = component.component_config?.title || 'chart';
+                                          await exportChartAsPng(cardEl, chartTitle);
+                                        } finally {
+                                          setExportingIds(prev => {
+                                            const next = new Set(prev);
+                                            next.delete(cellKey);
+                                            return next;
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      {exportingIds.has(cellKey)
+                                        ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-400" />
+                                        : <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />}
+                                      Export to PNG
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator className="bg-border dark:bg-white/10" />
+                                  </>
+                                )}
                                 <DropdownMenuItem
                                   className="cursor-pointer gap-2 py-2 text-red-400 focus:bg-red-500/15 focus:text-red-400"
                                   onSelect={() => setConfirmRemoveId(cellKey)}

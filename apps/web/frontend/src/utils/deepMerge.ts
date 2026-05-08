@@ -27,17 +27,39 @@ export function deepMerge<T extends AnyRecord>(target: T, source: Partial<T> | A
 /**
  * Set a value at a dot-path inside an object, returning a new object.
  * Used by side-panel forms binding nested fields like 'styling.legendPosition'.
+ *
+ * Container-type heuristic: when seeding a missing intermediate level, the
+ * shape (`[]` vs `{}`) is decided by the NEXT head's type — numeric → array,
+ * string → object. This prevents producing `{ data: { '2': {...} } }` when the
+ * intent is `{ data: [..., {...}, ...] }`. Note: even with this fix, applying
+ * a sparse-array patch via deepMerge will still wipe non-touched indices —
+ * use full-array patches for table data edits.
  */
 export function setAtPath<T extends AnyRecord>(target: T, path: (string | number)[], value: unknown): T {
   if (path.length === 0) return target;
   const [head, ...rest] = path;
   const cur = (target as AnyRecord)[head as string];
-  const next = rest.length === 0
-    ? value
-    : setAtPath(isPlainObject(cur) ? cur : (typeof head === 'number' ? ([] as unknown as AnyRecord) : ({} as AnyRecord)), rest, value);
+
+  let next: unknown;
+  if (rest.length === 0) {
+    next = value;
+  } else {
+    const nextHead = rest[0];
+    const seed: AnyRecord = isPlainObject(cur) || Array.isArray(cur)
+      ? (cur as AnyRecord)
+      : (typeof nextHead === 'number' ? ([] as unknown as AnyRecord) : ({} as AnyRecord));
+    next = setAtPath(seed, rest, value);
+  }
+
   if (Array.isArray(target)) {
     const copy = [...(target as unknown as unknown[])];
-    copy[head as number] = next;
+    if (typeof head === 'number') {
+      copy[head] = next;
+    } else {
+      // Path mismatch (string head into array target). Bail to defensive
+      // object so we don't pollute the array with non-index properties.
+      return { [head]: next } as unknown as T;
+    }
     return copy as unknown as T;
   }
   return { ...target, [head]: next } as T;

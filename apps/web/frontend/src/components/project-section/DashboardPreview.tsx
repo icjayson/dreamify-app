@@ -32,6 +32,13 @@ import InlineSvgTextEditor from "@/components/charts/edit/InlineSvgTextEditor";
 import { useChatStore } from "@/chat/useChatStore";
 import { DashboardGenerationRequest, LayoutType, ChartType, DashboardConfiguration } from "@/types/dashboard";
 import {
+  getMinSizeForType as getMinSizeForTypePure,
+  computeStorageKey,
+  sanitizeLayouts,
+  shouldFillSparse,
+  clampLayoutItem,
+} from "@/components/project-section/dashboardLayout";
+import {
   convertLLMStylingToChartStyling,
   validateChartStyling,
   getDefaultChartStyling,
@@ -125,6 +132,13 @@ interface DashboardPreviewProps {
    * project.tsx uses this to know the exact components to write on save.
    */
   onEditedComponentsChange?: (components: any[], activeDashboard: any | null) => void;
+  /**
+   * When true, skip the localStorage read/write for layouts. Use for ephemeral
+   * inline previews (admin/hidden capturer) where persisting layout can bleed
+   * stale grid items across different dashboards. The dashboard view itself
+   * leaves this false.
+   */
+  disablePersistence?: boolean;
 }
 
 const DashboardPreview = ({
@@ -139,6 +153,7 @@ const DashboardPreview = ({
   showCardActionsMenu = false,
   projectId,
   onEditedComponentsChange,
+  disablePersistence = false,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -1003,20 +1018,23 @@ const DashboardPreview = ({
   // existing signal for "user has authorship" — public exports keep showCardActionsMenu false).
   const canEdit = !!showCardActionsMenu && !isExporting;
 
-  // Helpers to build layouts per component list
-  const getMinSizeForType = (type: string) => {
-    if (type === 'metric') return { minW: 2, minH: 2 };
-    if (type === 'table') return { minW: 12, minH: 8 };
-    return { minW: 4, minH: 8 }; // default for charts
-  };
+  // Helpers to build layouts per component list. The pure logic lives in
+  // dashboardLayout.ts so it can be unit-tested without rendering the grid.
+  const getMinSizeForType = getMinSizeForTypePure;
 
   const componentsToBaseLayout = (components: any[]): Layout[] => {
     return components.map((c: any, index: number) => {
       const typeMin = getMinSizeForType(c.type);
       const src = c.layout || {};
-      const x = Number.isFinite(src.x) ? src.x : (Number.isFinite(c.position?.x) ? c.position.x : (index % 12));
+      let x = Number.isFinite(src.x) ? src.x : (Number.isFinite(c.position?.x) ? c.position.x : (index % 12));
       const y = Number.isFinite(src.y) ? src.y : (Number.isFinite(c.position?.y) ? c.position.y : Math.floor(index / 12));
-      const w = Number.isFinite(src.w) ? src.w : (Number.isFinite(c.position?.width) ? c.position.width : 4);
+      let w = Number.isFinite(src.w) ? src.w : (Number.isFinite(c.position?.width) ? c.position.width : 4);
+      // R5: when the dashboard is sparse, widen the sole non-metric to span
+      // the full 24-col grid so it doesn't render pinned to a corner.
+      if (shouldFillSparse(components, c.type)) {
+        w = 24;
+        x = 0;
+      }
 
       // Calculate dynamic height for tables if not explicitly provided
       let h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 10);
@@ -1034,10 +1052,16 @@ const DashboardPreview = ({
         }
       }
 
-      // Enforce content-driven minima for first render if provided by backend; otherwise type defaults
-      const minW = Number.isFinite(src.minW) ? src.minW : typeMin.minW;
-      const minH = Number.isFinite(src.minH) ? src.minH : typeMin.minH;
-      return { i: String(c.id), x, y, w, h, minW, minH, static: false } as Layout;
+      // Final clamp against the type floor. The backend can (and historically has)
+      // shipped layouts with h<minH or minH=1, which would render as 30px slivers
+      // — the canonical "stretched chart" bug. Route every backend-payload item
+      // through the same clamp the localStorage path uses so F5 alone heals the
+      // dashboard, no regeneration needed.
+      const clamped = clampLayoutItem(
+        { w, h, minW: Number.isFinite(src.minW) ? src.minW : typeMin.minW, minH: Number.isFinite(src.minH) ? src.minH : typeMin.minH },
+        typeMin,
+      );
+      return { i: String(c.id), x, y, w: clamped.w, h: clamped.h, minW: clamped.minW, minH: clamped.minH, static: false } as Layout;
     });
   };
 
@@ -1050,7 +1074,12 @@ const DashboardPreview = ({
         scaledX = Math.max(0, toCols - scaledW);
       }
       const scaledMinW = item.minW ? Math.max(1, Math.round((item.minW * toCols) / fromCols)) : item.minW;
-      return { ...item, x: scaledX, w: scaledW, minW: scaledMinW } as Layout;
+      // Heights don't depend on cols, but enforce minH so a saved item with h<minH
+      // (the "stretched vertical strip" pattern) cannot survive a breakpoint rescale.
+      const minH = item.minH;
+      const h = minH && Number.isFinite(minH) ? Math.max(item.h, minH) : item.h;
+      const w = scaledMinW && Number.isFinite(scaledMinW) ? Math.max(scaledW, scaledMinW) : scaledW;
+      return { ...item, x: scaledX, w, h, minW: scaledMinW } as Layout;
     });
   };
 
@@ -1084,12 +1113,10 @@ const DashboardPreview = ({
 
   // Bump version when grid behavior changes (e.g. compactType) so we don't reuse
   // layouts saved under older compaction logic.
-  const storageKey = useMemo(() => {
-    const baseId = activeDashboard?.id || 'processed_dashboard';
-    // Append projectId for "processed_dashboard" to prevent layout collisions between different projects
-    const suffix = (baseId === 'processed_dashboard' && projectId) ? `_${projectId}` : '';
-    return `dashboard_layout_${baseId}${suffix}_v5`;
-  }, [activeDashboard?.id, projectId]);
+  const storageKey = useMemo(
+    () => computeStorageKey(activeDashboard?.id, activeDashboard?.components, projectId),
+    [activeDashboard?.id, activeDashboard?.components, projectId],
+  );
 
   const [layouts, setLayouts] = useState<Layouts>({ lg: [], md: [], sm: [], xs: [], xxs: [] });
   const [isLayoutReady, setIsLayoutReady] = useState(false);
@@ -1121,51 +1148,76 @@ const DashboardPreview = ({
       return;
     }
 
-    // Try to restore saved layouts for persisted dashboards (even processed ones with a legitimate ID)
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Layouts;
-
-        // Validation: Verify if the saved layouts still match the components we have.
-        // If the LLM generates 5 totally new charts but the saved layout has 2 layout boxes, we must use initial.
-        // Compare the keys in the 'lg' array.
-        const activeComponentIds = new Set(activeDashboard.components.map((c: any) => String(c.id)));
-        const savedComponentIds = new Set(parsed.lg?.map((item) => item.i));
-
-        // Check if there's significant overlap. Fast heuristic: do they differ in size, or missing required IDs?
-        let isValid = true;
-        for (const id of activeComponentIds) {
-          if (!savedComponentIds.has(id)) {
-            isValid = false;
-            break;
+    // Try to restore saved layouts for persisted dashboards (even processed ones with a legitimate ID).
+    // Skipped entirely for ephemeral previews (disablePersistence) so stale grid items can't bleed
+    // across different dashboards.
+    if (!disablePersistence) {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved) as Layouts;
+          const { layouts: sanitized, fullyCovered } = sanitizeLayouts(
+            parsed,
+            activeDashboard.components,
+          );
+          if (fullyCovered) {
+            setLayouts(sanitized);
+            setIsLayoutReady(true);
+            return;
           }
         }
-
-        if (isValid) {
-          setLayouts(parsed);
-          setIsLayoutReady(true);
-          return;
-        }
+      } catch (_e) {
+        // ignore parse errors and fall back to initial
       }
-    } catch (_e) {
-      // ignore parse errors and fall back to initial
     }
 
     // Default to the backend's generated layout if storage fails or layout is deemed invalidated.
     setLayouts(initialResult.layouts);
     setIsLayoutReady(true);
-  }, [activeDashboard, storageKey, isExporting]);
+  }, [activeDashboard, storageKey, isExporting, disablePersistence]);
+
+  // Sliver telemetry. After the grid mounts, measure every rendered grid item
+  // and warn (dev) / track (prod) when any chart/table cell renders smaller
+  // than its minimum legible size. This is the canary that fires when stale
+  // localStorage, an RGL cache miss, or a width-0 mount sneaks the
+  // "stretched chart" bug back in — even when the backend data is fine.
+  useEffect(() => {
+    if (!isLayoutReady || !activeDashboard || isExporting) return;
+    const id = window.setTimeout(() => {
+      const items = document.querySelectorAll<HTMLElement>(".react-grid-item");
+      const slivers: Array<{ id: string; w: number; h: number }> = [];
+      items.forEach((el) => {
+        const r = el.getBoundingClientRect();
+        // Charts/tables should be at least 40px tall after minH clamp. Metrics
+        // can legitimately be ~60px tall, so apply a lower floor.
+        const tooShort = r.height < 40;
+        const tooNarrow = r.width < 60;
+        if (tooShort || tooNarrow) {
+          slivers.push({ id: el.getAttribute("data-grid-id") || el.className, w: r.width, h: r.height });
+        }
+      });
+      if (slivers.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[DashboardPreview] sliver layout detected — chart/table rendered below minimum size.",
+          { storageKey, dashboardId: activeDashboard?.id, slivers },
+        );
+      }
+    }, 500);
+    return () => window.clearTimeout(id);
+  }, [isLayoutReady, layouts, activeDashboard, isExporting, storageKey]);
 
   const [currentBreakpoint, setCurrentBreakpoint] = useState<string>('lg');
 
   const handleLayoutChange = (current: Layout[], all: Layouts) => {
     if (!isLayoutReady) return;
     setLayouts(all);
-    // Persist per dashboard id
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(all));
-    } catch (_e) { /* ignore */ }
+    // Persist per dashboard id (skipped for ephemeral previews)
+    if (!disablePersistence) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(all));
+      } catch (_e) { /* ignore */ }
+    }
 
     // Sync back to dashboard state only when using real configuration
     if (!processedData && dashboardState.configuration && updateComponent) {
@@ -1191,9 +1243,11 @@ const DashboardPreview = ({
     scaledAll.xxs = currentBreakpoint === 'xxs' ? current : scaleLayoutForCols(current, currentCols, cols.xxs);
 
     setLayouts(scaledAll);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(scaledAll));
-    } catch (_e) { /* ignore */ }
+    if (!disablePersistence) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(scaledAll));
+      } catch (_e) { /* ignore */ }
+    }
   };
 
   const handleBreakpointChange = (newBreakpoint: string) => {

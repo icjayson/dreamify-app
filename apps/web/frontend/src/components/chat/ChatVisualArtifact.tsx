@@ -29,7 +29,7 @@ export function ChatVisualArtifact({ artifact, isSidePanelOpen = false }: ChatVi
   const [isExporting, setIsExporting] = useState(false);
   const Icon = artifact.kind === "table" ? Table2 : BarChart3;
   const isTable = artifact.kind === "table";
-  const inlineWidthClass = isSidePanelOpen ? "max-w-full" : "max-w-[720px]";
+  const inlineWidthClass = isSidePanelOpen ? "max-w-full" : "max-w-[760px]";
 
   const handleExport = async (target: "card" | "modal" = "card") => {
     const element = target === "modal" ? modalRef.current : cardRef.current;

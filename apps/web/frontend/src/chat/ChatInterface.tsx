@@ -27,6 +27,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import { useTheme } from "@/hooks/useTheme";
 import { formatToDisplay } from "@/utils/timestamp";
+import { useUser } from "@clerk/clerk-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 
 // Creative phrase variants per backend step — each key maps to a real Morpheus workflow step
@@ -554,6 +556,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const stagedFiles = uploadedFiles.filter(f => f.status !== 'processed' && f.status !== 'error');
   const isSendingRef = useRef<boolean>(false);
   const { toast } = useToast();
+  const { user: clerkUser } = useUser();
+  const userImageUrl = clerkUser?.imageUrl;
+  const userInitials = (() => {
+    const name = (clerkUser?.fullName || clerkUser?.firstName || clerkUser?.username || clerkUser?.primaryEmailAddress?.emailAddress || "").trim();
+    if (!name) return "";
+    const parts = name.split(/\s+/);
+    const first = parts[0]?.[0] || "";
+    const second = parts.length > 1 ? parts[parts.length - 1][0] : "";
+    return (first + second).toUpperCase();
+  })();
 
   // Derive available charts from active dashboard components
   const availableCharts = useMemo(() => {
@@ -1341,45 +1353,49 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     <div className="flex flex-col h-full min-h-0 bg-muted">
 
       {/* Messages Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 space-y-4 chat-scrollbar-hide">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3 space-y-4 chat-scrollbar-hide">
         {messages.map((message, index) => {
           const isUser = message.role === "user";
           const isSystem = message.role === "system";
           const bubbleLayoutClass = isUser ? "flex-row-reverse" : "flex-row";
-          const avatarClass = isUser
-            ? "bg-slate-800 dark:bg-black"
-            : isSystem
-              ? "bg-muted dark:bg-white/10 border border-border dark:border-white/20"
-              : "bg-transparent";
           const bubbleBgClass = isUser
             ? "bg-muted dark:bg-black p-3 border border-border dark:border-white/10"
             : isSystem
               ? "bg-muted/50 dark:bg-white/5 p-3 border border-border dark:border-white/10"
               : "bg-transparent p-0";
           const isAssistant = !isUser && !isSystem;
-          const messageGap = isAssistant ? "gap-1" : "gap-2";
-          const avatarContainerSize = isAssistant ? "w-5 h-5" : "w-6 h-6";
-          const messageWidthClass = isAssistant && !isSidePanelOpen ? "w-full max-w-full" : "max-w-[90%]";
+          const messageGap = "gap-2";
+          // Single canonical content width — every child of the message column inherits this so
+          // user/assistant/dashboard-card/artifact blocks line up on the same vertical rail.
+          const CONTENT_MAX = isSidePanelOpen ? "max-w-full" : "max-w-[760px]";
+          const messageWidthClass = isAssistant && !isSidePanelOpen ? `w-full ${CONTENT_MAX}` : CONTENT_MAX;
           const bubbleWidthClass = isAssistant && !isSidePanelOpen ? "flex-1" : "";
-          const textContentWidthClass = isAssistant && !isSidePanelOpen ? "max-w-[860px]" : "max-w-full";
-          const compactSurfaceWidthClass = isAssistant && !isSidePanelOpen ? "max-w-[720px]" : "max-w-full";
+          const textContentWidthClass = CONTENT_MAX;
+          const compactSurfaceWidthClass = CONTENT_MAX;
           return (
             <div key={message.id} className="space-y-1">
               <div
-                className={`chat-enter flex ${isUser ? "justify-end" : "justify-start"}`}
+                className={`group/message chat-enter flex ${isUser ? "justify-end" : "justify-start"}`}
               >
                 <div className={`${messageWidthClass} min-w-0 flex ${messageGap} ${bubbleLayoutClass}`}>
-                  <div className={`${avatarContainerSize} rounded-md flex items-center justify-center flex-shrink-0 ${avatarClass}`}>
-                    {isUser ? (
-                      <User className="w-3 h-3 text-white" />
-                    ) : isSystem ? (
+                  {isUser ? (
+                    <Avatar className="w-7 h-7 flex-shrink-0 ring-1 ring-white/10 dark:ring-white/15 shadow-sm">
+                      {userImageUrl ? <AvatarImage src={userImageUrl} alt="You" /> : null}
+                      <AvatarFallback className="bg-gradient-to-br from-slate-700 to-slate-900 dark:from-zinc-700 dark:to-black text-white text-[10px] font-semibold tracking-wide">
+                        {userInitials || <User className="w-3.5 h-3.5 text-white/90" />}
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : isSystem ? (
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-muted dark:bg-white/10 border border-border dark:border-white/20">
                       <span className="text-[9px] font-semibold tracking-wide uppercase text-muted-foreground dark:text-white/70">
                         SYS
                       </span>
-                    ) : (
-                      <img src={logoFavicon} alt="Dreamify" className="h-5 w-5 object-contain" />
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-transparent">
+                      <img src={logoFavicon} alt="Dreamify" className="h-6 w-6 object-contain" />
+                    </div>
+                  )}
 
                   <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words overflow-hidden ${bubbleWidthClass} ${bubbleBgClass}`}>
                     {/* Attachment badge (file) — hide full badge when chart mentions are present (compact version shown below instead) */}
@@ -1786,27 +1802,25 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         </Tooltip>
                       );
                     })()}
-                    <div className="flex items-center justify-between mt-1">
+                    <div className={`flex items-center gap-2 mt-1 ${isUser ? "justify-end" : "justify-start"}`}>
                       <span className="text-xs text-muted-foreground">
                         {formatToDisplay(
                           message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
                           { format: "full" },
                         )}
-	                      </span>
-	                      <div className="flex items-center gap-1">
-	                        {message.content && !message.isError && (
-	                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(message.content);
-                              toast({ title: "Copied", description: "Message copied to clipboard" });
-                            }}
-                            className="p-1 rounded-md text-muted-foreground hover:text-foreground dark:text-white/40 dark:hover:text-white transition-colors hover:bg-muted dark:hover:bg-white/10"
-                            title="Copy message"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
+                      </span>
+                      {message.content && !message.isError && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(message.content);
+                            toast({ title: "Copied", description: "Message copied to clipboard" });
+                          }}
+                          className="p-1 rounded-md text-muted-foreground hover:text-foreground dark:text-white/40 dark:hover:text-white transition-colors hover:bg-muted dark:hover:bg-white/10 opacity-0 group-hover/message:opacity-100 focus:opacity-100"
+                          title="Copy message"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

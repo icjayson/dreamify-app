@@ -174,6 +174,7 @@ export default function HiddenDashboardCapturer({
         dashboardId={currentTask.dashboardId}
         processedData={dashboardData}
         showCardActionsMenu={false}
+        disablePersistence
       />
     </div>
   );

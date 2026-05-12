@@ -94,6 +94,7 @@ export function AdminDashboardPreview({ conversationId, projectId, dashboardId }
         <DashboardPreview
             dashboardId={dashboardId || undefined}
             processedData={config}
+            disablePersistence
         />
     );
 }

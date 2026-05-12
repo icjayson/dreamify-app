@@ -11,6 +11,15 @@ export interface ConversationNodesToMessagesOptions {
     accountName?: string;
     propertyName?: string;
     syncVersionName?: string;
+    files?: Array<{
+      id: string;
+      name: string;
+      ext?: string;
+      sourceType?: string;
+      accountName?: string;
+      propertyName?: string;
+      syncVersionName?: string;
+    }>;
   };
 }
 
@@ -218,31 +227,40 @@ export function conversationNodesToMessages(
           assetContent?.data?.name ||
           currentAssetName;
 
+        const getSourceTypeFromRaw = (raw?: string): string | undefined => {
+          const lower = (raw || '').toLowerCase();
+          if (lower.includes('ga4') || lower.includes('google_analytics') || lower.includes('google analytics')) return 'GA4';
+          if (lower.includes('sheet') || lower.includes('google sheets')) return 'Google Sheets';
+          if (lower.includes('meta') || lower.includes('meta_ads')) return 'Meta Ads';
+          if (lower.includes('tiktok') || lower.includes('tik_tok')) return 'TikTok';
+          if (lower.includes('google ads') || lower.includes('google_ads')) return 'Google Ads';
+          if (lower.includes('firebase')) return 'Firebase';
+          if (lower.includes('appsflyer')) return 'AppsFlyer';
+          if (lower.includes('stripe')) return 'Stripe';
+          return undefined;
+        };
+
         // Derive sourceType from asset_type stored in the conversation node
         const assetType: string = assetContent?.data?.sourceType || '';
         const fileName: string = firstName || '';
-        let sourceType: string | undefined;
-        const lowerAssetType = assetType.toLowerCase();
-
-        if (assetContents.length > 1) {
-          sourceType = 'Multiple';
-        } else if (lowerAssetType.includes('ga4') || lowerAssetType.includes('google_analytics') || lowerAssetType.includes('google analytics')) {
-          sourceType = 'GA4';
-        } else if (lowerAssetType.includes('sheet') || lowerAssetType.includes('google sheets')) {
-          sourceType = 'Google Sheets';
-        } else if (lowerAssetType.includes('meta') || lowerAssetType.includes('meta_ads')) {
-          sourceType = 'Meta Ads';
-        } else if (lowerAssetType.includes('tiktok') || lowerAssetType.includes('tik_tok')) {
-          sourceType = 'TikTok';
-        } else if (lowerAssetType.includes('google ads') || lowerAssetType.includes('google_ads')) {
-          sourceType = 'Google Ads';
-        } else if (lowerAssetType.includes('firebase')) {
-          sourceType = 'Firebase';
-        } else if (lowerAssetType.includes('appsflyer')) {
-          sourceType = 'AppsFlyer';
-        } else if (lowerAssetType.includes('stripe')) {
-          sourceType = 'Stripe';
-        }
+        const sourceType = assetContents.length > 1 ? 'Multiple' : getSourceTypeFromRaw(assetType);
+        const attachmentFiles = assetContents
+          .map((content: any) => {
+            const data = content?.data || {};
+            const id = data.asset_id || data.file_id;
+            const name = data.filename || data.name;
+            if (!id || !name || id === 'all-assets') return null;
+            return {
+              id,
+              name,
+              ext: data.extension || data.ext,
+              sourceType: getSourceTypeFromRaw(data.sourceType),
+              accountName: data.accountName,
+              propertyName: data.propertyName,
+              syncVersionName: data.syncVersionName || data.sync_version_name,
+            };
+          })
+          .filter(Boolean) as NonNullable<Message['attachment']>['files'];
 
         // Track current sourceType for dashboard cards
         if (sourceType) currentSourceType = sourceType;
@@ -255,6 +273,7 @@ export function conversationNodesToMessages(
           accountName: assetContent?.data?.accountName,
           propertyName: assetContent?.data?.propertyName,
           syncVersionName: assetContent?.data?.syncVersionName || assetContent?.data?.sync_version_name,
+          files: attachmentFiles,
         };
       } else if (isLastUser && options?.lastUserMessageAttachment) {
         normalized.attachment = options.lastUserMessageAttachment;

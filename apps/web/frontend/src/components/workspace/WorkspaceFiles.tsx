@@ -105,6 +105,7 @@ export default function WorkspaceFiles() {
   const [uploadingFiles, setUploadingFiles] = useState<{ name: string; progress: number }[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+  const [addingToProject, setAddingToProject] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -277,20 +278,39 @@ export default function WorkspaceFiles() {
   };
 
   // ── Add to new project ───────────────────────────────────────────────────────
-  const handleChatWithFiles = (fileItems: FileItem[]) => {
-    const toAdd: UploadedFile[] = fileItems.map((f) => ({
-      fileID: f.fileID,
-      filename: f.filename,
-      size: f.size,
-      ext: f.ext,
-      status: "uploaded" as const,
-      projectId: f.asset?.project_id,
-      rowCount: f.asset?.row_count,
-      columnCount: f.asset?.column_count,
-    }));
-    // Store in pending slot — WorkspaceNewChat picks these up after resetChat()
-    setPendingFilesForNewChat(toAdd);
-    navigate("/workspace?tab=new-chat");
+  const handleChatWithFiles = async (fileItems: FileItem[]) => {
+    if (addingToProject || fileItems.length === 0) return;
+    setAddingToProject(true);
+    try {
+      const projectName = fileItems.length === 1
+        ? `${fileItems[0].filename} Project`
+        : `${fileItems.length} Files Project`;
+      const result = await fileService.addAssetsToNewProject(fileItems.map((f) => f.fileID), projectName);
+      if (!result.success || !result.project?.id || result.assets.length === 0) {
+        throw new Error(result.error || "Failed to add files to a new project.");
+      }
+      const toAdd: UploadedFile[] = result.assets.map((asset) => ({
+        fileID: asset.asset_id,
+        filename: asset.filename,
+        size: asset.size_bytes,
+        ext: asset.extension,
+        status: "uploaded" as const,
+        projectId: result.project?.id,
+        rowCount: asset.row_count,
+        columnCount: asset.column_count,
+      }));
+      // Store in pending slot — WorkspaceNewChat picks these up after resetChat()
+      setPendingFilesForNewChat(toAdd);
+      navigate("/workspace?tab=new-chat");
+    } catch (error) {
+      toast({
+        title: "Could not create project",
+        description: error instanceof Error ? error.message : "Failed to add files to a new project.",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingToProject(false);
+    }
   };
 
   // ── Download ─────────────────────────────────────────────────────────────────
@@ -513,7 +533,7 @@ export default function WorkspaceFiles() {
             <ActionBtn
               icon={<FolderPlus className="w-3.5 h-3.5" />}
               label={`Add to new project (${selected.size})`}
-              active={selected.size > 0}
+              active={selected.size > 0 && !addingToProject}
               onClick={() => {
                 const sel = filteredFiles.filter((f) => selected.has(f.fileID));
                 if (sel.length) handleChatWithFiles(sel);
@@ -624,6 +644,7 @@ export default function WorkspaceFiles() {
                   </button>
                   <button
                     onClick={() => handleChatWithFiles([file])}
+                    disabled={addingToProject}
                     className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all opacity-0 group-hover:opacity-100"
                     title="Add to new project"
                   >

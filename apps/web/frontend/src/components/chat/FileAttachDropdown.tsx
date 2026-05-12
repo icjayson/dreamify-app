@@ -13,6 +13,7 @@ import { fileService, type FileItem } from "@/services/fileService";
 import { useChatStore, type UploadedFile } from "@/chat/useChatStore";
 import { cn } from "@/lib/utils";
 import { formatToDisplay } from "@/utils/timestamp";
+import { useToast } from "@/hooks/use-toast";
 
 interface FileAttachDropdownProps {
   /** Called when the user chooses "Upload" */
@@ -20,6 +21,8 @@ interface FileAttachDropdownProps {
   disabled?: boolean;
   /** Compact = icon-only trigger (used in ChatInterface toolbar) */
   compact?: boolean;
+  /** Clone selected existing files into the active prompt project before attaching. */
+  cloneToProject?: boolean;
   className?: string;
 }
 
@@ -39,14 +42,18 @@ export default function FileAttachDropdown({
   onUpload,
   disabled,
   compact,
+  cloneToProject,
   className,
 }: FileAttachDropdownProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"main" | "files">("main");
   const [files, setFiles] = useState<FileItem[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [selectingFileId, setSelectingFileId] = useState<string | null>(null);
+  const [fileSearch, setFileSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const addFiles = useChatStore((s) => s.addFiles);
+  const { toast } = useToast();
 
   // Close on outside click
   useEffect(() => {
@@ -81,6 +88,7 @@ export default function FileAttachDropdown({
 
   const handleShowFiles = async () => {
     setView("files");
+    setFileSearch("");
     setFilesLoading(true);
     try {
       const res = await fileService.listFiles();
@@ -97,20 +105,63 @@ export default function FileAttachDropdown({
     }
   };
 
-  const handleSelectFile = (file: FileItem) => {
-    const uploaded: UploadedFile = {
-      fileID: file.fileID,
-      filename: file.filename,
-      size: file.size,
-      ext: file.ext || "",
-      status: "uploaded",
-      projectId: file.asset?.project_id,
-      rowCount: file.asset?.row_count,
-      columnCount: file.asset?.column_count,
-    };
-    addFiles([uploaded]);
-    setOpen(false);
-    setView("main");
+  const visibleFiles = files.filter((file) =>
+    file.filename.toLowerCase().includes(fileSearch.trim().toLowerCase())
+  );
+
+  const handleSelectFile = async (file: FileItem) => {
+    if (selectingFileId) return;
+    if (!cloneToProject) {
+      const uploaded: UploadedFile = {
+        fileID: file.fileID,
+        filename: file.filename,
+        size: file.size,
+        ext: file.ext || "",
+        status: "uploaded",
+        projectId: file.asset?.project_id,
+        rowCount: file.asset?.row_count,
+        columnCount: file.asset?.column_count,
+      };
+      addFiles([uploaded]);
+      setOpen(false);
+      setView("main");
+      return;
+    }
+    setSelectingFileId(file.fileID);
+    try {
+      const existingProjectId = useChatStore.getState().currentProjectId || useChatStore.getState().uploadedFiles.find((uploadedFile) => uploadedFile.projectId)?.projectId;
+      const result = existingProjectId
+        ? await fileService.addAssetsToProject([file.fileID], existingProjectId)
+        : await fileService.addAssetsToNewProject(
+            [file.fileID],
+            `${file.filename} Project`
+          );
+      const asset = result.assets[0];
+      if (!result.success || !result.project?.id || !asset?.asset_id) {
+        throw new Error(result.error || "Failed to add this file to the project.");
+      }
+      const uploaded: UploadedFile = {
+        fileID: asset.asset_id,
+        filename: asset.filename,
+        size: asset.size_bytes,
+        ext: asset.extension || "",
+        status: "uploaded",
+        projectId: result.project.id,
+        rowCount: asset.row_count,
+        columnCount: asset.column_count,
+      };
+      addFiles([uploaded]);
+      setOpen(false);
+      setView("main");
+    } catch (error) {
+      toast({
+        title: "Could not add file",
+        description: error instanceof Error ? error.message : "Failed to add this file to a new project.",
+        variant: "destructive",
+      });
+    } finally {
+      setSelectingFileId(null);
+    }
   };
 
   return (
@@ -173,6 +224,15 @@ export default function FileAttachDropdown({
                 <span className="text-sm font-medium">Current Files</span>
               </div>
 
+              <div className="px-3 py-2 border-b border-border/30">
+                <input
+                  value={fileSearch}
+                  onChange={(e) => setFileSearch(e.target.value)}
+                  placeholder="Search files..."
+                  className="h-8 w-full rounded-md border border-border/50 bg-background px-2.5 text-xs outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary/40"
+                />
+              </div>
+
               {/* File list */}
               <div className="max-h-60 overflow-y-auto">
                 {filesLoading ? (
@@ -183,11 +243,16 @@ export default function FileAttachDropdown({
                   <div className="px-3 py-5 text-xs text-muted-foreground text-center">
                     No files uploaded yet
                   </div>
+                ) : visibleFiles.length === 0 ? (
+                  <div className="px-3 py-5 text-xs text-muted-foreground text-center">
+                    No files match your search
+                  </div>
                 ) : (
-                  files.map((f) => (
+                  visibleFiles.map((f) => (
                     <button
                       key={f.fileID}
                       className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/60 transition-colors"
+                      disabled={!!selectingFileId}
                       onClick={() => handleSelectFile(f)}
                     >
                       {fileIcon(f.ext)}
@@ -197,6 +262,9 @@ export default function FileAttachDropdown({
                           {formatDate(f.created_at)}
                         </p>
                       </div>
+                      {selectingFileId === f.fileID && (
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground flex-shrink-0" />
+                      )}
                     </button>
                   ))
                 )}

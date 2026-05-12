@@ -15,6 +15,15 @@ export interface Message {
     accountName?: string;
     propertyName?: string;
     syncVersionName?: string;
+    files?: Array<{
+      id: string;
+      name: string;
+      ext?: string;
+      sourceType?: string;
+      accountName?: string;
+      propertyName?: string;
+      syncVersionName?: string;
+    }>;
   };
   /** Charts referenced via @chart mention */
   chartMentions?: Array<{

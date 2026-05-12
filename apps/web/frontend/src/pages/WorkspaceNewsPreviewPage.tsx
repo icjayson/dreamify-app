@@ -4,6 +4,7 @@ import ProductNewsModal, {
   WORKSPACE_NEWS_ITEMS,
   type WorkspaceNewsItem,
 } from "@/components/workspace/ProductNewsModal";
+import OnboardingModal from "@/components/workspace/OnboardingModal";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Shuffle } from "lucide-react";
@@ -11,6 +12,7 @@ import { Shuffle } from "lucide-react";
 export default function WorkspaceNewsPreviewPage() {
   const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
+  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
   const [activeFeature, setActiveFeature] = useState<WorkspaceNewsItem | null>(WORKSPACE_NEWS_ITEMS[0]);
 
   const featureCount = useMemo(() => WORKSPACE_NEWS_ITEMS.length, []);
@@ -49,6 +51,9 @@ export default function WorkspaceNewsPreviewPage() {
             <Button variant="outline" onClick={() => navigate("/workspace?tab=new-chat")}>
               Back to Workspace
             </Button>
+            <Button variant="outline" onClick={() => setOnboardingModalOpen(true)}>
+              Open Onboarding
+            </Button>
             <Button onClick={openRandomFeature} className="button-gradient">
               <Shuffle className="mr-2 h-4 w-4" />
               Open Random
@@ -86,6 +91,10 @@ export default function WorkspaceNewsPreviewPage() {
         feature={activeFeature}
         onClose={() => setModalOpen(false)}
         onExplore={handleExplore}
+      />
+      <OnboardingModal
+        open={onboardingModalOpen}
+        onDismiss={() => setOnboardingModalOpen(false)}
       />
     </div>
   );

@@ -285,10 +285,11 @@ export default function MetaAdsIntegrationModal() {
           ? `${selectedAccount.business_name} — ${selectedAccount.name}`
           : selectedAccount.name
         : 'Meta Ads';
+      const promptProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
 
       const result = await syncMetaAds(
         selectedAccountId,
-        currentProjectId || undefined,
+        promptProjectId || undefined,
         isCustomRange ? undefined : datePreset,
         isCustomRange && startDate ? formatDateForApi(startDate) : undefined,
         isCustomRange && endDate ? formatDateForApi(endDate) : undefined,
@@ -330,14 +331,48 @@ export default function MetaAdsIntegrationModal() {
     }
   };
 
-  const handleSelectConnectedAsset = (run: any) => {
+  const handleSelectConnectedAsset = async (run: any) => {
     if (!run.asset_id) return;
+    const existingProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
+    let resolvedProjectId = existingProjectId || undefined;
+    let selectedAsset: any = null;
+    if (run.connectorKey && run.entityId) {
+      try {
+        if (existingProjectId) {
+          const result = await fileService.addAssetsToProject([run.asset_id], existingProjectId);
+          if (!result.success || !result.project?.id || !result.assets[0]?.asset_id) {
+            throw new Error(result.error || 'Failed to add connected data to the current project.');
+          }
+          selectedAsset = result.assets[0];
+          resolvedProjectId = result.project.id;
+        } else {
+          const projectName = `${run.entityName || run.accountName || 'Connected Data'} Project`;
+          const defaultPrompt = 'Analyze this data and build a dashboard.';
+          const result = await integrationService.addConnectorEntityToNewProject(
+            run.connectorKey,
+            run.entityId,
+            { project_name: projectName, prompt: defaultPrompt, asset_id: run.asset_id }
+          );
+          if (!result.success || !result.project?.project_id || !result.asset?.asset_id) {
+            throw new Error(result.error || 'Failed to create project context from connected data.');
+          }
+          selectedAsset = result.asset;
+          resolvedProjectId = result.project.project_id;
+        }
+      } catch (err: any) {
+        setError(err?.message || 'Failed to create project context from connected data.');
+        return;
+      }
+    } else {
+      resolvedProjectId = run.project_id || resolvedProjectId;
+    }
     const file = {
-      fileID: run.asset_id,
-      filename: run.asset_filename || 'data.csv',
-      size: run.config_snapshot?.size_bytes || 0,
-      ext: 'csv',
+      fileID: selectedAsset?.asset_id || run.asset_id,
+      filename: selectedAsset?.filename || run.asset_filename || 'data.csv',
+      size: selectedAsset?.size_bytes || run.config_snapshot?.size_bytes || 0,
+      ext: selectedAsset?.extension || 'csv',
       status: 'uploaded' as const,
+      projectId: resolvedProjectId,
       sourceType: 'Meta Ads',
       accountName: run.accountName || run.entityName || 'Meta Ads',
       propertyName: 'Campaigns',
@@ -407,7 +442,7 @@ export default function MetaAdsIntegrationModal() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]">
+        <DialogContent className="sm:max-w-[425px] bg-background text-foreground border-border outline-none z-[200]">
           {!emptyRowsDialog ? (
             <>
               <DialogHeader>
@@ -415,7 +450,7 @@ export default function MetaAdsIntegrationModal() {
                   <img src="/meta.png" alt="Meta Logo" className="w-8 h-8 object-contain" />
                   <DialogTitle className="text-xl font-semibold">Connect Meta Ads</DialogTitle>
                 </div>
-                <DialogDescription className="text-gray-400 text-sm">
+                <DialogDescription className="text-muted-foreground text-sm">
                   Import campaign insights directly from your Meta Ads account.
                 </DialogDescription>
               </DialogHeader>
@@ -518,7 +553,7 @@ export default function MetaAdsIntegrationModal() {
                                             </SelectLabel>
                                           )}
                                           {personal.map(a => (
-                                            <SelectItem key={a.id} value={a.id} className="focus:bg-white/10 focus:text-white">
+                                            <SelectItem key={a.id} value={a.id} className="data-[highlighted]:bg-blue-500/15 data-[highlighted]:text-blue-700 dark:data-[highlighted]:text-blue-300">
                                               {a.name}{a.currency ? ` (${a.currency})` : ''}
                                             </SelectItem>
                                           ))}
@@ -530,7 +565,7 @@ export default function MetaAdsIntegrationModal() {
                                             {accounts[0].business_name}
                                           </SelectLabel>
                                           {accounts.map(a => (
-                                            <SelectItem key={a.id} value={a.id} className="focus:bg-white/10 focus:text-white">
+                                            <SelectItem key={a.id} value={a.id} className="data-[highlighted]:bg-blue-500/15 data-[highlighted]:text-blue-700 dark:data-[highlighted]:text-blue-300">
                                               {a.name}{a.currency ? ` (${a.currency})` : ''}
                                             </SelectItem>
                                           ))}
@@ -569,7 +604,7 @@ export default function MetaAdsIntegrationModal() {
                               </SelectTrigger>
                               <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
                                 {DATE_PRESETS.map((preset) => (
-                                  <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
+                                  <SelectItem key={preset.value} value={preset.value} className="data-[highlighted]:bg-blue-500/15 data-[highlighted]:text-blue-700 dark:data-[highlighted]:text-blue-300">
                                     {preset.label}
                                   </SelectItem>
                                 ))}

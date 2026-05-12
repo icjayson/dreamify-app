@@ -175,11 +175,12 @@ export default function AppsFlyerIntegrationModal() {
     try {
       const selectedApp = apps.find((a) => a.app_id === selectedAppId);
       const appLabel = selectedApp?.app_name || selectedAppId;
+      const promptProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
 
       const result = await syncAppsFlyer(
         selectedAppId,
         appLabel,
-        currentProjectId || undefined,
+        promptProjectId || undefined,
         isCustomRange ? undefined : datePreset,
         isCustomRange && startDate ? formatDateForApi(startDate) : undefined,
         isCustomRange && endDate ? formatDateForApi(endDate) : undefined,
@@ -218,14 +219,48 @@ export default function AppsFlyerIntegrationModal() {
     }
   };
 
-  const handleSelectConnectedAsset = (run: any) => {
+  const handleSelectConnectedAsset = async (run: any) => {
     if (!run.asset_id) return;
+    const existingProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
+    let resolvedProjectId = existingProjectId || undefined;
+    let selectedAsset: any = null;
+    if (run.connectorKey && run.entityId) {
+      try {
+        if (existingProjectId) {
+          const result = await fileService.addAssetsToProject([run.asset_id], existingProjectId);
+          if (!result.success || !result.project?.id || !result.assets[0]?.asset_id) {
+            throw new Error(result.error || 'Failed to add connected data to the current project.');
+          }
+          selectedAsset = result.assets[0];
+          resolvedProjectId = result.project.id;
+        } else {
+          const projectName = `${run.entityName || run.accountName || 'Connected Data'} Project`;
+          const defaultPrompt = 'Analyze this data and build a dashboard.';
+          const result = await integrationService.addConnectorEntityToNewProject(
+            run.connectorKey,
+            run.entityId,
+            { project_name: projectName, prompt: defaultPrompt, asset_id: run.asset_id }
+          );
+          if (!result.success || !result.project?.project_id || !result.asset?.asset_id) {
+            throw new Error(result.error || 'Failed to create project context from connected data.');
+          }
+          selectedAsset = result.asset;
+          resolvedProjectId = result.project.project_id;
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to create project context from connected data.');
+        return;
+      }
+    } else {
+      resolvedProjectId = run.project_id || resolvedProjectId;
+    }
     const file = {
-      fileID: run.asset_id,
-      filename: run.asset_filename || 'data.csv',
-      size: run.config_snapshot?.size_bytes || 0,
-      ext: 'csv',
+      fileID: selectedAsset?.asset_id || run.asset_id,
+      filename: selectedAsset?.filename || run.asset_filename || 'data.csv',
+      size: selectedAsset?.size_bytes || run.config_snapshot?.size_bytes || 0,
+      ext: selectedAsset?.extension || 'csv',
       status: 'uploaded' as const,
+      projectId: resolvedProjectId,
       sourceType: 'AppsFlyer',
       accountName: run.accountName || run.entityName || 'AppsFlyer',
       propertyName: 'AppsFlyer',
@@ -277,7 +312,7 @@ export default function AppsFlyerIntegrationModal() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]">
+        <DialogContent className="sm:max-w-[425px] bg-background text-foreground border-border outline-none z-[200]">
           {!emptyRowsDialog ? (
             <>
               <DialogHeader>
@@ -287,7 +322,7 @@ export default function AppsFlyerIntegrationModal() {
                   </div>
                   <DialogTitle className="text-xl font-semibold">Connect AppsFlyer</DialogTitle>
                 </div>
-                <DialogDescription className="text-gray-400 text-sm">
+            <DialogDescription className="text-muted-foreground text-sm">
                   Import mobile attribution data from your AppsFlyer account.
                 </DialogDescription>
               </DialogHeader>
@@ -377,7 +412,7 @@ export default function AppsFlyerIntegrationModal() {
                             </SelectTrigger>
                             <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
                               {apps.map((app) => (
-                                <SelectItem key={app.app_id} value={app.app_id} className="focus:bg-white/10 focus:text-white">
+                                <SelectItem key={app.app_id} value={app.app_id} className="data-[highlighted]:bg-violet-500/15 data-[highlighted]:text-violet-600 dark:data-[highlighted]:text-violet-300">
                                   {app.app_name}{app.platform ? ` (${app.platform})` : ''}
                                 </SelectItem>
                               ))}
@@ -392,7 +427,7 @@ export default function AppsFlyerIntegrationModal() {
                               </SelectTrigger>
                               <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
                                 {apps.map((app) => (
-                                  <SelectItem key={app.app_id} value={app.app_id} className="focus:bg-white/10 focus:text-white">
+                                  <SelectItem key={app.app_id} value={app.app_id} className="data-[highlighted]:bg-violet-500/15 data-[highlighted]:text-violet-600 dark:data-[highlighted]:text-violet-300">
                                     {app.app_name}{app.platform ? ` (${app.platform})` : ''}
                                   </SelectItem>
                                 ))}
@@ -408,7 +443,7 @@ export default function AppsFlyerIntegrationModal() {
                               </SelectTrigger>
                               <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
                                 {DATE_PRESETS.map((preset) => (
-                                  <SelectItem key={preset.value} value={preset.value} className="focus:bg-white/10 focus:text-white">
+                                  <SelectItem key={preset.value} value={preset.value} className="data-[highlighted]:bg-violet-500/15 data-[highlighted]:text-violet-600 dark:data-[highlighted]:text-violet-300">
                                     {preset.label}
                                   </SelectItem>
                                 ))}

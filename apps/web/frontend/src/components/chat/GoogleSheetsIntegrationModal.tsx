@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { integrationService } from '@/services/integrationService';
 import { Loader2, AlertCircle, FileSpreadsheet, RefreshCw, Plus, ShieldCheck } from 'lucide-react';
 import { useChatStore } from '@/chat/useChatStore';
+import { fileService } from '@/services/fileService';
 import { cn } from '@/lib/utils';
 import { useGoogleConnectorAuth } from '@/hooks/useGoogleConnectorAuth';
 import { GOOGLE_CONNECTOR_SCOPES } from '@/constants/googleScopes';
@@ -185,7 +186,8 @@ export default function GoogleSheetsIntegrationModal() {
     setError(null);
 
     try {
-      await syncGoogleSheets(currentProjectId || undefined, oauthToken || undefined);
+      const promptProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
+      await syncGoogleSheets(promptProjectId || undefined, oauthToken || undefined);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to sync Google Sheets');
@@ -194,14 +196,48 @@ export default function GoogleSheetsIntegrationModal() {
     }
   };
 
-  const handleSelectConnectedAsset = (run: any) => {
+  const handleSelectConnectedAsset = async (run: any) => {
     if (!run.asset_id) return;
+    const existingProjectId = currentProjectId || useChatStore.getState().uploadedFiles.find((file) => file.projectId)?.projectId;
+    let resolvedProjectId = existingProjectId || undefined;
+    let selectedAsset: any = null;
+    if (run.connectorKey && run.entityId) {
+      try {
+        if (existingProjectId) {
+          const result = await fileService.addAssetsToProject([run.asset_id], existingProjectId);
+          if (!result.success || !result.project?.id || !result.assets[0]?.asset_id) {
+            throw new Error(result.error || 'Failed to add connected data to the current project.');
+          }
+          selectedAsset = result.assets[0];
+          resolvedProjectId = result.project.id;
+        } else {
+          const projectName = `${run.entityName || run.accountName || 'Connected Data'} Project`;
+          const defaultPrompt = 'Analyze this data and build a dashboard.';
+          const result = await integrationService.addConnectorEntityToNewProject(
+            run.connectorKey,
+            run.entityId,
+            { project_name: projectName, prompt: defaultPrompt, asset_id: run.asset_id }
+          );
+          if (!result.success || !result.project?.project_id || !result.asset?.asset_id) {
+            throw new Error(result.error || 'Failed to create project context from connected data.');
+          }
+          selectedAsset = result.asset;
+          resolvedProjectId = result.project.project_id;
+        }
+      } catch (err: any) {
+        setError(err?.message || 'Failed to create project context from connected data.');
+        return;
+      }
+    } else {
+      resolvedProjectId = run.project_id || resolvedProjectId;
+    }
     const file = {
-      fileID: run.asset_id,
-      filename: run.asset_filename || 'data.csv',
-      size: run.config_snapshot?.size_bytes || 0,
-      ext: 'csv',
+      fileID: selectedAsset?.asset_id || run.asset_id,
+      filename: selectedAsset?.filename || run.asset_filename || 'data.csv',
+      size: selectedAsset?.size_bytes || run.config_snapshot?.size_bytes || 0,
+      ext: selectedAsset?.extension || 'csv',
       status: 'uploaded' as const,
+      projectId: resolvedProjectId,
       sourceType: 'Google Sheets',
       accountName: run.accountName || 'Google Account',
       propertyName: run.entityName || run.config_snapshot?.entity_name,
@@ -219,14 +255,14 @@ export default function GoogleSheetsIntegrationModal() {
       if (!open) onClose();
     }}>
       <DialogContent
-        className="sm:max-w-[425px] bg-[#1A1A1A] text-white border-white/10 outline-none z-[200]"
+        className="sm:max-w-[425px] bg-background text-foreground border-border outline-none z-[200]"
       >
         <DialogHeader>
           <div className="flex items-center gap-3 mb-1">
             <img src="/google-sheet.png" alt="Google Sheets Logo" className="w-8 h-8 object-contain" />
             <DialogTitle className="text-xl font-semibold">Connect Google Sheets</DialogTitle>
           </div>
-          <DialogDescription className="text-gray-400 text-sm">
+          <DialogDescription className="text-muted-foreground text-sm">
             Select a spreadsheet to import data into your project.
           </DialogDescription>
         </DialogHeader>
@@ -249,7 +285,7 @@ export default function GoogleSheetsIntegrationModal() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-green-300">Google Drive access required</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {isGoogleLinked
                       ? 'Grant Drive file permission to your connected Google account.'
                       : 'Connect your Google account and grant Drive file permission.'}
@@ -264,16 +300,16 @@ export default function GoogleSheetsIntegrationModal() {
               )}
               <Button
                 onClick={handleGrantAccess}
-                className="bg-white text-black hover:bg-gray-100 text-sm font-medium w-full"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium w-full"
               >
                 {isGoogleLinked ? 'Grant Drive Access' : 'Connect Google Account'}
               </Button>
             </div>
           ) : (
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
-              <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 p-1 rounded-lg">
-                <TabsTrigger value="new" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select New Sheet</TabsTrigger>
-                <TabsTrigger value="connected" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select Connected Sheet</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 bg-muted border border-border p-1 rounded-lg">
+                <TabsTrigger value="new" className="data-[state=active]:bg-background data-[state=active]:text-foreground rounded-md text-sm transition-all">Select New Sheet</TabsTrigger>
+                <TabsTrigger value="connected" className="data-[state=active]:bg-background data-[state=active]:text-foreground rounded-md text-sm transition-all">Select Connected Sheet</TabsTrigger>
               </TabsList>
 
               <TabsContent value="new" className="space-y-4 outline-none">
@@ -285,14 +321,14 @@ export default function GoogleSheetsIntegrationModal() {
                       <div className="w-8 h-8 rounded-md bg-green-500/20 flex items-center justify-center shrink-0">
                         <FileSpreadsheet className="w-4 h-4 text-green-500" />
                       </div>
-                      <span className="text-sm font-medium truncate max-w-[250px] text-white">
+                      <span className="text-sm font-medium truncate max-w-[250px] text-foreground">
                         {selectedFileName}
                       </span>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-emerald-500/10"
                       onClick={() => {
                         setGoogleSheetsFileId(null);
                         setGoogleSheetsFileName(null);
@@ -306,17 +342,17 @@ export default function GoogleSheetsIntegrationModal() {
                   <div
                     onClick={handleOpenPicker}
                     className={cn(
-                      "flex items-center justify-between p-3 border border-white/10 rounded-lg bg-[#222] hover:bg-white/5 transition-colors cursor-pointer group",
+                      "flex items-center justify-between p-3 border border-border rounded-lg bg-background hover:bg-emerald-500/10 transition-colors cursor-pointer group",
                       !oauthToken && "opacity-50 cursor-not-allowed"
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-md bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
-                        <FileSpreadsheet className="w-4 h-4 text-gray-400" />
+                      <div className="w-8 h-8 rounded-md bg-muted/60 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/15 transition-colors">
+                        <FileSpreadsheet className="w-4 h-4 text-muted-foreground" />
                       </div>
-                      <span className="text-sm text-gray-300">Select a spreadsheet from Drive</span>
+                      <span className="text-sm text-foreground">Select a spreadsheet from Drive</span>
                     </div>
-                    <Plus className="w-4 h-4 text-gray-500 group-hover:text-gray-300 transition-colors" />
+                    <Plus className="w-4 h-4 text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
                   </div>
                 )}
               </TabsContent>
@@ -343,7 +379,7 @@ export default function GoogleSheetsIntegrationModal() {
             type="button"
             variant="ghost"
             onClick={onClose}
-            className="text-gray-400 hover:text-white hover:bg-white/10"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted"
             disabled={syncing}
           >
             Cancel

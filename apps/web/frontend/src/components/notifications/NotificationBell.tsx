@@ -115,7 +115,10 @@ export function NotificationBell() {
       {open && (
         <div
           ref={panelRef}
-          className="absolute bottom-10 left-0 z-50 w-80 rounded-xl border border-border bg-background shadow-xl overflow-hidden"
+          className="absolute top-full right-0 mt-2 z-50 w-80 rounded-xl border border-border bg-background shadow-xl overflow-hidden"
+          style={{
+            animation: 'fadeInDown 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
+          }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/40">

@@ -531,6 +531,86 @@ export default function ProjectPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty]);
 
+  // R6: debounced auto-save of just-dragged layout to S3. DashboardPreview
+  // calls `onLayoutPersist` with the components-merged-with-new-positions on
+  // every drag/resize stop. We coalesce rapid drags into a single save 700ms
+  // after the last interaction.
+  const pendingLayoutSaveRef = useRef<any[] | null>(null);
+  const layoutSaveTimerRef = useRef<number | null>(null);
+
+  const flushLayoutSave = useCallback(async () => {
+    const components = pendingLayoutSaveRef.current;
+    pendingLayoutSaveRef.current = null;
+    if (layoutSaveTimerRef.current !== null) {
+      window.clearTimeout(layoutSaveTimerRef.current);
+      layoutSaveTimerRef.current = null;
+    }
+    if (!components || components.length === 0) return;
+    if (!currentConversationId || !selectedDashboardId || !projectId) return;
+    if (!processedData) return;
+    try {
+      // Refresh in-flight refs so a subsequent manual Save sees the new positions.
+      editedComponentsRef.current = components;
+      const meta = activeDashboardMetaRef.current;
+      const normalizedCore = {
+        id: meta?.id || 'processed_dashboard',
+        layout: meta?.layout || { type: 'grid', grid_columns: 12, grid_rows: 20 },
+        components,
+      };
+      const payload: Record<string, unknown> = processedData?.dashboard_config
+        ? { ...processedData, dashboard_config: normalizedCore }
+        : { ...processedData, ...normalizedCore };
+      // Fire-and-forget. No toast, no spinner — this is the silent counterpart
+      // to `handleSaveDashboard`. Errors surface only via console + telemetry.
+      const result = await conversationService.saveDashboardData(
+        currentConversationId,
+        selectedDashboardId,
+        projectId,
+        payload,
+      );
+      if (result.success) {
+        // Keep processedData in sync so the next render sees the persisted positions.
+        setProcessedData(payload);
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn('[DashboardPreview] auto-save layout failed', result.error);
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[DashboardPreview] auto-save layout exception', e);
+    }
+  }, [currentConversationId, selectedDashboardId, projectId, processedData]);
+
+  const handleLayoutPersist = useCallback((components: any[]) => {
+    pendingLayoutSaveRef.current = components;
+    if (layoutSaveTimerRef.current !== null) {
+      window.clearTimeout(layoutSaveTimerRef.current);
+    }
+    layoutSaveTimerRef.current = window.setTimeout(() => {
+      void flushLayoutSave();
+    }, 700);
+  }, [flushLayoutSave]);
+
+  // Flush pending auto-save when the user navigates away or closes the tab so
+  // the last drag isn't lost.
+  useEffect(() => {
+    const handler = () => {
+      if (pendingLayoutSaveRef.current) {
+        // sendBeacon would be ideal, but our PUT endpoint isn't shaped for it.
+        // A best-effort sync flush is good enough at unload time.
+        void flushLayoutSave();
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+      // Also flush on unmount (route change within the SPA).
+      if (pendingLayoutSaveRef.current) {
+        void flushLayoutSave();
+      }
+    };
+  }, [flushLayoutSave]);
+
   const handleSaveDashboard = useCallback(async () => {
     if (!currentConversationId || !selectedDashboardId || !projectId || !processedData) return;
     setIsSaving(true);
@@ -939,6 +1019,7 @@ export default function ProjectPage() {
                           className="h-full overflow-y-auto"
                           showCardActionsMenu
                           onEditedComponentsChange={handleEditedComponentsChange}
+                          onLayoutPersist={handleLayoutPersist}
                         />
                       </div>
                     </div>

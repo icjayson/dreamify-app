@@ -37,7 +37,18 @@ import {
   sanitizeLayouts,
   shouldFillSparse,
   clampLayoutItem,
+  mergeLayoutIntoComponents,
 } from "@/components/project-section/dashboardLayout";
+
+// Source of truth for the dashboard layout.
+//   "s3"           — the `position` field on each component (loaded from S3) wins.
+//                    localStorage is used only as a one-time legacy fallback,
+//                    and writes are skipped in favor of debounced S3 saves
+//                    triggered via the `onLayoutPersist` callback.
+//   "localstorage" — pre-R6 behavior. Kept as an escape hatch in case the S3
+//                    auto-save path needs to be disabled in production without
+//                    a redeploy.
+const LAYOUT_SOURCE: "s3" | "localstorage" = "s3";
 import {
   convertLLMStylingToChartStyling,
   validateChartStyling,
@@ -139,6 +150,14 @@ interface DashboardPreviewProps {
    * leaves this false.
    */
   disablePersistence?: boolean;
+  /**
+   * Called after every drag/resize stop with the components list merged with
+   * the new layout (each component's `position` reflects the latest x/y/w/h).
+   * The parent (project.tsx) debounces this and pushes it to S3 via
+   * conversationService.saveDashboardData. R6 follow-up: localStorage stops
+   * being the source of truth for layout; S3 is.
+   */
+  onLayoutPersist?: (components: any[]) => void;
 }
 
 const DashboardPreview = ({
@@ -154,6 +173,7 @@ const DashboardPreview = ({
   projectId,
   onEditedComponentsChange,
   disablePersistence = false,
+  onLayoutPersist,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -1148,10 +1168,14 @@ const DashboardPreview = ({
       return;
     }
 
-    // Try to restore saved layouts for persisted dashboards (even processed ones with a legitimate ID).
-    // Skipped entirely for ephemeral previews (disablePersistence) so stale grid items can't bleed
-    // across different dashboards.
-    if (!disablePersistence) {
+    // R6: when LAYOUT_SOURCE is "s3", the `position` field on each component
+    // (loaded from the dashboard JSON on S3) is the source of truth. We do NOT
+    // read localStorage at all — instead we always build from componentsToBaseLayout
+    // (below) which already honours each component's position/layout fields.
+    //
+    // In legacy "localstorage" mode we try the saved layout first, falling
+    // back to the backend payload when it doesn't match.
+    if (LAYOUT_SOURCE === "localstorage" && !disablePersistence) {
       try {
         const saved = localStorage.getItem(storageKey);
         if (saved) {
@@ -1175,6 +1199,20 @@ const DashboardPreview = ({
     setLayouts(initialResult.layouts);
     setIsLayoutReady(true);
   }, [activeDashboard, storageKey, isExporting, disablePersistence]);
+
+  // R6: one-time legacy cache eviction. Every existing user has a corrupted
+  // `dashboard_layout_*` localStorage entry that keeps bleeding the stretched
+  // chart back on F5. Now that S3 is authoritative, evict the stale entry on
+  // first render so users don't have to clear cache manually.
+  useEffect(() => {
+    if (LAYOUT_SOURCE !== "s3") return;
+    if (disablePersistence) return;
+    try {
+      localStorage.removeItem(storageKey);
+    } catch (_e) {
+      // private mode / quota — safe to ignore
+    }
+  }, [storageKey, disablePersistence]);
 
   // Sliver telemetry. After the grid mounts, measure every rendered grid item
   // and warn (dev) / track (prod) when any chart/table cell renders smaller
@@ -1212,8 +1250,9 @@ const DashboardPreview = ({
   const handleLayoutChange = (current: Layout[], all: Layouts) => {
     if (!isLayoutReady) return;
     setLayouts(all);
-    // Persist per dashboard id (skipped for ephemeral previews)
-    if (!disablePersistence) {
+    // Persist per dashboard id (skipped for ephemeral previews and for s3 mode,
+    // which persists via the debounced S3 push fired from handleDragResizeStop).
+    if (LAYOUT_SOURCE === "localstorage" && !disablePersistence) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(all));
       } catch (_e) { /* ignore */ }
@@ -1243,10 +1282,18 @@ const DashboardPreview = ({
     scaledAll.xxs = currentBreakpoint === 'xxs' ? current : scaleLayoutForCols(current, currentCols, cols.xxs);
 
     setLayouts(scaledAll);
-    if (!disablePersistence) {
+    if (LAYOUT_SOURCE === "localstorage" && !disablePersistence) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(scaledAll));
       } catch (_e) { /* ignore */ }
+    }
+    // R6: debounced S3 persistence runs in the parent. We hand it the
+    // edits-applied components merged with the new layout positions so the
+    // dashboard JSON on S3 always reflects what the user just did.
+    if (LAYOUT_SOURCE === "s3" && !disablePersistence && onLayoutPersist) {
+      const lgLayout = scaledAll.lg || current;
+      const mergedForS3 = mergeLayoutIntoComponents(editedDisplayComponents as any[], lgLayout);
+      onLayoutPersist(mergedForS3);
     }
   };
 

@@ -4,6 +4,7 @@ import {
   clampLayoutItem,
   computeStorageKey,
   getMinSizeForType,
+  mergeLayoutIntoComponents,
   sanitizeBreakpoint,
   sanitizeLayouts,
   shouldFillSparse,
@@ -300,6 +301,49 @@ describe("clampLayoutItem — the universal floor used on BOTH backend and local
     );
     expect(out.h).toBe(8);
     expect(out.w).toBe(4);
+  });
+});
+
+describe("mergeLayoutIntoComponents — the bridge from RGL layout to S3 dashboard JSON (R6)", () => {
+  type Comp = { id: string | number; type?: string; position?: Record<string, unknown> };
+
+  it("writes x/y/w/h/minW/minH into each matching component's position", () => {
+    const components: Comp[] = [
+      { id: "a", position: { existing: "field" } },
+      { id: "b" },
+    ];
+    const layout = [
+      mkLayout({ i: "a", x: 0, y: 0, w: 12, h: 10, minW: 4, minH: 8 }),
+      mkLayout({ i: "b", x: 12, y: 0, w: 12, h: 10 }),
+    ];
+    const out = mergeLayoutIntoComponents(components, layout);
+    expect(out[0].position).toMatchObject({
+      x: 0, y: 0, width: 12, height: 10, minW: 4, minH: 8,
+      existing: "field", // preserves pre-existing fields
+    });
+    expect(out[1].position).toMatchObject({ x: 12, y: 0, width: 12, height: 10 });
+  });
+
+  it("returns components untouched when layout is null/empty", () => {
+    const components: Comp[] = [{ id: "a", position: { x: 1 } }];
+    expect(mergeLayoutIntoComponents(components, null)).toBe(components);
+    expect(mergeLayoutIntoComponents(components, [])).toBe(components);
+  });
+
+  it("leaves a component's position untouched when no matching layout entry exists", () => {
+    const components: Comp[] = [
+      { id: "a", position: { x: 99 } },
+      { id: "b" },
+    ];
+    const out = mergeLayoutIntoComponents(components, [mkLayout({ i: "a", x: 1, y: 2 })]);
+    expect(out[0].position).toMatchObject({ x: 1, y: 2 });
+    expect(out[1].position).toBeUndefined();
+  });
+
+  it("matches by stringified id (handles numeric component ids)", () => {
+    const components: Comp[] = [{ id: 42 }];
+    const out = mergeLayoutIntoComponents(components, [mkLayout({ i: "42", x: 5, y: 5 })]);
+    expect(out[0].position).toMatchObject({ x: 5, y: 5 });
   });
 });
 

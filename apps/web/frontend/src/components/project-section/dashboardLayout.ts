@@ -124,6 +124,40 @@ export function shouldFillSparse(components: ComponentLike[], type: string): boo
 }
 
 /**
+ * Merge the latest RGL Layout entries back into the component list as
+ * `position: {x, y, width, height}`. This is what gets pushed to S3 so the
+ * dashboard JSON itself carries the user's layout — no more localStorage as
+ * source of truth.
+ *
+ * Components without a matching layout entry are returned untouched (preserves
+ * any pre-existing position).
+ */
+export function mergeLayoutIntoComponents<C extends { id: string | number; position?: Record<string, unknown> }>(
+  components: C[],
+  layout: Layout[] | undefined | null,
+): C[] {
+  if (!Array.isArray(layout) || layout.length === 0) return components;
+  const byId = new Map<string, Layout>();
+  layout.forEach((l) => byId.set(l.i, l));
+  return components.map((c) => {
+    const l = byId.get(String(c.id));
+    if (!l) return c;
+    return {
+      ...c,
+      position: {
+        ...(c.position || {}),
+        x: l.x,
+        y: l.y,
+        width: l.w,
+        height: l.h,
+        minW: l.minW,
+        minH: l.minH,
+      },
+    };
+  });
+}
+
+/**
  * Sanitize every breakpoint at once. Returns the cleaned layouts plus a flag
  * indicating whether the saved layout still fully covers the active component
  * set — callers should fall back to a freshly-built layout when this is false.

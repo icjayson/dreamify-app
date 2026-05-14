@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any
 import json
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_user
 from app.services.credit_service import CreditService
@@ -408,6 +408,27 @@ class WorkflowStatusResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
+class ThinkingEventResponse(BaseModel):
+    id: str
+    run_id: str
+    sequence: int
+    phase: str
+    status: str
+    title: str
+    summary: Optional[str] = None
+    detail: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    duration_ms: Optional[float] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowEventsResponse(BaseModel):
+    conversation_id: str
+    status: Optional[WorkflowStatusResponse] = None
+    events: List[ThinkingEventResponse]
+
+
 def _map_workflow_node(item: Dict[str, Any]) -> WorkflowStatusResponse:
     return WorkflowStatusResponse(
         conversation_id=item["conversation_id"],
@@ -418,8 +439,27 @@ def _map_workflow_node(item: Dict[str, Any]) -> WorkflowStatusResponse:
     )
 
 
-# NOTE: This route MUST be declared before /conversation/{conversation_id}
-# to avoid FastAPI matching "workflow-status" as a conversation_id.
+def _map_thinking_event(item: Dict[str, Any]) -> ThinkingEventResponse:
+    metadata = item.get("metadata", {}) or {}
+    node_id = item.get("node_id", "")
+    return ThinkingEventResponse(
+        id=str(metadata.get("id") or node_id),
+        run_id=str(metadata.get("run_id") or ""),
+        sequence=int(metadata.get("sequence") or 0),
+        phase=str(metadata.get("phase") or "analysis"),
+        status=str(metadata.get("status") or item.get("status") or "completed"),
+        title=str(metadata.get("title") or "Thinking"),
+        summary=metadata.get("summary"),
+        detail=metadata.get("detail"),
+        started_at=metadata.get("started_at"),
+        completed_at=metadata.get("completed_at"),
+        duration_ms=metadata.get("duration_ms"),
+        metadata=metadata.get("metadata") or {},
+    )
+
+
+# NOTE: Workflow helper routes MUST be declared before /conversation/{conversation_id}
+# to avoid FastAPI matching static path segments as a conversation_id.
 @router.get(
     "/conversation/workflow-status/{conversation_id}",
     response_model=WorkflowStatusResponse,
@@ -450,6 +490,28 @@ async def get_conversation_workflow_status(
             metadata={"step": "initializing"},
         )
     return _map_workflow_node(node)
+
+
+@router.get(
+    "/conversation/workflow-events/{conversation_id}",
+    response_model=WorkflowEventsResponse,
+)
+async def get_conversation_workflow_events(
+    conversation_id: str,
+    project_id: str,
+    user_id: str = Depends(require_user),
+):
+    conversation = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation or conversation.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    status_item = workflow_nodes_repo.get_node(conversation_id, "workflow")
+    events = workflow_nodes_repo.list_workflow_events(conversation_id)
+    return WorkflowEventsResponse(
+        conversation_id=conversation_id,
+        status=_map_workflow_node(status_item) if status_item else None,
+        events=[_map_thinking_event(item) for item in events],
+    )
 
 
 @router.get("/conversation/{conversation_id}", response_model=ConversationResponse)

@@ -36,6 +36,13 @@ class NodeStatusUpdateRequest(BaseModel):
     metadata: Optional[Dict] = None
 
 
+class WorkflowEventRequest(BaseModel):
+    conversation_id: str
+    run_id: str
+    sequence: int
+    event: Dict
+
+
 class ProcessedKeyUpdateRequest(BaseModel):
     processed_json_s3_key: str
 
@@ -121,6 +128,21 @@ async def upsert_workflow_status(
         node_id=request.node_id,
         status=request.status,
         metadata=request.metadata,
+    )
+    return _map_node(item)
+
+
+@router.post("/morpheus/workflow-event", response_model=NodeStatusResponse)
+async def append_workflow_event(
+    request: WorkflowEventRequest,
+    x_morpheus_key: Optional[str] = Header(None),
+):
+    _ensure_morpheus_key(x_morpheus_key)
+    item = workflow_nodes_repo.append_workflow_event(
+        conversation_id=request.conversation_id,
+        run_id=request.run_id,
+        sequence=request.sequence,
+        event=request.event,
     )
     return _map_node(item)
 

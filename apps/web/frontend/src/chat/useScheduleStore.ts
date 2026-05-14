@@ -21,6 +21,7 @@ interface ScheduleState {
   updateSchedule: (scheduleId: string, req: UpdateScheduleRequest) => Promise<void>;
   deleteSchedule: (scheduleId: string) => Promise<void>;
   togglePause: (schedule: ScheduleRecord) => Promise<void>;
+  runScheduleNow: (scheduleId: string) => Promise<void>;
   fetchScheduleRuns: (scheduleId: string) => Promise<void>;
 }
 
@@ -76,6 +77,15 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         s.schedule_id === schedule.schedule_id ? updated : s
       ),
     }));
+  },
+
+  runScheduleNow: async (scheduleId) => {
+    await scheduleService.runScheduleNow(scheduleId);
+    const [schedules, runs] = await Promise.all([
+      scheduleService.listSchedules(),
+      scheduleService.getScheduleRuns(scheduleId),
+    ]);
+    set({ schedules, selectedScheduleRuns: runs });
   },
 
   fetchScheduleRuns: async (scheduleId) => {

@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2, Pencil, CalendarDays } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -1399,9 +1398,9 @@ const DashboardPreview = ({
                 {!isExporting && (
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="h-9 text-sm rounded-md border flex items-center gap-2"
+                      <button
+                        type="button"
+                        className="flex h-9 flex-shrink-0 items-center justify-start gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-80"
                         style={{
                           color: "var(--highlight-color)",
                           backgroundColor: "var(--bg-card-color)",
@@ -1410,7 +1409,7 @@ const DashboardPreview = ({
                       >
                         <CalendarDays className="h-4 w-4" />
                         <span>Date Range</span>
-                      </Button>
+                      </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[280px] z-[201] p-3 space-y-3" align="end">
                       <div className="space-y-1">

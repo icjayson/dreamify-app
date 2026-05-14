@@ -558,12 +558,12 @@ export default function WorkspacePage() {
   }, [user]);
 
   useEffect(() => {
-    if (activeTab === "connectors") fetchConnectorStatuses();
+    if (activeTab === "connectors" || activeTab === "schedules") fetchConnectorStatuses();
   }, [activeTab, fetchConnectorStatuses]);
 
   useEffect(() => {
     const handleConnectorSynced = () => {
-      if (activeTab !== "connectors") return;
+      if (activeTab !== "connectors" && activeTab !== "schedules") return;
       fetchConnectorStatuses();
     };
     window.addEventListener("dreamify:connector-synced", handleConnectorSynced);
@@ -1206,6 +1206,7 @@ export default function WorkspacePage() {
                     const dashboardQuery = dashboardId ? `&dashboardId=${encodeURIComponent(dashboardId)}` : "";
                     navigate(`/workspace/project?projectId=${projectId}${dashboardQuery}`);
                   }}
+                  projects={projects}
                 />
               </>
             ) : (
@@ -1430,7 +1431,7 @@ export default function WorkspacePage() {
 
           {/* ════ SCHEDULES TAB ════ */}
           {activeTab === "schedules" && (
-            <ScheduleManager projectId={projects[0]?.id ?? ""} />
+            <ScheduleManager projectId="" connectorOverview={connectorOverview} projects={projects} />
           )}
 
 

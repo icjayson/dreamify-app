@@ -4,6 +4,7 @@ export type ProviderKey = 'ga4' | 'meta_ads' | 'tiktok' | 'appsflyer' | 'stripe'
 export type FrequencyKey = 'daily' | 'weekly' | 'biweekly';
 export type DateRangePreset = 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d';
 export type ScheduleStatus = 'active' | 'paused';
+export type SchedulerStatus = 'configured' | 'not_configured' | 'error';
 export type RunStatus = 'running' | 'success' | 'failed' | 'token_expired';
 
 export interface SlackAction {
@@ -24,6 +25,8 @@ export interface ScheduleRecord {
   date_range_preset: DateRangePreset;
   status: ScheduleStatus;
   eventbridge_rule_name: string;
+  scheduler_status?: SchedulerStatus;
+  scheduler_error?: string;
   created_at: string;
   updated_at: string;
   last_run_at?: string;
@@ -124,6 +127,15 @@ class ScheduleService {
     const res = await api.post<ScheduleRecord>(`${this.baseUrl}/${scheduleId}/resume`, {});
     if (res.success && res.data) return res.data;
     throw new Error(res.error || 'Failed to resume schedule');
+  }
+
+  async runScheduleNow(scheduleId: string): Promise<{ status: RunStatus | 'skipped' | 'not_found'; run_id?: string; rows?: number; duration_ms?: number; reason?: string }> {
+    const res = await api.post<{ status: RunStatus | 'skipped' | 'not_found'; run_id?: string; rows?: number; duration_ms?: number; reason?: string }>(
+      `${this.baseUrl}/${scheduleId}/run-now`,
+      {}
+    );
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || 'Failed to run schedule');
   }
 
   async getScheduleRuns(scheduleId: string, limit = 20): Promise<SyncRun[]> {

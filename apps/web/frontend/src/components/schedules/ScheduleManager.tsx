@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Plus, Trash2, ChevronDown, ChevronUp, AlertCircle, ArrowRight } from 'lucide-react';
+import { Clock, Plus, Trash2, ChevronDown, ChevronUp, AlertCircle, ArrowRight, PlayCircle } from 'lucide-react';
 import { useScheduleStore } from '@/chat/useScheduleStore';
 import { ScheduleRecord, scheduleService } from '@/services/scheduleService';
+import type { ConnectorOverviewItem } from '@/services/integrationService';
+import type { Project } from '@/hooks/useProjects';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -10,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateScheduleModal } from './CreateScheduleModal';
 import { SyncRunHistory } from './SyncRunHistory';
+import { useToast } from '@/hooks/use-toast';
 
 const PROVIDER_LABELS: Record<string, string> = {
   ga4: 'Google Analytics 4',
@@ -60,17 +63,19 @@ function lastRunBadge(schedule: ScheduleRecord) {
 interface ScheduleCardProps {
   schedule: ScheduleRecord;
   defaultProjectId: string;
+  isRunning: boolean;
+  onRunNow: (schedule: ScheduleRecord) => Promise<void>;
 }
 
-const ASSET_SOURCE_TYPE: Record<string, string> = {
-  integration_ga4: 'GA4',
-  integration_meta_ads: 'Meta Ads',
-  integration_tiktok: 'TikTok Ads',
-  integration_appsflyer: 'AppsFlyer',
-  integration_stripe: 'Stripe',
-};
+function schedulerStatusLabel(schedule: ScheduleRecord) {
+  if (schedule.scheduler_status === 'configured') return null;
+  if (schedule.scheduler_status === 'error') {
+    return <Badge className="bg-red-500/15 text-red-700 dark:text-red-300 border-0 text-xs">Scheduler Error</Badge>;
+  }
+  return <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-0 text-xs">Not Configured</Badge>;
+}
 
-function ScheduleCard({ schedule, defaultProjectId }: ScheduleCardProps) {
+function ScheduleCard({ schedule, defaultProjectId, isRunning, onRunNow }: ScheduleCardProps) {
   const { togglePause, deleteSchedule } = useScheduleStore();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -153,9 +158,26 @@ function ScheduleCard({ schedule, defaultProjectId }: ScheduleCardProps) {
               )}
             </div>
           )}
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {schedulerStatusLabel(schedule)}
+            {schedule.scheduler_error && (
+              <span className="text-xs text-muted-foreground truncate max-w-[420px]" title={schedule.scheduler_error}>
+                {schedule.scheduler_error}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => onRunNow(schedule)}
+            disabled={isRunning}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-50"
+            title="Run this schedule now"
+          >
+            <PlayCircle className={`w-3.5 h-3.5 ${isRunning ? 'animate-pulse' : ''}`} />
+            {isRunning ? 'Running' : 'Run now'}
+          </button>
           <Switch
             checked={schedule.status === 'active'}
             onCheckedChange={() => togglePause(schedule)}
@@ -191,15 +213,38 @@ function ScheduleCard({ schedule, defaultProjectId }: ScheduleCardProps) {
 
 interface ScheduleManagerProps {
   projectId: string;
+  connectorOverview?: ConnectorOverviewItem[];
+  projects?: Project[];
 }
 
-export function ScheduleManager({ projectId }: ScheduleManagerProps) {
-  const { schedules, isLoadingSchedules, schedulesError, fetchSchedules } = useScheduleStore();
+export function ScheduleManager({ projectId, connectorOverview = [], projects = [] }: ScheduleManagerProps) {
+  const { schedules, isLoadingSchedules, schedulesError, fetchSchedules, runScheduleNow } = useScheduleStore();
   const [createOpen, setCreateOpen] = useState(false);
+  const [runningScheduleId, setRunningScheduleId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchSchedules();
   }, [fetchSchedules]);
+
+  const handleRunNow = async (schedule: ScheduleRecord) => {
+    setRunningScheduleId(schedule.schedule_id);
+    try {
+      await runScheduleNow(schedule.schedule_id);
+      toast({
+        title: 'Schedule run started',
+        description: `${schedule.account_name || PROVIDER_LABELS[schedule.provider] || 'Schedule'} was triggered successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Run failed',
+        description: error instanceof Error ? error.message : 'Could not run this schedule.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRunningScheduleId(null);
+    }
+  };
 
   return (
     <div>
@@ -239,7 +284,13 @@ export function ScheduleManager({ projectId }: ScheduleManagerProps) {
       ) : (
         <div className="space-y-3">
           {schedules.map((s) => (
-            <ScheduleCard key={s.schedule_id} schedule={s} defaultProjectId={projectId} />
+            <ScheduleCard
+              key={s.schedule_id}
+              schedule={s}
+              defaultProjectId={projectId}
+              isRunning={runningScheduleId === s.schedule_id}
+              onRunNow={handleRunNow}
+            />
           ))}
         </div>
       )}
@@ -248,6 +299,8 @@ export function ScheduleManager({ projectId }: ScheduleManagerProps) {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         projectId={projectId}
+        connectorOverview={connectorOverview}
+        projects={projects}
       />
     </div>
   );

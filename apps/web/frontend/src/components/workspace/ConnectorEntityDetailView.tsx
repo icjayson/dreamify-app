@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsRight, Download, FolderPlus, Pencil, Plug, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsRight, Clock, Download, FolderPlus, Pencil, Plug, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,6 +10,9 @@ import type { ConnectorEntityDetailResponse, ConnectorEntityRunItem } from "@/se
 import { fileService } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
 import { formatToDisplay } from "@/utils/timestamp";
+import { CreateScheduleModal } from "@/components/schedules/CreateScheduleModal";
+import type { ProviderKey } from "@/services/scheduleService";
+import type { Project } from "@/hooks/useProjects";
 
 type ConnectorCard = {
   connectorKey: string;
@@ -17,6 +20,21 @@ type ConnectorCard = {
   entityId: string;
   entityName: string;
 };
+
+function stringArrayField(source: Record<string, unknown>, key: string): string[] {
+  const value = source[key];
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+function stringField(source: Record<string, unknown>, key: string): string {
+  const value = source[key];
+  return typeof value === "string" ? value : "";
+}
+
+function numberField(source: Record<string, unknown>, key: string): number | undefined {
+  const value = source[key];
+  return typeof value === "number" ? value : undefined;
+}
 
 type Props = {
   selectedConnectorCard: ConnectorCard;
@@ -53,6 +71,7 @@ type Props = {
   setRefreshAdsetIds: (v: string) => void;
   onSubmitRefreshModal: () => void;
   onOpenRelatedProject: (projectId: string, dashboardId?: string | null) => void;
+  projects?: Project[];
 };
 
 export default function ConnectorEntityDetailView(props: Props) {
@@ -90,6 +109,7 @@ export default function ConnectorEntityDetailView(props: Props) {
     setRefreshAdsetIds,
     onSubmitRefreshModal,
     onOpenRelatedProject,
+    projects = [],
   } = props;
 
   const connectorKey = selectedConnectorCard.connectorKey;
@@ -97,17 +117,23 @@ export default function ConnectorEntityDetailView(props: Props) {
   const isGA4Connector = connectorKey === "ga4";
   const isMetaAdsConnector = connectorKey === "meta_ads";
   const configSnapshot = (selectedHistoryRun?.config_snapshot as Record<string, unknown> | undefined) || {};
-  const fallbackSchedule = (connectorDetail?.latest_schedule as Record<string, unknown> | undefined) || {};
-  const fallbackConnectorConfig = (fallbackSchedule.connector_config as Record<string, unknown> | undefined) || {};
-  const selectedCampaignIds = Array.isArray((configSnapshot as any)?.campaign_ids)
-    ? ((configSnapshot as any).campaign_ids as string[])
-    : (Array.isArray((fallbackConnectorConfig as any)?.campaign_ids) ? ((fallbackConnectorConfig as any).campaign_ids as string[]) : []);
-  const selectedAdsetIds = Array.isArray((configSnapshot as any)?.adset_ids)
-    ? ((configSnapshot as any).adset_ids as string[])
-    : (Array.isArray((fallbackConnectorConfig as any)?.adset_ids) ? ((fallbackConnectorConfig as any).adset_ids as string[]) : []);
-  const selectedDatePreset = (configSnapshot as any)?.date_preset || (fallbackSchedule as any)?.date_range_preset || "last_30d";
-  const timeStart = (configSnapshot as any)?.start_date || selectedHistoryRun?.date_range_start || (fallbackConnectorConfig as any)?.start_date || "";
-  const timeEnd = (configSnapshot as any)?.end_date || selectedHistoryRun?.date_range_end || (fallbackConnectorConfig as any)?.end_date || "";
+  const fallbackSchedule = React.useMemo(
+    () => (connectorDetail?.latest_schedule as Record<string, unknown> | undefined) || {},
+    [connectorDetail?.latest_schedule]
+  );
+  const fallbackConnectorConfig = React.useMemo(
+    () => (fallbackSchedule.connector_config as Record<string, unknown> | undefined) || {},
+    [fallbackSchedule]
+  );
+  const selectedCampaignIds = stringArrayField(configSnapshot, "campaign_ids").length > 0
+    ? stringArrayField(configSnapshot, "campaign_ids")
+    : stringArrayField(fallbackConnectorConfig, "campaign_ids");
+  const selectedAdsetIds = stringArrayField(configSnapshot, "adset_ids").length > 0
+    ? stringArrayField(configSnapshot, "adset_ids")
+    : stringArrayField(fallbackConnectorConfig, "adset_ids");
+  const selectedDatePreset = stringField(configSnapshot, "date_preset") || stringField(fallbackSchedule, "date_range_preset") || "last_30d";
+  const timeStart = stringField(configSnapshot, "start_date") || selectedHistoryRun?.date_range_start || stringField(fallbackConnectorConfig, "start_date") || "";
+  const timeEnd = stringField(configSnapshot, "end_date") || selectedHistoryRun?.date_range_end || stringField(fallbackConnectorConfig, "end_date") || "";
   const hasExplicitTimeRange = Boolean(timeStart && timeEnd);
   const { toast } = useToast();
   const [customVersionNames, setCustomVersionNames] = React.useState<Record<string, string>>({});
@@ -117,6 +143,7 @@ export default function ConnectorEntityDetailView(props: Props) {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("connector_panel_collapsed") === "true";
   });
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
 
   React.useEffect(() => {
     setCustomVersionNames({});
@@ -184,7 +211,8 @@ export default function ConnectorEntityDetailView(props: Props) {
   );
 
   const getSyncVersionName = React.useCallback((run: ConnectorEntityRunItem, index: number) => {
-    const backendName = (run as any)?.sync_version_name || (run as any)?.version_name;
+    const runWithVersion = run as ConnectorEntityRunItem & { version_name?: string };
+    const backendName = runWithVersion.sync_version_name || runWithVersion.version_name;
     const localName = customVersionNames[run.run_id];
     const trimmedLocalName = typeof localName === "string" ? localName.trim() : "";
     const trimmedBackendName = typeof backendName === "string" ? backendName.trim() : "";
@@ -292,6 +320,67 @@ export default function ConnectorEntityDetailView(props: Props) {
     [connectorHistory, getSyncVersionName, setActiveAssetId, setDetailTab, setSelectedHistoryRunId]
   );
 
+  const scheduleDefaults = React.useMemo(() => {
+    const scheduleConfig = (fallbackSchedule.connector_config as Record<string, unknown> | undefined) || {};
+    const entityId = selectedConnectorCard.entityId;
+    const entityName = connectorDetail?.entity?.name || selectedConnectorCard.entityName;
+    const accountName = connectorDetail?.account_name || String(fallbackSchedule.account_name || "") || selectedConnectorCard.entityName;
+    const projectId =
+      String(fallbackSchedule.project_id || "")
+      || connectorDetail?.latest_asset?.project_id
+      || connectorDetail?.related_projects?.[0]?.project_id
+      || projects[0]?.id
+      || "";
+
+    if (connectorKey === "ga4") {
+      return {
+        provider: "ga4" as ProviderKey,
+        config: {
+          property_id: String(scheduleConfig.property_id || entityId),
+          property_name: String(scheduleConfig.property_name || entityName),
+          account_name: String(scheduleConfig.account_name || accountName),
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "meta_ads" || connectorKey === "tiktok_ads") {
+      return {
+        provider: (connectorKey === "meta_ads" ? "meta_ads" : "tiktok") as ProviderKey,
+        config: {
+          ad_account_id: String(scheduleConfig.ad_account_id || entityId),
+          account_name: String(scheduleConfig.account_name || accountName),
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "appsflyer") {
+      return {
+        provider: "appsflyer" as ProviderKey,
+        config: {
+          app_id: String(scheduleConfig.app_id || entityId),
+          app_name: String(scheduleConfig.app_name || entityName),
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "stripe") {
+      return {
+        provider: "stripe" as ProviderKey,
+        config: { report_type: String(scheduleConfig.report_type || "charges") },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    return null;
+  }, [connectorDetail, connectorKey, fallbackSchedule, projects, selectedConnectorCard.entityId, selectedConnectorCard.entityName]);
+
   return (
     <>
       <div className="mb-2">
@@ -344,6 +433,16 @@ export default function ConnectorEntityDetailView(props: Props) {
               <TabsTrigger value="data-table">Data Table</TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-2">
+              {scheduleDefaults && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setScheduleOpen(true)}
+                  className="inline-flex items-center gap-2 border border-border/60 hover:bg-foreground/5 hover:text-foreground"
+                >
+                  <Clock className="w-4 h-4" />
+                  Schedule sync
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 onClick={onOpenRefreshModal}
@@ -523,13 +622,13 @@ export default function ConnectorEntityDetailView(props: Props) {
                     <div className="grid grid-cols-2 gap-1.5 text-xs">
                       <div className="rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
                         <div className="text-xl font-semibold leading-none">
-                          {(((configSnapshot as any)?.rows ?? selectedHistoryRun.rows_fetched ?? connectorDetail?.latest_asset?.row_count) ?? 0).toLocaleString()}
+                          {((numberField(configSnapshot, "rows") ?? selectedHistoryRun.rows_fetched ?? connectorDetail?.latest_asset?.row_count) ?? 0).toLocaleString()}
                         </div>
                         <div className="text-muted-foreground mt-1">Rows</div>
                       </div>
                       <div className="rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
                         <div className="text-xl font-semibold leading-none">
-                          {(((configSnapshot as any)?.columns ?? selectedHistoryRun.columns_fetched ?? connectorDetail?.latest_asset?.column_count) ?? 0).toLocaleString()}
+                          {((numberField(configSnapshot, "columns") ?? selectedHistoryRun.columns_fetched ?? connectorDetail?.latest_asset?.column_count) ?? 0).toLocaleString()}
                         </div>
                         <div className="text-muted-foreground mt-1">Columns</div>
                       </div>
@@ -749,6 +848,18 @@ export default function ConnectorEntityDetailView(props: Props) {
           )}
         </Tabs>
       </div>
+      {scheduleDefaults && (
+        <CreateScheduleModal
+          open={scheduleOpen}
+          onClose={() => setScheduleOpen(false)}
+          defaultProvider={scheduleDefaults.provider}
+          defaultConnectorConfig={scheduleDefaults.config}
+          defaultAccountName={scheduleDefaults.accountName}
+          defaultEntityName={scheduleDefaults.entityName}
+          projectId={scheduleDefaults.projectId}
+          projects={projects}
+        />
+      )}
 
       <Dialog open={refreshModalOpen} onOpenChange={setRefreshModalOpen}>
         <DialogContent className="sm:max-w-lg">

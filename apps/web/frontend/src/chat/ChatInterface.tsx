@@ -1719,6 +1719,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           const bubbleWidthClass = isAssistant && !isSidePanelOpen ? "flex-1" : "";
           const textContentWidthClass = CONTENT_MAX;
           const compactSurfaceWidthClass = CONTENT_MAX;
+          const canCopyMessage = Boolean(message.content && !message.isError);
+          const copyMessage = () => {
+            if (!message.content) return;
+            navigator.clipboard.writeText(message.content);
+            toast({ title: "Copied", description: "Message copied to clipboard" });
+          };
           return (
             <div key={message.id} className="space-y-1">
               <div
@@ -2241,26 +2247,25 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         </Tooltip>
                       );
                     })()}
-                    <div className={`flex items-center gap-2 mt-1 ${isUser ? "justify-end" : "justify-start"}`}>
-                      <span className="text-xs text-muted-foreground">
-                        {formatToDisplay(
-                          message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
-                          { format: "full" },
-                        )}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {message.content && !message.isError && (
+                    <div className={`flex items-center mt-1 ${isUser ? "justify-end" : "justify-start"}`}>
+                      <div className={`flex items-center gap-1.5 ${isUser ? "" : "flex-row-reverse"}`}>
+                        {canCopyMessage && (
                           <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(message.content);
-                              toast({ title: "Copied", description: "Message copied to clipboard" });
-                            }}
-                            className="p-1 rounded-md text-muted-foreground hover:text-foreground dark:text-white/40 dark:hover:text-white transition-colors hover:bg-muted dark:hover:bg-white/10 opacity-0 group-hover/message:opacity-100 focus:opacity-100"
+                            type="button"
+                            onClick={copyMessage}
+                            className={`rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:opacity-100 dark:text-white/40 dark:hover:bg-white/10 dark:hover:text-white ${isUser ? "" : "opacity-0 group-hover/message:opacity-100"}`}
+                            aria-label="Copy message"
                             title="Copy message"
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                         )}
+                        <span className="text-xs text-muted-foreground">
+                          {formatToDisplay(
+                            message.timestamp instanceof Date ? message.timestamp.toISOString() : String(message.timestamp),
+                            { format: "full" },
+                          )}
+                        </span>
                       </div>
                     </div>
                   </div>

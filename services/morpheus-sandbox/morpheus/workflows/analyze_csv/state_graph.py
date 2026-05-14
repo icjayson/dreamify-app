@@ -82,6 +82,8 @@ class StatefulAnalyzeCSVWorkflow:
 
         # Live sync tracker for intermediate state persistence
         self._last_synced_index = 0
+        self._post_status_fn = None
+        self._thinking_event_fn = None
 
         logger.info("StatefulAnalyzeCSVWorkflow initialized")
 
@@ -121,6 +123,7 @@ class StatefulAnalyzeCSVWorkflow:
         conversation_uri: Optional[str] = None,
         conversation_backup_uri: Optional[str] = None,
         post_status_fn: Optional[callable] = None,
+        thinking_event_fn: Optional[callable] = None,
         assets: Optional[List[Dict[str, Any]]] = None,
         file_path: Optional[str] = None,  # Deprecated, for backward compatibility
     ) -> Dict[str, Any]:
@@ -158,6 +161,7 @@ class StatefulAnalyzeCSVWorkflow:
 
         # Store callback for use in workflow loop
         self._post_status_fn = post_status_fn
+        self._thinking_event_fn = thinking_event_fn
 
         # Build initial state
         state = self._build_initial_state(
@@ -563,6 +567,7 @@ class StatefulAnalyzeCSVWorkflow:
                     model=node_model,
                     model_with_tools=self.model_with_tools,
                     python_tool=self.python_tool,
+                    thinking_event_fn=self._thinking_event_fn,
                 )
 
                 duration_ms = (time.time() - start_time) * 1000

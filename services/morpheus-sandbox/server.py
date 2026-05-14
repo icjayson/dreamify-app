@@ -75,6 +75,122 @@ STEP_FRIENDLY_MAP: Dict[str, str] = {
 SAVEABLE_WORKFLOW_STEPS = {"load_conversation",  "download_asset", "routing","execution", "synthesis", "validation"}
 
 
+STEP_PHASE_MAP: Dict[str, str] = {
+    "initialized": "queued",
+    "load_conversation": "context",
+    "download_asset": "context",
+    "run_workflow": "analysis",
+    "explore_files": "analysis",
+    "routing": "routing",
+    "reasoning": "analysis",
+    "reasoning_internal": "analysis",
+    "execution": "tool",
+    "synthesis": "synthesis",
+    "validation": "validation",
+    "finish": "final",
+    "error": "error",
+}
+
+STEP_TITLE_MAP: Dict[str, str] = {
+    "initialized": "Queued for analysis",
+    "load_conversation": "Reading project context",
+    "download_asset": "Loading data assets",
+    "run_workflow": "Starting analysis workflow",
+    "explore_files": "Profiling data structure",
+    "routing": "Choosing analysis path",
+    "reasoning": "Planning next analysis step",
+    "reasoning_internal": "Comparing analytical options",
+    "execution": "Running analysis tool",
+    "synthesis": "Drafting answer with visual",
+    "validation": "Validating numbers",
+    "finish": "Finishing response",
+    "error": "Handling issue",
+}
+
+
+def _safe_preview(value: Any, limit: int = 700) -> str:
+    text = str(value or "").strip()
+    text = _re.sub(r"\s+", " ", text)
+    if len(text) > limit:
+        return text[: limit - 1].rstrip() + "…"
+    return text
+
+
+class ThinkingTracer:
+    """Append-only, user-safe workflow activity trace."""
+
+    def __init__(self, conversation_id: str):
+        self.conversation_id = conversation_id
+        self.run_id = f"run_{uuid.uuid4().hex[:12]}"
+        self.sequence = 0
+        self.events: List[Dict[str, Any]] = []
+        self._seen_setup_steps: set[str] = set()
+
+    def emit(
+        self,
+        phase: str,
+        title: str,
+        summary: Optional[str] = None,
+        detail: Optional[str] = None,
+        status: str = "completed",
+        metadata: Optional[Dict[str, Any]] = None,
+        duration_ms: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        self.sequence += 1
+        now = datetime.now().isoformat()
+        event = {
+            "id": f"{self.run_id}:{self.sequence}",
+            "run_id": self.run_id,
+            "sequence": self.sequence,
+            "phase": phase,
+            "status": status,
+            "title": _safe_preview(title, 120) or "Thinking",
+            "summary": _safe_preview(summary, 260) if summary else None,
+            "detail": _safe_preview(detail, 900) if detail else None,
+            "started_at": now,
+            "completed_at": now if status in {"completed", "error"} else None,
+            "duration_ms": duration_ms,
+            "metadata": metadata or {},
+        }
+        self.events.append(event)
+        _post_workflow_event_sync(self.conversation_id, self.run_id, self.sequence, event)
+        return event
+
+    def emit_status(self, metadata: Optional[Dict[str, Any]], status: str) -> None:
+        if not metadata:
+            return
+        step = str(metadata.get("step") or "").lower()
+        if not step:
+            return
+        status_key = f"{step}:{metadata.get('iteration', '')}:{status}"
+        if metadata.get("iteration") is None and status_key in self._seen_setup_steps:
+            return
+        self._seen_setup_steps.add(status_key)
+        event_status = "error" if status == "error" else "completed"
+        self.emit(
+            phase=STEP_PHASE_MAP.get(step, "analysis"),
+            title=STEP_TITLE_MAP.get(step, STEP_FRIENDLY_MAP.get(step, "Processing")),
+            summary=metadata.get("log") or metadata.get("message") or metadata.get("error"),
+            detail=metadata.get("error"),
+            status=event_status,
+            metadata={
+                "step": step,
+                "node": metadata.get("node"),
+                "iteration": metadata.get("iteration"),
+            },
+        )
+
+    def snapshot(self, finalize: bool = False) -> List[Dict[str, Any]]:
+        events: List[Dict[str, Any]] = []
+        for event in self.events:
+            copied = dict(event)
+            if finalize and copied.get("status") == "active":
+                copied["status"] = "completed"
+                copied["completed_at"] = copied.get("completed_at") or datetime.now().isoformat()
+            events.append(copied)
+        return events
+
+
 def _parse_run_tasks(prompt: str) -> List[Dict[str, str]]:
     """Parse user-defined tasks from a /run prompt."""
     if not prompt or not prompt.strip().startswith("/run"):
@@ -87,6 +203,32 @@ def _parse_run_tasks(prompt: str) -> List[Dict[str, str]]:
         if cleaned:
             tasks.append({"id": f"prompt-{i}", "text": cleaned})
     return tasks
+
+
+def _attach_thinking_trace(
+    conversation: Dict[str, Any],
+    events: List[Dict[str, Any]],
+) -> None:
+    if not events:
+        return
+    last_assistant_node = None
+    for node in reversed(conversation.setdefault("nodes", [])):
+        if node.get("role") == "assistant":
+            last_assistant_node = node
+            break
+    if last_assistant_node is None:
+        last_assistant_node = {
+            "node_id": f"node_{uuid.uuid4().hex[:8]}",
+            "role": "assistant",
+            "status": "completed",
+            "created_at": datetime.now().isoformat(),
+            "contents": [],
+        }
+        conversation["nodes"].append(last_assistant_node)
+
+    contents = last_assistant_node.setdefault("contents", [])
+    contents[:] = [content for content in contents if content.get("type") != "thinking_trace"]
+    contents.append({"type": "thinking_trace", "data": {"events": events}})
 
 logger.info(
     "Config AWS credentials present: %s",
@@ -337,6 +479,39 @@ def _post_node_status_sync(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop.run_until_complete(_post_node_status(conversation_id, status, metadata))
+
+
+def _post_workflow_event_sync(
+    conversation_id: Optional[str],
+    run_id: str,
+    sequence: int,
+    event: Dict[str, Any],
+):
+    if not conversation_id:
+        return None
+    try:
+        response = requests.post(
+            f"{BACKEND_API_URL}/api/v1/morpheus/workflow-event",
+            headers={"X-Morpheus-Key": MORPHEUS_API_KEY},
+            json={
+                "conversation_id": conversation_id,
+                "run_id": run_id,
+                "sequence": sequence,
+                "event": event,
+            },
+            timeout=10,
+        )
+        if response.status_code != 200:
+            logger.warning(
+                "Failed to append workflow event: HTTP %s - %s",
+                response.status_code,
+                response.text[:200],
+            )
+            return None
+        return response.json()
+    except Exception as exc:
+        logger.warning("Failed to append workflow event: %s", exc)
+        return None
 
 
 async def _get_workflow_status(conversation_id: str, project_id: str) -> Optional[str]:
@@ -624,13 +799,15 @@ def _process_conversation_background(
     conversation: Optional[Dict[str, Any]] = None
     conversation_bucket: Optional[str] = None
     collected_steps: List[Dict[str, str]] = []
+    thinking_tracer = ThinkingTracer(conversation_id)
 
     def _collecting_post_status(conv_id, status, metadata=None):
         """Wrapper that collects meaningful workflow steps for todo_tasks persistence."""
+        thinking_tracer.emit_status(metadata, status)
         if metadata and isinstance(metadata, dict):
             step = metadata.get("step")
             if step and step in SAVEABLE_WORKFLOW_STEPS and step not in {s["id"] for s in collected_steps}:
-                display_text = STEP_FRIENDLY_MAP.get(step, "Processing...")
+                display_text = metadata.get("log") or STEP_FRIENDLY_MAP.get(step, "Processing...")
                 collected_steps.append({"id": step, "text": display_text})
         return _post_node_status_sync(conv_id, status, metadata)
 
@@ -660,7 +837,7 @@ def _process_conversation_background(
                 },
             )
 
-        _post_node_status_sync(
+        _collecting_post_status(
             conversation_id, "processing", {"step": "load_conversation"}
         )
 
@@ -696,7 +873,7 @@ def _process_conversation_background(
             # For Q&A with no data files, pass empty file_paths so the workflow
             # routes to Q&A mode immediately without trying to open any file.
         else:
-            _post_node_status_sync(
+            _collecting_post_status(
                 conversation_id, "processing", {"step": "download_asset"}
             )
             for idx, asset_info in enumerate(assets):
@@ -744,7 +921,7 @@ def _process_conversation_background(
                     logger.error(
                         f"Failed to download asset {asset_info.get('asset_id')}: {e}"
                     )
-                    _post_node_status_sync(
+                    _collecting_post_status(
                         conversation_id,
                         "error",
                         {
@@ -772,7 +949,7 @@ def _process_conversation_background(
         primary_asset = assets[0] if assets else None
 
         workflow = StatefulAnalyzeCSVWorkflow(model_override=model_override, template_id=template_id)
-        _post_node_status_sync(conversation_id, "processing", {"step": "run_workflow"})
+        _collecting_post_status(conversation_id, "processing", {"step": "run_workflow"})
 
         # Extract user prompt and chart_mention context from latest user node
         user_prompt = None
@@ -803,6 +980,7 @@ def _process_conversation_background(
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
             post_status_fn=_collecting_post_status,
+            thinking_event_fn=thinking_tracer.emit,
             assets=assets,
         )
 
@@ -810,7 +988,20 @@ def _process_conversation_background(
         if result is None:
             error_msg = "Workflow returned None result"
             logger.error(error_msg)
-            _collecting_post_status(conversation_id, "error", {"error": error_msg})
+            thinking_tracer.emit(
+                "error",
+                "Workflow stopped on an issue",
+                "The workflow ended without a usable result.",
+                detail=error_msg,
+                status="error",
+            )
+            _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
+            _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
+            _collecting_post_status(
+                conversation_id,
+                "error",
+                {"step": "error", "error": error_msg},
+            )
             return
 
         # Check response type to route handling
@@ -939,6 +1130,12 @@ def _process_conversation_background(
             }
             conversation.setdefault("nodes", []).append(visual_node)
             conversation["updated_at"] = datetime.now().isoformat()
+            thinking_tracer.emit(
+                "final",
+                "Answer ready",
+                f"Prepared the response with {len(artifacts)} inline visual artifact(s).",
+            )
+            _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
             _persist_conversation(
                 conversation_uri, conversation_backup_uri, conversation
             )
@@ -975,6 +1172,12 @@ def _process_conversation_background(
 
             # Q&A responses don't generate dashboards, just save conversation with text response
             conversation["updated_at"] = datetime.now().isoformat()
+            thinking_tracer.emit(
+                "final",
+                "Answer ready",
+                "Prepared the response from the available project context.",
+            )
+            _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
             _persist_conversation(
                 conversation_uri, conversation_backup_uri, conversation
             )
@@ -1203,6 +1406,12 @@ def _process_conversation_background(
             )
 
         conversation["updated_at"] = datetime.now().isoformat()
+        thinking_tracer.emit(
+            "final",
+            "Dashboard ready",
+            "Saved the generated dashboard and prepared the response.",
+        )
+        _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
         _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
 
         completion_file_identifier = (
@@ -1296,6 +1505,14 @@ def _process_conversation_background(
             conversation.setdefault("nodes", []).append(error_node)
             conversation["updated_at"] = datetime.now().isoformat()
             try:
+                thinking_tracer.emit(
+                    "error",
+                    "Workflow stopped on an issue",
+                    "The workflow hit an error before it could finish.",
+                    detail=str(exc),
+                    status="error",
+                )
+                _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
                 _persist_conversation(
                     conversation_uri, conversation_backup_uri, conversation
                 )

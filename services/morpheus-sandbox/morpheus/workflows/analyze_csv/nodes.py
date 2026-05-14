@@ -13,7 +13,7 @@ import json
 import re
 import concurrent.futures as _futures
 from datetime import datetime
-from typing import Callable, Any, Dict
+from typing import Callable, Any, Dict, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 
@@ -1617,6 +1617,29 @@ def node_reasoning_internal(state: AgentState, model=None, python_tool=None, **k
         Updated agent state with state.output set, ready for VALIDATION
     """
     logger.info(f"Running REASONING_INTERNAL node (iteration {state.iteration})")
+    thinking_event_fn = kwargs.get("thinking_event_fn")
+
+    def emit_thinking_event(
+        phase: str,
+        title: str,
+        summary: str = "",
+        detail: str = "",
+        status: str = "completed",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if not thinking_event_fn:
+            return
+        try:
+            thinking_event_fn(
+                phase=phase,
+                title=title,
+                summary=summary,
+                detail=detail,
+                status=status,
+                metadata=metadata or {},
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to emit thinking event: {exc}")
 
     # --- Setup model and tools ---
     if model is None:
@@ -1760,6 +1783,12 @@ Output ONLY the modified chart in "charts" array."""
 
     try:
         for turn in range(max_turns):
+            emit_thinking_event(
+                "analysis",
+                "Comparing analytical options",
+                f"Evaluating the next step for {mode.replace('_', ' ')} mode.",
+                metadata={"turn": turn + 1, "mode": mode},
+            )
             response = _llm_invoke(
                 model_with_tools.invoke, messages,
                 label=f"Internal reasoning turn {turn + 1}"
@@ -1785,10 +1814,25 @@ Output ONLY the modified chart in "charts" array."""
                     try:
                         if tool_name.lower() == "python_repl":
                             query = tool_args.get("query", "")
+                            emit_thinking_event(
+                                "tool",
+                                "Running Python analysis",
+                                "Computing values from the selected data before drafting the response.",
+                                detail=query,
+                                status="active",
+                                metadata={"turn": turn + 1, "tool": "python_repl"},
+                            )
                             logger.info(f"[Internal] Turn {turn+1} — Python:\n{query[:200]}...")
                             result = python_tool.run(query)
                             success, error = True, None
                         elif tool_name.lower() == "get_available_chart_types":
+                            emit_thinking_event(
+                                "tool",
+                                "Checking chart options",
+                                "Reviewing available visual encodings for the answer.",
+                                status="active",
+                                metadata={"turn": turn + 1, "tool": "get_available_chart_types"},
+                            )
                             logger.info(f"[Internal] Turn {turn+1} — get_available_chart_types")
                             result = get_available_chart_types.invoke({})
                             success, error = True, None
@@ -1828,8 +1872,23 @@ Output ONLY the modified chart in "charts" array."""
 
                     if success:
                         tool_execution_count += 1
+                        emit_thinking_event(
+                            "tool",
+                            "Tool result received",
+                            f"{tool_name} completed and returned data for the next step.",
+                            detail=result_str,
+                            metadata={"turn": turn + 1, "tool": tool_name},
+                        )
                     else:
                         state.working_memory.retry_count += 1
+                        emit_thinking_event(
+                            "error",
+                            "Tool needs correction",
+                            f"{tool_name} returned an issue; retrying with corrected context.",
+                            detail=error or result_str,
+                            status="error",
+                            metadata={"turn": turn + 1, "tool": tool_name},
+                        )
 
                     # Feed result back to model
                     messages.append(ToolMessage(content=result_str, tool_call_id=tool_call_id))
@@ -1911,6 +1970,12 @@ Output ONLY the modified chart in "charts" array."""
 
                 logger.info(
                     f"[Internal] Completed — {turn + 1} turns, {tool_execution_count} tool calls, mode={mode}"
+                )
+                emit_thinking_event(
+                    "synthesis",
+                    "Drafting answer with visual" if mode == "qa_visual" else "Assembling final response",
+                    "Combining computed results into the user-facing response.",
+                    metadata={"turns": turn + 1, "tool_count": tool_execution_count, "mode": mode},
                 )
                 break
 

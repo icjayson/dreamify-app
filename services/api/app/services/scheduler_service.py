@@ -15,8 +15,16 @@ from utils.config import config
 
 logger = logging.getLogger(__name__)
 
-_SCHEDULE_GROUP = "dreamify-sync-schedules"
 _FLEXIBLE_WINDOW_MINUTES = 10  # allow up to 10-min delivery window
+
+
+def _schedule_group() -> str:
+    return config.scheduler.SCHEDULE_GROUP or "dreamify-sync-schedules"
+
+
+def is_scheduler_configured() -> bool:
+    """Return whether production automatic schedule delivery can be created."""
+    return bool(config.scheduler.EVENTBRIDGE_ROLE_ARN and config.scheduler.TARGET_LAMBDA_ARN)
 
 
 def _get_client():
@@ -32,11 +40,11 @@ def _ensure_group() -> None:
     """Create the schedule group if it doesn't exist."""
     client = _get_client()
     try:
-        client.get_schedule_group(Name=_SCHEDULE_GROUP)
+        client.get_schedule_group(Name=_schedule_group())
     except client.exceptions.ResourceNotFoundException:
         try:
-            client.create_schedule_group(Name=_SCHEDULE_GROUP)
-            logger.info("Created EventBridge schedule group: %s", _SCHEDULE_GROUP)
+            client.create_schedule_group(Name=_schedule_group())
+            logger.info("Created EventBridge schedule group: %s", _schedule_group())
         except ClientError as exc:
             # Another process may have created it concurrently
             if exc.response["Error"]["Code"] != "ConflictException":
@@ -64,21 +72,18 @@ def _build_cron_expression(frequency: str, hour_utc: int, day_of_week: int) -> s
 
 
 def _build_target(schedule_id: str) -> dict:
-    """Build the EventBridge target definition pointing to our internal endpoint."""
-    target_url = config.scheduler.TARGET_URL.format(schedule_id=schedule_id)
+    """Build a universal target that invokes the Lambda bridge for one schedule."""
+    if not is_scheduler_configured():
+        raise RuntimeError("EventBridge Scheduler is missing EVENTBRIDGE_ROLE_ARN or TARGET_LAMBDA_ARN")
+
     return {
-        "Arn": "arn:aws:scheduler:::aws-sdk:sqs:sendMessage",  # placeholder if no role
-        # When EVENTBRIDGE_ROLE_ARN is configured, use HTTPS target instead:
-        # "Arn": "arn:aws:scheduler:::http",
-        # "HttpParameters": {
-        #     "HeaderParameters": {
-        #         "X-Internal-Sync-Secret": config.scheduler.INTERNAL_SYNC_SECRET,
-        #         "Content-Type": "application/json",
-        #     },
-        #     "QueryStringParameters": {},
-        # },
-        "RoleArn": config.scheduler.EVENTBRIDGE_ROLE_ARN or "arn:aws:iam::000000000000:role/placeholder",
-        "Input": json.dumps({"schedule_id": schedule_id}),
+        "Arn": "arn:aws:scheduler:::aws-sdk:lambda:invoke",
+        "RoleArn": config.scheduler.EVENTBRIDGE_ROLE_ARN,
+        "Input": json.dumps({
+            "FunctionName": config.scheduler.TARGET_LAMBDA_ARN,
+            "InvocationType": "Event",
+            "Payload": json.dumps({"schedule_id": schedule_id}),
+        }),
     }
 
 
@@ -92,15 +97,10 @@ def create_schedule(
     Create an EventBridge Scheduler schedule.
     Returns the schedule name (used for future updates/deletes).
 
-    Note: If EVENTBRIDGE_ROLE_ARN is not configured (dev environment), logs a warning
-    and returns a placeholder name without actually calling AWS.
+    Raises RuntimeError when scheduler delivery is not configured.
     """
-    if not config.scheduler.EVENTBRIDGE_ROLE_ARN:
-        logger.warning(
-            "EVENTBRIDGE_ROLE_ARN not configured — skipping EventBridge schedule creation for %s",
-            schedule_id,
-        )
-        return f"dreamify-sync-{schedule_id}"
+    if not is_scheduler_configured():
+        raise RuntimeError("EventBridge Scheduler is not configured")
 
     _ensure_group()
     client = _get_client()
@@ -109,7 +109,7 @@ def create_schedule(
 
     client.create_schedule(
         Name=name,
-        GroupName=_SCHEDULE_GROUP,
+        GroupName=_schedule_group(),
         ScheduleExpression=cron_expr,
         ScheduleExpressionTimezone="UTC",
         FlexibleTimeWindow={"Mode": "FLEXIBLE", "MaximumWindowInMinutes": _FLEXIBLE_WINDOW_MINUTES},
@@ -129,17 +129,16 @@ def update_schedule(
     day_of_week: int,
 ) -> None:
     """Update the cron expression on an existing EventBridge schedule."""
-    if not config.scheduler.EVENTBRIDGE_ROLE_ARN:
-        logger.warning("EVENTBRIDGE_ROLE_ARN not configured — skipping EventBridge update for %s", rule_name)
-        return
+    if not is_scheduler_configured():
+        raise RuntimeError("EventBridge Scheduler is not configured")
 
     client = _get_client()
     cron_expr = _build_cron_expression(frequency, hour_utc, day_of_week)
-    existing = client.get_schedule(Name=rule_name, GroupName=_SCHEDULE_GROUP)
+    existing = client.get_schedule(Name=rule_name, GroupName=_schedule_group())
 
     client.update_schedule(
         Name=rule_name,
-        GroupName=_SCHEDULE_GROUP,
+        GroupName=_schedule_group(),
         ScheduleExpression=cron_expr,
         ScheduleExpressionTimezone="UTC",
         FlexibleTimeWindow={"Mode": "FLEXIBLE", "MaximumWindowInMinutes": _FLEXIBLE_WINDOW_MINUTES},
@@ -151,13 +150,13 @@ def update_schedule(
 
 def pause_schedule(rule_name: str) -> None:
     """Disable an EventBridge schedule (paused state)."""
-    if not config.scheduler.EVENTBRIDGE_ROLE_ARN:
-        return
+    if not is_scheduler_configured():
+        raise RuntimeError("EventBridge Scheduler is not configured")
     client = _get_client()
-    existing = client.get_schedule(Name=rule_name, GroupName=_SCHEDULE_GROUP)
+    existing = client.get_schedule(Name=rule_name, GroupName=_schedule_group())
     client.update_schedule(
         Name=rule_name,
-        GroupName=_SCHEDULE_GROUP,
+        GroupName=_schedule_group(),
         ScheduleExpression=existing["ScheduleExpression"],
         ScheduleExpressionTimezone=existing.get("ScheduleExpressionTimezone", "UTC"),
         FlexibleTimeWindow=existing["FlexibleTimeWindow"],
@@ -169,13 +168,13 @@ def pause_schedule(rule_name: str) -> None:
 
 def resume_schedule(rule_name: str) -> None:
     """Re-enable a disabled EventBridge schedule."""
-    if not config.scheduler.EVENTBRIDGE_ROLE_ARN:
-        return
+    if not is_scheduler_configured():
+        raise RuntimeError("EventBridge Scheduler is not configured")
     client = _get_client()
-    existing = client.get_schedule(Name=rule_name, GroupName=_SCHEDULE_GROUP)
+    existing = client.get_schedule(Name=rule_name, GroupName=_schedule_group())
     client.update_schedule(
         Name=rule_name,
-        GroupName=_SCHEDULE_GROUP,
+        GroupName=_schedule_group(),
         ScheduleExpression=existing["ScheduleExpression"],
         ScheduleExpressionTimezone=existing.get("ScheduleExpressionTimezone", "UTC"),
         FlexibleTimeWindow=existing["FlexibleTimeWindow"],
@@ -187,11 +186,11 @@ def resume_schedule(rule_name: str) -> None:
 
 def delete_schedule(rule_name: str) -> None:
     """Delete an EventBridge schedule."""
-    if not config.scheduler.EVENTBRIDGE_ROLE_ARN:
-        return
+    if not is_scheduler_configured():
+        raise RuntimeError("EventBridge Scheduler is not configured")
     client = _get_client()
     try:
-        client.delete_schedule(Name=rule_name, GroupName=_SCHEDULE_GROUP)
+        client.delete_schedule(Name=rule_name, GroupName=_schedule_group())
         logger.info("Deleted EventBridge schedule: %s", rule_name)
     except client.exceptions.ResourceNotFoundException:
         logger.warning("EventBridge schedule not found (already deleted?): %s", rule_name)

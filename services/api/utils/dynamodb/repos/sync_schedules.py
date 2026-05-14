@@ -47,6 +47,8 @@ def create_schedule(
         "date_range_preset": date_range_preset,
         "status": "active",
         "eventbridge_rule_name": "",
+        "scheduler_status": "not_configured",
+        "scheduler_error": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -133,6 +135,7 @@ def update_schedule(user_id: str, schedule_id: str, **updates) -> Optional[Dict]
     allowed = {
         "frequency", "hour_utc", "day_of_week", "date_range_preset",
         "status", "eventbridge_rule_name", "updated_at",
+        "scheduler_status", "scheduler_error",
         "connector_config", "account_name", "project_id",
         "on_complete_actions", "auto_refresh_conversation_id", "auto_refresh_prompt",
     }

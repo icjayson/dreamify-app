@@ -50,6 +50,7 @@ class UpdateScheduleRequest(BaseModel):
 _VALID_PROVIDERS = {"ga4", "meta_ads", "tiktok", "appsflyer", "stripe"}
 _VALID_FREQUENCIES = {"daily", "weekly", "biweekly"}
 _VALID_DATE_PRESETS = {"last_7d", "last_14d", "last_30d", "last_90d"}
+_VALID_STRIPE_REPORT_TYPES = {"charges", "subscriptions", "customers"}
 
 
 def _validate_create(req: CreateScheduleRequest) -> None:
@@ -59,6 +60,58 @@ def _validate_create(req: CreateScheduleRequest) -> None:
         raise HTTPException(400, f"Invalid frequency. Must be one of: {', '.join(_VALID_FREQUENCIES)}")
     if req.date_range_preset not in _VALID_DATE_PRESETS:
         raise HTTPException(400, f"Invalid date_range_preset. Must be one of: {', '.join(_VALID_DATE_PRESETS)}")
+    if not req.project_id.strip():
+        raise HTTPException(400, "project_id is required")
+    _normalize_connector_config(req.provider, req.connector_config)
+
+
+def _normalize_connector_config(provider: str, connector_config: Dict[str, Any]) -> Dict[str, Any]:
+    cfg = dict(connector_config or {})
+    if provider == "ga4" and not str(cfg.get("property_id") or "").strip():
+        raise HTTPException(400, "connector_config.property_id is required for GA4 schedules")
+    if provider in {"meta_ads", "tiktok"} and not str(cfg.get("ad_account_id") or "").strip():
+        raise HTTPException(400, "connector_config.ad_account_id is required for ad account schedules")
+    if provider == "appsflyer" and not str(cfg.get("app_id") or "").strip():
+        raise HTTPException(400, "connector_config.app_id is required for AppsFlyer schedules")
+    if provider == "stripe":
+        report_type = str(cfg.get("report_type") or "charges").strip()
+        if report_type not in _VALID_STRIPE_REPORT_TYPES:
+            raise HTTPException(400, "connector_config.report_type must be charges, subscriptions, or customers")
+        cfg["report_type"] = report_type
+    return cfg
+
+
+def _apply_scheduler_state(record: Dict, status: str, error: str = "", rule_name: str = "") -> Dict:
+    updates: Dict[str, Any] = {
+        "scheduler_status": status,
+        "scheduler_error": error,
+    }
+    if rule_name:
+        updates["eventbridge_rule_name"] = rule_name
+    schedules_repo.update_schedule(record["user_id"], record["schedule_id"], **updates)
+    record.update(updates)
+    return record
+
+
+def _configure_eventbridge_schedule(record: Dict, frequency: str, hour_utc: int, day_of_week: int) -> Dict:
+    if not scheduler_service.is_scheduler_configured():
+        return _apply_scheduler_state(
+            record,
+            "not_configured",
+            "EventBridge Scheduler role or Lambda target is not configured.",
+        )
+
+    try:
+        rule_name = scheduler_service.create_schedule(
+            schedule_id=record["schedule_id"],
+            frequency=frequency,
+            hour_utc=hour_utc,
+            day_of_week=day_of_week,
+        )
+        return _apply_scheduler_state(record, "configured", "", rule_name)
+    except Exception as exc:
+        logger.warning("EventBridge schedule creation failed: %s", exc)
+        return _apply_scheduler_state(record, "error", str(exc))
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -70,10 +123,11 @@ async def create_schedule(
 ) -> Dict:
     """Create a new data sync schedule."""
     _validate_create(req)
+    connector_config = _normalize_connector_config(req.provider, req.connector_config)
     record = schedules_repo.create_schedule(
         user_id=user_id,
         provider=req.provider,
-        connector_config=req.connector_config,
+        connector_config=connector_config,
         project_id=req.project_id,
         account_name=req.account_name,
         frequency=req.frequency,
@@ -92,22 +146,7 @@ async def create_schedule(
     if optional_updates:
         schedules_repo.update_schedule(user_id, record["schedule_id"], **optional_updates)
         record.update(optional_updates)
-    # Create EventBridge schedule (no-op if EVENTBRIDGE_ROLE_ARN not configured)
-    try:
-        rule_name = scheduler_service.create_schedule(
-            schedule_id=record["schedule_id"],
-            frequency=req.frequency,
-            hour_utc=req.hour_utc,
-            day_of_week=req.day_of_week,
-        )
-        schedules_repo.update_schedule(
-            user_id, record["schedule_id"], eventbridge_rule_name=rule_name
-        )
-        record["eventbridge_rule_name"] = rule_name
-    except Exception as exc:
-        logger.warning("EventBridge schedule creation failed (non-fatal): %s", exc)
-
-    return record
+    return _configure_eventbridge_schedule(record, req.frequency, req.hour_utc, req.day_of_week)
 
 
 @router.get("/schedules")
@@ -148,20 +187,43 @@ async def update_schedule(
         raise HTTPException(400, f"Invalid frequency")
     if "date_range_preset" in updates and updates["date_range_preset"] not in _VALID_DATE_PRESETS:
         raise HTTPException(400, "Invalid date_range_preset")
+    if "project_id" in updates and not str(updates["project_id"]).strip():
+        raise HTTPException(400, "project_id is required")
+    if "connector_config" in updates:
+        updates["connector_config"] = _normalize_connector_config(existing["provider"], updates["connector_config"])
 
     # Update EventBridge if timing changed
     timing_changed = any(k in updates for k in ("frequency", "hour_utc", "day_of_week"))
-    if timing_changed and existing.get("eventbridge_rule_name"):
-        try:
-            scheduler_service.update_schedule(
-                rule_name=existing["eventbridge_rule_name"],
-                schedule_id=schedule_id,
-                frequency=updates.get("frequency", existing["frequency"]),
-                hour_utc=updates.get("hour_utc", existing["hour_utc"]),
-                day_of_week=updates.get("day_of_week", existing["day_of_week"]),
-            )
-        except Exception as exc:
-            logger.warning("EventBridge update failed (non-fatal): %s", exc)
+    if timing_changed:
+        if scheduler_service.is_scheduler_configured():
+            try:
+                if existing.get("eventbridge_rule_name"):
+                    scheduler_service.update_schedule(
+                        rule_name=existing["eventbridge_rule_name"],
+                        schedule_id=schedule_id,
+                        frequency=updates.get("frequency", existing["frequency"]),
+                        hour_utc=updates.get("hour_utc", existing["hour_utc"]),
+                        day_of_week=updates.get("day_of_week", existing["day_of_week"]),
+                    )
+                    updates["scheduler_status"] = "configured"
+                    updates["scheduler_error"] = ""
+                else:
+                    rule_name = scheduler_service.create_schedule(
+                        schedule_id=schedule_id,
+                        frequency=updates.get("frequency", existing["frequency"]),
+                        hour_utc=updates.get("hour_utc", existing["hour_utc"]),
+                        day_of_week=updates.get("day_of_week", existing["day_of_week"]),
+                    )
+                    updates["eventbridge_rule_name"] = rule_name
+                    updates["scheduler_status"] = "configured"
+                    updates["scheduler_error"] = ""
+            except Exception as exc:
+                logger.warning("EventBridge update failed: %s", exc)
+                updates["scheduler_status"] = "error"
+                updates["scheduler_error"] = str(exc)
+        else:
+            updates["scheduler_status"] = "not_configured"
+            updates["scheduler_error"] = "EventBridge Scheduler role or Lambda target is not configured."
 
     return schedules_repo.update_schedule(user_id, schedule_id, **updates)
 
@@ -221,6 +283,21 @@ async def resume_schedule(
             logger.warning("EventBridge resume failed (non-fatal): %s", exc)
 
     return schedules_repo.update_schedule(user_id, schedule_id, status="active")
+
+
+@router.post("/schedules/{schedule_id}/run-now", status_code=200)
+async def run_schedule_now(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Run a user's schedule immediately for validation/debugging."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    from app.api.route_modules.internal import execute_schedule
+
+    return await execute_schedule(schedule_id)
 
 
 @router.get("/schedules/{schedule_id}/runs")

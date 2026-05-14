@@ -15,18 +15,6 @@ import httpx
 from fastapi import HTTPException
 
 from clerk_backend_api import Clerk
-from google.analytics.data_v1beta import (
-    BetaAnalyticsDataClient,
-    BetaAnalyticsDataAsyncClient,
-)
-from google.analytics.data_v1beta.types import (
-    DateRange,
-    Dimension,
-    Metric,
-    RunReportRequest,
-)
-from google.analytics.admin import AnalyticsAdminServiceAsyncClient
-from google.oauth2.credentials import Credentials
 
 from utils.config import config
 from utils.dynamodb.repos import assets as assets_repo
@@ -101,6 +89,13 @@ class IntegrationService:
 
         try:
             from google.oauth2.credentials import Credentials
+            from google.analytics.data_v1beta import BetaAnalyticsDataAsyncClient
+            from google.analytics.data_v1beta.types import (
+                DateRange,
+                Dimension,
+                Metric,
+                RunReportRequest,
+            )
 
             # Create standard google credentials object with the token
             credentials = Credentials(token=access_token)
@@ -245,6 +240,7 @@ class IntegrationService:
 
         try:
             from google.oauth2.credentials import Credentials
+            from google.analytics.admin import AnalyticsAdminServiceAsyncClient
 
             # Create standard google credentials object with the token
             credentials = Credentials(token=access_token)
@@ -2651,8 +2647,8 @@ class IntegrationService:
 
     def assert_appsflyer_token_valid(self, user_id: str) -> None:
         """Raise TokenExpiredError if no AppsFlyer token exists."""
-        status = self.get_appsflyer_connection_status(user_id)
-        if not status.get("connected"):
+        record = connected_accounts_repo.get_connection(user_id, "appsflyer")
+        if not record:
             raise TokenExpiredError("appsflyer", "AppsFlyer token missing — please reconnect")
 
     def _resolve_stripe_dates(

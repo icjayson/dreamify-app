@@ -4,6 +4,8 @@ Tests for the sync scheduling system.
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timedelta, timezone
+import json
+import asyncio
 
 
 # ── Scheduler service: cron expression generation ────────────────────────────
@@ -38,6 +40,30 @@ class TestBuildCronExpression:
     def test_invalid_frequency(self):
         with pytest.raises(ValueError):
             self._build("monthly", 9, 0)
+
+    def test_lambda_target_payload(self):
+        from app.services.scheduler_service import _build_target
+        from utils.config import config
+
+        with patch.object(config.scheduler, "EVENTBRIDGE_ROLE_ARN", "arn:aws:iam::123456789012:role/SchedulerRole"), \
+             patch.object(config.scheduler, "TARGET_LAMBDA_ARN", "arn:aws:lambda:ap-southeast-1:123456789012:function:dreamify-sync-bridge"):
+            target = _build_target("schedule-123")
+
+        assert target["Arn"] == "arn:aws:scheduler:::aws-sdk:lambda:invoke"
+        assert target["RoleArn"].endswith(":role/SchedulerRole")
+        payload = json.loads(target["Input"])
+        assert payload["FunctionName"].endswith(":function:dreamify-sync-bridge")
+        assert payload["InvocationType"] == "Event"
+        assert json.loads(payload["Payload"]) == {"schedule_id": "schedule-123"}
+
+    def test_lambda_target_requires_config(self):
+        from app.services.scheduler_service import _build_target
+        from utils.config import config
+
+        with patch.object(config.scheduler, "EVENTBRIDGE_ROLE_ARN", ""), \
+             patch.object(config.scheduler, "TARGET_LAMBDA_ARN", ""):
+            with pytest.raises(RuntimeError):
+                _build_target("schedule-123")
 
 
 # ── Internal trigger: date resolution ────────────────────────────────────────
@@ -113,7 +139,8 @@ class TestTokenGuards:
     def test_appsflyer_raises_when_not_connected(self):
         from app.services.integration_service import TokenExpiredError
         svc = self._service()
-        with patch.object(svc, 'get_appsflyer_connection_status', return_value={"connected": False}):
+        with patch('app.services.integration_service.connected_accounts_repo') as mock_repo:
+            mock_repo.get_connection.return_value = None
             with pytest.raises(TokenExpiredError):
                 svc.assert_appsflyer_token_valid("user_123")
 
@@ -121,55 +148,48 @@ class TestTokenGuards:
 # ── Internal trigger endpoint ─────────────────────────────────────────────────
 
 class TestTriggerEndpoint:
-    @pytest.mark.asyncio
-    async def test_trigger_rejected_without_secret(self):
-        from fastapi.testclient import TestClient
-        from app.main import app
-        client = TestClient(app)
-        resp = client.post("/api/v1/internal/schedules/fake-id/trigger")
-        assert resp.status_code == 403
+    def test_trigger_rejected_without_secret(self):
+        from fastapi import HTTPException
+        from app.api.route_modules.internal import trigger_schedule
 
-    @pytest.mark.asyncio
-    async def test_trigger_returns_not_found_for_unknown_schedule(self):
-        from fastapi.testclient import TestClient
-        from app.main import app
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(trigger_schedule("fake-id"))
+        assert exc_info.value.status_code == 403
+
+    def test_trigger_returns_not_found_for_unknown_schedule(self):
+        from app.api.route_modules.internal import trigger_schedule
         from utils.config import config
-        client = TestClient(app)
         with patch('app.api.route_modules.internal.schedules_repo') as mock_repo:
             mock_repo.get_schedule_by_id.return_value = None
-            resp = client.post(
-                "/api/v1/internal/schedules/nonexistent/trigger",
-                headers={"X-Internal-Sync-Secret": config.scheduler.INTERNAL_SYNC_SECRET},
+            resp = asyncio.run(
+                trigger_schedule(
+                    "nonexistent",
+                    x_internal_sync_secret=config.scheduler.INTERNAL_SYNC_SECRET,
+                )
             )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "not_found"
+        assert resp["status"] == "not_found"
 
-    @pytest.mark.asyncio
-    async def test_trigger_skips_paused_schedule(self):
-        from fastapi.testclient import TestClient
-        from app.main import app
+    def test_trigger_skips_paused_schedule(self):
+        from app.api.route_modules.internal import trigger_schedule
         from utils.config import config
-        client = TestClient(app)
         with patch('app.api.route_modules.internal.schedules_repo') as mock_repo:
             mock_repo.get_schedule_by_id.return_value = {
                 "schedule_id": "s1", "user_id": "u1", "provider": "stripe",
                 "status": "paused", "connector_config": {}, "project_id": "p1",
                 "date_range_preset": "last_30d",
             }
-            resp = client.post(
-                "/api/v1/internal/schedules/s1/trigger",
-                headers={"X-Internal-Sync-Secret": config.scheduler.INTERNAL_SYNC_SECRET},
+            resp = asyncio.run(
+                trigger_schedule(
+                    "s1",
+                    x_internal_sync_secret=config.scheduler.INTERNAL_SYNC_SECRET,
+                )
             )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "skipped"
+        assert resp["status"] == "skipped"
 
-    @pytest.mark.asyncio
-    async def test_trigger_records_token_expired_on_failure(self):
-        from fastapi.testclient import TestClient
-        from app.main import app
+    def test_trigger_records_token_expired_on_failure(self):
+        from app.api.route_modules.internal import trigger_schedule
         from app.services.integration_service import TokenExpiredError
         from utils.config import config
-        client = TestClient(app)
 
         schedule_data = {
             "schedule_id": "s1", "user_id": "u1", "provider": "meta_ads",
@@ -186,17 +206,30 @@ class TestTriggerEndpoint:
             mock_runs.create_run.return_value = run_data
             mock_sync.side_effect = TokenExpiredError("meta_ads", "token expired")
 
-            resp = client.post(
-                "/api/v1/internal/schedules/s1/trigger",
-                headers={"X-Internal-Sync-Secret": config.scheduler.INTERNAL_SYNC_SECRET},
+            resp = asyncio.run(
+                trigger_schedule(
+                    "s1",
+                    x_internal_sync_secret=config.scheduler.INTERNAL_SYNC_SECRET,
+                )
             )
 
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "token_expired"
+        assert resp["status"] == "token_expired"
         mock_runs.complete_run.assert_called_once()
         call_kwargs = mock_runs.complete_run.call_args.kwargs
         assert call_kwargs["status"] == "token_expired"
+
+    def test_run_now_checks_ownership_and_executes(self):
+        from app.api.route_modules.schedules import run_schedule_now
+
+        with patch('app.api.route_modules.schedules.schedules_repo') as mock_sched, \
+             patch('app.api.route_modules.internal.execute_schedule', new_callable=AsyncMock) as mock_execute:
+            mock_sched.get_schedule.return_value = {"schedule_id": "s1", "user_id": "u1"}
+            mock_execute.return_value = {"status": "success", "run_id": "r1"}
+            resp = asyncio.run(run_schedule_now("s1", user_id="u1"))
+
+        assert resp["status"] == "success"
+        mock_sched.get_schedule.assert_called_once_with("u1", "s1")
+        mock_execute.assert_awaited_once_with("s1")
 
 
 # ── Schedules CRUD validation ─────────────────────────────────────────────────
@@ -217,6 +250,41 @@ class TestScheduleValidation:
         with pytest.raises(HTTPException) as exc_info:
             _validate_create(req)
         assert exc_info.value.status_code == 400
+
+    def test_missing_provider_config_rejected(self):
+        from app.api.route_modules.schedules import _validate_create, CreateScheduleRequest
+        from fastapi import HTTPException
+        req = CreateScheduleRequest(
+            provider="ga4",
+            connector_config={},
+            project_id="p1",
+            frequency="daily",
+            hour_utc=9,
+            day_of_week=0,
+            date_range_preset="last_30d",
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_create(req)
+        assert exc_info.value.status_code == 400
+
+    def test_empty_project_rejected(self):
+        from app.api.route_modules.schedules import _validate_create, CreateScheduleRequest
+        from fastapi import HTTPException
+        req = CreateScheduleRequest(
+            provider="stripe",
+            connector_config={"report_type": "charges"},
+            project_id="",
+            frequency="daily",
+            hour_utc=9,
+            day_of_week=0,
+            date_range_preset="last_30d",
+        )
+        with pytest.raises(HTTPException):
+            _validate_create(req)
+
+    def test_stripe_defaults_to_charges(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        assert _normalize_connector_config("stripe", {}) == {"report_type": "charges"}
 
     def test_invalid_frequency_rejected(self):
         from app.api.route_modules.schedules import _validate_create, CreateScheduleRequest

@@ -54,7 +54,11 @@ async def trigger_schedule(
     Looks up the schedule, runs the appropriate connector sync, and records the result.
     """
     _require_internal_secret(x_internal_sync_secret)
+    return await execute_schedule(schedule_id)
 
+
+async def execute_schedule(schedule_id: str) -> dict:
+    """Run one schedule by id and persist run/schedule/notification state."""
     schedule = schedules_repo.get_schedule_by_id(schedule_id)
     if not schedule:
         logger.warning("Trigger received for unknown schedule_id: %s", schedule_id)

@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -38,6 +39,7 @@ type TooltipProps = {
   active?: boolean;
   payload?: TooltipEntry[];
   label?: string | number;
+  valueSuffix?: string;
 };
 
 const FALLBACK_COLORS = [
@@ -55,10 +57,13 @@ const NAMED_DARK_COLORS = new Set(["black"]);
 
 const SUPPORTED_TYPES = new Set<string>([
   ChartType.BAR,
+  ChartType.STACKED_BAR,
+  ChartType.STACKED_COLUMN,
   ChartType.LINE,
   ChartType.AREA,
   ChartType.PIE,
   ChartType.DONUT,
+  ChartType.COMPOSED,
 ]);
 
 const toNumber = (value: string | number) => {
@@ -74,6 +79,27 @@ const formatValue = (value: string | number | undefined) => {
   return String(value).trim() !== "" && Number.isFinite(numeric)
     ? numeric.toLocaleString()
     : String(value);
+};
+
+const formatAxisValue = (value: string | number) => {
+  const numeric = typeof value === "number"
+    ? value
+    : Number(String(value).replace(/[,\s$€£¥%]/g, ""));
+
+  if (!Number.isFinite(numeric)) return truncateLabel(value, 10);
+
+  const abs = Math.abs(numeric);
+  const formatScaled = (scaled: number) => {
+    const scaledAbs = Math.abs(scaled);
+    const maximumFractionDigits = scaledAbs >= 100 ? 0 : scaledAbs >= 10 ? 1 : 2;
+    return scaled.toLocaleString(undefined, { maximumFractionDigits });
+  };
+
+  if (abs >= 1_000_000_000) return `${formatScaled(numeric / 1_000_000_000)}B`;
+  if (abs >= 1_000_000) return `${formatScaled(numeric / 1_000_000)}M`;
+  if (abs >= 1_000) return `${formatScaled(numeric / 1_000)}K`;
+  if (abs > 0 && abs < 1) return numeric.toLocaleString(undefined, { maximumSignificantDigits: 2 });
+  return numeric.toLocaleString(undefined, { maximumFractionDigits: 1 });
 };
 
 const truncateLabel = (label: string | number, maxLength = 14) => {
@@ -122,6 +148,9 @@ const getPalette = (config: ChartConfiguration) => {
 const getDatasets = (config: ChartConfiguration): ChartDataset[] =>
   Array.isArray(config.datasets) ? config.datasets : [];
 
+const getSeriesColor = (dataset: ChartDataset, index: number, palette: string[]) =>
+  dataset.color ? sanitizeColor(dataset.color, index) : palette[index % palette.length];
+
 const useCartesianData = (datasets: ChartDataset[]) => {
   return useMemo(() => {
     const labels = new Set<string>();
@@ -140,7 +169,7 @@ const useCartesianData = (datasets: ChartDataset[]) => {
   }, [datasets]);
 };
 
-const CompactTooltip = ({ active, payload, label }: TooltipProps) => {
+const CompactTooltip = ({ active, payload, label, valueSuffix = "" }: TooltipProps) => {
   if (!active || !payload?.length) return null;
 
   return (
@@ -152,7 +181,7 @@ const CompactTooltip = ({ active, payload, label }: TooltipProps) => {
             <span className="max-w-[150px] truncate" style={{ color: entry.color }}>
               {entry.name || entry.dataKey}
             </span>
-            <span className="font-medium">{formatValue(entry.value)}</span>
+            <span className="font-medium">{formatValue(entry.value)}{valueSuffix}</span>
           </div>
         ))}
       </div>
@@ -209,6 +238,27 @@ export function ChatInlineChart({ artifact, variant = "inline", compact = false 
   const datasets = getDatasets(config);
   const rows = useCartesianData(datasets);
   const palette = getPalette(config);
+  const isStackedBar = chartType === ChartType.STACKED_BAR;
+  const isStackedColumn = chartType === ChartType.STACKED_COLUMN;
+  const isStacked = isStackedBar || isStackedColumn;
+  const configWithNormalized = config as ChartConfiguration & { normalized?: boolean };
+  const isNormalizedStacked = isStacked && Boolean(config.config?.normalized ?? configWithNormalized.normalized);
+  const stackedRows = useMemo(() => {
+    if (!isNormalizedStacked) return rows;
+
+    const seriesKeys = datasets.map((dataset) => dataset.label);
+    return rows.map((row) => {
+      const total = seriesKeys.reduce((sum, key) => sum + toNumber(row[key] ?? 0), 0);
+      const normalizedRow: ChartRow = { label: row.label };
+
+      seriesKeys.forEach((key) => {
+        const value = toNumber(row[key] ?? 0);
+        normalizedRow[key] = total > 0 ? Number(((value / total) * 100).toFixed(2)) : 0;
+      });
+
+      return normalizedRow;
+    });
+  }, [datasets, isNormalizedStacked, rows]);
   const heightClass = variant === "modal" ? "h-full" : "h-[272px]";
   const labelCount = rows.length;
   const xInterval = compact
@@ -235,6 +285,12 @@ export function ChatInlineChart({ artifact, variant = "inline", compact = false 
   }
 
   const cartesianMargin = { top: 8, right: 12, left: 0, bottom: bottomMargin };
+  const stackedMargin = {
+    top: 8,
+    right: 12,
+    left: isStackedBar ? 8 : 0,
+    bottom: isStackedColumn ? bottomMargin : 12,
+  };
 
   if (chartType === ChartType.PIE || chartType === ChartType.DONUT) {
     const pieData = (datasets[0]?.data || []).map((point) => ({
@@ -279,9 +335,45 @@ export function ChatInlineChart({ artifact, variant = "inline", compact = false 
 
   const renderSeries = () =>
     datasets.map((dataset, index) => {
-      const color = dataset.color
-        ? sanitizeColor(dataset.color, index)
-        : palette[index % palette.length];
+      const color = getSeriesColor(dataset, index, palette);
+      if (chartType === ChartType.COMPOSED) {
+        return index % 2 === 0 ? (
+          <Bar
+            key={dataset.label}
+            dataKey={dataset.label}
+            fill={color}
+            radius={[3, 3, 0, 0]}
+            isAnimationActive={false}
+          />
+        ) : (
+          <Line
+            key={dataset.label}
+            type="monotone"
+            dataKey={dataset.label}
+            stroke={color}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 3 }}
+            isAnimationActive={false}
+          />
+        );
+      }
+      if (isStacked) {
+        const isLast = index === datasets.length - 1;
+        const radius: [number, number, number, number] = isLast
+          ? isStackedBar ? [0, 3, 3, 0] : [3, 3, 0, 0]
+          : [0, 0, 0, 0];
+        return (
+          <Bar
+            key={dataset.label}
+            dataKey={dataset.label}
+            fill={color}
+            radius={radius}
+            stackId="stack"
+            isAnimationActive={false}
+          />
+        );
+      }
       if (chartType === ChartType.LINE) {
         return (
           <Line
@@ -321,9 +413,60 @@ export function ChatInlineChart({ artifact, variant = "inline", compact = false 
     });
 
   const chartProps = {
-    data: rows,
+    data: isStacked ? stackedRows : rows,
     margin: cartesianMargin,
   };
+
+  const stackedChartBody = (
+    <>
+      <CartesianGrid
+        strokeDasharray="3 3"
+        stroke="var(--element-color)"
+        opacity={0.35}
+        horizontal={!isStackedBar}
+        vertical={isStackedBar}
+      />
+      {isStackedBar ? (
+        <>
+          <XAxis
+            type="number"
+            tickFormatter={(value) => isNormalizedStacked ? `${formatAxisValue(value)}%` : formatAxisValue(value)}
+            {...commonAxisProps}
+          />
+          <YAxis
+            dataKey="label"
+            interval={xInterval}
+            tickFormatter={(value) => truncateLabel(value, 12)}
+            type="category"
+            width={88}
+            {...commonAxisProps}
+          />
+        </>
+      ) : (
+        <>
+          <XAxis
+            dataKey="label"
+            interval={xInterval}
+            tickFormatter={(value) => truncateLabel(value, 13)}
+            angle={hasLongLabels ? -24 : 0}
+            textAnchor={hasLongLabels ? "end" : "middle"}
+            height={hasLongLabels ? 46 : 28}
+            type="category"
+            {...commonAxisProps}
+          />
+          <YAxis
+            type="number"
+            width={52}
+            tickFormatter={(value) => isNormalizedStacked ? `${formatAxisValue(value)}%` : formatAxisValue(value)}
+            {...commonAxisProps}
+          />
+        </>
+      )}
+      <Tooltip content={<CompactTooltip valueSuffix={isNormalizedStacked ? "%" : undefined} />} />
+      <ChartLegend datasetCount={datasets.length} />
+      {renderSeries()}
+    </>
+  );
 
   const chartBody = (
     <>
@@ -339,7 +482,7 @@ export function ChatInlineChart({ artifact, variant = "inline", compact = false 
       />
       <YAxis
         width={52}
-        tickFormatter={(value) => truncateLabel(formatValue(value), 9)}
+        tickFormatter={(value) => formatAxisValue(value)}
         {...commonAxisProps}
       />
       <Tooltip content={<CompactTooltip />} />
@@ -351,7 +494,18 @@ export function ChatInlineChart({ artifact, variant = "inline", compact = false 
   return (
     <div className={`min-h-0 rounded-lg bg-background/70 p-2 dark:bg-black/20 ${heightClass}`}>
       <ResponsiveContainer width="100%" height="100%">
-        {chartType === ChartType.LINE ? (
+        {isStacked ? (
+          <BarChart
+            data={stackedRows}
+            layout={isStackedBar ? "vertical" : "horizontal"}
+            margin={stackedMargin}
+            barCategoryGap="20%"
+          >
+            {stackedChartBody}
+          </BarChart>
+        ) : chartType === ChartType.COMPOSED ? (
+          <ComposedChart {...chartProps}>{chartBody}</ComposedChart>
+        ) : chartType === ChartType.LINE ? (
           <LineChart {...chartProps}>{chartBody}</LineChart>
         ) : chartType === ChartType.AREA ? (
           <AreaChart {...chartProps}>{chartBody}</AreaChart>

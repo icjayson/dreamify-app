@@ -8,6 +8,7 @@ import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { fileService, type UploadResponse, type AssetRecord } from "@/services/fileService";
+import { conversationService } from "@/services/conversationService";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useChatStore, type UploadedFile, isNonAnalyzableUpload } from "@/chat/useChatStore";
@@ -29,6 +30,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { formatToDisplay } from "@/utils/timestamp";
 import { useUser } from "@clerk/clerk-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { ThinkingEvent } from "@/types/message";
 
 
 // Creative phrase variants per backend step — each key maps to a real Morpheus workflow step
@@ -40,6 +42,18 @@ const STEP_VARIANTS: Record<string, string[]> = {
     "Just getting started...",
     "Firing up the engines...",
     "Rising and shining...",
+  ],
+  'initialized': [
+    "Queued for analysis...",
+    "Getting ready...",
+    "Preparing the run...",
+    "Setting up the workspace...",
+  ],
+  'initializing': [
+    "Queued for analysis...",
+    "Getting ready...",
+    "Preparing the run...",
+    "Setting up the workspace...",
   ],
   'load_conversation': [
     "Reading our conversation...",
@@ -80,6 +94,18 @@ const STEP_VARIANTS: Record<string, string[]> = {
     "Working out the strategy...",
     "Deliberating on the best move...",
     "Picking the smartest path...",
+  ],
+  'reasoning_internal': [
+    "Comparing analytical options...",
+    "Working through the next move...",
+    "Choosing the strongest analysis path...",
+    "Checking possible approaches...",
+  ],
+  'explore_files': [
+    "Profiling the data structure...",
+    "Reading the table shape...",
+    "Scanning columns and samples...",
+    "Getting familiar with the dataset...",
   ],
   'execution': [
     "Crunching the numbers...",
@@ -403,6 +429,237 @@ const RollingText = ({ isActive, stopSignal, currentStep = null }: RollingTextPr
   );
 };
 
+interface ThinkingProcessProps {
+  events?: ThinkingEvent[];
+  fallbackTasks?: Array<{ id: string; text: string }>;
+  isActive: boolean;
+  inline?: boolean;
+  compactSurface?: boolean;
+}
+
+const MEANINGFUL_THINKING_PHASES = new Set([
+  "context",
+  "routing",
+  "tool",
+  "synthesis",
+  "validation",
+  "final",
+  "error",
+]);
+
+const DESKTOP_THINKING_ROWS = 5;
+const MOBILE_THINKING_ROWS = 3;
+
+const formatElapsedMs = (ms: number): string => {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+};
+
+const parseEventTime = (raw?: string | null): number | null => {
+  const parsed = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const thinkingEventTime = (event: ThinkingEvent): number => {
+  return parseEventTime(event.started_at) ?? parseEventTime(event.completed_at) ?? 0;
+};
+
+const thinkingEventKey = (event: ThinkingEvent): string => event.title.trim().toLowerCase();
+
+const buildExpandedThinkingEvents = (
+  displayEvents: ThinkingEvent[],
+  activeEvent: ThinkingEvent,
+): ThinkingEvent[] => {
+  const activeIndex = Math.max(0, displayEvents.findIndex((event) => event.id === activeEvent.id));
+  const priorEvents = displayEvents.slice(0, activeIndex).reverse();
+  const seen = new Set([thinkingEventKey(activeEvent)]);
+  const meaningful: ThinkingEvent[] = [];
+  const secondary: ThinkingEvent[] = [];
+
+  priorEvents.forEach((event) => {
+    const key = thinkingEventKey(event);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    if (MEANINGFUL_THINKING_PHASES.has(event.phase) || event.status === "error") {
+      meaningful.push(event);
+    } else {
+      secondary.push(event);
+    }
+  });
+
+  return [...meaningful, ...secondary];
+};
+
+const ThinkingStatusText = ({ text, isActive }: { text: string; isActive: boolean }) => {
+  if (!isActive) {
+    return (
+      <span className="min-w-0 max-w-[min(620px,calc(100vw-180px))] truncate text-muted-foreground">
+        {text}
+      </span>
+    );
+  }
+
+  return (
+    <span className="relative min-w-0 max-w-[min(620px,calc(100vw-180px))] overflow-hidden">
+      <motion.span
+        key={text}
+        initial={{ opacity: 0 }}
+        animate={{
+          opacity: 1,
+          backgroundPosition: ["200% 50%", "-200% 50%"],
+        }}
+        transition={{
+          opacity: { duration: 0.18, ease: "easeOut" },
+          backgroundPosition: {
+            duration: 4.2,
+            repeat: Infinity,
+            ease: "easeInOut",
+            repeatDelay: 0.25,
+          },
+        }}
+        className="block truncate bg-gradient-to-r from-muted-foreground/60 via-foreground to-muted-foreground/60 bg-clip-text text-transparent [background-size:260%_100%] dark:from-muted-foreground/80 dark:via-white dark:to-muted-foreground/80"
+      >
+        {text}
+      </motion.span>
+    </span>
+  );
+};
+
+const ThinkingProcess = ({ events, fallbackTasks, isActive, inline, compactSurface = false }: ThinkingProcessProps) => {
+  const [peekOpen, setPeekOpen] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!isActive) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [isActive]);
+
+  const displayEvents = useMemo<ThinkingEvent[]>(() => {
+    if (events && events.length > 0) {
+      const sorted = [...events].sort((a, b) => {
+        const timeDelta = thinkingEventTime(a) - thinkingEventTime(b);
+        if (timeDelta !== 0) return timeDelta;
+        if (a.run_id !== b.run_id) return a.run_id.localeCompare(b.run_id);
+        return a.sequence - b.sequence;
+      });
+      const latestRunId = isActive ? sorted[sorted.length - 1]?.run_id : null;
+      const source = latestRunId ? sorted.filter((event) => event.run_id === latestRunId) : sorted;
+      return source.map((event, idx, arr) => {
+        const isPastActive = event.status === "active" && (idx < arr.length - 1 || !isActive);
+        return isPastActive ? { ...event, status: "completed" } : event;
+      });
+    }
+
+    const source: ThinkingEvent[] = (fallbackTasks || []).map((task, idx) => ({
+      id: task.id,
+      run_id: "legacy",
+      sequence: idx + 1,
+      phase: idx === 0 ? "context" : "analysis",
+      status: "completed",
+      title: task.text,
+    }));
+
+    return source.map((event, idx, arr) => {
+      const isPastActive = event.status === "active" && (idx < arr.length - 1 || !isActive);
+      return isPastActive ? { ...event, status: "completed" } : event;
+    });
+  }, [events, fallbackTasks, isActive]);
+
+  if (displayEvents.length === 0) return null;
+
+  const activeEvent = [...displayEvents].reverse().find((event) => event.status === "active")
+    || displayEvents[displayEvents.length - 1];
+  const firstEvent = displayEvents[0];
+  const lastTimestamp = [...displayEvents]
+    .reverse()
+    .map((event) => parseEventTime(event.completed_at) ?? parseEventTime(event.started_at))
+    .find((timestamp): timestamp is number => typeof timestamp === "number");
+  const startedAt = parseEventTime(firstEvent?.started_at) ?? parseEventTime(firstEvent?.completed_at) ?? now;
+  const endedAt = isActive ? now : (lastTimestamp ?? startedAt);
+  const elapsed = formatElapsedMs(endedAt - startedAt);
+  const expandedEvents = buildExpandedThinkingEvents(displayEvents, activeEvent);
+  const desktopExpandedEvents = expandedEvents.slice(0, DESKTOP_THINKING_ROWS - 1);
+  const desktopOverflowCount = Math.max(0, expandedEvents.length - (DESKTOP_THINKING_ROWS - 1));
+  const mobileOverflowCount = Math.max(0, expandedEvents.length - (MOBILE_THINKING_ROWS - 1));
+  const canExpand = expandedEvents.length > 0;
+  const inlineStatus = isActive
+    ? activeEvent.title
+    : `Thought for ${elapsed}`;
+
+  const wrapperClass = inline
+    ? `w-fit max-w-full mt-2`
+    : `w-fit ${compactSurface ? "max-w-[720px]" : "max-w-[85%]"} mt-2 ml-[38px]`;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          if (canExpand) {
+            setPeekOpen((open) => !open);
+          }
+        }}
+        className={`${wrapperClass} group flex flex-col items-start rounded-md px-0.5 py-1 text-left transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30`}
+      >
+        <span className="inline-flex min-h-7 max-w-full items-center gap-2 text-sm text-muted-foreground">
+          <span className="relative flex h-4 w-4 flex-shrink-0 items-center justify-center">
+            <Sparkles className="relative h-3.5 w-3.5 text-primary" />
+          </span>
+          <ThinkingStatusText text={inlineStatus} isActive={isActive} />
+          {canExpand && (
+            <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 opacity-60 transition-transform ${peekOpen ? "rotate-180" : ""} group-hover:opacity-80`} />
+          )}
+        </span>
+        <AnimatePresence initial={false}>
+          {peekOpen && canExpand && (
+            <motion.span
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="ml-5 mt-1.5 flex max-w-[min(600px,calc(100vw-190px))] flex-col gap-1 overflow-hidden"
+            >
+              {desktopExpandedEvents.map((event, index) => (
+                <span
+                  key={`${event.id}:peek`}
+                  className={`${index >= MOBILE_THINKING_ROWS - 1 ? "hidden sm:grid" : "grid"} min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 text-[13px] leading-5 text-muted-foreground/70`}
+                >
+                  <span className="relative flex h-5 w-4 items-center justify-center">
+                    {index < desktopExpandedEvents.length - 1 && (
+                      <span className="absolute left-1/2 top-[15px] h-[14px] w-px -translate-x-1/2 bg-primary/15" />
+                    )}
+                    <Check className="relative h-3.5 w-3.5 text-primary/55" />
+                  </span>
+                  <span className="truncate pt-px">{event.title}</span>
+                </span>
+              ))}
+              {mobileOverflowCount > 0 && (
+                <span className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 text-[13px] leading-5 text-muted-foreground/55 sm:hidden">
+                  <span className="flex h-5 w-4 items-center justify-center">
+                    <span className="h-1 w-1 rounded-full bg-primary/30" />
+                  </span>
+                  <span className="truncate pt-px">+ {mobileOverflowCount} more steps summarized</span>
+                </span>
+              )}
+              {desktopOverflowCount > 0 && (
+                <span className="hidden min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 text-[13px] leading-5 text-muted-foreground/55 sm:grid">
+                  <span className="flex h-5 w-4 items-center justify-center">
+                    <span className="h-1 w-1 rounded-full bg-primary/30" />
+                  </span>
+                  <span className="truncate pt-px">+ {desktopOverflowCount} more steps summarized</span>
+                </span>
+              )}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </button>
+    </>
+  );
+};
+
 // Fetch project assets for @mention feature
 const fetchProjectAssets = async (projectId: string): Promise<Array<{
   id: string;
@@ -515,6 +772,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     isTemplatePending,
     currentWorkflowStep,
     priorWorkflowSteps,
+    thinkingEvents,
+    currentConversationId,
+    setThinkingEvents,
     setInputValue,
     setIsTyping,
     setMessages,
@@ -686,6 +946,37 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       fetchProjectAssets(projectId).then(setProjectAssets);
     }
   }, [projectId]);
+
+  useEffect(() => {
+    if (!isProcessing || !currentConversationId || !projectId) return;
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const pollThinkingEvents = async () => {
+      try {
+        const response = await conversationService.getWorkflowEvents(
+          currentConversationId,
+          projectId,
+          controller.signal
+        );
+        if (!cancelled && response.events?.length) {
+          setThinkingEvents(response.events);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.warn('Failed to poll thinking events:', error);
+        }
+      }
+    };
+
+    pollThinkingEvents();
+    const interval = window.setInterval(pollThinkingEvents, 1500);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [currentConversationId, isProcessing, projectId, setThinkingEvents]);
 
   // Auto-refresh project assets when uploadedFiles changes (e.g. after GA4/Sheets sync)
   useEffect(() => {
@@ -1850,10 +2141,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         </div>
                       )
                     )}
-                    {/* Render saved todo tasks (between text and dashboard card) */}
-                    {message.role === 'assistant' && message.todoTasks && message.todoTasks.length > 0 && (
-                      <DeepThinkingTasks
-                        savedTasks={message.todoTasks}
+                    {/* Render saved thinking trace (legacy todo tasks are adapted as fallback) */}
+                    {message.role === 'assistant' && ((message.thinkingTrace && message.thinkingTrace.length > 0) || (message.todoTasks && message.todoTasks.length > 0)) && (
+                      <ThinkingProcess
+                        events={message.thinkingTrace}
+                        fallbackTasks={message.todoTasks}
                         isActive={false}
                         inline
                         compactSurface={!isSidePanelOpen}
@@ -1977,11 +2269,18 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               {/* Live Deep Thinking Tasks under the user message during active processing */}
               {message.role === 'user' && isProcessing && index === messages.length - 1 && (
                 <div className="flex justify-start">
-                  <DeepThinkingTasks
-                    prompt={message.content}
+                  <ThinkingProcess
+                    events={thinkingEvents}
+                    fallbackTasks={[
+                      ...priorWorkflowSteps.map(s => ({ id: s, text: mapStepToDisplayText(s) })),
+                      ...(currentWorkflowStep && !priorWorkflowSteps.includes(currentWorkflowStep)
+                        ? [{ id: currentWorkflowStep, text: mapStepToDisplayText(currentWorkflowStep) }]
+                        : []),
+                      ...(!currentWorkflowStep && priorWorkflowSteps.length === 0
+                        ? [{ id: 'start', text: 'Queued for analysis' }]
+                        : []),
+                    ]}
                     isActive={true}
-                    currentStep={currentWorkflowStep}
-                    initialSteps={priorWorkflowSteps.map(s => ({ id: s, text: mapStepToDisplayText(s) }))}
                     compactSurface={!isSidePanelOpen}
                   />
                 </div>

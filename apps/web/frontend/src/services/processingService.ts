@@ -114,6 +114,56 @@ class ProcessingService {
     }
   }
 
+  async getWorkflowEvents(
+    conversationId: string,
+    projectId: string,
+    abortSignal?: AbortSignal
+  ): Promise<ProcessingResponse> {
+    try {
+      const workflowEvents = await conversationService.getWorkflowEvents(
+        conversationId,
+        projectId,
+        abortSignal
+      );
+      return {
+        success: true,
+        data: {
+          success: true,
+          status: workflowEvents.status?.status === 'completed' ? 'completed' :
+            workflowEvents.status?.status === 'error' ? 'error' :
+              workflowEvents.status?.status === 'stopped' ? 'stopped' : 'processing',
+          fileID: '',
+          conversation_id: conversationId,
+          workflow_status: workflowEvents.status,
+          thinking_events: workflowEvents.events,
+        },
+      };
+    } catch (error) {
+      if (abortSignal?.aborted) {
+        return {
+          success: false,
+          data: {
+            success: false,
+            status: 'error',
+            fileID: '',
+            conversation_id: conversationId,
+            error: 'Request aborted',
+          },
+        };
+      }
+      return {
+        success: false,
+        data: {
+          success: false,
+          status: 'error',
+          fileID: '',
+          conversation_id: conversationId,
+          error: error instanceof Error ? error.message : 'Unable to fetch workflow events',
+        },
+      };
+    }
+  }
+
   async pollProcessingStatus(
     assetId: string,
     projectId: string,

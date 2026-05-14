@@ -1,5 +1,20 @@
 import type { DashboardComponent } from "@/types/dashboard";
 
+export interface ThinkingEvent {
+  id: string;
+  run_id: string;
+  sequence: number;
+  phase: "queued" | "context" | "routing" | "analysis" | "tool" | "synthesis" | "validation" | "final" | "error" | string;
+  status: "pending" | "active" | "completed" | "error" | string;
+  title: string;
+  summary?: string | null;
+  detail?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  duration_ms?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
@@ -57,4 +72,5 @@ export interface Message {
     id: string;
     text: string;
   }>;
+  thinkingTrace?: ThinkingEvent[];
 }

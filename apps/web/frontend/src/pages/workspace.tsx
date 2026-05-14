@@ -518,7 +518,9 @@ export default function WorkspacePage() {
             if (firstAccount) {
               fallbackAccountInfo = `Account: ${firstAccount.account_name}`;
             }
-          } catch (_) {}
+          } catch {
+            // Keep the generic fallback when GA properties cannot be loaded.
+          }
         }
 
         const info = googleEmail ? `Account: ${googleEmail}` : fallbackAccountInfo;
@@ -937,6 +939,7 @@ export default function WorkspacePage() {
   }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen]);
 
   const isAesthetic = layoutStyle === "aesthetic" && activeTab === "new-chat";
+  const showWorkspaceHeaderActions = activeTab !== "files" && activeTab !== "schedules";
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -972,13 +975,15 @@ export default function WorkspacePage() {
           MAIN CONTENT
       ══════════════════════════════════════════════════════════════════════ */}
       <div className="flex-1 flex flex-col min-w-0 relative z-[2]">
-        <div className="hidden md:flex items-center absolute top-4 right-6 z-50">
-          <HeaderCreditBadge
-            creditsRemaining={creditsRemaining}
-            monthlyCreditsUsed={creditUsage?.monthly_credits_used}
-          />
-          <NotificationBell />
-        </div>
+        {showWorkspaceHeaderActions && (
+          <div className="hidden md:flex items-center absolute top-4 right-6 z-50">
+            <HeaderCreditBadge
+              creditsRemaining={creditsRemaining}
+              monthlyCreditsUsed={creditUsage?.monthly_credits_used}
+            />
+            <NotificationBell />
+          </div>
+        )}
 
         {/* Mobile Navigation Tabs */}
         <div className="md:hidden flex items-center justify-around border-b border-border/30 bg-muted/95 sticky top-0 z-40 backdrop-blur-sm">

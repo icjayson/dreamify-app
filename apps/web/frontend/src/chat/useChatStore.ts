@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Message } from '@/types/message';
+import type { Message, ThinkingEvent } from '@/types/message';
 import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService } from '@/services/processingService';
 import { ConversationChatRequest } from '@/services/conversationService';
@@ -135,6 +135,7 @@ interface ChatState {
   isProcessing: boolean;
   currentWorkflowStep: string | null;
   priorWorkflowSteps: string[];
+  thinkingEvents: ThinkingEvent[];
 
   // UI state
   dropdownOpen: boolean;
@@ -220,6 +221,8 @@ interface ChatState {
   setIsProcessing: (processing: boolean) => void;
   setCurrentWorkflowStep: (step: string | null) => void;
   setPriorWorkflowSteps: (steps: string[]) => void;
+  setThinkingEvents: (events: ThinkingEvent[]) => void;
+  clearThinkingEvents: () => void;
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
   setDashboardTheme: (theme: 'light' | 'dark') => void;
   setIsThemeChanging: (changing: boolean) => void;
@@ -298,7 +301,12 @@ export interface PendingAction {
 }
 
 // Ordered sequence of workflow steps (used to reconstruct prior steps on resume)
-const STEP_ORDER = ['start', 'load_conversation', 'download_asset', 'run_workflow', 'routing', 'reasoning', 'execution', 'synthesis', 'validation', 'finish'];
+const STEP_ORDER = ['initializing', 'initialized', 'load_conversation', 'download_asset', 'run_workflow', 'explore_files', 'routing', 'reasoning', 'reasoning_internal', 'execution', 'synthesis', 'validation', 'finish'];
+
+const getPriorWorkflowSteps = (step: string): string[] => {
+  const stepIdx = STEP_ORDER.indexOf(step);
+  return stepIdx > 0 ? STEP_ORDER.slice(0, stepIdx) : [];
+};
 
 const initialMessages: Message[] = [
   {
@@ -321,6 +329,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isProcessing: false,
   currentWorkflowStep: null,
   priorWorkflowSteps: [],
+  thinkingEvents: [],
   dropdownOpen: false,
   selectedDataSource: "",
   isListening: false,
@@ -395,6 +404,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   setCurrentWorkflowStep: (step) => set({ currentWorkflowStep: step }),
   setPriorWorkflowSteps: (steps) => set({ priorWorkflowSteps: steps }),
+  setThinkingEvents: (events) => set({ thinkingEvents: events }),
+  clearThinkingEvents: () => set({ thinkingEvents: [] }),
   updateMessages: (updater) => set((state) => ({ messages: updater(state.messages) })),
   setDashboardTheme: (theme) => set({ dashboardTheme: theme }),
   setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
@@ -741,14 +752,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => {
     const state = get();
-    const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep } = state;
+    const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep, setPriorWorkflowSteps } = state;
 
     // Create new AbortController for this processing session
     const abortController = new AbortController();
-    set({ abortController, currentProjectId: projectIdParam || null });
+    set({ abortController, currentProjectId: projectIdParam || null, thinkingEvents: [], priorWorkflowSteps: [] });
 
     // Clear current workflow step at start
     setCurrentWorkflowStep(null);
+    setPriorWorkflowSteps([]);
 
     // Text-only message path: allow theme change after initial dashboard shown, only if currently light
     // @mentioned files should use Q&A path (they're already in conversation)
@@ -977,6 +989,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               const step = status.data?.workflow_status?.metadata?.step;
               if (step) {
                 setCurrentWorkflowStep(step);
+                setPriorWorkflowSteps(getPriorWorkflowSteps(step));
               }
             },
             360,
@@ -1382,6 +1395,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const step = status.data?.workflow_status?.metadata?.step;
             if (step) {
               setCurrentWorkflowStep(step);
+              setPriorWorkflowSteps(getPriorWorkflowSteps(step));
             }
           },
           360, // max attempts (30 minutes)
@@ -1640,9 +1654,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (initialStep) {
       setCurrentWorkflowStep(initialStep);
       // Compute all steps that logically preceded this one so the UI can show them as completed
-      const stepIdx = STEP_ORDER.indexOf(initialStep);
-      const priorSteps = stepIdx > 0 ? STEP_ORDER.slice(0, stepIdx) : [];
-      set({ priorWorkflowSteps: priorSteps });
+      set({ priorWorkflowSteps: getPriorWorkflowSteps(initialStep) });
     }
 
     const abortController = new AbortController();
@@ -1661,7 +1673,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             setIsTyping(false);
           }
           const step = status.data?.workflow_status?.metadata?.step;
-          if (step) setCurrentWorkflowStep(step);
+          if (step) {
+            setCurrentWorkflowStep(step);
+            set({ priorWorkflowSteps: getPriorWorkflowSteps(step) });
+          }
         },
         360,
         5000,
@@ -1743,6 +1758,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isProcessing: false,
       currentWorkflowStep: null,
       priorWorkflowSteps: [],
+      thinkingEvents: [],
       dropdownOpen: false,
       selectedDataSource: "",
       isListening: false,

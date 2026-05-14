@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { ThinkingEvent } from '@/types/message';
 
 export interface ConversationChatRequest {
   conversation_id?: string;
@@ -34,6 +35,12 @@ export interface WorkflowStatusResponse {
   status: string;
   metadata: Record<string, any>;
   updated_at?: string;
+}
+
+export interface WorkflowEventsResponse {
+  conversation_id: string;
+  status: WorkflowStatusResponse | null;
+  events: ThinkingEvent[];
 }
 
 export interface DashboardDataResponse {
@@ -83,6 +90,17 @@ class ConversationService {
     }
 
     throw new Error(response.error || 'Failed to get workflow status');
+  }
+
+  async getWorkflowEvents(conversationId: string, projectId: string, abortSignal?: AbortSignal): Promise<WorkflowEventsResponse> {
+    const response = await api.get<WorkflowEventsResponse>(
+      `/api/v1/conversation/workflow-events/${conversationId}?project_id=${encodeURIComponent(projectId)}`,
+      abortSignal ? { signal: abortSignal } : undefined
+    );
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.error || 'Failed to get workflow events');
   }
 
   async getDashboardData(conversationId: string, projectId: string, dashboardId?: string): Promise<DashboardDataResponse | null> {
@@ -153,4 +171,3 @@ class ConversationService {
 }
 
 export const conversationService = new ConversationService();
-

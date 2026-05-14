@@ -147,7 +147,7 @@ export function conversationNodesToMessages(
             const text = c?.data?.text;
             return typeof text === 'string' && text.trim().length > 0;
           }
-          return c?.type === 'dashboard' || c?.type === 'todo_tasks';
+          return c?.type === 'dashboard' || c?.type === 'todo_tasks' || c?.type === 'thinking_trace';
         });
         return !!hasRenderableContent;
       }
@@ -171,6 +171,7 @@ export function conversationNodesToMessages(
       const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
       const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
       const todoTasksContent = node?.contents?.find?.((c: any) => c?.type === 'todo_tasks');
+      const thinkingTraceContent = node?.contents?.find?.((c: any) => c?.type === 'thinking_trace');
       const visualArtifactsContent = node?.contents?.find?.((c: any) => c?.type === 'visual_artifacts');
       const assetContents = node?.contents?.filter?.(
         (c: any) =>
@@ -209,6 +210,9 @@ export function conversationNodesToMessages(
       }
       if (todoTasksContent?.data?.tasks && Array.isArray(todoTasksContent.data.tasks)) {
         normalized.todoTasks = todoTasksContent.data.tasks;
+      }
+      if (thinkingTraceContent?.data?.events && Array.isArray(thinkingTraceContent.data.events)) {
+        normalized.thinkingTrace = thinkingTraceContent.data.events;
       }
       if (Array.isArray(visualArtifactsContent?.data?.artifacts)) {
         const artifacts = visualArtifactsContent.data.artifacts

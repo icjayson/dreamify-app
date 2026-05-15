@@ -1414,25 +1414,6 @@ def _process_conversation_background(
         _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
         _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
 
-        completion_file_identifier = (
-            primary_asset.get("file_id") or primary_asset.get("asset_id")
-            if primary_asset
-            else conversation_id
-        )
-        _post_node_status_sync(
-            conversation_id,
-            "completed",
-            {
-                "fileID": completion_file_identifier,
-                "response_type": "dashboard_config",
-                "dashboard_id": (
-                    new_dashboard_record["dashboard_id"]
-                    if new_dashboard_record
-                    else None
-                ),
-            },
-        )
-
         # Derive source_type from primary asset's asset_type
         _asset_type_to_source: dict = {
             "integration_ga4": "GA4",
@@ -1451,7 +1432,6 @@ def _process_conversation_background(
         try:
             project_metadata_payload = {
                 "user_id": user_id,
-                "name": dashboard_title,
                 "description": dashboard_description,
                 "latest_conversation_id": conversation_id,
                 "latest_dashboard_id": (
@@ -1478,6 +1458,25 @@ def _process_conversation_background(
                 )
         except Exception as exc:
             logger.warning("Project metadata update failed: %s", exc)
+
+        completion_file_identifier = (
+            primary_asset.get("file_id") or primary_asset.get("asset_id")
+            if primary_asset
+            else conversation_id
+        )
+        _post_node_status_sync(
+            conversation_id,
+            "completed",
+            {
+                "fileID": completion_file_identifier,
+                "response_type": "dashboard_config",
+                "dashboard_id": (
+                    new_dashboard_record["dashboard_id"]
+                    if new_dashboard_record
+                    else None
+                ),
+            },
+        )
 
         logger.info(f"Workflow completed for conversation {conversation_id}")
 

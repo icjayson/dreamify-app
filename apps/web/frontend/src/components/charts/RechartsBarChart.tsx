@@ -123,12 +123,12 @@ const RechartsBarChart: React.FC<RechartsBarChartProps & { axisConfig?: any }> =
 
   return (
     <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '100%', display: 'flex', flexDirection: 'column', ...style }}>
-      <div className="mb-4" style={{ flexShrink: 0 }}>
+      <div className="mb-3" style={{ flexShrink: 0 }}>
         <EditableText
           as="h3"
           value={title}
           path="title"
-          className="text-lg font-semibold mb-1"
+          className="text-base font-semibold leading-6"
           style={{ color: 'var(--title-color)' }}
           placeholder="Chart title"
         />
@@ -136,7 +136,7 @@ const RechartsBarChart: React.FC<RechartsBarChartProps & { axisConfig?: any }> =
           as="p"
           value={description}
           path="description"
-          className="text-sm"
+          className="mt-0.5 text-sm leading-5"
           style={{ color: 'var(--description-color)' }}
           placeholder="Add description"
         />
@@ -146,27 +146,34 @@ const RechartsBarChart: React.FC<RechartsBarChartProps & { axisConfig?: any }> =
         <BarChart
           data={transformedData}
           margin={{
-            top: 20,
-            right: 30,
-            left: 20,
-            bottom: 20,
+            top: 8,
+            right: 14,
+            left: 2,
+            bottom: 6,
           }}
         >
           {styling?.gridVisible !== false && (
             <CartesianGrid
-              strokeDasharray="3 3"
+              strokeDasharray="4 6"
+              vertical={false}
+              stroke="var(--border-card-color)"
+              strokeOpacity={0.58}
               className="chart-grid"
             />
           )}
           <XAxis
             dataKey="label"
             className="chart-axis"
-            tick={{ fill: 'var(--element-color)' }}
+            tick={{ fill: 'var(--element-color)', fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
             {...xAxisProps}
           />
           <YAxis
             className="chart-axis"
-            tick={{ fill: 'var(--element-color)' }}
+            tick={{ fill: 'var(--element-color)', fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
             {...yAxisProps}
           />
           <Tooltip content={<CustomTooltip />} />
@@ -174,6 +181,7 @@ const RechartsBarChart: React.FC<RechartsBarChartProps & { axisConfig?: any }> =
             <Legend
               className="chart-legend"
               verticalAlign={styling?.legendPosition === 'top' ? 'top' : 'bottom'}
+              wrapperStyle={{ color: 'var(--description-color)', fontSize: 11, paddingTop: 8 }}
             />
           )}
           {coloredDatasets.map((dataset, index) => (
@@ -181,7 +189,8 @@ const RechartsBarChart: React.FC<RechartsBarChartProps & { axisConfig?: any }> =
               key={dataset.label}
               dataKey={dataset.label}
               fill={dataset.color}
-              radius={[4, 4, 0, 0]}
+              maxBarSize={42}
+              radius={[5, 5, 0, 0]}
               isAnimationActive={styling?.animationEnabled !== false}
               animationDuration={styling?.animationEnabled !== false ? 1000 : 0}
             />

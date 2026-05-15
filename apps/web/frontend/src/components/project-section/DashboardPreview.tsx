@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, Loader2, ChevronDown, ChevronUp, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2, Pencil, CalendarDays } from "lucide-react";
+import { AlertCircle, Loader2, ChevronDown, ChevronUp, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2, Pencil, CalendarDays, Sparkles } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -29,7 +29,7 @@ import { EditProvider } from "@/components/charts/edit/EditContext";
 import EditPanel from "@/components/charts/edit/EditPanel";
 import InlineSvgTextEditor from "@/components/charts/edit/InlineSvgTextEditor";
 import { useChatStore } from "@/chat/useChatStore";
-import { DashboardGenerationRequest, LayoutType, ChartType, DashboardConfiguration } from "@/types/dashboard";
+import { DashboardGenerationRequest, LayoutType, ChartType, DashboardConfiguration, DashboardComponent } from "@/types/dashboard";
 import {
   getMinSizeForType as getMinSizeForTypePure,
   computeStorageKey,
@@ -58,7 +58,8 @@ import {
   getColorPalette,
   CHART_THEME_COLORS,
   CHART_PRESET_THEMES,
-  ChartPresetTheme
+  ChartPresetTheme,
+  isLightBackground
 } from "@/utils/chartStyling";
 import type { ChartChipData } from "@/components/chat/ChartPreviewChip";
 import { exportChartAsPng } from "@/utils/exportUtils";
@@ -76,6 +77,45 @@ const DATE_PRESETS = [
   { value: "last_year", label: "Last year" },
   { value: "custom", label: "Custom range" },
 ];
+
+type PremiumDashboardStyleVars = CSSProperties & Record<`--${string}`, string>;
+
+function hexToRgba(hex: string | undefined, alpha: number): string {
+  if (!hex) return `rgba(15, 23, 42, ${alpha})`;
+  const normalized = hex.replace("#", "");
+  if (!/^[\da-f]{6}$/i.test(normalized)) return hex;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function buildPremiumDashboardVars(theme: ChartPresetTheme): PremiumDashboardStyleVars {
+  const colors = CHART_THEME_COLORS[theme] ?? CHART_THEME_COLORS[CHART_PRESET_THEMES.DEFAULT];
+  const isLight = isLightBackground(theme);
+  const accent = colors["highlight-color"];
+  return {
+    "--dashboard-accent": accent,
+    "--dashboard-accent-soft": hexToRgba(accent, isLight ? 0.08 : 0.16),
+    "--dashboard-accent-ring": hexToRgba(accent, isLight ? 0.18 : 0.28),
+    "--dashboard-bg": colors["bg-dashboard-color"],
+    "--dashboard-card-bg": colors["bg-card-color"],
+    "--dashboard-card-border": colors["border-card-color"],
+    "--dashboard-title": colors["title-color"],
+    "--dashboard-muted": colors["description-color"],
+    "--dashboard-element": colors["element-color"],
+    "--dashboard-command-bg": hexToRgba(colors["bg-dashboard-color"], isLight ? 0.92 : 0.88),
+    "--dashboard-control-bg": hexToRgba(colors["bg-card-color"], isLight ? 0.9 : 0.84),
+    "--dashboard-control-hover": hexToRgba(accent, isLight ? 0.1 : 0.18),
+    "--dashboard-popover-bg": colors["bg-card-color"],
+    "--dashboard-card-shadow": isLight
+      ? "0 12px 28px rgba(15, 23, 42, 0.07)"
+      : "0 18px 38px rgba(0, 0, 0, 0.26)",
+    "--dashboard-card-shadow-hover": isLight
+      ? "0 18px 36px rgba(15, 23, 42, 0.11)"
+      : "0 22px 44px rgba(0, 0, 0, 0.34)",
+  };
+}
 
 function getPresetRange(preset: string): { from: Date; to: Date } {
   const now = new Date();
@@ -913,6 +953,14 @@ const DashboardPreview = ({
     return base;
   }, [dashboardStylingForContainer, staticConfig, processedData]);
 
+  const effectiveTheme = useMemo(() => {
+    const theme = effectiveStyling?.presetTheme as ChartPresetTheme | undefined;
+    return theme && CHART_THEME_COLORS[theme] ? theme : CHART_PRESET_THEMES.DEFAULT;
+  }, [effectiveStyling]);
+
+  const premiumDashboardVars = useMemo(() => buildPremiumDashboardVars(effectiveTheme), [effectiveTheme]);
+  const isLightDashboardTheme = isLightBackground(effectiveTheme);
+
   useEffect(() => {
     if (containerRef.current && effectiveStyling) {
       applyChartStyling(containerRef.current, effectiveStyling);
@@ -1364,10 +1412,11 @@ const DashboardPreview = ({
       ref={containerRef}
       id={isExporting ? "dashboard-export-inner-root" : "dashboard-preview-root"}
       data-dashboard-root
-      className={`h-full overflow-y-auto relative chat-scrollbar-hide ${getChartStylingClasses(effectiveStyling || getDefaultChartStyling() as any)} ${className}`}
+      className={`h-full overflow-y-auto relative chat-scrollbar-hide ${getChartStylingClasses(effectiveStyling || getDefaultChartStyling())} ${className}`}
       style={{
         ...style,
-        ...getDashboardBackgroundStyle(effectiveStyling || getDefaultChartStyling())
+        ...getDashboardBackgroundStyle(effectiveStyling || getDefaultChartStyling()),
+        ...premiumDashboardVars
       }}
       data-theme="dashboard-preview"
     >
@@ -1375,7 +1424,6 @@ const DashboardPreview = ({
       {dashboardMetadata && (
         <div className="px-6 pt-6 pb-4" style={{ borderColor: 'var(--border-card-color)' }}>
           <div className="flex flex-col gap-2">
-            {/* Row 1: Title and Controls */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1 w-full">
                 <h1
@@ -1393,8 +1441,7 @@ const DashboardPreview = ({
                   </p>
                 )}
               </div>
-              <div className="flex items-center justify-start gap-2 flex-shrink-0 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-                {/* Date Picker - Hide when exporting */}
+              <div className="relative flex w-full flex-shrink-0 items-center justify-start gap-2 overflow-visible pb-1 md:w-auto md:pb-0">
                 {!isExporting && (
                   <Popover>
                     <PopoverTrigger asChild>
@@ -1473,18 +1520,27 @@ const DashboardPreview = ({
                     </PopoverContent>
                   </Popover>
                 )}
-                {/* Key Insights Button - Hide when exporting */}
                 {!isExporting && dashboardMetadata.insights && dashboardMetadata.insights.length > 0 && (
                   <button
                     onClick={() => setExpandedInsights(!expandedInsights)}
-                    className="flex items-center justify-start gap-2 px-3 py-1.5 h-9 text-sm rounded-md border hover:opacity-80 transition-opacity flex-shrink-0"
+                    className="flex h-9 flex-shrink-0 items-center justify-start gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-[var(--dashboard-control-hover)]"
                     style={{
                       color: 'var(--highlight-color)',
                       backgroundColor: 'var(--bg-card-color)',
                       borderColor: 'var(--border-card-color)'
                     }}
                   >
-                    <span className="text-sm font-medium">Key Insights</span>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span className="text-sm font-medium">Insights</span>
+                    <span
+                      className="hidden rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none sm:inline-flex"
+                      style={{
+                        backgroundColor: "var(--dashboard-accent-soft)",
+                        color: "var(--title-color)",
+                      }}
+                    >
+                      {dashboardMetadata.insights.length}
+                    </span>
                     {expandedInsights ? (
                       <ChevronUp className="w-4 h-4" />
                     ) : (
@@ -1492,30 +1548,106 @@ const DashboardPreview = ({
                     )}
                   </button>
                 )}
+                {!isExporting && expandedInsights && dashboardMetadata.insights && dashboardMetadata.insights.length > 0 && (
+                  <div
+                    className="absolute right-0 top-[calc(100%+0.5rem)] z-40 w-[min(540px,calc(100vw-3rem))] overflow-hidden rounded-xl border p-2.5 backdrop-blur-xl"
+                    style={{
+                      backgroundColor: "var(--dashboard-popover-bg)",
+                      borderColor: "var(--dashboard-accent-ring)",
+                      boxShadow: "var(--dashboard-card-shadow)",
+                    }}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--highlight-color)" }} />
+                        <h2
+                          className="truncate text-sm font-semibold"
+                          style={{ color: "var(--title-color)" }}
+                        >
+                          Key signals
+                        </h2>
+                      </div>
+                      <span
+                        className="shrink-0 text-[11px] font-medium"
+                        style={{ color: "var(--description-color)" }}
+                      >
+                        {dashboardMetadata.insights.length} insight{dashboardMetadata.insights.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <ul className="space-y-1">
+                      {dashboardMetadata.insights.map((insight: string, index: number) => (
+                        <li
+                          key={index}
+                          className="flex min-w-0 items-start gap-2.5 rounded-md px-2 py-1.5"
+                        >
+                          <span
+                            className="mt-0.5 inline-flex h-5 min-w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums"
+                            style={{
+                              backgroundColor: "var(--dashboard-accent-soft)",
+                              color: "var(--highlight-color)",
+                            }}
+                          >
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <span
+                            className="min-w-0 text-[13px] leading-5"
+                            style={{ color: "var(--title-color)" }}
+                          >
+                            {insight}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
-            {/* Expanded Insights List - Always show when exporting */}
-            {dashboardMetadata?.insights && dashboardMetadata.insights.length > 0 && (expandedInsights || isExporting) && (
-              <div className="w-full mt-2">
-                <h2
-                  className="text-lg font-medium mb-2"
-                  style={{ color: 'var(--description-color)' }}
-                >
-                  Key Insights
-                </h2>
-                <ul className="space-y-2">
+
+            {dashboardMetadata?.insights && dashboardMetadata.insights.length > 0 && isExporting && (
+              <div
+                className="relative mt-2 w-full max-w-[980px] overflow-hidden rounded-lg border px-3 py-2.5"
+                style={{
+                  background: "linear-gradient(135deg, var(--dashboard-accent-soft), transparent 78%)",
+                  borderColor: "var(--dashboard-accent-ring)",
+                }}
+              >
+                <span
+                  className="absolute bottom-3 left-0 top-3 w-px rounded-full"
+                  style={{ backgroundColor: "var(--highlight-color)", opacity: 0.5 }}
+                  aria-hidden="true"
+                />
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--highlight-color)" }} />
+                    <h2
+                      className="truncate text-sm font-semibold"
+                      style={{ color: 'var(--title-color)' }}
+                    >
+                      Key signals
+                    </h2>
+                  </div>
+                  <span
+                    className="shrink-0 text-[11px] font-medium"
+                    style={{ color: 'var(--description-color)' }}
+                  >
+                    {dashboardMetadata.insights.length} insight{dashboardMetadata.insights.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <ul className="space-y-1">
                   {dashboardMetadata.insights.map((insight: string, index: number) => (
                     <li
                       key={index}
-                      className="flex items-start gap-2"
+                      className="flex min-w-0 items-start gap-2.5 rounded-md px-1 py-0.5"
                     >
                       <span
-                        className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: 'var(--highlight-color)' }}
-                      />
-                      <span
-                        className="text-sm"
+                        className="mt-px w-5 shrink-0 text-[10px] font-semibold leading-5 tabular-nums"
                         style={{ color: 'var(--highlight-color)' }}
+                      >
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <span
+                        className="min-w-0 text-[13px] leading-5"
+                        style={{ color: 'var(--title-color)' }}
                       >
                         {insight}
                       </span>
@@ -1530,13 +1662,13 @@ const DashboardPreview = ({
 
 
       {/* Main Dashboard Content */}
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         {/* Loading State */}
         {dashboardState.loading && !dashboardState.configuration && (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center space-y-4">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-              <p className="text-muted-foreground">Generating dashboard...</p>
+          <div className="flex h-64 items-center justify-center">
+            <div className="space-y-4 text-center">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin" style={{ color: "var(--dashboard-accent)" }} />
+              <p style={{ color: "var(--dashboard-muted)" }}>Generating dashboard...</p>
             </div>
           </div>
         )}
@@ -1570,12 +1702,21 @@ const DashboardPreview = ({
                 isBounded
                 compactType={null}
               >
-                {editedDisplayComponents.map((component: any) => (
+                {editedDisplayComponents.map((component: DashboardComponent) => (
                   <div key={String(component.id)} className="animate-fade-in">
+                    <div
+                      className="h-full min-h-0 overflow-hidden rounded-lg border"
+                      style={{
+                        backgroundColor: "var(--dashboard-card-bg)",
+                        borderColor: "var(--dashboard-card-border)",
+                        boxShadow: "var(--dashboard-card-shadow)",
+                      }}
+                    >
                     <ChartRenderer
                       component={component}
                       onError={handleComponentError}
                     />
+                    </div>
                   </div>
                 ))}
               </Responsive>
@@ -1606,13 +1747,13 @@ const DashboardPreview = ({
                 onDragStop={handleDragResizeStop}
                 onResizeStop={handleDragResizeStop}
               >
-                {editedDisplayComponents.map((component: any) => {
+                {editedDisplayComponents.map((component: DashboardComponent) => {
                   const compId = component.component_config?.id || component.id;
                   const isHighlighted = highlightedIds.has(String(compId)) || highlightedIds.has(String(component.id));
                   const cellKey = String(component.id);
                   const isSelectedForEdit = editMode && selectedComponentId === cellKey;
                   const cardEditClass = editMode
-                    ? `cursor-pointer ${isSelectedForEdit ? 'ring-2 ring-offset-2 ring-blue-400/70' : 'ring-1 ring-blue-300/30 hover:ring-blue-400/60'}`
+                    ? `cursor-pointer ${isSelectedForEdit ? 'ring-2 ring-[var(--dashboard-accent)] ring-offset-2 ring-offset-[var(--dashboard-bg)]' : 'ring-1 ring-[var(--dashboard-accent-ring)] hover:ring-[var(--dashboard-accent)]'}`
                     : '';
                   return (
                     <div key={cellKey} className={`animate-fade-in h-full min-h-0 ${isHighlighted ? 'dashboard-component-highlight' : ''}`}>
@@ -1624,8 +1765,13 @@ const DashboardPreview = ({
                         onSelectComponent={setSelectedComponent}
                       >
                       <div
-                        className={`relative h-full min-h-0 rounded-md group/card transition-all duration-200 hover:shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_4px_16px_rgba(0,0,0,0.25)] ${cardEditClass}`}
+                        className={`relative h-full min-h-0 overflow-hidden rounded-lg border group/card transition-all duration-200 hover:-translate-y-px hover:shadow-[var(--dashboard-card-shadow-hover)] ${cardEditClass}`}
                         data-chart-id={cellKey}
+                        style={{
+                          backgroundColor: "var(--dashboard-card-bg)",
+                          borderColor: "var(--dashboard-card-border)",
+                          boxShadow: "var(--dashboard-card-shadow)",
+                        }}
                         onMouseDownCapture={editMode && canEdit ? (e) => {
                           // Click selects the component for the panel — but
                           // skip when the click is on an editable control,
@@ -1657,10 +1803,14 @@ const DashboardPreview = ({
                       >
                         {showCardActionsMenu && (
                           <div
-                            className="absolute left-2 top-2 z-20 opacity-0 group-hover/card:opacity-40 transition-opacity duration-150 pointer-events-none"
+                            className="absolute left-2 top-2 z-20 opacity-0 group-hover/card:opacity-60 transition-opacity duration-150 pointer-events-none"
                             aria-hidden="true"
                           >
-                            <GripVertical className="h-3.5 w-3.5 text-white" strokeWidth={2} />
+                            <GripVertical
+                              className="h-3.5 w-3.5"
+                              strokeWidth={2}
+                              style={{ color: isLightDashboardTheme ? "var(--dashboard-muted)" : "var(--dashboard-title)" }}
+                            />
                           </div>
                         )}
                         {showCardActionsMenu && (
@@ -1682,7 +1832,12 @@ const DashboardPreview = ({
                                   // hijack each menu action — opening the
                                   // panel instead of running the action.
                                   data-edit-control="card-menu"
-                                  className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background/50 dark:border-white/10 dark:bg-black/30 text-foreground/80 dark:text-white/80 backdrop-blur-sm outline-none transition-colors hover:bg-muted dark:hover:bg-black/55 hover:text-foreground dark:hover:text-white focus-visible:ring-2 focus-visible:ring-primary/30"
+                                  className="flex h-7 w-7 items-center justify-center rounded-md border backdrop-blur-sm outline-none transition-colors focus-visible:ring-2"
+                                  style={{
+                                    backgroundColor: "var(--dashboard-control-bg)",
+                                    borderColor: "var(--dashboard-card-border)",
+                                    color: "var(--dashboard-title)",
+                                  }}
                                 >
                                   <MoreVertical className="h-3.5 w-3.5" strokeWidth={2} />
                                 </button>
@@ -1690,7 +1845,12 @@ const DashboardPreview = ({
                               <DropdownMenuContent
                                 align="end"
                                 sideOffset={6}
-                                className="min-w-[11rem] rounded-xl border border-border dark:border-white/10 bg-popover/95 dark:bg-[#161616]/95 backdrop-blur-md text-popover-foreground dark:text-white shadow-xl"
+                                className="min-w-[11rem] rounded-lg border backdrop-blur-md shadow-xl"
+                                style={{
+                                  backgroundColor: "var(--dashboard-popover-bg)",
+                                  borderColor: "var(--dashboard-card-border)",
+                                  color: "var(--dashboard-title)",
+                                }}
                               >
                                 {/* In edit mode, only the destructive Remove
                                     action is available. Edit / Fix in chat
@@ -1705,17 +1865,17 @@ const DashboardPreview = ({
                                 {!editMode && (
                                   <>
                                     <DropdownMenuItem
-                                      className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
+                                      className="cursor-pointer gap-2 py-2"
                                       onSelect={() => {
                                         setEditMode(true);
                                         setSelectedComponent(cellKey);
                                       }}
                                     >
-                                      <Pencil className="h-4 w-4 shrink-0 text-blue-400" />
+                                      <Pencil className="h-4 w-4 shrink-0" style={{ color: "var(--dashboard-accent)" }} />
                                       Edit
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
-                                      className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
+                                      className="cursor-pointer gap-2 py-2"
                                       onSelect={() => {
                                         window.dispatchEvent(
                                           new CustomEvent(SELECT_CHART_CONTEXT_EVENT, {
@@ -1724,11 +1884,11 @@ const DashboardPreview = ({
                                         );
                                       }}
                                     >
-                                      <MessageSquare className="h-4 w-4 shrink-0 text-purple-400" />
+                                      <MessageSquare className="h-4 w-4 shrink-0" style={{ color: "var(--dashboard-accent)" }} />
                                       Fix in chat
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
-                                      className="cursor-pointer gap-2 py-2 focus:bg-muted dark:focus:bg-white/10 focus:text-foreground dark:focus:text-white"
+                                      className="cursor-pointer gap-2 py-2"
                                       disabled={exportingIds.has(cellKey)}
                                       onSelect={async () => {
                                         const cardEl = document.querySelector<HTMLElement>(
@@ -1749,11 +1909,11 @@ const DashboardPreview = ({
                                       }}
                                     >
                                       {exportingIds.has(cellKey)
-                                        ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-400" />
-                                        : <ImageDown className="h-4 w-4 shrink-0 text-emerald-400" />}
+                                        ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: "var(--dashboard-accent)" }} />
+                                        : <ImageDown className="h-4 w-4 shrink-0" style={{ color: "var(--dashboard-accent)" }} />}
                                       Export to PNG
                                     </DropdownMenuItem>
-                                    <DropdownMenuSeparator className="bg-border dark:bg-white/10" />
+                                    <DropdownMenuSeparator style={{ backgroundColor: "var(--dashboard-card-border)" }} />
                                   </>
                                 )}
                                 <DropdownMenuItem

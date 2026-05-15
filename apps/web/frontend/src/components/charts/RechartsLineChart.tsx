@@ -120,41 +120,49 @@ const RechartsLineChart: React.FC<RechartsLineChartProps & { axisConfig?: any }>
 
   return (
     <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '100%', display: 'flex', flexDirection: 'column', ...style }}>
-      <div className="mb-4" style={{ flexShrink: 0 }}>
-        <EditableText as="h3" value={title} path="title" className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }} placeholder="Chart title" />
-        <EditableText as="p" value={description} path="description" className="text-sm" style={{ color: 'var(--description-color)' }} placeholder="Add description" />
+      <div className="mb-3" style={{ flexShrink: 0 }}>
+        <EditableText as="h3" value={title} path="title" className="text-base font-semibold leading-6" style={{ color: 'var(--title-color)' }} placeholder="Chart title" />
+        <EditableText as="p" value={description} path="description" className="mt-0.5 text-sm leading-5" style={{ color: 'var(--description-color)' }} placeholder="Add description" />
       </div>
 
       <ResponsiveContainer width="100%" height="100%" style={{ flex: 1 }}>
         <LineChart
           data={transformedData}
           margin={{
-            top: 20,
-            right: 30,
-            left: 20,
-            bottom: 20,
+            top: 8,
+            right: 14,
+            left: 2,
+            bottom: 6,
           }}
         >
           {styling?.gridVisible !== false && (
             <CartesianGrid
-              strokeDasharray="3 3"
+              strokeDasharray="4 6"
+              vertical={false}
+              stroke="var(--border-card-color)"
+              strokeOpacity={0.58}
               className="chart-grid"
             />
           )}
           <XAxis
             dataKey="label"
             className="chart-axis"
-            tick={{ fill: 'var(--element-color)' }}
+            tick={{ fill: 'var(--element-color)', fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
            {...xAxisProps}/>
           <YAxis
             className="chart-axis"
-            tick={{ fill: 'var(--element-color)' }}
+            tick={{ fill: 'var(--element-color)', fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
            {...yAxisProps}/>
           <Tooltip content={<CustomTooltip />} />
           {styling?.legendPosition !== 'none' && (
             <Legend
               className="chart-legend"
               verticalAlign={styling?.legendPosition === 'top' ? 'top' : 'bottom'}
+              wrapperStyle={{ color: 'var(--description-color)', fontSize: 11, paddingTop: 8 }}
             />
           )}
           {coloredDatasets.map((dataset, index) => (
@@ -163,9 +171,9 @@ const RechartsLineChart: React.FC<RechartsLineChartProps & { axisConfig?: any }>
               type="monotone"
               dataKey={dataset.label}
               stroke={dataset.color}
-              strokeWidth={2}
+              strokeWidth={2.5}
               dot={false}
-              activeDot={false}
+              activeDot={{ r: 4, strokeWidth: 0 }}
               isAnimationActive={styling?.animationEnabled !== false}
               animationDuration={styling?.animationEnabled !== false ? 1000 : 0}
             />

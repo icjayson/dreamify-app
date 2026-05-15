@@ -150,9 +150,9 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
 
   return (
     <div className={`chart-container ${stylingClasses} ${className}`} style={{ height: '100%', display: 'flex', flexDirection: 'column', ...style }}>
-      <div className="mb-4" style={{ flexShrink: 0 }}>
-        <EditableText as="h3" value={title} path="title" className="text-lg font-semibold mb-1" style={{ color: 'var(--title-color)' }} placeholder="Chart title" />
-        <EditableText as="p" value={description} path="description" className="text-sm" style={{ color: 'var(--description-color)' }} placeholder="Add description" />
+      <div className="mb-3" style={{ flexShrink: 0 }}>
+        <EditableText as="h3" value={title} path="title" className="text-base font-semibold leading-6" style={{ color: 'var(--title-color)' }} placeholder="Chart title" />
+        <EditableText as="p" value={description} path="description" className="mt-0.5 text-sm leading-5" style={{ color: 'var(--description-color)' }} placeholder="Add description" />
       </div>
 
       <ResponsiveContainer width="100%" height="100%" style={{ flex: 1 }}>
@@ -174,7 +174,9 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
                 </text>
               );
             }}
-            outerRadius={isDense ? 100 : 80}
+            innerRadius="46%"
+            outerRadius={isDense ? "78%" : "72%"}
+            paddingAngle={displayData.length > 1 ? 2 : 0}
             fill="#8884d8"
             dataKey="value"
             isAnimationActive={styling?.animationEnabled !== false}
@@ -189,7 +191,7 @@ const RechartsPieChart: React.FC<RechartsPieChartProps> = ({
             <Legend
               className="chart-legend"
               verticalAlign={styling?.legendPosition === 'top' ? 'top' : 'bottom'}
-              wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+              wrapperStyle={{ color: 'var(--description-color)', fontSize: 11, paddingTop: 8 }}
             />
           )}
         </PieChart>

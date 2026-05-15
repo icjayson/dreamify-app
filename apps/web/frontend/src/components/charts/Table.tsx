@@ -1,6 +1,6 @@
 import { TableColumn } from "@/types/dashboard";
 import { useState, useMemo } from "react";
-import { getStyleVariantProps, type ChartStyleVariant } from "@/utils/chartStyling";
+import type { ChartStyleVariant } from "@/utils/chartStyling";
 import EditableText from "@/components/charts/edit/EditableText";
 import { useEditContext } from "@/components/charts/edit/EditContext";
 import { formatToDisplay } from "@/utils/timestamp";
@@ -86,10 +86,11 @@ const Table = ({
 
   const hasStructure = Array.isArray(columns) && columns.length > 0;
   const hasData = Array.isArray(data) && data.length > 0;
-  const tile = styling?.tile || {};
-  const variantProps = getStyleVariantProps(styling?.chartStyle || 'rounded');
   const titleColor = 'var(--title-color)';
   const descriptionColor = 'var(--description-color)';
+  const borderColor = styling?.borderColor || 'var(--border-card-color)';
+  const subtleRow = styling?.rowAltBg || 'color-mix(in srgb, var(--highlight-color) 4%, transparent)';
+  const headerBg = styling?.headerBg || 'color-mix(in srgb, var(--highlight-color) 8%, var(--bg-card-color))';
   const tileStyle = {
     color: titleColor
   } as React.CSSProperties;
@@ -140,9 +141,9 @@ const Table = ({
 
   return (
     <div className={`animate-fade-in h-full ${className}`} style={{ ...tileStyle, ...style, display: 'flex', flexDirection: 'column' }}>
-      <div className="mb-4">
-        <EditableText as="h3" value={title} path="title" className="text-lg font-semibold mb-1" style={{ color: titleColor }} placeholder="Table title" />
-        <EditableText as="p" value={description} path="description" className="text-sm" style={{ color: descriptionColor }} placeholder="Add description" />
+      <div className="mb-3 flex-shrink-0">
+        <EditableText as="h3" value={title} path="title" className="text-base font-semibold leading-6" style={{ color: titleColor }} placeholder="Table title" />
+        <EditableText as="p" value={description} path="description" className="mt-0.5 text-sm leading-5" style={{ color: descriptionColor }} placeholder="Add description" />
       </div>
 
       {!hasStructure || !hasData ? (
@@ -151,25 +152,29 @@ const Table = ({
         </div>
       ) : (
         <>
-          <div className="flex-1 overflow-auto">
-            <div className="rounded-md border w-max min-w-full" style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}>
-              <table className="w-full">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <div className="w-max min-w-full overflow-hidden rounded-lg border" style={{ borderColor }}>
+              <table className="w-full border-separate border-spacing-0">
                 <thead
                   className="sticky top-0 z-10"
                   style={{
-                    backgroundColor: styling?.headerBg || 'var(--table-header-bg, var(--highlight-color))',
-                    color: styling?.headerText || 'var(--table-header-text, var(--bg-card-color))'
+                    backgroundColor: headerBg,
+                    color: styling?.headerText || 'var(--title-color)'
                   }}
                 >
                   <tr>
                     {columns.map((column, colIdx) => (
                       <th
                         key={column.key}
-                        className="h-12 px-4 text-left align-middle font-medium cursor-pointer hover:bg-opacity-80 transition-colors first:rounded-tl-md last:rounded-tr-md"
-                        style={{ textAlign: column.align || 'left' }}
+                        className="h-10 whitespace-nowrap border-b px-3 text-left align-middle text-[11px] font-semibold uppercase tracking-normal transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                        style={{
+                          textAlign: column.align || (["number", "currency", "percentage"].includes(column.type) ? 'right' : 'left'),
+                          borderColor,
+                          color: styling?.headerText || 'var(--title-color)',
+                        }}
                         onClick={() => handleSort(column.key)}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className={`flex items-center gap-2 ${column.align === 'right' || (!column.align && ["number", "currency", "percentage"].includes(column.type)) ? 'justify-end' : ''}`}>
                           <EditableTableHeaderLabel
                             value={column.label}
                             colIdx={colIdx}
@@ -187,21 +192,27 @@ const Table = ({
                     return (
                     <tr
                       key={index}
-                      className="animate-slide-up border-b transition-colors hover:bg-opacity-50"
+                      className="animate-slide-up transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.045]"
                       style={{
                         animationDelay: `${index * 100}ms`,
-                        backgroundColor: index % 2 === 1 ? styling?.rowAltBg : styling?.rowBg || 'transparent',
-                        borderBottomColor: 'var(--element-color)',
+                        backgroundColor: index % 2 === 1 ? subtleRow : styling?.rowBg || 'transparent',
                         color: descriptionColor
                       }}
                     >
-                      {columns.map((column) => (
+                      {columns.map((column, columnIndex) => {
+                        const isNumeric = ["number", "currency", "percentage"].includes(column.type);
+                        const cellAlign = column.align || (isNumeric ? 'right' : 'left');
+                        return (
                         <td
                           key={column.key}
-                          className="p-4 align-middle"
-                          style={{ textAlign: column.align || 'left' }}
+                          className="border-b px-3 py-3 align-middle text-sm last:border-r-0"
+                          style={{
+                            textAlign: cellAlign,
+                            borderColor,
+                            color: isNumeric ? 'var(--title-color)' : descriptionColor,
+                          }}
                         >
-                          <div className={`${column.key === 'name' ? 'font-medium truncate' : ''}`}>
+                          <div className={`${column.key === 'name' || columnIndex === 0 ? 'font-medium' : ''} ${isNumeric ? 'tabular-nums font-semibold' : ''} truncate`}>
                             {originalIdx >= 0 ? (
                               <EditableTableCell
                                 value={row[column.key]}
@@ -214,7 +225,8 @@ const Table = ({
                             )}
                           </div>
                         </td>
-                      ))}
+                        );
+                      })}
                     </tr>
                     );
                   })}
@@ -225,16 +237,16 @@ const Table = ({
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-end space-x-2 py-4 mt-auto border-t relative z-10" style={{ borderColor: 'var(--element-color, transparent)' }}>
-              <div className="text-muted-foreground flex-1 text-sm">
+            <div className="relative z-10 mt-auto flex items-center justify-end space-x-2 border-t py-3" style={{ borderColor }}>
+              <div className="flex-1 text-sm" style={{ color: descriptionColor }}>
                 Showing {currentPage * pageSize + 1} to{" "}
                 {Math.min((currentPage + 1) * pageSize, sortedData.length)} of {sortedData.length} entries
               </div>
               <div className="space-x-2">
                 <button
                   type="button"
-                  className="px-3 py-1 text-sm border rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                  style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}
+                  className="cursor-pointer rounded-md border px-3 py-1 text-sm transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-white/10"
+                  style={{ borderColor, color: titleColor }}
                   onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
                   disabled={currentPage === 0}
                 >
@@ -242,8 +254,8 @@ const Table = ({
                 </button>
                 <button
                   type="button"
-                  className="px-3 py-1 text-sm border rounded hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                  style={{ borderColor: styling?.borderColor || 'var(--element-color)' }}
+                  className="cursor-pointer rounded-md border px-3 py-1 text-sm transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-white/10"
+                  style={{ borderColor, color: titleColor }}
                   onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
                   disabled={currentPage >= totalPages - 1}
                 >
@@ -329,5 +341,4 @@ const EditableTableHeaderLabel: React.FC<EditableTableHeaderLabelProps> = ({ val
 };
 
 export default Table;
-
 

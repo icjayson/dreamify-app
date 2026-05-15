@@ -800,19 +800,19 @@ export default function ProjectPage() {
                   </button>
                 </div>
               ) : (
-                <>
-                  <span className="font-regular min-w-0 flex-1 text-sm truncate" title={projectTitle}>{visibleProjectTitle}</span>
+                <div className="flex min-w-0 max-w-full items-center gap-1">
+                  <span className="font-regular min-w-0 shrink text-sm truncate" title={projectTitle}>{visibleProjectTitle}</span>
                   {projectTitleAnimation?.active && (
-                    <span className="ml-0.5 inline-block h-4 border-r border-foreground/70 animate-pulse" aria-hidden="true" />
+                    <span className="inline-block h-4 shrink-0 border-r border-foreground/70 animate-pulse" aria-hidden="true" />
                   )}
                   <button
                     aria-label="Rename project"
                     onClick={startEditingTitle}
-                    className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+                    className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
-                </>
+                </div>
               )}
 
             </div>

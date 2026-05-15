@@ -1,6 +1,6 @@
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
-import { getStyleVariantProps, type ChartStyleVariant } from "@/utils/chartStyling";
+import type { ChartStyleVariant } from "@/utils/chartStyling";
 import EditableText from "@/components/charts/edit/EditableText";
 
 interface MetricCardProps {
@@ -43,19 +43,15 @@ const MetricCard = ({
   style = {}
 }: MetricCardProps) => {
   // Use CSS variables for all colors with semantic tokens as fallback
-  const variantProps = getStyleVariantProps(styling?.chartStyle || 'rounded');
-  const borderColor = 'var(--border-card-color)';
-  const borderWidth = styling?.tile?.borderWidth ?? 1;
-  const borderRadius = styling?.tile?.borderRadius ?? variantProps.cardBorderRadius;
-  const background = variantProps.containerHasBackground ? 'var(--bg-card-color)' : 'transparent';
   const valueColor = 'var(--highlight-color)';
   const trendUp = styling?.trendUpColor || 'hsl(142 76% 36%)';
   const trendDown = styling?.trendDownColor || 'hsl(0 84% 60%)';
   const textColor = 'var(--title-color)';
+  const mutedColor = 'var(--description-color)';
   // Derive display change and direction
   const pct = typeof timeComparison?.percentage_change === 'number' ? timeComparison!.percentage_change : null;
   const hasPct = pct !== null && isFinite(pct as number);
-  let direction: 'up' | 'down' | 'stable' | undefined = trend as any;
+  let direction: 'up' | 'down' | 'stable' | undefined = trend;
   if (!direction && hasPct) direction = (pct as number) > 0 ? 'up' : (pct as number) < 0 ? 'down' : 'stable';
   const displayChange = (change !== undefined && change !== null && String(change).trim() !== '')
     ? String(change)
@@ -64,7 +60,8 @@ const MetricCard = ({
 
   // Determine sparkline color based on trend
   const sparklineColor = direction === 'up' ? trendUp : direction === 'down' ? trendDown : textColor;
-  const gradientId = `gradient-${direction || 'stable'}`;
+  const trendColor = direction === 'up' ? trendUp : direction === 'down' ? trendDown : textColor;
+  const gradientId = `metric-gradient-${String(title).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${direction || 'stable'}`;
 
   // Transform data for sparkline (if provided)
   const sparklineData = data?.map((item) => ({
@@ -73,64 +70,79 @@ const MetricCard = ({
   }));
 
   return (
-    <div className={`animate-fade-in h-full ${className}`}
-      style={{ ...style }}>
-      <div className="flex items-stretch h-full">
-        {/* Left Side: Text Content */}
-        <div className="flex-1 flex flex-col justify-between pr-2 min-w-0">
-          <EditableText as="p" value={title} path="title" className="text-sm" style={{ color: textColor }} placeholder="Metric title" />
-          <div>
-            <EditableText as="p" value={value} path="value" className="text-2xl font-bold" style={{ color: valueColor }} placeholder="0" />
-            {(displayChange && direction) && (
-              <div className="flex items-center gap-1.5 mt-1">
-                {direction === 'up' && (
-                  <ArrowUpRight className="w-3 h-3" aria-label="trend up" style={{ color: trendUp }} />
-                )}
-                {direction === 'down' && (
-                  <ArrowDownRight className="w-3 h-3" aria-label="trend down" style={{ color: trendDown }} />
-                )}
-                {direction === 'stable' && (
-                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: textColor }} />
-                )}
-                <EditableText
-                  as="span"
-                  value={displayChange}
-                  path="change"
-                  className="text-xs font-medium"
-                  style={{ color: direction === 'up' ? trendUp : direction === 'down' ? trendDown : textColor }}
-                />
-                {periodLabel && (
-                  <span className="text-[10px] opacity-75" style={{ color: textColor }}>{periodLabel}</span>
-                )}
-              </div>
-            )}
+    <div className={`animate-fade-in h-full min-h-0 ${className}`} style={{ ...style }}>
+      <div className="flex h-full min-h-0 flex-col justify-between gap-3">
+        <div className="flex min-h-0 flex-1 items-stretch gap-3">
+          <div className="flex min-w-0 flex-1 flex-col justify-between">
+            <EditableText
+              as="h3"
+              value={title}
+              path="title"
+              className="line-clamp-2 break-words text-sm font-semibold leading-5 tracking-normal"
+              style={{ color: textColor }}
+              placeholder="Metric title"
+            />
+            <div className="min-w-0">
+              <EditableText
+                as="p"
+                value={value}
+                path="value"
+                className="truncate text-2xl font-bold leading-none md:text-[1.7rem]"
+                style={{ color: valueColor }}
+                placeholder="0"
+              />
+            </div>
           </div>
+
+          {sparklineData && sparklineData.length > 0 && (
+            <div className="relative min-h-[4.75rem] w-[46%] min-w-[7rem] flex-shrink-0 overflow-hidden rounded-md">
+              <svg width="0" height="0" style={{ position: 'absolute' }}>
+                <defs>
+                  <linearGradient id={`${gradientId}-fill`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={sparklineColor} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={sparklineColor} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={sparklineData} margin={{ top: 8, right: 2, left: 2, bottom: 0 }}>
+                  <Area
+                    type="monotone"
+                    dataKey={dataKey}
+                    stroke={sparklineColor}
+                    fill={`url(#${gradientId}-fill)`}
+                    strokeWidth={2.25}
+                    fillOpacity={1}
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
-        
-        {/* Right Side: Sparkline */}
-        {sparklineData && sparklineData.length > 0 && (
-          <div className="w-1/2 flex-shrink-0 h-full">
-            <svg width="0" height="0" style={{ position: 'absolute' }}>
-              <defs>
-                <linearGradient id={`${gradientId}-fill`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={sparklineColor} stopOpacity={0.6} />
-                  <stop offset="100%" stopColor={sparklineColor} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-            </svg>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={sparklineData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                <Area
-                  type="monotone"
-                  dataKey={dataKey}
-                  stroke={sparklineColor}
-                  fill={`url(#${gradientId}-fill)`}
-                  strokeWidth={2}
-                  fillOpacity={0.6}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+
+        {(displayChange && direction) && (
+          <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4">
+            <span className="inline-flex min-w-0 items-center gap-1 text-xs font-semibold tabular-nums" style={{ color: trendColor }}>
+              {direction === 'up' && (
+                <ArrowUpRight className="h-3 w-3 flex-shrink-0" aria-label="trend up" />
+              )}
+              {direction === 'down' && (
+                <ArrowDownRight className="h-3 w-3 flex-shrink-0" aria-label="trend down" />
+              )}
+              {direction === 'stable' && (
+                <span className="inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: textColor }} />
+              )}
+              <EditableText
+                as="span"
+                value={displayChange}
+                path="change"
+                className="truncate"
+              />
+            </span>
+            <span className="truncate text-[11px] font-medium uppercase tracking-normal" style={{ color: mutedColor }}>
+              {periodLabel || 'trend'}
+            </span>
           </div>
         )}
       </div>
@@ -139,5 +151,3 @@ const MetricCard = ({
 };
 
 export default MetricCard;
-
-

@@ -150,7 +150,7 @@ export interface StyleVariantProps {
 export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> = {
   rounded: {
     containerBorderRadius: 8,
-    containerBoxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+    containerBoxShadow: '0 1px 3px rgba(15,23,42,0.08)',
     containerHasBorder: false,
     containerHasBackground: true,
     barBorderRadius: [6, 6, 0, 0],
@@ -158,8 +158,8 @@ export const CHART_STYLE_CONFIGS: Record<ChartStyleVariant, StyleVariantProps> =
     lineType: 'monotone',
     lineDot: true,
     gridOpacity: 0.3,
-    cardBorderRadius: 12,
-    cardBoxShadow: '0 2px 8px rgba(0,0,0,0.12)'
+    cardBorderRadius: 8,
+    cardBoxShadow: '0 1px 3px rgba(15,23,42,0.08)'
   },
   sharp: {
     containerBorderRadius: 0,

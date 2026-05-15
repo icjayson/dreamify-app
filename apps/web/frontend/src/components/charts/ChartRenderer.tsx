@@ -14,7 +14,7 @@ import {
 } from '@/types/dashboard';
 import { createChart, validateChartConfig } from './ChartFactory';
 import ErrorBoundary from '@/components/charts/ErrorBoundary';
-import { getChartStylingClasses, resolveColorToken, convertLLMStylingToChartStyling, getStyleVariantProps } from '@/utils/chartStyling';
+import { getChartStylingClasses, convertLLMStylingToChartStyling } from '@/utils/chartStyling';
 
 interface ChartRendererProps {
   component: DashboardComponent;
@@ -28,6 +28,13 @@ interface ChartRendererState {
   error: string | null;
   expandedInsight: boolean;
 }
+
+type RenderableChartConfiguration = ChartConfiguration & {
+  insight?: string;
+  styling?: ChartConfiguration['styling'] & {
+    theme?: string;
+  };
+};
 
 /** How many ms to wait before checking if the chart rendered any visible content */
 const HEALTH_CHECK_DELAY_MS = 600;
@@ -216,12 +223,12 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
   }
 
   // Get styling classes for the chart
-  const chartConfig = config as ChartConfiguration;
+  const chartConfig = config as RenderableChartConfiguration;
 
   // Convert Morpheus styling to ChartStyling format if needed
   let stylingClasses = '';
   if (chartConfig.styling) {
-    const morpheusStyling = chartConfig.styling as any;
+    const morpheusStyling = chartConfig.styling;
     if (morpheusStyling.presetTheme) {
       stylingClasses = getChartStylingClasses(morpheusStyling);
     } else if (morpheusStyling.theme) {
@@ -230,31 +237,18 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
     }
   }
 
-  // Compute tile styles from styling
-  const tile = (chartConfig as any)?.styling?.tile || {};
-
-  // Resolve semantic color tokens to CSS variables
-  const borderColor = tile.borderColor ? resolveColorToken(tile.borderColor) : 'var(--border-card-color)';
-  const backgroundColor = tile.background ? resolveColorToken(tile.background) : 'var(--bg-card-color)';
-
   // Get insight from config
-  const insight = (chartConfig as any).insight || '';
-
-  const chartStyle = (chartConfig as any)?.styling?.chartStyle || 'rounded';
-  const variantProps = getStyleVariantProps(chartStyle);
+  const insight = chartConfig.insight || '';
 
   const containerStyle: React.CSSProperties = {
-    border: variantProps.containerHasBorder
-      ? `1px solid ${borderColor}`
-      : tile.borderWidth !== undefined ? `${tile.borderWidth}px solid ${borderColor}` : 'none',
-    borderRadius: variantProps.cardBorderRadius,
-    backgroundColor: variantProps.containerHasBackground ? backgroundColor : 'transparent',
-    boxShadow: variantProps.cardBoxShadow,
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
+    minHeight: 0,
+    color: 'var(--title-color)',
     ...style
   };
+  const paddingClass = component.type === 'metric' ? 'px-4 py-3.5' : 'px-4 py-4 md:px-5 md:py-5';
 
   return (
     <ErrorBoundary
@@ -266,7 +260,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
         }
       }}
     >
-      <div className={`p-6 rounded-md animate-fade-in ${stylingClasses} ${className}`} style={containerStyle}>
+      <div className={`${paddingClass} rounded-[inherit] animate-fade-in bg-transparent ${stylingClasses} ${className}`} style={containerStyle}>
         <div ref={chartContentRef} className="chart-content w-full overflow-hidden flex-1 min-h-0">
           {/* key forces a full remount on each retry, clearing any partial extension-blocked state */}
           <React.Fragment key={mountKey}>
@@ -290,10 +284,11 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
 
         {insight && (
           <div
-            className="relative z-10 flex-shrink-0"
+            className="relative z-10 mt-3 flex-shrink-0 border-t pt-3"
             data-export-exclude
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
+            style={{ borderColor: 'var(--border-card-color)' }}
           >
             <button
               onMouseDown={(e) => {
@@ -304,10 +299,10 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
                 e.stopPropagation();
                 setState(prev => ({ ...prev, expandedInsight: !prev.expandedInsight }));
               }}
-              className="w-full flex items-center justify-start gap-2 hover:opacity-80 transition-opacity"
+              className="w-full flex items-center justify-start gap-2 text-xs font-medium hover:opacity-80 transition-opacity"
               style={{ color: 'var(--description-color)' }}
             >
-              <span className="text-sm font-medium">Insight</span>
+              <span>Insight</span>
               {state.expandedInsight ? (
                 <ChevronUp className="w-4 h-4" />
               ) : (
@@ -316,7 +311,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
             </button>
             {state.expandedInsight && (
               <div className="mt-2" onMouseDown={(e) => e.stopPropagation()}>
-                <p className="text-sm" style={{ color: 'var(--highlight-color)' }}>
+                <p className="text-sm leading-5" style={{ color: 'var(--title-color)' }}>
                   {insight}
                 </p>
               </div>

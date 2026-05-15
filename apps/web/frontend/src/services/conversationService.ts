@@ -21,7 +21,9 @@ export interface ConversationChatRequest {
 export interface ConversationChatResponse {
   conversation_id: string;
   project_id: string;
-  asset_id: string;
+  asset_id?: string;
+  project_name?: string;
+  project_name_source?: string;
   workflow_status: Record<string, any>;
 }
 

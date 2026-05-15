@@ -54,6 +54,8 @@ class ProcessingService {
           status: 'accepted',
           fileID: assetId || '',
           conversation_id: response.conversation_id,
+          project_name: response.project_name,
+          project_name_source: response.project_name_source,
         },
       };
     } catch (error) {

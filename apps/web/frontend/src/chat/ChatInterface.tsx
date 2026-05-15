@@ -705,6 +705,7 @@ interface ChatInterfaceProps {
   onProcessedDataChange?: (data: any) => void;
   onSwitchToDashboard?: (dashboardId?: string) => void;
   onShowCsvPreview?: (assetId: string, filename: string) => void;
+  onProjectNameAccepted?: (projectName: string) => void;
   dashboardComponents?: DashboardComponent[];
   isSidePanelOpen?: boolean;
 }
@@ -719,7 +720,7 @@ type AttachmentFileItem = {
   syncVersionName?: string;
 };
 
-const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, dashboardComponents, isSidePanelOpen = false }: ChatInterfaceProps) => {
+const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, onProjectNameAccepted, dashboardComponents, isSidePanelOpen = false }: ChatInterfaceProps) => {
   const { resolvedTheme } = useTheme();
   const logoFavicon = "/logo-favicon.png";
 
@@ -1152,7 +1153,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       }
 
       try {
-        await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, hasChartMentions ? chartsWithConfig : undefined, selectedModel, refreshSubscription);
+        await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, hasChartMentions ? chartsWithConfig : undefined, selectedModel, refreshSubscription, onProjectNameAccepted);
       } catch (err: unknown) {
         const errObj = err as Record<string, unknown>;
         const detail = (errObj?.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
@@ -1244,7 +1245,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         };
       }
 
-      await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, undefined, undefined, refreshSubscription);
+      await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, undefined, undefined, refreshSubscription, onProjectNameAccepted);
     } finally {
       isSendingRef.current = false;
     }
@@ -1695,6 +1696,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     { text: "Generate a dashboard of my most important metrics.", icon: BarChart3 },
     { text: "Build a comprehensive dashboard from all my connected data.", icon: Users },
   ];
+  const compactComposer = isSidePanelOpen;
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-muted">
@@ -2316,12 +2318,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       )}
 
       {/* Bottom Area: Input */}
-      <div className="mt-auto">
+      <div className="mt-auto min-w-0">
         {/* Input Area */}
-        <div className="m-2">
+        <div className={compactComposer ? "m-1.5" : "m-2"}>
           {/* Main Chat Input with Hero Section Styling */}
           <div
-            className="w-full min-h-[60px] text-sm p-4 pb-2 bg-background dark:bg-[#292929] border border-border dark:border-transparent rounded-xl resize-none transition-all duration-300 relative"
+            className={`w-full min-h-[60px] text-sm ${compactComposer ? 'p-3 pb-2' : 'p-4 pb-2'} bg-background dark:bg-[#292929] border border-border dark:border-transparent rounded-xl resize-none transition-all duration-300 relative`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -2348,7 +2350,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 onChartSelect={handleChartSelect}
                 onPreview={(fileId) => window.open(`/preview/${fileId}`, '_blank')}
                 query={mentionQuery}
-                className={`project-context-picker-container ${pickerTriggerMode === 'button' ? 'bottom-full left-0 mb-2' : ''}`}
+                className={`project-context-picker-container max-w-[calc(100vw_-_2rem)] ${compactComposer ? 'max-w-full' : ''} ${pickerTriggerMode === 'button' ? 'bottom-full left-0 mb-2' : ''}`}
               />
             )}
 
@@ -2536,9 +2538,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
             )}
 
             {/* Buttons Row */}
-            <div className="flex items-center justify-between">
+            <div className={`chat-composer-actions flex items-center justify-between ${compactComposer ? 'flex-wrap gap-2' : 'gap-2'}`}>
               {/* Left side - File Upload and Data Connector Buttons */}
-              <div className="flex items-center gap-2">
+              <div className={`flex items-center ${compactComposer ? 'min-w-0 flex-wrap gap-1.5' : 'gap-2'}`}>
                 {/* File attach dropdown */}
                 <FileAttachDropdown
                   onUpload={handleFileUpload}
@@ -2603,7 +2605,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   </button>
 
                   {dropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-2 w-52">
+                    <div className="absolute bottom-full left-0 mb-1 w-[min(13rem,calc(100vw_-_2rem))] bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-2">
                       <p className="px-2 pt-1 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground dark:text-white/25">Popular</p>
 
                       {/* Active connectors */}
@@ -2649,7 +2651,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               </div>
 
               {/* Right side - Model Selector + Send Button */}
-              <div className="flex items-center gap-2">
+              <div className={`flex items-center ${compactComposer ? 'ml-auto shrink-0 gap-1.5' : 'gap-2'}`}>
                 {/* Model Dropdown */}
                 {/* Model Selector Component */}
                 <ModelSelector
@@ -2672,13 +2674,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   anchor="right"
                   placement="top"
                   variant="compact"
+                  labelMode={compactComposer ? 'adaptive' : 'full'}
                 />
 
                 {/* Send / Stop Button */}
                 {(isProcessing || uploadedFiles.some(f => f.status === 'processing')) ? (
                   <Button
                     onClick={() => stopGeneration()}
-                    className="button-gradient p-3"
+                    className={`button-gradient ${compactComposer ? 'p-2.5' : 'p-3'}`}
                   >
                     <Square className="w-4 h-4" />
                   </Button>
@@ -2686,7 +2689,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   <Button
                     onClick={() => handleSend()}
                     disabled={!inputValue.trim() || isTyping || uploadedFiles.some(f => f.status === 'uploading')}
-                    className="button-gradient p-3 disabled:opacity-50"
+                    className={`button-gradient ${compactComposer ? 'p-2.5' : 'p-3'} disabled:opacity-50`}
                   >
                     <CornerRightUp className="w-4 h-4" />
                   </Button>

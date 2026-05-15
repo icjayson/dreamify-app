@@ -16,6 +16,7 @@ export interface ProjectRecord {
   latest_conversation_id?: string | null;
   latest_dashboard_id?: string | null;
   dashboard_title?: string | null;
+  name_source?: string | null;
   dashboard_preview_key?: string | null;
   is_preview_public?: boolean;
   allowed?: AllowedUser[];
@@ -126,4 +127,3 @@ class ProjectService {
 }
 
 export const projectService = new ProjectService();
-

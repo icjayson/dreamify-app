@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from "react";
 import { Zap, Sparkles, ChevronDown, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "@clerk/clerk-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import CreditIcon from "./CreditIcon";
 
 interface ModelSelectorProps {
@@ -14,6 +15,7 @@ interface ModelSelectorProps {
   anchor: 'left' | 'right';
   placement?: 'top' | 'bottom';
   variant?: 'classic' | 'compact';
+  labelMode?: 'full' | 'adaptive';
 }
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({
@@ -25,10 +27,15 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   onToggle,
   anchor = 'right',
   placement = 'bottom',
-  variant = 'classic'
+  variant = 'classic',
+  labelMode = 'full'
 }) => {
   const { isSignedIn } = useUser();
   const containerRef = useRef<HTMLDivElement>(null);
+  const adaptiveLabel = labelMode === 'adaptive';
+  const selectedModelLabel = selectedModel === 'fast' ? 'Standard' : 'Pro';
+  const selectedModelShortLabel = selectedModel === 'fast' ? 'Std' : 'Pro';
+  const selectorTooltip = `${selectedModelLabel} model selector`;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -47,50 +54,62 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   if (!isSignedIn) return null;
   return (
     <div className="relative" ref={containerRef}>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-        className={`flex items-center gap-2 transition-all duration-300 group h-[34px] ${variant === 'compact'
-          ? `px-2.5 py-1.5 rounded-md border text-sm ${selectedModel === 'pro'
-            ? 'border-primary bg-primary text-white shadow-lg shadow-primary/20'
-            : isOpen
-              ? 'dark:border-white/50 border-input dark:bg-white/10 bg-black/5 dark:text-white text-foreground'
-              : 'dark:border-white/30 border-input/60 text-muted-foreground hover:text-foreground dark:text-white/60 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
-          }`
-          : `px-3 py-1.5 text-sm button-outline ${selectedModel === 'pro'
-            ? 'border-primary bg-primary text-white shadow-[0_4px_20px_hsl(var(--primary)/0.4)]'
-            : 'hover:border-primary/60 hover:bg-black/5 dark:hover:bg-white/5 dark:text-white/90 text-foreground/90'
-          }`
-          } ${isOpen && variant === 'classic' ? 'ring-2 ring-primary/20 border-primary/40' : ''}`}
-        title="Select intelligence model"
-      >
-        <div className="relative flex items-center justify-center">
-          {selectedModel === 'fast' ? (
-            <Zap className={`w-4 h-4 ${variant === 'compact' && selectedModel === 'fast' && !isOpen ? 'text-muted-foreground group-hover:text-foreground dark:text-white/60 dark:group-hover:text-white' : ''}`} />
-          ) : (
-            <Sparkles className="w-4 h-4 text-white animate-pulse-glow" />
-          )}
-          {selectedModel === 'pro' && (
-            <motion.div
-              layoutId="pro-glow"
-              className="absolute inset-0 bg-primary/30 blur-md rounded-full -z-10"
-            />
-          )}
-          {(creditState === 'critical' || creditState === 'empty') && (
-            <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-red-500" />
-          )}
-          {creditState === 'warning' && (
-            <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
-          )}
-        </div>
-        <span className="font-medium">{selectedModel === 'fast' ? 'Standard' : 'Pro'}</span>
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''} ${selectedModel === 'pro'
-          ? 'text-white/70 group-hover:text-white'
-          : 'text-foreground/40 dark:text-white/40 group-hover:text-foreground/70 dark:group-hover:text-white/70'
-          }`} />
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            aria-label={`Select intelligence model (${selectedModelLabel})`}
+            className={`model-selector-button ${adaptiveLabel ? 'model-selector-adaptive-button w-[68px] justify-center gap-1.5 px-2' : 'gap-2'} flex items-center transition-all duration-300 group h-[34px] ${variant === 'compact'
+              ? `${adaptiveLabel ? '' : 'px-2.5 py-1.5'} rounded-md border text-sm ${selectedModel === 'pro'
+                ? 'border-primary bg-primary text-white shadow-lg shadow-primary/20'
+                : isOpen
+                  ? 'dark:border-white/50 border-input dark:bg-white/10 bg-black/5 dark:text-white text-foreground'
+                  : 'dark:border-white/30 border-input/60 text-muted-foreground hover:text-foreground dark:text-white/60 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+              }`
+              : `${adaptiveLabel ? '' : 'px-3 py-1.5'} text-sm button-outline ${selectedModel === 'pro'
+                ? 'border-primary bg-primary text-white shadow-[0_4px_20px_hsl(var(--primary)/0.4)]'
+                : 'hover:border-primary/60 hover:bg-black/5 dark:hover:bg-white/5 dark:text-white/90 text-foreground/90'
+              }`
+              } ${isOpen && variant === 'classic' ? 'ring-2 ring-primary/20 border-primary/40' : ''}`}
+            title={adaptiveLabel ? undefined : "Select intelligence model"}
+          >
+            <div className="relative flex items-center justify-center">
+              {selectedModel === 'fast' ? (
+                <Zap className={`w-4 h-4 ${variant === 'compact' && selectedModel === 'fast' && !isOpen ? 'text-muted-foreground group-hover:text-foreground dark:text-white/60 dark:group-hover:text-white' : ''}`} />
+              ) : (
+                <Sparkles className="w-4 h-4 text-white animate-pulse-glow" />
+              )}
+              {selectedModel === 'pro' && (
+                <motion.div
+                  layoutId="pro-glow"
+                  className="absolute inset-0 bg-primary/30 blur-md rounded-full -z-10"
+                />
+              )}
+              {(creditState === 'critical' || creditState === 'empty') && (
+                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-red-500" />
+              )}
+              {creditState === 'warning' && (
+                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
+              )}
+            </div>
+            <span className={`model-selector-adaptive-label font-medium ${adaptiveLabel ? 'text-xs' : ''}`}>
+              {adaptiveLabel ? selectedModelShortLabel : selectedModelLabel}
+            </span>
+            <ChevronDown className={`model-selector-adaptive-chevron w-3.5 h-3.5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''} ${selectedModel === 'pro'
+              ? 'text-white/70 group-hover:text-white'
+              : 'text-foreground/40 dark:text-white/40 group-hover:text-foreground/70 dark:group-hover:text-white/70'
+              }`} />
+          </button>
+        </TooltipTrigger>
+        {adaptiveLabel && (
+          <TooltipContent side="top" align={anchor === 'right' ? 'end' : 'start'} className="text-xs">
+            {selectorTooltip}
+          </TooltipContent>
+        )}
+      </Tooltip>
 
       <AnimatePresence>
         {isOpen && (
@@ -100,7 +119,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
             exit={{ opacity: 0, y: placement === 'bottom' ? 5 : -5, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
             className={`absolute ${placement === 'bottom' ? 'top-full mt-3' : 'bottom-full mb-3'
-              } w-72 bg-background/95 dark:bg-[#121214]/95 backdrop-blur-xl border border-border dark:border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-20 overflow-hidden ${anchor === 'right' ? 'right-0' : 'left-0'
+              } w-[min(18rem,calc(100vw_-_2rem))] bg-background/95 dark:bg-[#121214]/95 backdrop-blur-xl border border-border dark:border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-20 overflow-hidden ${anchor === 'right' ? 'right-0' : 'left-0'
               }`}
           >
             <div className="p-2 space-y-1">

@@ -192,6 +192,24 @@
 }
 
 @layer components {
+  .chat-composer-actions {
+    container-type: inline-size;
+  }
+
+  @container (max-width: 17rem) {
+    .chat-composer-actions .model-selector-adaptive-button {
+      width: 34px;
+      min-width: 34px;
+      padding-left: 0;
+      padding-right: 0;
+      gap: 0;
+    }
+
+    .chat-composer-actions .model-selector-adaptive-label,
+    .chat-composer-actions .model-selector-adaptive-chevron {
+      display: none;
+    }
+  }
 
   /* Glass morphism effect — theme-aware */
   .glass-panel {

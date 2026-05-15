@@ -259,7 +259,7 @@ interface ChatState {
   sendMessage: (content: string) => void;
   clearInput: () => void;
   resetChat: (preserveTemplate?: boolean) => void;
-  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => Promise<void>;
+  processFileWithMessage: (content: string, onProcessedDataChange?: (data: any) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void, onProjectNameAccepted?: (projectName: string) => void) => Promise<void>;
   stopGeneration: () => Promise<void>;
   resumeWorkflowPolling: (projectId: string, conversationId: string, onProcessedDataChange?: (data: any) => void) => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<any>;
@@ -750,7 +750,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void) => {
+  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: any) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: any }>, model?: 'pro' | 'fast', onAccepted?: () => void, onProjectNameAccepted?: (projectName: string) => void) => {
     const state = get();
     const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep, setPriorWorkflowSteps } = state;
 
@@ -957,6 +957,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
           // Invoke onAccepted callback to allow early UI updates (e.g. credit refresh)
           if (onAccepted) onAccepted();
+          const acceptedProjectName = startResult.data?.project_name;
+          if (typeof acceptedProjectName === 'string' && acceptedProjectName.trim()) {
+            onProjectNameAccepted?.(acceptedProjectName.trim());
+          }
 
           const conversationId = startResult.data?.conversation_id || currentConversationId;
           if (conversationId) {
@@ -1366,6 +1370,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
         // Invoke onAccepted callback to allow early UI updates (e.g. credit refresh)
         if (onAccepted) onAccepted();
+        const acceptedProjectName = startResult.data?.project_name;
+        if (typeof acceptedProjectName === 'string' && acceptedProjectName.trim()) {
+          onProjectNameAccepted?.(acceptedProjectName.trim());
+        }
 
         const conversationId = startResult.data?.conversation_id;
         if (conversationId) {

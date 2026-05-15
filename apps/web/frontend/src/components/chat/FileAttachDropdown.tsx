@@ -187,7 +187,7 @@ export default function FileAttachDropdown({
 
       {/* ── Dropdown panel ─────────────────────────────────────────────────── */}
       {open && (
-        <div className="absolute bottom-full mb-2 left-0 w-72 rounded-xl border border-border/50 bg-popover shadow-xl overflow-hidden z-[300] animate-in fade-in-0 zoom-in-95 duration-100">
+        <div className="absolute bottom-full mb-2 left-0 w-[min(18rem,calc(100vw_-_2rem))] rounded-xl border border-border/50 bg-popover shadow-xl overflow-hidden z-[300] animate-in fade-in-0 zoom-in-95 duration-100">
 
           {view === "main" && (
             <>

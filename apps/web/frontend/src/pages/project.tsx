@@ -36,10 +36,12 @@ export default function ProjectPage() {
   const [csvPreviewMeta, setCsvPreviewMeta] = useState<{ totalRows: number; columns: string[] } | null>(null);
   const [isProjectLoading, setIsProjectLoading] = useState(false);
   const [projectTitle, setProjectTitle] = useState("Untitled Project");
+  const [projectTitleAnimation, setProjectTitleAnimation] = useState<{ target: string; display: string; active: boolean } | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const projectTitleRef = useRef(projectTitle);
 
   const {
     projects,
@@ -51,11 +53,31 @@ export default function ProjectPage() {
   } = useProjects();
 
   useEffect(() => {
+    projectTitleRef.current = projectTitle;
     document.title = projectTitle ? `${projectTitle}` : "Dreamify";
     return () => {
       document.title = "Dreamify";
     };
   }, [projectTitle]);
+
+  useEffect(() => {
+    if (!projectTitleAnimation?.active) return;
+
+    const target = projectTitleAnimation.target;
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index += 1;
+      setProjectTitleAnimation((current) => {
+        if (!current || current.target !== target) return current;
+        if (index >= target.length) {
+          return { target, display: target, active: false };
+        }
+        return { target, display: target.slice(0, index), active: true };
+      });
+    }, 24);
+
+    return () => window.clearInterval(timer);
+  }, [projectTitleAnimation?.active, projectTitleAnimation?.target]);
 
   const startEditingTitle = () => {
     setRenameValue(projectTitle);
@@ -83,7 +105,10 @@ export default function ProjectPage() {
       setIsRenaming(true);
       const response = await projectService.updateProject(projectId, trimmed);
       if (response.success) {
+        projectTitleRef.current = trimmed;
+        setProjectTitleAnimation(null);
         setProjectTitle(trimmed);
+        window.dispatchEvent(new Event('projectUpdated'));
         toast({
           title: "Project renamed",
           description: `Project name updated to "${trimmed}".`,
@@ -112,9 +137,21 @@ export default function ProjectPage() {
     const response = await projectService.getProject(projectId);
     if (response.success && response.project) {
       const displayTitle = response.project.name || response.project.dashboard_title || "Untitled Project";
+      projectTitleRef.current = displayTitle;
+      setProjectTitleAnimation(null);
       setProjectTitle(displayTitle);
     }
   };
+
+  const handleProjectNameAccepted = useCallback((projectName: string) => {
+    const trimmed = projectName.trim();
+    if (!trimmed || projectTitleRef.current === trimmed) return;
+
+    projectTitleRef.current = trimmed;
+    setProjectTitle(trimmed);
+    setProjectTitleAnimation({ target: trimmed, display: "", active: true });
+    window.dispatchEvent(new Event('projectUpdated'));
+  }, []);
 
   const uploadedFiles = useChatStore((s) => s.uploadedFiles);
   const isInitialLoading = useChatStore((s) => s.isInitialLoading);
@@ -335,6 +372,8 @@ export default function ProjectPage() {
         if (!cancelled) {
           if (response.success && response.project) {
             const displayTitle = response.project.name || response.project.dashboard_title || "Untitled Project";
+            projectTitleRef.current = displayTitle;
+            setProjectTitleAnimation(null);
             setProjectTitle(displayTitle);
             const latestConversationId = response.project.latest_conversation_id;
             if (latestConversationId) {
@@ -366,7 +405,9 @@ export default function ProjectPage() {
                 undefined,
                 undefined,
                 undefined,
-                pendingAction.model
+                pendingAction.model,
+                undefined,
+                handleProjectNameAccepted
               );
 
               // Clear pending action
@@ -427,7 +468,7 @@ export default function ProjectPage() {
         })();
       }
     };
-  }, [projectId, hydrateConversation, toast]);
+  }, [projectId, hydrateConversation, toast, handleProjectNameAccepted]);
 
   useEffect(() => {
     if (!projectId || !dashboardIdFromQuery) return;
@@ -680,6 +721,13 @@ export default function ProjectPage() {
     }
   }, [csvPreview, toast]);
 
+  const visibleProjectTitle = projectTitleAnimation?.active
+    ? projectTitleAnimation.display || " "
+    : projectTitle;
+  const workspaceLayoutClass = isSidePanelOpen
+    ? 'lg:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)] lg:gap-2 lg:px-2'
+    : 'lg:flex lg:justify-center';
+
   return (
     <>
       {/* Loading overlay — renders on top of the page so components are visible behind */}
@@ -692,7 +740,7 @@ export default function ProjectPage() {
       <div className="h-[100dvh] flex flex-col bg-muted">
         {/* Header */}
         <div className="px-4 py-2 relative z-[200] shrink-0">
-          <div className="flex flex-wrap items-center justify-between min-h-10 gap-y-2 pb-2 md:pb-0 shrink-0">
+          <div className="flex flex-wrap items-center justify-between min-h-10 gap-x-2 gap-y-2 pb-2 md:pb-0 shrink-0">
             <div className="flex items-center gap-3 order-1 shrink-0">
               <button
                 onClick={() => setIsSidebarOpen(true)}
@@ -716,11 +764,11 @@ export default function ProjectPage() {
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2 sm:ml-2 min-w-0 w-full md:w-auto order-3 md:order-2 md:mr-auto pl-1 md:pl-0 mt-1 md:mt-0">
-              <span className="hidden md:inline text-sm text-muted-foreground truncate" title={displayName}>{displayName}</span>
+            <div className="flex min-w-0 flex-1 basis-full items-center gap-2 order-3 md:order-2 md:basis-0 md:mr-auto pl-1 md:pl-0 mt-1 md:mt-0">
+              <span className="hidden md:inline max-w-[8rem] shrink-0 text-sm text-muted-foreground truncate" title={displayName}>{displayName}</span>
               <span className="hidden md:inline text-sm text-muted-foreground/50">›</span>
               {isEditingTitle ? (
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <input
                     value={renameValue}
                     onChange={(e) => setRenameValue(e.target.value)}
@@ -733,7 +781,7 @@ export default function ProjectPage() {
                         cancelEditingTitle();
                       }
                     }}
-                    className="text-sm text-foreground bg-transparent border-b border-border focus:outline-none focus:border-primary leading-none w-40 sm:w-56"
+                    className="min-w-0 flex-1 text-sm text-foreground bg-transparent border-b border-border focus:outline-none focus:border-primary leading-none w-40 sm:w-56"
                     autoFocus
                   />
                   <button
@@ -753,7 +801,10 @@ export default function ProjectPage() {
                 </div>
               ) : (
                 <>
-                  <span className="font-regular text-sm truncate" title={projectTitle}>{projectTitle}</span>
+                  <span className="font-regular min-w-0 flex-1 text-sm truncate" title={projectTitle}>{visibleProjectTitle}</span>
+                  {projectTitleAnimation?.active && (
+                    <span className="ml-0.5 inline-block h-4 border-r border-foreground/70 animate-pulse" aria-hidden="true" />
+                  )}
                   <button
                     aria-label="Rename project"
                     onClick={startEditingTitle}
@@ -791,8 +842,8 @@ export default function ProjectPage() {
         </div>
 
         {/* Content */}
-        <div className={`grid grid-cols-1 ${isSidePanelOpen ? 'lg:grid-cols-4' : 'lg:flex lg:justify-center'} flex-1 lg:flex-none lg:h-[calc(100vh-4rem)] min-h-0`}>
-          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${isSidePanelOpen ? 'lg:col-span-1 lg:w-full' : 'w-full mx-auto lg:w-[1000px] lg:max-w-[calc(100vw-3rem)]'} lg:block transition-all duration-300 h-full lg:h-auto min-h-0`}>
+        <div className={`grid grid-cols-1 ${workspaceLayoutClass} flex-1 lg:flex-none lg:h-[calc(100vh-4rem)] min-h-0 min-w-0`}>
+          <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${isSidePanelOpen ? 'lg:w-full lg:min-w-0' : 'w-full mx-auto lg:w-[1000px] lg:max-w-[calc(100vw-3rem)]'} lg:block transition-all duration-300 h-full lg:h-auto min-h-0 min-w-0`}>
             <div className="bg-muted h-full lg:h-[calc(100vh-4rem)] min-h-0 flex flex-col lg:block">
               <div className="flex-1 min-h-0 h-full lg:h-auto lg:block">
                 <div className="px-1 h-full lg:h-[calc(100vh-4rem)] flex flex-col lg:block" data-chat-root>
@@ -842,6 +893,7 @@ export default function ProjectPage() {
                       setIsDashboardOpen(true);
                       setActiveTab('dashboard');
                     }}
+                    onProjectNameAccepted={handleProjectNameAccepted}
                     dashboardComponents={dashboardComponents}
                     isSidePanelOpen={isSidePanelOpen}
                   />
@@ -851,13 +903,13 @@ export default function ProjectPage() {
           </div>
 
           {/* dashboard columns */}
-          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${isSidePanelOpen ? 'lg:col-span-3 lg:block w-full' : 'lg:hidden'} transition-all duration-300 relative h-full lg:h-auto min-h-0`}>
-            <div className="mr-2 sm:ml-0 ml-2 mt-0 mb-0 rounded-lg border border-border h-full lg:h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
+          <div className={`${activeTab === 'dashboard' ? 'block w-full' : 'hidden'} ${isSidePanelOpen ? 'lg:block lg:w-full lg:min-w-0' : 'lg:hidden'} transition-all duration-300 relative h-full lg:h-auto min-h-0 min-w-0`}>
+            <div className="mx-2 lg:mx-0 mt-0 mb-0 rounded-lg border border-border h-full lg:h-[calc(100vh-4rem)] flex flex-col overflow-hidden min-w-0">
               {/* Panel header — CSV preview mode */}
               {csvPreview && (
                 <div className="shrink-0 flex items-center gap-2 px-3 h-10 border-b border-border bg-background/60 backdrop-blur-sm">
                   <Database className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500" />
-                  <span className="text-sm font-medium text-foreground/80 truncate min-w-0">
+                  <span className="text-sm font-medium text-foreground/80 truncate min-w-0 flex-1">
                     {csvPreview.filename}
                   </span>
                   {csvPreviewMeta && (
@@ -865,7 +917,7 @@ export default function ProjectPage() {
                       {csvPreviewMeta.totalRows.toLocaleString()} rows · {csvPreviewMeta.columns.length} columns
                     </span>
                   )}
-                  <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                  <div className="ml-auto flex max-w-[70%] items-center gap-1.5 shrink-0 overflow-x-auto chat-scrollbar-hide">
                     <button
                       onClick={handleDownloadCsvPreview}
                       className="button-outline h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
@@ -895,7 +947,7 @@ export default function ProjectPage() {
               {/* Panel header — Dashboard mode */}
               {!csvPreview && shouldShowDashboard && isDashboardOpen && !isProjectLoading && (
                 <div className="shrink-0 flex items-center gap-2 px-3 h-10 border-b border-border bg-background/60 backdrop-blur-sm">
-                  <span className="text-sm font-medium text-foreground/80 truncate min-w-0">
+                  <span className="text-sm font-medium text-foreground/80 truncate min-w-0 flex-1">
                     {dashboardTitle || 'Dashboard'}
                   </span>
                   {isSwitchingDashboard && (
@@ -908,7 +960,7 @@ export default function ProjectPage() {
                       <span>Loading dashboard…</span>
                     </span>
                   )}
-                  <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                  <div className="ml-auto flex max-w-[72%] items-center gap-1.5 shrink-0 overflow-x-auto chat-scrollbar-hide">
                     <button
                       onClick={() => setTemplateModalOpen(true, 'header')}
                       className="button-outline h-7 px-2.5 rounded-md text-xs flex items-center gap-1.5 text-muted-foreground hover:text-foreground dark:text-white/70 dark:hover:text-white"

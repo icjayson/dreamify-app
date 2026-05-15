@@ -1,6 +1,7 @@
 """
 User-scoped project and asset APIs.
 """
+
 import asyncio
 import logging
 import os
@@ -14,7 +15,17 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -25,7 +36,14 @@ from utils.config import config
 from utils.logger import logger
 from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import projects as projects_repo
-from utils.s3.client import compute_sha256_checksum, upload_bytes, delete_object, download_bytes, generate_presigned_url, get_s3_client
+from utils.s3.client import (
+    compute_sha256_checksum,
+    upload_bytes,
+    delete_object,
+    download_bytes,
+    generate_presigned_url,
+    get_s3_client,
+)
 from utils.s3.paths import build_asset_key
 from clerk_backend_api import Clerk
 
@@ -37,6 +55,7 @@ _clerk_client = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
 
 class UserLookupResponse(BaseModel):
     """Response model for user lookup by email."""
+
     success: bool
     user_id: Optional[str] = None
     email: Optional[str] = None
@@ -89,6 +108,7 @@ async def lookup_user_by_email(
 
 class AllowedUser(BaseModel):
     """A user granted access to a private project."""
+
     user_id: str
     email: Optional[str] = None
     name: Optional[str] = None
@@ -115,6 +135,7 @@ class ProjectUpdateRequest(BaseModel):
 class ProjectResponse(BaseModel):
     id: str
     name: str
+    name_source: Optional[str] = None
     description: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -202,6 +223,7 @@ def _map_project(item: dict) -> ProjectResponse:
     return ProjectResponse(
         id=item["project_id"],
         name=item.get("name", ""),
+        name_source=item.get("name_source"),
         description=item.get("description"),
         created_at=item.get("created_at"),
         updated_at=item.get("updated_at"),
@@ -221,18 +243,14 @@ def _get_file_metadata(data: bytes, extension: str) -> Dict[str, Optional[int]]:
         file_info = {"extension": extension}
         file_like = io.BytesIO(data)
         df = FileHandler.read_file(file_like, file_info)
-        return {
-            "row_count": len(df),
-            "column_count": len(df.columns)
-        }
+        return {"row_count": len(df), "column_count": len(df.columns)}
     except Exception:
-        return {
-            "row_count": None,
-            "column_count": None
-        }
+        return {"row_count": None, "column_count": None}
 
 
-def _map_asset(item: dict, row_count: Optional[int] = None, column_count: Optional[int] = None) -> AssetResponse:
+def _map_asset(
+    item: dict, row_count: Optional[int] = None, column_count: Optional[int] = None
+) -> AssetResponse:
     rc = row_count if row_count is not None else item.get("row_count")
     cc = column_count if column_count is not None else item.get("column_count")
     if isinstance(rc, str):
@@ -275,6 +293,7 @@ def _ensure_project(user_id: str, project_id: Optional[str]) -> dict:
         user_id=user_id,
         name="Untitled Project",
         description="Auto-created project",
+        name_source="generated",
     )
 
 
@@ -283,10 +302,14 @@ async def create_project_endpoint(
     request: ProjectCreateRequest,
     user_id: str = Depends(require_user),
 ):
+    name_source = (
+        "generated" if request.name.strip().lower() == "untitled project" else "user"
+    )
     project = projects_repo.create_project(
         user_id=user_id,
         name=request.name,
         description=request.description,
+        name_source=name_source,
     )
     return _map_project(project)
 
@@ -323,8 +346,13 @@ async def update_project_endpoint(
         dashboard_title=request.dashboard_title,
         dashboard_preview_key=request.dashboard_preview_key,
         is_preview_public=request.is_preview_public,
-        allowed=[u.model_dump() for u in request.allowed] if request.allowed is not None else None,
+        allowed=(
+            [u.model_dump() for u in request.allowed]
+            if request.allowed is not None
+            else None
+        ),
         source_type=request.source_type,
+        name_source="user" if request.name is not None else None,
     )
     if not updated_project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -370,7 +398,10 @@ class DashboardPreviewUrlResponse(BaseModel):
     expires_in: int = 3600
 
 
-@router.post("/user/project/{project_id}/dashboard-preview", response_model=DashboardPreviewUploadResponse)
+@router.post(
+    "/user/project/{project_id}/dashboard-preview",
+    response_model=DashboardPreviewUploadResponse,
+)
 async def upload_dashboard_preview(
     project_id: str,
     dashboard_id: str = Form(..., description="Dashboard ID this preview belongs to"),
@@ -398,7 +429,9 @@ async def upload_dashboard_preview(
         content_type = "image/webp"
 
     bucket = config.aws.s3.USER_ASSETS_BUCKET
-    s3_key = f"users/{user_id}/projects/{project_id}/dashboards/preview/{dashboard_id}.{ext}"
+    s3_key = (
+        f"users/{user_id}/projects/{project_id}/dashboards/preview/{dashboard_id}.{ext}"
+    )
 
     try:
         upload_bytes(
@@ -408,8 +441,12 @@ async def upload_dashboard_preview(
             content_type=content_type,
         )
     except Exception as e:
-        logger.error(f"Failed to upload dashboard preview for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload preview: {str(e)}")
+        logger.error(
+            f"Failed to upload dashboard preview for project {project_id}: {e}"
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to upload preview: {str(e)}"
+        )
 
     try:
         projects_repo.update_project(
@@ -418,19 +455,28 @@ async def upload_dashboard_preview(
             dashboard_preview_key=s3_key,
         )
     except Exception as e:
-        logger.error(f"Failed to update project dashboard_preview_key for {project_id}: {e}")
+        logger.error(
+            f"Failed to update project dashboard_preview_key for {project_id}: {e}"
+        )
         # Not fatal — image is uploaded, just metadata save failed
         return DashboardPreviewUploadResponse(success=True, s3_key=s3_key)
 
-    logger.info(f"Dashboard preview uploaded for project {project_id}, dashboard {dashboard_id}: {s3_key}")
+    logger.info(
+        f"Dashboard preview uploaded for project {project_id}, dashboard {dashboard_id}: {s3_key}"
+    )
     return DashboardPreviewUploadResponse(success=True, s3_key=s3_key)
 
 
-@router.get("/user/project/{project_id}/dashboard-preview-url", response_model=DashboardPreviewUrlResponse)
+@router.get(
+    "/user/project/{project_id}/dashboard-preview-url",
+    response_model=DashboardPreviewUrlResponse,
+)
 async def get_dashboard_preview_url(
     project_id: str,
     user_id: str = Depends(require_user),
-    expires_in: int = Query(3600, ge=60, le=86400, description="URL expiration in seconds"),
+    expires_in: int = Query(
+        3600, ge=60, le=86400, description="URL expiration in seconds"
+    ),
 ):
     """
     Generate a presigned URL for the project's dashboard preview image.
@@ -439,7 +485,9 @@ async def get_dashboard_preview_url(
     s3_key = project.get("dashboard_preview_key")
 
     if not s3_key:
-        raise HTTPException(status_code=404, detail="No dashboard preview found for this project")
+        raise HTTPException(
+            status_code=404, detail="No dashboard preview found for this project"
+        )
 
     bucket = config.aws.s3.USER_ASSETS_BUCKET
 
@@ -467,7 +515,7 @@ async def upload_asset_endpoint(
     data = await file.read()
     file_size = len(data)
     checksum = compute_sha256_checksum(data)
-    
+
     # Get file metadata (row and column counts)
     # Wrap in try/except to ensure upload continues even if parsing fails
     row_count = None
@@ -497,7 +545,9 @@ async def upload_asset_endpoint(
         "xls": "application/vnd.ms-excel",
         "json": "application/json",
     }
-    content_type = content_type_map.get(file_info["extension"], "application/octet-stream")
+    content_type = content_type_map.get(
+        file_info["extension"], "application/octet-stream"
+    )
 
     upload_bytes(
         bucket=bucket,
@@ -538,7 +588,9 @@ async def list_assets_endpoint(
     return AssetListResponse(assets=[_map_asset(item) for item in assets])
 
 
-@router.post("/user/asset/add-to-new-project", response_model=AssetAddToNewProjectResponse)
+@router.post(
+    "/user/asset/add-to-new-project", response_model=AssetAddToNewProjectResponse
+)
 async def add_assets_to_new_project_endpoint(
     request: AssetAddToNewProjectRequest,
     user_id: str = Depends(require_user),
@@ -604,7 +656,9 @@ async def add_assets_to_project_endpoint(
 
     cloned_assets = []
     for source_asset in source_assets:
-        if str(source_asset.get("project_id", "")) == request.project_id and source_asset.get("cloned_from_asset_id"):
+        if str(
+            source_asset.get("project_id", "")
+        ) == request.project_id and source_asset.get("cloned_from_asset_id"):
             cloned_assets.append(source_asset)
             continue
         cloned = assets_repo.clone_asset_to_project(
@@ -657,9 +711,15 @@ def _resolve_accessible_asset_blob(user_id: str, asset: dict) -> tuple[dict, byt
 
     def _candidate_score(candidate: dict) -> int:
         score = 0
-        if str(candidate.get("file_id", "")) and str(candidate.get("file_id", "")) == current_file_id:
+        if (
+            str(candidate.get("file_id", ""))
+            and str(candidate.get("file_id", "")) == current_file_id
+        ):
             score += 100
-        if str(candidate.get("checksum_sha256", "")) and str(candidate.get("checksum_sha256", "")) == current_checksum:
+        if (
+            str(candidate.get("checksum_sha256", ""))
+            and str(candidate.get("checksum_sha256", "")) == current_checksum
+        ):
             score += 80
         if str(candidate.get("filename", "")) == current_filename:
             score += 20
@@ -670,11 +730,15 @@ def _resolve_accessible_asset_blob(user_id: str, asset: dict) -> tuple[dict, byt
         return score
 
     candidates = [
-        candidate for candidate in all_assets
+        candidate
+        for candidate in all_assets
         if str(candidate.get("asset_id", "")) != current_asset_id
         and (
             (current_file_id and str(candidate.get("file_id", "")) == current_file_id)
-            or (current_checksum and str(candidate.get("checksum_sha256", "")) == current_checksum)
+            or (
+                current_checksum
+                and str(candidate.get("checksum_sha256", "")) == current_checksum
+            )
             or (
                 current_filename
                 and current_size is not None
@@ -721,12 +785,19 @@ async def get_asset_download_url(
     user_id: str = Depends(require_user),
 ):
     """Generate a short-lived presigned S3 URL that forces a file download."""
+
     def _build_content_disposition(filename: str) -> str:
         # S3 response headers are ISO-8859-1 only. Keep ASCII fallback + RFC5987 UTF-8.
-        normalized = unicodedata.normalize("NFKD", filename or "").encode("ascii", "ignore").decode("ascii")
+        normalized = (
+            unicodedata.normalize("NFKD", filename or "")
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
         sanitized = re.sub(r'[\\/\r\n"]+', "_", normalized).strip(" .")
         fallback = sanitized or "download"
-        utf8_name = quote((filename or fallback).replace("\r", "").replace("\n", ""), safe="")
+        utf8_name = quote(
+            (filename or fallback).replace("\r", "").replace("\n", ""), safe=""
+        )
         return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{utf8_name}"
 
     asset = _get_asset_or_404(user_id, asset_id)
@@ -800,7 +871,7 @@ def _get_user_from_token(request: Request, token: Optional[str] = None) -> str:
     # First, try to get token from Authorization header
     authorization = request.headers.get("Authorization")
     auth_token = None
-    
+
     if authorization:
         try:
             scheme, auth_token = authorization.split(" ", 1)
@@ -808,51 +879,50 @@ def _get_user_from_token(request: Request, token: Optional[str] = None) -> str:
                 auth_token = None
         except ValueError:
             auth_token = None
-    
+
     # Use query parameter token if no Authorization header
     if not auth_token and token:
         auth_token = token
-    
+
     # If we have a token, verify it
     if auth_token:
         # Create a mock request with Authorization header for Clerk auth
         class TokenRequest:
             def __init__(self, token: str):
                 self.headers = {"Authorization": f"Bearer {token}"}
-            
+
             def header(self, name: str):
                 return self.headers.get(name)
-        
+
         try:
             clerk_req = TokenRequest(auth_token)
             from clerk_backend_api import Clerk
             from clerk_backend_api.security import authenticate_request
             from clerk_backend_api.security.types import AuthenticateRequestOptions
             from utils.config import config
-            
+
             clerk = Clerk()
             jwt_key = config.clerk.CLERK_JWT_KEY
-            
+
             state = clerk.authenticate_request(
                 clerk_req,
-                AuthenticateRequestOptions(
-                    jwt_key=jwt_key,
-                    authorized_parties=None
-                )
+                AuthenticateRequestOptions(jwt_key=jwt_key, authorized_parties=None),
             )
-            
+
             if not state.is_signed_in:
                 raise HTTPException(status_code=401, detail="Invalid or expired token")
-            
-            user_id = state.payload.get('sub')
+
+            user_id = state.payload.get("sub")
             if not user_id:
                 raise HTTPException(status_code=401, detail="Token missing user ID")
-            
+
             return user_id
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+            raise HTTPException(
+                status_code=401, detail=f"Token verification failed: {str(e)}"
+            )
     else:
         # Fall back to standard authentication (requires Authorization header)
         try:
@@ -863,15 +933,22 @@ def _get_user_from_token(request: Request, token: Optional[str] = None) -> str:
                 raise
             raise HTTPException(status_code=401, detail="Authentication required")
 
+
 # Initialize processors
 csv_processor = CSVProcessor()
+
 
 @router.get("/files/preview/{asset_id}", response_model=FilePreviewResponse)
 async def preview_file_endpoint(
     asset_id: str,
     request: Request,
     token: Optional[str] = Query(None, description="Authentication token"),
-    limit: int = Query(100, ge=1, le=5000, description="Maximum number of rows to return in the preview payload"),
+    limit: int = Query(
+        100,
+        ge=1,
+        le=5000,
+        description="Maximum number of rows to return in the preview payload",
+    ),
     offset: int = Query(0, ge=0, description="Row offset for paginated fetching"),
 ):
     """
@@ -881,32 +958,41 @@ async def preview_file_endpoint(
     try:
         # Get user from token or header
         user_id = _get_user_from_token(request, token)
-        
+
         # Get asset metadata
         asset = assets_repo.get_asset(user_id, asset_id)
         if not asset:
-            logger.warning(f"Preview requested for non-existent asset: {asset_id} for user {user_id}")
+            logger.warning(
+                f"Preview requested for non-existent asset: {asset_id} for user {user_id}"
+            )
             raise HTTPException(status_code=404, detail="Asset not found")
-            
+
         # Download file data (with self-healing for missing S3 keys)
         try:
             asset, file_data = _resolve_accessible_asset_blob(user_id, asset)
         except FileNotFoundError as e:
-            logger.warning(f"Preview requested for asset with missing blob {asset_id}: {e}")
+            logger.warning(
+                f"Preview requested for asset with missing blob {asset_id}: {e}"
+            )
             raise HTTPException(
                 status_code=404,
                 detail="The underlying file for this asset is no longer available in storage.",
             )
         except Exception as e:
-            logger.error(f"Failed to download asset {asset_id} from S3: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Failed to retrieve file from storage: {str(e)}")
-            
+            logger.error(
+                f"Failed to download asset {asset_id} from S3: {e}", exc_info=True
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to retrieve file from storage: {str(e)}",
+            )
+
         # Use CSVProcessor for robust reading
         try:
             filename = asset.get("filename", "unknown_file")
             # _smart_read_file handles encoding, separators, and multiple file types
             df = csv_processor._smart_read_file(file_data, filename)
-            
+
             if df.empty:
                 return FilePreviewResponse(
                     success=True,
@@ -914,22 +1000,23 @@ async def preview_file_endpoint(
                     columns=[],
                     rows=[],
                     total_rows=0,
-                    displayed_rows=0
+                    displayed_rows=0,
                 )
-            
+
             # Prepare preview slice using offset + limit
             total_rows = len(df)
-            df_preview = df.iloc[offset:offset + limit]
-            
+            df_preview = df.iloc[offset : offset + limit]
+
             # Explicitly convert all values to basic types for JSON serialization
             from app.core.analytics import convert_numpy_types
+
             columns = [str(col) for col in df_preview.columns.tolist()]
-            
+
             # Efficiently convert rows to list of lists
             rows = []
             for row in df_preview.values.tolist():
                 rows.append([convert_numpy_types(val) for val in row])
-                
+
             # Map asset type to display name
             asset_type = asset.get("asset_type", "")
             source_type = None
@@ -947,13 +1034,17 @@ async def preview_file_endpoint(
                 rows=rows,
                 total_rows=total_rows,
                 displayed_rows=len(rows),
-                source_type=source_type
+                source_type=source_type,
             )
-            
+
         except Exception as e:
-            logger.error(f"Failed to process file preview for {asset_id}: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Failed to parse file: {str(e)}")
-            
+            logger.error(
+                f"Failed to process file preview for {asset_id}: {e}", exc_info=True
+            )
+            raise HTTPException(
+                status_code=500, detail=f"Failed to parse file: {str(e)}"
+            )
+
     except HTTPException:
         raise
     except Exception as e:
@@ -975,5 +1066,5 @@ async def compatibility_preview_redirect(
     redirect_url = f"/api/v1/files/preview/{asset_id}"
     if query_params:
         redirect_url += f"?{query_params}"
-    
+
     return RedirectResponse(url=redirect_url)

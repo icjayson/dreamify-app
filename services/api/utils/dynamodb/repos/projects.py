@@ -1,6 +1,7 @@
 """
 DynamoDB repository for project entities.
 """
+
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
@@ -18,13 +19,20 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def create_project(user_id: str, name: str, description: Optional[str] = None, allowed: Optional[List[Dict]] = None) -> Dict:
+def create_project(
+    user_id: str,
+    name: str,
+    description: Optional[str] = None,
+    allowed: Optional[List[Dict]] = None,
+    name_source: str = "generated",
+) -> Dict:
     table = get_table(tables.projects)
     project_id = str(uuid.uuid4())
     item = {
         "user_id": user_id,
         "project_id": project_id,
         "name": name,
+        "name_source": name_source,
         "description": description or "",
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
@@ -62,28 +70,28 @@ def get_project_by_id(project_id: str) -> Optional[Dict]:
     table = get_table(tables.projects)
     all_items = []
     last_key = None
-    
+
     while True:
         scan_kwargs = {
             "FilterExpression": Attr("project_id").eq(project_id),
             "Limit": 1000,
         }
-        
+
         if last_key:
             scan_kwargs["ExclusiveStartKey"] = last_key
-        
+
         resp = table.scan(**scan_kwargs)
         items = resp.get("Items", [])
         all_items.extend(items)
-        
+
         last_key = resp.get("LastEvaluatedKey")
         if not last_key:
             break
-        
+
         # If we found the project, we can stop scanning
         if items:
             break
-    
+
     return all_items[0] if all_items else None
 
 
@@ -99,8 +107,11 @@ def update_project(
     is_preview_public: Optional[bool] = None,
     allowed: Optional[List[Dict]] = None,
     source_type: Optional[str] = None,
+    name_source: Optional[str] = None,
 ) -> Optional[Dict]:
-    logger.info(f"Updating project {project_id} for user {user_id}: name={name}, dashboard_title={dashboard_title}, conversation_id={latest_conversation_id}")
+    logger.info(
+        f"Updating project {project_id} for user {user_id}: name={name}, dashboard_title={dashboard_title}, conversation_id={latest_conversation_id}"
+    )
     table = get_table(tables.projects)
     expr = []
     values = {}
@@ -141,6 +152,10 @@ def update_project(
         expr.append("#source_type = :source_type")
         names["#source_type"] = "source_type"
         values[":source_type"] = source_type
+    if name_source is not None:
+        expr.append("#name_source = :name_source")
+        names["#name_source"] = "name_source"
+        values[":name_source"] = name_source
     if not expr:
         logger.info(f"No fields to update for project {project_id}")
         return get_project(user_id, project_id)
@@ -167,5 +182,3 @@ def update_project(
 def delete_project(user_id: str, project_id: str) -> None:
     table = get_table(tables.projects)
     table.delete_item(Key={"user_id": user_id, "project_id": project_id})
-
-

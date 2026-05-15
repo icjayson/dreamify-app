@@ -7,6 +7,7 @@ import uuid
 import time
 import asyncio
 import logging
+import re
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import json
@@ -42,6 +43,152 @@ MODEL_ID_MAP = {
     "fast": os.environ.get("DREAMIFY_FAST_MODEL", "gemini-3-flash-preview"),
 }
 
+PLACEHOLDER_PROJECT_NAMES = {"", "untitled project", "new project"}
+TITLE_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "build",
+    "create",
+    "dashboard",
+    "data",
+    "for",
+    "from",
+    "generate",
+    "give",
+    "make",
+    "me",
+    "my",
+    "of",
+    "please",
+    "report",
+    "show",
+    "the",
+    "this",
+    "to",
+    "use",
+    "with",
+}
+
+
+def _is_placeholder_project_name(name: Optional[str]) -> bool:
+    normalized = re.sub(r"\s+", " ", (name or "").strip().lower())
+    return normalized in PLACEHOLDER_PROJECT_NAMES
+
+
+def _should_generate_project_name(project: Dict[str, Any]) -> bool:
+    if str(project.get("name_source") or "").lower() == "user":
+        return False
+    return _is_placeholder_project_name(project.get("name"))
+
+
+def _title_case_words(text: str, max_words: int = 4) -> str:
+    cleaned = re.sub(r"[_\-./]+", " ", text)
+    cleaned = re.sub(r"[^A-Za-z0-9\s]+", " ", cleaned)
+    words = [
+        word
+        for word in cleaned.split()
+        if len(word) > 1 and word.lower() not in TITLE_STOPWORDS
+    ]
+    if not words:
+        return ""
+    return " ".join(word[:1].upper() + word[1:].lower() for word in words[:max_words])
+
+
+def _extract_prompt_text(contents: List[Dict[str, Any]]) -> str:
+    for content in contents:
+        if content.get("type") == "text":
+            text = content.get("data", {}).get("text")
+            if isinstance(text, str):
+                return text.strip()
+    return ""
+
+
+def _detect_source_label(contents: List[Dict[str, Any]]) -> str:
+    raw_values: List[str] = []
+    for content in contents:
+        data = content.get("data", {}) or {}
+        raw_values.extend(
+            str(data.get(key) or "")
+            for key in ("sourceType", "asset_type", "filename", "name")
+        )
+    raw = " ".join(raw_values).lower()
+    if "ga4" in raw or "google_analytics" in raw or "google analytics" in raw:
+        return "GA4"
+    if "google ads" in raw or "google_ads" in raw:
+        return "Google Ads"
+    if "google sheet" in raw or "gsheet" in raw or "google_sheet" in raw:
+        return "Google Sheets"
+    if "meta" in raw or "facebook" in raw:
+        return "Meta Ads"
+    if "tiktok" in raw or "tik_tok" in raw:
+        return "TikTok Ads"
+    if "firebase" in raw:
+        return "Firebase"
+    if "appsflyer" in raw:
+        return "AppsFlyer"
+    if "stripe" in raw:
+        return "Stripe"
+    return "CSV"
+
+
+def _first_asset_filename_topic(contents: List[Dict[str, Any]]) -> str:
+    for content in contents:
+        data = content.get("data", {}) or {}
+        filename = str(data.get("filename") or data.get("name") or "")
+        if filename:
+            return _title_case_words(filename.rsplit(".", 1)[0], max_words=3)
+    return ""
+
+
+def _infer_project_topic(prompt: str, source_label: str, filename_topic: str) -> str:
+    prompt_l = prompt.lower()
+    if re.search(
+        r"\b(revenue|sales|orders|ecommerce|gross merchandise|gmv)\b", prompt_l
+    ):
+        return "Sales Performance"
+    if re.search(
+        r"\b(ads?|campaign|roas|cpc|ctr|spend|impressions|clicks?)\b", prompt_l
+    ):
+        return "Campaign Performance"
+    if re.search(
+        r"\b(acquisition|traffic|sessions?|users?|engagement|ga4|analytics)\b", prompt_l
+    ):
+        return "Acquisition Overview"
+    if re.search(r"\b(subscription|payment|stripe|mrr|arr|invoice)\b", prompt_l):
+        return "Revenue Overview"
+    if re.search(r"\b(retention|churn|cohort|lifetime|ltv)\b", prompt_l):
+        return "Retention Analysis"
+    if source_label == "GA4":
+        return "Acquisition Overview"
+    if source_label in {"Google Ads", "Meta Ads", "TikTok Ads"}:
+        return "Campaign Performance"
+    if source_label == "Stripe":
+        return "Revenue Overview"
+    if source_label == "Firebase":
+        return "Product Analytics"
+    if source_label == "AppsFlyer":
+        return "Attribution Overview"
+    return filename_topic or _title_case_words(prompt, max_words=3) or "Data Overview"
+
+
+def _derive_project_name(contents: List[Dict[str, Any]]) -> str:
+    prompt = _extract_prompt_text(contents)
+    source_label = _detect_source_label(contents)
+    filename_topic = _first_asset_filename_topic(contents)
+    topic = _infer_project_topic(prompt, source_label, filename_topic)
+    if source_label != "CSV" and not topic.startswith(source_label):
+        name = f"{source_label} {topic}"
+    else:
+        name = topic
+    if not re.search(
+        r"\b(dashboard|overview|report|analysis|analytics|performance)\b", name, re.I
+    ):
+        name = f"{name} Dashboard"
+    return re.sub(r"\s+", " ", name).strip()[:80]
+
 
 def _conversation_keys(
     user_id: str, project_id: str, conversation_id: str
@@ -64,6 +211,8 @@ class ConversationChatRequest(BaseModel):
 class ConversationChatResponse(BaseModel):
     conversation_id: str
     project_id: str
+    project_name: Optional[str] = None
+    project_name_source: Optional[str] = None
     workflow_status: Dict
 
 
@@ -280,17 +429,23 @@ async def conversation_chat(
         )
 
         # Update DynamoDB metadata so admin list views have the latest model info
-        existing_meta = conversations_repo.get_conversation(request.project_id, conversation_id)
+        existing_meta = conversations_repo.get_conversation(
+            request.project_id, conversation_id
+        )
         if existing_meta:
             dynamo_metadata = existing_meta.get("metadata", {})
             dynamo_metadata["chat_mode"] = model_alias
             dynamo_metadata["resolved_model"] = resolved_model
             if request.template_id:
                 dynamo_metadata["template_id"] = request.template_id
-            conversations_repo.update_conversation_metadata(request.project_id, conversation_id, dynamo_metadata)
-            
+            conversations_repo.update_conversation_metadata(
+                request.project_id, conversation_id, dynamo_metadata
+            )
+
             # Also update conversation object to persist template_id in S3
-            conversation["metadata"]["template_id"] = request.template_id or conversation["metadata"].get("template_id")
+            conversation["metadata"]["template_id"] = (
+                request.template_id or conversation["metadata"].get("template_id")
+            )
             conversation["metadata"]["chat_mode"] = model_alias
             conversation["metadata"]["resolved_model"] = resolved_model
     else:
@@ -337,16 +492,26 @@ async def conversation_chat(
     )
 
     # Keep project metadata in sync so frontend can restore conversations
+    project_name = project.get("name")
+    project_name_source = project.get("name_source")
     try:
         logger.info(
             f"Updating project {request.project_id} with conversation {conversation_id}"
         )
+        next_project_name = _derive_project_name(enriched_contents)
+        should_name_project = _should_generate_project_name(project) and bool(
+            next_project_name
+        )
         updated = projects_repo.update_project(
             user_id=user_id,
             project_id=request.project_id,
+            name=next_project_name if should_name_project else None,
+            name_source="generated" if should_name_project else None,
             latest_conversation_id=conversation_id,
         )
         if updated:
+            project_name = updated.get("name", project_name)
+            project_name_source = updated.get("name_source", project_name_source)
             logger.info(f"Successfully updated project {request.project_id} metadata")
         else:
             logger.warning(f"Project update returned None for {request.project_id}")
@@ -396,6 +561,8 @@ async def conversation_chat(
     return ConversationChatResponse(
         conversation_id=conversation_id,
         project_id=request.project_id,
+        project_name=project_name,
+        project_name_source=project_name_source,
         workflow_status=workflow_status,
     )
 
@@ -706,7 +873,9 @@ async def update_dashboard_template(
     user_id: str = Depends(require_user),
 ):
     """Update the template_id field inside a saved dashboard JSON in S3."""
-    conversation_meta = conversations_repo.get_conversation(request.project_id, conversation_id)
+    conversation_meta = conversations_repo.get_conversation(
+        request.project_id, conversation_id
+    )
     if not conversation_meta:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation_meta.get("user_id") != user_id:
@@ -717,7 +886,9 @@ async def update_dashboard_template(
     conversation = load_conversation(s3_bucket, s3_key)
 
     dashboards = conversation.get("dashboards", [])
-    target = next((d for d in dashboards if d.get("dashboard_id") == dashboard_id), None)
+    target = next(
+        (d for d in dashboards if d.get("dashboard_id") == dashboard_id), None
+    )
     if not target:
         raise HTTPException(status_code=404, detail="Dashboard not found")
 
@@ -738,7 +909,9 @@ async def update_dashboard_template(
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Dashboard data not found in S3")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load dashboard: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load dashboard: {str(e)}"
+        )
 
     if request.template_id is not None:
         dashboard_data["template_id"] = request.template_id
@@ -746,10 +919,14 @@ async def update_dashboard_template(
         dashboard_data.pop("template_id", None)
 
     try:
-        updated_bytes = json.dumps(dashboard_data, ensure_ascii=False, indent=2).encode("utf-8")
+        updated_bytes = json.dumps(dashboard_data, ensure_ascii=False, indent=2).encode(
+            "utf-8"
+        )
         upload_bytes(bucket, key, updated_bytes, content_type="application/json")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save dashboard: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save dashboard: {str(e)}"
+        )
 
     return {"success": True}
 
@@ -767,7 +944,9 @@ async def save_dashboard_data(
     user_id: str = Depends(require_user),
 ):
     """Overwrite a saved dashboard JSON in S3 with new data (manual edits)."""
-    conversation_meta = conversations_repo.get_conversation(request.project_id, conversation_id)
+    conversation_meta = conversations_repo.get_conversation(
+        request.project_id, conversation_id
+    )
     if not conversation_meta:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation_meta.get("user_id") != user_id:
@@ -778,7 +957,9 @@ async def save_dashboard_data(
     conversation = load_conversation(s3_bucket, s3_key)
 
     dashboards = conversation.get("dashboards", [])
-    target = next((d for d in dashboards if d.get("dashboard_id") == dashboard_id), None)
+    target = next(
+        (d for d in dashboards if d.get("dashboard_id") == dashboard_id), None
+    )
     if not target:
         raise HTTPException(status_code=404, detail="Dashboard not found")
 
@@ -794,13 +975,25 @@ async def save_dashboard_data(
     key = uri_parts[1].lstrip("/")
 
     try:
-        updated_bytes = json.dumps(request.dashboard_data, ensure_ascii=False, indent=2).encode("utf-8")
+        updated_bytes = json.dumps(
+            request.dashboard_data, ensure_ascii=False, indent=2
+        ).encode("utf-8")
         upload_bytes(bucket, key, updated_bytes, content_type="application/json")
     except Exception as e:
-        logger.error("Failed to save dashboard data: dashboard_id=%s, error=%s", dashboard_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to save dashboard: {str(e)}")
+        logger.error(
+            "Failed to save dashboard data: dashboard_id=%s, error=%s",
+            dashboard_id,
+            str(e),
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save dashboard: {str(e)}"
+        )
 
-    logger.info("Dashboard saved: conversation_id=%s, dashboard_id=%s", conversation_id, dashboard_id)
+    logger.info(
+        "Dashboard saved: conversation_id=%s, dashboard_id=%s",
+        conversation_id,
+        dashboard_id,
+    )
     return {"success": True}
 
 

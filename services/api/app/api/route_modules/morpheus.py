@@ -1,6 +1,7 @@
 """
 Morpheus workflow integration endpoints.
 """
+
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -63,6 +64,7 @@ class MorpheusAssetResponse(BaseModel):
 class ProjectMetadataUpdateRequest(BaseModel):
     user_id: str
     name: Optional[str] = None
+    name_source: Optional[str] = None
     description: Optional[str] = None
     latest_conversation_id: Optional[str] = None
     latest_dashboard_id: Optional[str] = None
@@ -105,7 +107,9 @@ async def list_node_status(
     return NodeStatusListResponse(nodes=[_map_node(item) for item in nodes])
 
 
-@router.get("/morpheus/workflow-status/{conversation_id}", response_model=NodeStatusResponse)
+@router.get(
+    "/morpheus/workflow-status/{conversation_id}", response_model=NodeStatusResponse
+)
 async def get_workflow_status(
     conversation_id: str,
     x_morpheus_key: Optional[str] = Header(None),
@@ -196,10 +200,23 @@ async def update_project_metadata(
     if not request.user_id:
         raise HTTPException(status_code=400, detail="user_id is required")
 
+    project = projects_repo.get_project(request.user_id, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    requested_name = request.name
+    if requested_name and str(project.get("name_source") or "").lower() == "user":
+        logger.info(
+            "Ignoring Morpheus project name update for user-renamed project %s",
+            project_id,
+        )
+        requested_name = None
+
     updated_project = projects_repo.update_project(
         user_id=request.user_id,
         project_id=project_id,
-        name=request.name,
+        name=requested_name,
+        name_source=request.name_source if requested_name else None,
         description=request.description,
         latest_conversation_id=request.latest_conversation_id,
         latest_dashboard_id=request.latest_dashboard_id,
@@ -250,10 +267,10 @@ async def update_conversation_tokens(
     conversation = conversations_repo.get_conversation(project_id, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     metadata = conversation.get("metadata", {})
     metadata["total_tokens"] = metadata.get("total_tokens", 0) + request.total_tokens
-    
+
     updated = conversations_repo.update_conversation_metadata(
         project_id=project_id,
         conversation_id=conversation_id,

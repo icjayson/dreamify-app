@@ -1,8 +1,9 @@
 /**
  * Chart Theme Presets - CSS Custom Properties for Dynamic Chart Styling
- * Color Component Prefix System with 7 curated neutral-first themes
+ * Color Component Prefix System with 16 curated neutral-first themes
  *
- * Theme names: carbon, slate, chalk, warm, ash, sage, ink
+ * Theme names: default, carbon, slate, chalk, warm, ash, sage, ink,
+ * aurora, glacier, coral, orchid, mint, crimson, cobalt, sandstone
  * Old names (ocean, forest, sunset, midnight, sakura, monochrome, light)
  * are kept as aliases for backward compatibility with stored dashboards.
  */
@@ -18,11 +19,11 @@
   --bg-card-color: #ffffff;
   --border-card-color: #e2e8f0;
   --title-color: #0f172a;
-  --description-color: #64748b;
-  --element-color: #64748b;
+  --description-color: #526174;
+  --element-color: #526174;
 
   --highlight-color-rgb: 30, 58, 95;
-  --element-color-rgb: 100, 116, 139;
+  --element-color-rgb: 82, 97, 116;
 
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -55,10 +56,10 @@
   --border-card-color: #2d4157;
   --title-color: #e2e8f0;
   --description-color: #94a3b8;
-  --element-color: #64748b;
+  --element-color: #72869d;
 
   --highlight-color-rgb: 96, 165, 250;
-  --element-color-rgb: 100, 116, 139;
+  --element-color-rgb: 114, 134, 157;
 
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -116,11 +117,11 @@
   --bg-card-color: #3d3d3d;
   --border-card-color: #505050;
   --title-color: #f0f0f0;
-  --description-color: #a0a0a0;
-  --element-color: #707070;
+  --description-color: #b3b3b3;
+  --element-color: #c0c0c0;
 
   --highlight-color-rgb: 240, 240, 240;
-  --element-color-rgb: 112, 112, 112;
+  --element-color-rgb: 192, 192, 192;
 
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -163,6 +164,166 @@
   --chart-hover-scale: 1.03;
 }
 
+/* AURORA - Deep indigo, violet/cyan accent, executive dark dashboard */
+.chart-theme-aurora {
+  --highlight-color: #a78bfa;
+  --bg-dashboard-color: #100f24;
+  --bg-card-color: #1a1833;
+  --border-card-color: #2b2850;
+  --title-color: #f1efff;
+  --description-color: #b8b2e6;
+  --element-color: #7c74b8;
+
+  --highlight-color-rgb: 167, 139, 250;
+  --element-color-rgb: 124, 116, 184;
+  --table-header-bg: #242143;
+  --table-header-text: #f1efff;
+
+  --chart-animation-duration: 0.9s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* GLACIER - Icy light, cyan-blue accent, crisp report dashboard */
+.chart-theme-glacier {
+  --highlight-color: #0284c7;
+  --bg-dashboard-color: #f3fbff;
+  --bg-card-color: #ffffff;
+  --border-card-color: #cfe8f7;
+  --title-color: #0f2537;
+  --description-color: #4b6b7d;
+  --element-color: #6b8795;
+
+  --highlight-color-rgb: 2, 132, 199;
+  --element-color-rgb: 107, 135, 149;
+  --table-header-bg: #e7f5fc;
+  --table-header-text: #0f2537;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* CORAL - Graphite dark, coral accent, high-contrast operating dashboard */
+.chart-theme-coral {
+  --highlight-color: #fb7185;
+  --bg-dashboard-color: #181a1f;
+  --bg-card-color: #23262d;
+  --border-card-color: #383d46;
+  --title-color: #f7f2ef;
+  --description-color: #b8ada8;
+  --element-color: #7d8794;
+
+  --highlight-color-rgb: 251, 113, 133;
+  --element-color-rgb: 125, 135, 148;
+  --table-header-bg: #30333b;
+  --table-header-text: #f7f2ef;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* ORCHID - Dark plum, orchid pink accent, expressive product dashboard */
+.chart-theme-orchid {
+  --highlight-color: #e879f9;
+  --bg-dashboard-color: #1a0f1f;
+  --bg-card-color: #281532;
+  --border-card-color: #422052;
+  --title-color: #fae8ff;
+  --description-color: #d8b4fe;
+  --element-color: #a855f7;
+
+  --highlight-color-rgb: 232, 121, 249;
+  --element-color-rgb: 168, 85, 247;
+  --table-header-bg: #351c42;
+  --table-header-text: #fae8ff;
+
+  --chart-animation-duration: 0.9s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* MINT - Soft mint light, emerald accent, fresh analytical report */
+.chart-theme-mint {
+  --highlight-color: #059669;
+  --bg-dashboard-color: #f1fbf6;
+  --bg-card-color: #ffffff;
+  --border-card-color: #cdeede;
+  --title-color: #10251d;
+  --description-color: #4b6358;
+  --element-color: #6b8f80;
+
+  --highlight-color-rgb: 5, 150, 105;
+  --element-color-rgb: 107, 143, 128;
+  --table-header-bg: #e4f6ed;
+  --table-header-text: #10251d;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* CRIMSON - Dark slate, crimson accent, urgent signal dashboard */
+.chart-theme-crimson {
+  --highlight-color: #ef4444;
+  --bg-dashboard-color: #111827;
+  --bg-card-color: #1f2937;
+  --border-card-color: #374151;
+  --title-color: #f9fafb;
+  --description-color: #d1d5db;
+  --element-color: #9ca3af;
+
+  --highlight-color-rgb: 239, 68, 68;
+  --element-color-rgb: 156, 163, 175;
+  --table-header-bg: #2a3444;
+  --table-header-text: #f9fafb;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* COBALT - Deep cobalt, electric lime accent, energetic technical dashboard */
+.chart-theme-cobalt {
+  --highlight-color: #a3e635;
+  --bg-dashboard-color: #0b1738;
+  --bg-card-color: #11245a;
+  --border-card-color: #1d3a7a;
+  --title-color: #eff6ff;
+  --description-color: #bfd7ff;
+  --element-color: #5da2ff;
+
+  --highlight-color-rgb: 163, 230, 53;
+  --element-color-rgb: 93, 162, 255;
+  --table-header-bg: #18306d;
+  --table-header-text: #eff6ff;
+
+  --chart-animation-duration: 0.9s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* SANDSTONE - Warm sand, terracotta accent, editorial business dashboard */
+.chart-theme-sandstone {
+  --highlight-color: #c2410c;
+  --bg-dashboard-color: #fbf4ea;
+  --bg-card-color: #fffaf3;
+  --border-card-color: #e5c8a8;
+  --title-color: #2a1609;
+  --description-color: #7c5b43;
+  --element-color: #9a7a5d;
+
+  --highlight-color-rgb: 194, 65, 12;
+  --element-color-rgb: 154, 122, 93;
+  --table-header-bg: #f1dfc8;
+  --table-header-text: #2a1609;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    BACKWARD COMPATIBILITY ALIASES
    Old theme names map to new equivalents so dashboards stored in S3
@@ -177,9 +338,9 @@
   --border-card-color: #2d4157;
   --title-color: #e2e8f0;
   --description-color: #94a3b8;
-  --element-color: #64748b;
+  --element-color: #72869d;
   --highlight-color-rgb: 96, 165, 250;
-  --element-color-rgb: 100, 116, 139;
+  --element-color-rgb: 114, 134, 157;
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --chart-hover-scale: 1.02;
@@ -241,9 +402,9 @@
   --border-card-color: #d4c5b0;
   --title-color: #1c1005;
   --description-color: #6b5344;
-  --element-color: #9c8170;
+  --element-color: #5c4033;
   --highlight-color-rgb: 180, 83, 9;
-  --element-color-rgb: 156, 129, 112;
+  --element-color-rgb: 92, 64, 51;
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --chart-hover-scale: 1.02;
@@ -256,10 +417,10 @@
   --bg-card-color: #ffffff;
   --border-card-color: #e2e8f0;
   --title-color: #0f172a;
-  --description-color: #64748b;
-  --element-color: #94a3b8;
+  --description-color: #526174;
+  --element-color: #526174;
   --highlight-color-rgb: 30, 58, 95;
-  --element-color-rgb: 148, 163, 184;
+  --element-color-rgb: 82, 97, 116;
   --chart-animation-duration: 0.8s;
   --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --chart-hover-scale: 1.02;
@@ -273,9 +434,9 @@
   --border-card-color: #e2e8f0;
   --title-color: #1a1a2e;
   --description-color: #475569;
-  --element-color: #94a3b8;
+  --element-color: #64748b;
   --highlight-color-rgb: 30, 64, 175;
-  --element-color-rgb: 148, 163, 184;
+  --element-color-rgb: 100, 116, 139;
   --table-header-bg: #f1f5f9;
   --table-header-text: #0f172a;
   --chart-animation-duration: 0.8s;

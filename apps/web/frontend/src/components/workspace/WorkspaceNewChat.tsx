@@ -9,7 +9,6 @@ import {
   TrendingUp,
   AlertCircle,
   LayoutDashboard,
-  X,
 } from "lucide-react";
 import FileAttachDropdown from "@/components/chat/FileAttachDropdown";
 import TextareaAutosize from "react-textarea-autosize";
@@ -24,8 +23,10 @@ import { useFileUpload } from "@/hooks/use-file-upload";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import FilePreviewChip from "@/components/chat/FilePreviewChip";
+import { ThemeInlineToken } from "@/components/chat/ThemeInlineToken";
 import ModelSelector from "@/chat/ModelSelector";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
+import type { ThemeSelection } from "@/constants/builtinTemplates";
 import { CONNECTORS } from "@/constants/connectors";
 import { type ConnectorItem } from "@/constants/connectors";
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
@@ -75,6 +76,7 @@ export default function WorkspaceNewChat() {
     updateFile,
     isProcessing,
     selectedTemplate,
+    isTemplatePending,
     setInputValue,
     setSelectedDataSource,
     setDropdownOpen,
@@ -125,9 +127,16 @@ export default function WorkspaceNewChat() {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Auto-open template modal from query flag ────────────────────────────────
+  // ── Auto-open theme modal from query flag ───────────────────────────────────
   useEffect(() => {
     if (searchParams.get("openTemplate") !== "1") return;
+    try {
+      const storedTheme = sessionStorage.getItem("dreamify:selected_theme");
+      if (storedTheme) {
+        setSelectedTemplate(JSON.parse(storedTheme) as ThemeSelection);
+        sessionStorage.removeItem("dreamify:selected_theme");
+      }
+    } catch { /* ignore malformed session payloads */ }
     setTemplateModalOpen(true);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -354,9 +363,9 @@ export default function WorkspaceNewChat() {
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleAttachClick = () => fileInputRef.current?.click();
 
-  const handleTemplateSelect = (template: { id: string; title: string; description: string; category: string; suggestedTheme: string; image?: string }) => {
+  const handleTemplateSelect = (template: ThemeSelection) => {
     setSelectedTemplate(template);
-    setInputValue(`Use ${template.title} template to make `);
+    setInputValue(`Use ${template.title} theme to make `);
   };
 
   const handleTemplateRemove = () => {
@@ -450,27 +459,16 @@ export default function WorkspaceNewChat() {
             </div>
           )}
 
-          {/* File chips + template chip */}
-          {(uploadedFiles.length > 0 || selectedTemplate) && (
-            <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-              {selectedTemplate && (
-                <div className="flex-shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
-                  <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent bg-accent/10 px-3 py-2 transition-all hover:border-accent outline-none">
-                    <LayoutTemplate className="w-4 h-4 text-accent flex-shrink-0" />
-                    <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
-                      <span className="flex-shrink-0 font-semibold text-accent">Template</span>
-                      <span className="flex-shrink-0 font-light text-accent/30">•</span>
-                      <span className="min-w-0 flex-1 truncate text-foreground dark:text-white/90" title={selectedTemplate.title}>{selectedTemplate.title}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleTemplateRemove(); }}
-                      className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-accent/50 transition-colors hover:text-white"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
+          {/* File chips + theme chip */}
+          {(uploadedFiles.some(file => file.status !== "processed" && file.status !== "error") || (selectedTemplate && isTemplatePending)) && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {selectedTemplate && isTemplatePending && (
+                <ThemeInlineToken
+                  theme={selectedTemplate}
+                  variant="composer"
+                  onRemove={handleTemplateRemove}
+                  className="animate-in fade-in slide-in-from-left-2 duration-300"
+                />
               )}
               {uploadedFiles.map((file) => (
                 <div key={file.fileID} className="flex-shrink-0">
@@ -525,14 +523,14 @@ export default function WorkspaceNewChat() {
                 cloneToProject
               />
 
-              {/* Template */}
+              {/* Theme */}
               <button
                 onClick={() => setTemplateModalOpen(true)}
                 className="px-3 py-1.5 text-sm button-outline rounded-md flex items-center gap-2"
-                aria-label="Clone template"
+                aria-label="Choose theme"
               >
                 <LayoutTemplate className="w-4 h-4" />
-                <span className="hidden sm:inline">Template</span>
+                <span className="hidden sm:inline">Theme</span>
               </button>
 
               {/* Connect data source */}
@@ -666,6 +664,7 @@ export default function WorkspaceNewChat() {
         open={templateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
         onTemplateSelect={handleTemplateSelect}
+        initialSelection={selectedTemplate}
       />
     </div>
   );

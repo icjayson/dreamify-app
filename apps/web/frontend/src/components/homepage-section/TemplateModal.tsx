@@ -1,93 +1,86 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { BUILTIN_TEMPLATES } from "@/constants/builtinTemplates";
-import TemplateColorPreview from "@/components/templates/TemplateColorPreview";
 import { createPortal } from "react-dom";
+import { Check } from "lucide-react";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  ANALYSIS_FOCUSES,
+  VISUAL_THEMES,
+  createThemeSelection,
+  type AnalysisFocusId,
+  type ThemeSelection,
+} from "@/constants/builtinTemplates";
+import TemplateColorPreview from "@/components/templates/TemplateColorPreview";
+import type { ChartPresetTheme } from "@/utils/chartStyling";
 
 interface TemplateModalProps {
   open: boolean;
   onClose: () => void;
-  onTemplateSelect: (template: Template) => void;
-  /** 'toolbar' = pre-run pick from chat input (next generation only)
-   *  'header'  = post-run apply to current dashboard */
-  source?: 'toolbar' | 'header';
+  onTemplateSelect: (template: ThemeSelection) => void;
+  initialSelection?: ThemeSelection | null;
+  /** 'toolbar' = pre-run pick from chat input; 'header' = restyle current dashboard */
+  source?: "toolbar" | "header";
 }
 
-interface Template {
-  id: string;
-  title: string;
-  description: string;
-  suggestedTheme: string;
-  category: string;
-}
-
-const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplateSelect, source = 'toolbar' }) => {
-  const isHeader = source === 'header';
-
-  // Copy strings differ by entry point
+const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplateSelect, initialSelection, source = "toolbar" }) => {
+  const isHeader = source === "header";
   const copy = {
-    title:    isHeader ? 'Apply a Theme'    : 'Choose a Template',
+    title: isHeader ? "Apply a Theme" : "Choose Theme",
     subtitle: isHeader
-      ? 'Instantly restyle your current dashboard'
-      : 'Shapes the layout and metrics of your next dashboard',
-    btnSelect:   isHeader ? 'Apply to dashboard' : 'Use for next run',
-    btnUnselect: isHeader ? 'Remove'             : 'Unselect',
+      ? "Instantly restyle your current dashboard"
+      : "Pick the dashboard look, then optionally guide the analysis",
+    btnSelect: isHeader ? "Apply to dashboard" : "Use for next run",
+    btnUnselect: isHeader ? "Remove" : "Unselect",
+    confirmEmpty: "Pick a theme first",
     confirmActive: (name: string) => isHeader ? `Apply ${name}` : `Use ${name} for Next Run`,
-    confirmEmpty:  isHeader ? 'Pick a theme first' : 'Pick a template first',
   };
+
   const [dragY, setDragY] = useState(0);
   const draggingRef = useRef(false);
   const startYRef = useRef<number | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
-
-  // Responsive: detect desktop to avoid mounting mobile Sheet overlay on desktop
+  const [selectedThemeId, setSelectedThemeId] = useState<ChartPresetTheme | null>(null);
+  const [selectedFocusId, setSelectedFocusId] = useState<AnalysisFocusId>("auto");
   const [isDesktop, setIsDesktop] = useState<boolean>(false);
 
   useEffect(() => {
-    const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 640px)') : null;
+    const mq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 640px)") : null;
     const update = () => setIsDesktop(!!mq && mq.matches);
+    const legacyMq = mq as (MediaQueryList & {
+      addListener?: (listener: () => void) => void;
+      removeListener?: (listener: () => void) => void;
+    }) | null;
     update();
     if (mq) {
       try {
-        mq.addEventListener('change', update);
+        mq.addEventListener("change", update);
       } catch {
-        // Safari fallback
-        // @ts-ignore
-        mq.addListener(update);
+        legacyMq?.addListener?.(update);
       }
     }
     return () => {
       if (mq) {
         try {
-          mq.removeEventListener('change', update);
+          mq.removeEventListener("change", update);
         } catch {
-          // @ts-ignore
-          mq.removeListener(update);
+          legacyMq?.removeListener?.(update);
         }
       }
     };
   }, []);
 
-  // Mobile two-sheet state
-  const [isShowingMobileContent, setIsShowingMobileContent] = useState(false);
-
-  // Reset mobile flow on open
   useEffect(() => {
     if (open) {
-      const isDesktopOrUp = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width: 640px)').matches;
       setDragY(0);
-      // On mobile (< sm), open directly into the content sheet for the selected tab
-      setIsShowingMobileContent(!isDesktopOrUp);
+      setSelectedThemeId(initialSelection?.suggestedTheme ?? initialSelection?.id ?? null);
+      setSelectedFocusId((initialSelection?.analysisFocusId as AnalysisFocusId | undefined) ?? "auto");
     } else {
-      setIsShowingMobileContent(false);
       setDragY(0);
     }
-  }, [open]);
+  }, [initialSelection, open]);
 
   const onHandlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     draggingRef.current = true;
     startYRef.current = e.clientY;
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { }
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
   };
 
   const onHandlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -99,137 +92,153 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
   const onHandlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
-    if (dragY > 100) {
-      onClose();
-    }
+    if (dragY > 100) onClose();
     setDragY(0);
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { }
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   };
 
-  // Map builtin templates to internal Template interface with theme previews
-  const templates: Template[] = BUILTIN_TEMPLATES.map((t) => ({
-    id: t.id,
-    title: t.name,
-    description: t.description,
-    suggestedTheme: t.suggested_theme,
-    category: t.category
-  }));
-
-  const handleTemplateClick = (template: Template) => {
-    if (selectedTemplate?.id === template.id) {
-      // If clicking on already selected template, unselect it
-      setSelectedTemplate(null);
-    } else {
-      // Otherwise, select the template
-      setSelectedTemplate(template);
-    }
+  const handleThemeClick = (themeId: ChartPresetTheme) => {
+    setSelectedThemeId((current) => current === themeId ? null : themeId);
   };
 
   const handleConfirmClick = () => {
-    if (selectedTemplate) {
-      onTemplateSelect(selectedTemplate);
-      onClose();
-    }
+    if (!selectedThemeId) return;
+    const selection = createThemeSelection(selectedThemeId, isHeader ? null : selectedFocusId);
+    if (!selection) return;
+    onTemplateSelect(selection);
+    onClose();
   };
+
+  const selectedTheme = VISUAL_THEMES.find((theme) => theme.id === selectedThemeId);
+  const focusChips = ANALYSIS_FOCUSES;
 
   if (!open) return null;
   if (typeof document === "undefined") return null;
 
+  const renderFocusChips = () => !isHeader && (
+    <div className="border-b border-border px-4 py-3 sm:px-6">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Analysis Focus</p>
+        <p className="text-xs text-muted-foreground">Optional</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {focusChips.map((focus) => {
+          const active = selectedFocusId === focus.id;
+          return (
+            <button
+              key={focus.id}
+              onClick={() => setSelectedFocusId(focus.id)}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors ${
+                active
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-background/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              }`}
+              type="button"
+            >
+              {active && <Check className="h-3 w-3" />}
+              {focus.short_name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderThemeGrid = (compact = false) => (
+    <div className={`grid grid-cols-1 gap-4 ${compact ? "" : "md:grid-cols-2 lg:grid-cols-3"}`}>
+      {VISUAL_THEMES.map((theme) => {
+        const isSelected = selectedThemeId === theme.id;
+        return (
+          <div
+            key={theme.id}
+            onClick={() => handleThemeClick(theme.id)}
+            className={`group relative aspect-video cursor-pointer overflow-hidden rounded-xl transition-all duration-300 hover:scale-[1.02] ${
+              isSelected ? "ring-2 ring-primary" : ""
+            }`}
+          >
+            <TemplateColorPreview theme={theme.id} className="h-full w-full" />
+
+            {isSelected && (
+              <div className="absolute left-4 top-4 z-20 flex items-center gap-1 rounded-md border border-border bg-background/90 px-2 py-1 text-xs font-semibold text-foreground shadow-md dark:bg-muted dark:text-white">
+                <Check className="h-3 w-3 text-primary" />
+                Selected
+              </div>
+            )}
+
+            <div className="absolute inset-0 flex flex-col justify-between bg-black/60 p-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+              <div className="flex justify-end">
+                {isSelected ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedThemeId(null);
+                    }}
+                    className="button-outline rounded-md border-white/40 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10"
+                    type="button"
+                  >
+                    {copy.btnUnselect}
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleThemeClick(theme.id);
+                    }}
+                    className="button-gradient rounded-md px-3 py-1.5 text-xs font-medium"
+                    type="button"
+                  >
+                    {copy.btnSelect}
+                  </button>
+                )}
+              </div>
+
+              <div>
+                <h3 className="mb-1 text-sm font-semibold text-white">{theme.name}</h3>
+                <p className="line-clamp-2 text-xs text-white/70">{theme.description}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return createPortal(
     <>
-      {/* Mobile: Single Sheet (sm:hidden) */}
       {open && !isDesktop && (
-        <Sheet open={open} onOpenChange={(v) => { if (!v) { setIsShowingMobileContent(false); onClose(); } }}>
-          <SheetContent side="bottom" className="sm:hidden h-[80vh] w-full bg-muted border-t border-border rounded-t-2xl overflow-hidden p-0 z-[520]">
-            {/* Drag Handle */}
+        <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+          <SheetContent side="bottom" className="z-[520] h-[80vh] w-full overflow-hidden rounded-t-2xl border-t border-border bg-muted p-0 sm:hidden">
             <div
-              className="w-full flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing select-none"
+              className="flex w-full cursor-grab select-none justify-center pb-1 pt-2 active:cursor-grabbing"
               onPointerDown={onHandlePointerDown}
               onPointerMove={onHandlePointerMove}
               onPointerUp={onHandlePointerUp}
             >
               <div className="h-1.5 w-12 rounded-full bg-white/20" />
             </div>
-            {/* Content with drag translate */}
-            <div style={{ transform: `translateY(${dragY}px)`, transition: draggingRef.current ? 'none' : 'transform 200ms ease' }}>
-              <div className="relative z-10 w-full h-[calc(80vh-20px)] bg-muted overflow-hidden flex flex-col">
-                {/* Header */}
-                <div className="px-4 py-3 border-b border-border">
+            <div style={{ transform: `translateY(${dragY}px)`, transition: draggingRef.current ? "none" : "transform 200ms ease" }}>
+              <div className="relative z-10 flex h-[calc(80vh-20px)] w-full flex-col overflow-hidden bg-muted">
+                <div className="border-b border-border px-4 py-3">
                   <h2 className="text-xl font-semibold text-foreground dark:text-white">{copy.title}</h2>
-                  <p className="text-sm text-muted-foreground dark:text-white/70 mt-1">{copy.subtitle}</p>
+                  <p className="mt-1 text-sm text-muted-foreground dark:text-white/70">{copy.subtitle}</p>
                 </div>
+                {renderFocusChips()}
 
-                {/* Template Grid */}
-                <div className="relative flex-1" style={{ height: 'calc(80vh - 160px)' }}>
+                <div className="relative flex-1" style={{ height: "calc(80vh - 210px)" }}>
                   <div className="absolute inset-0 overflow-y-auto p-4">
-                    <div className="grid grid-cols-1 gap-4">
-                      {templates.map((template) => (
-                        <div
-                          key={template.id}
-                          onClick={() => handleTemplateClick(template)}
-                          className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer hover:scale-[102%] transition-all duration-300 group ${selectedTemplate?.id === template.id ? 'ring-2 ring-primary' : ''
-                            }`}
-                        >
-                          <TemplateColorPreview theme={template.suggestedTheme} className="w-full h-full" />
-
-                          {/* Selected badge */}
-                          {selectedTemplate?.id === template.id && (
-                            <div className="absolute top-4 left-4 bg-muted text-foreground dark:text-white z-20 shadow-sm border border-border/50 px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1">
-                              <svg className="w-3 h-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12"></polyline>
-                              </svg>
-                              Selected
-                            </div>
-                          )}
-
-                          {/* Hover overlay with Select/Unselect Template button */}
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
-                            {/* Select/Unselect Template button - top right */}
-                            <div className="flex justify-end">
-                              {selectedTemplate?.id === template.id ? (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedTemplate(null);
-                                    }}
-                                    className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 text-white border-white/40 hover:bg-white/10"
-                                  >
-                                    {copy.btnUnselect}
-                                  </button>
-                              ) : (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTemplateClick(template);
-                                  }}
-                                  className="button-gradient px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
-                                >
-                                  {copy.btnSelect}
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Title and description - bottom */}
-                            <div>
-                              <h3 className="font-semibold text-white text-sm mb-1">{template.title}</h3>
-                              <p className="text-xs text-white/70 line-clamp-2">{template.description}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    {renderThemeGrid(true)}
                   </div>
                 </div>
 
-                {/* Modal Footer */}
-                <div className="flex-shrink-0 px-4 py-4 border-t border-border bg-muted/50">
+                <div className="flex-shrink-0 border-t border-border bg-muted/50 px-4 py-4">
                   <div className="flex justify-end">
                     <button
                       onClick={handleConfirmClick}
-                      disabled={!selectedTemplate}
-                      className="button-gradient px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!selectedThemeId}
+                      className="button-gradient rounded-md px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                      type="button"
                     >
-                      {selectedTemplate ? copy.confirmActive(selectedTemplate.title) : copy.confirmEmpty}
+                      {selectedTheme ? copy.confirmActive(selectedTheme.name) : copy.confirmEmpty}
                     </button>
                   </div>
                 </div>
@@ -239,106 +248,49 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
         </Sheet>
       )}
 
-      {/* Desktop/Tablet Centered Dialog (hidden on mobile) */}
-      <div className="hidden sm:flex fixed inset-0 z-[520] items-center justify-center p-4">
-        <div className="fixed inset-0 bg-black/80 hidden sm:block" onClick={onClose} />
-        <div className="relative z-10 w-full max-w-6xl h-[80vh] bg-muted rounded-2xl border border-border shadow-xl overflow-hidden">
+      <div className="fixed inset-0 z-[520] hidden items-center justify-center p-4 sm:flex">
+        <div className="fixed inset-0 hidden bg-black/80 sm:block" onClick={onClose} />
+        <div className="relative z-10 h-[80vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-border bg-muted shadow-xl">
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-3 right-3 p-2 rounded-md text-muted-foreground hover:text-foreground dark:text-white/70 dark:hover:text-white hover:bg-black/5 dark:hover:bg-black transition-colors z-10"
+            className="absolute right-3 top-3 z-10 rounded-md p-2 text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:text-white/70 dark:hover:bg-black dark:hover:text-white"
+            type="button"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
 
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-border">
+          <div className="border-b border-border px-6 py-4">
             <h2 className="text-2xl font-semibold text-foreground dark:text-white">{copy.title}</h2>
-            <p className="text-sm text-muted-foreground dark:text-white/70 mt-1">{copy.subtitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground dark:text-white/70">{copy.subtitle}</p>
           </div>
+          {renderFocusChips()}
 
-          {/* Template Grid */}
-          <div className="relative flex-1" style={{ height: 'calc(80vh - 160px)' }}>
+          <div className="relative flex-1" style={{ height: isHeader ? "calc(80vh - 160px)" : "calc(80vh - 230px)" }}>
             <div className="absolute inset-0 overflow-y-auto p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {templates.map((template) => (
-                  <div
-                    key={template.id}
-                    onClick={() => handleTemplateClick(template)}
-                    className={`relative aspect-video rounded-xl overflow-hidden cursor-pointer hover:scale-[102%] transition-all duration-300 group ${selectedTemplate?.id === template.id ? 'ring-2 ring-primary' : ''
-                      }`}
-                  >
-                    <TemplateColorPreview theme={template.suggestedTheme} className="w-full h-full" />
-
-                    {/* Selected badge */}
-                    {selectedTemplate?.id === template.id && (
-                      <div className="absolute top-4 left-4 bg-background/90 dark:bg-muted text-foreground dark:text-white z-20 shadow-md border border-border px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1">
-                        <svg className="w-3 h-3 text-primary animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        Selected
-                      </div>
-                    )}
-
-                    {/* Hover overlay with Select/Unselect Template button */}
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4">
-                      {/* Select/Unselect Template button - top right */}
-                      <div className="flex justify-end">
-                        {selectedTemplate?.id === template.id ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedTemplate(null);
-                            }}
-                            className="button-outline px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 text-white border-white/40 hover:bg-white/10 transition-all shadow-sm"
-                          >
-                            Unselect template
-                          </button>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleTemplateClick(template);
-                            }}
-                            className="button-gradient px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1"
-                          >
-                            Select template
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Title and description - bottom */}
-                      <div>
-                        <h3 className="font-semibold text-white text-sm mb-1">{template.title}</h3>
-                        <p className="text-xs text-white/70 line-clamp-2">{template.description}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {renderThemeGrid()}
             </div>
           </div>
 
-          {/* Modal Footer */}
-          <div className="flex-shrink-0 px-6 py-4 border-t border-border bg-muted/50">
+          <div className="flex-shrink-0 border-t border-border bg-muted/50 px-6 py-4">
             <div className="flex justify-end">
               <button
                 onClick={handleConfirmClick}
-                disabled={!selectedTemplate}
-                className="button-gradient px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!selectedThemeId}
+                className="button-gradient rounded-md px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
               >
-                {selectedTemplate ? `Confirm ${selectedTemplate.title} Template` : 'Select a template'}
+                {selectedTheme ? copy.confirmActive(selectedTheme.name) : copy.confirmEmpty}
               </button>
             </div>
           </div>
         </div>
       </div>
-    </>
-    ,
-    document.body
+    </>,
+    document.body,
   );
 };
 

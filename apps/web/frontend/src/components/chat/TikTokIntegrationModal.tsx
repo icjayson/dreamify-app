@@ -12,6 +12,7 @@ import { fileService } from '@/services/fileService';
 import type { AssetRecord } from '@/services/fileService';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConnectedEntitiesList } from './ConnectedEntitiesList';
+import { connectorModalStyles as modalStyles } from './connectorModalStyles';
 
 const DATE_PRESETS = [
   { value: 'last_7d', label: 'Last 7 days' },
@@ -364,7 +365,7 @@ export default function TikTokIntegrationModal() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[425px] bg-background text-foreground border-border outline-none z-[200]">
+        <DialogContent className={modalStyles.content}>
           {!emptyRowsDialog ? (
             <>
               <DialogHeader>
@@ -386,7 +387,7 @@ export default function TikTokIntegrationModal() {
                       <div className="w-8 h-8 rounded-md bg-pink-500/20 flex items-center justify-center shrink-0">
                         <Link2 className="w-4 h-4 text-pink-500" />
                       </div>
-                      <span className="text-sm font-medium truncate text-white">
+                      <span className={modalStyles.connectedText}>
                         TikTok account connected
                       </span>
                     </div>
@@ -394,7 +395,7 @@ export default function TikTokIntegrationModal() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 text-gray-400 hover:text-white hover:bg-white/10 px-2"
+                      className={modalStyles.ghostButtonSmall}
                       onClick={handleDisconnect}
                       disabled={disconnecting}
                     >
@@ -405,22 +406,22 @@ export default function TikTokIntegrationModal() {
                   <div
                     onClick={!connecting ? handleConnect : undefined}
                     className={cn(
-                      "flex items-center justify-between p-3 border border-white/10 rounded-lg bg-[#222] hover:bg-white/5 transition-colors cursor-pointer group",
+                      modalStyles.disconnectedCard,
                       connecting && "opacity-50 cursor-not-allowed"
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-md bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
-                        {connecting ? <Loader2 className="w-4 h-4 text-gray-400 animate-spin" /> : <img src="/tiktok.png" alt="" className="w-4 h-4 object-contain opacity-70 group-hover:opacity-100 transition-opacity whitespace-nowrap" />}
+                      <div className={modalStyles.disconnectedIcon}>
+                        {connecting ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" /> : <img src="/tiktok.png" alt="" className="w-4 h-4 object-contain opacity-70 group-hover:opacity-100 transition-opacity whitespace-nowrap" />}
                       </div>
-                      <span className="text-sm text-gray-300">Connect with TikTok</span>
+                      <span className={modalStyles.disconnectedText}>Connect with TikTok</span>
                     </div>
                   </div>
                 ) : null}
 
                 {/* ── Error banner ── */}
                 {error && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-700 dark:text-red-400 text-sm">
                     <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <span>{error}</span>
                   </div>
@@ -430,31 +431,31 @@ export default function TikTokIntegrationModal() {
                 {isConnected && (
                   <>
                     {loadingAccounts ? (
-                      <div className="flex flex-col items-center py-6 text-gray-400">
+                      <div className={modalStyles.loadingCompact}>
                         <Loader2 className="w-6 h-6 animate-spin mb-2 text-pink-500" />
                         <p className="text-sm">Loading ad accounts…</p>
                       </div>
                     ) : adAccounts.length === 0 ? (
-                      <div className="text-center py-5 text-gray-400 text-sm border border-white/10 rounded-lg bg-white/5">
+                      <div className={modalStyles.emptyStateCompact}>
                         No ad accounts found. Make sure your account has access to at least one TikTok Ads account.
                       </div>
                     ) : (
                       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-                        <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 p-1 rounded-lg mb-4">
-                          <TabsTrigger value="new" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Connect New Ad Account</TabsTrigger>
-                          <TabsTrigger value="connected" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select Connected Ad Account</TabsTrigger>
+                        <TabsList className={modalStyles.tabsListWithMargin}>
+                          <TabsTrigger value="new" className={modalStyles.tabsTrigger}>Connect New Ad Account</TabsTrigger>
+                          <TabsTrigger value="connected" className={modalStyles.tabsTrigger}>Select Connected Ad Account</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="new" className="space-y-4 outline-none">
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-200">Ad Account</label>
+                            <label className={modalStyles.label}>Ad Account</label>
                             <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                              <SelectTrigger className={modalStyles.selectTrigger}>
                                 <SelectValue placeholder="Select an ad account" />
                               </SelectTrigger>
-                              <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                              <SelectContent className={modalStyles.selectContent}>
                                 <SelectGroup>
-                                  <SelectLabel className="text-xs text-gray-500 uppercase tracking-wide px-2 py-1">
+                                  <SelectLabel className={modalStyles.selectLabel}>
                                     Ad Accounts
                                   </SelectLabel>
                                   {adAccounts.map((a) => (
@@ -468,12 +469,12 @@ export default function TikTokIntegrationModal() {
                           </div>
 
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-200">Date Range</label>
+                            <label className={modalStyles.label}>Date Range</label>
                             <Select value={datePreset} onValueChange={setDatePreset}>
-                              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                              <SelectTrigger className={modalStyles.selectTrigger}>
                                 <SelectValue placeholder="Select date range" />
                               </SelectTrigger>
-                              <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                              <SelectContent className={modalStyles.selectContent}>
                                 {DATE_PRESETS.map((preset) => (
                                   <SelectItem key={preset.value} value={preset.value} className="data-[highlighted]:bg-blue-500/15 data-[highlighted]:text-blue-700 dark:data-[highlighted]:text-blue-300">
                                     {preset.label}
@@ -486,27 +487,27 @@ export default function TikTokIntegrationModal() {
                           {isCustomRange && (
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-200">Start Date</label>
+                                <label className={modalStyles.label}>Start Date</label>
                                 <div className="relative">
                                   <input
                                     type="date"
                                     value={startDate ? formatDateForApi(startDate) : ''}
                                     onChange={(e) => setStartDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
-                                    className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                    className={modalStyles.dateInput}
                                   />
-                                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                                  <CalendarDays className={modalStyles.dateIcon} />
                                 </div>
                               </div>
                               <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-200">End Date</label>
+                                <label className={modalStyles.label}>End Date</label>
                                 <div className="relative">
                                   <input
                                     type="date"
                                     value={endDate ? formatDateForApi(endDate) : ''}
                                     onChange={(e) => setEndDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
-                                    className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                    className={modalStyles.dateInput}
                                   />
-                                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                                  <CalendarDays className={modalStyles.dateIcon} />
                                 </div>
                               </div>
                             </div>
@@ -526,7 +527,7 @@ export default function TikTokIntegrationModal() {
               </div>
 
               <DialogFooter className="sm:justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={onClose} className="text-gray-400 hover:text-white hover:bg-white/10" disabled={syncing}>
+                <Button type="button" variant="ghost" onClick={onClose} className={modalStyles.ghostButton} disabled={syncing}>
                   Cancel
                 </Button>
                 <Button
@@ -550,9 +551,9 @@ export default function TikTokIntegrationModal() {
                 <SearchX className="w-8 h-8 text-orange-400" />
               </div>
 
-              <h2 className="text-xl font-semibold text-white mb-2">No insights found</h2>
+              <h2 className={modalStyles.noDataTitle}>No insights found</h2>
 
-              <p className="text-center text-sm text-gray-400 mb-8 max-w-[300px]">
+              <p className={modalStyles.noDataDescription}>
                 TikTok returned no campaign insights for the selected date range. The export only contains schema headers.
               </p>
 
@@ -570,7 +571,7 @@ export default function TikTokIntegrationModal() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10 transition-all font-medium"
+                  className={modalStyles.secondaryActionButton}
                   onClick={handleEmptyKeepSchema}
                   disabled={discardingEmpty}
                 >

@@ -37,18 +37,18 @@ const ChartPreviewChip = ({ chart, onRemove }: ChartPreviewChipProps) => {
     return (
         <Tooltip>
             <TooltipTrigger asChild>
-                <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-purple-500/30 bg-purple-500/5 dark:bg-purple-500/10 px-3 py-2 transition-all hover:border-purple-500/50 outline-none">
-                    <IconComponent className="h-4 w-4 flex-shrink-0 text-purple-600 dark:text-purple-400" />
+                <div className="inline-flex h-6 max-w-full flex-shrink-0 cursor-default items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/5 px-1.5 text-[12px] font-medium leading-none text-foreground shadow-sm outline-none transition-all hover:border-purple-500/50 dark:bg-purple-500/10">
+                    <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border border-purple-500/20 bg-background/80 dark:bg-black/20">
+                        <IconComponent className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                    </span>
 
-                    <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
-                        <span className="flex-shrink-0 font-semibold text-purple-700 dark:text-purple-300">
-                            {typeLabel}
-                        </span>
-                        <span className="flex-shrink-0 font-light text-muted-foreground/30">•</span>
-                        <span className="min-w-0 flex-1 truncate text-foreground/80 dark:text-gray-400" title={chart.title}>
-                            {chart.title}
-                        </span>
-                    </div>
+                    <span className="flex-shrink-0 font-semibold text-purple-700 dark:text-purple-300">
+                        {typeLabel}
+                    </span>
+                    <span className="flex-shrink-0 font-light text-muted-foreground/30">•</span>
+                    <span className="min-w-0 max-w-[9rem] flex-1 truncate text-foreground/80 dark:text-gray-400 sm:max-w-[12rem]" title={chart.title}>
+                        {chart.title}
+                    </span>
 
                     <button
                         type="button"
@@ -56,7 +56,7 @@ const ChartPreviewChip = ({ chart, onRemove }: ChartPreviewChipProps) => {
                             e.stopPropagation();
                             onRemove();
                         }}
-                        className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-muted-foreground hover:text-foreground dark:hover:text-white transition-colors"
+                        className="-mr-0.5 grid h-4 w-4 flex-shrink-0 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground dark:hover:bg-white/10 dark:hover:text-white"
                         aria-label="Remove chart reference"
                     >
                         <X className="h-3 w-3" />

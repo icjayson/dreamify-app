@@ -1,5 +1,46 @@
 import type { DashboardComponent } from "@/types/dashboard";
 
+export type AssetSelectionMode = "none" | "explicit" | "all";
+export const EXPLICIT_PROMPT_THEME_SOURCE = "explicit_prompt_selection";
+
+export type ClarificationReasonCode =
+  | "missing_data_context"
+  | "ambiguous_metric"
+  | "ambiguous_time_range"
+  | "multiple_matching_assets"
+  | "chart_direction"
+  | "join_strategy"
+  | string;
+
+export interface ClarificationOption {
+  id: string;
+  label: string;
+  description?: string;
+  recommended?: boolean;
+  impact?: string;
+  metadata?: {
+    asset_ids?: string[];
+    asset_selection?: AssetSelectionMode;
+    [key: string]: unknown;
+  };
+}
+
+export interface ClarificationRequest {
+  clarification_id: string;
+  reason_code: ClarificationReasonCode;
+  question: string;
+  options: ClarificationOption[];
+  allow_free_text?: boolean;
+  required?: boolean;
+}
+
+export interface ClarificationResolution {
+  clarification_id: string;
+  status: "no_answer";
+  question: string;
+  resolved_at?: string;
+}
+
 export interface ThinkingEvent {
   id: string;
   run_id: string;
@@ -53,6 +94,8 @@ export interface Message {
     image?: string;
     category: string;
     suggestedTheme?: string;
+    analysisFocusId?: string;
+    analysisFocusName?: string;
   };
   dashboardCard?: {
     sourceFileName: string;
@@ -72,5 +115,7 @@ export interface Message {
     id: string;
     text: string;
   }>;
+  clarificationRequest?: ClarificationRequest;
+  clarificationResolution?: ClarificationResolution;
   thinkingTrace?: ThinkingEvent[];
 }

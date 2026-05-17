@@ -100,7 +100,7 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
                 <ArrowUpDown className="ml-2 h-3 w-3" />
               </Button>
             </TableHead>
-            <TableHead>Template</TableHead>
+            <TableHead>Theme / Focus</TableHead>
             <TableHead>Environment</TableHead>
             <TableHead>Tokens</TableHead>
             <TableHead>
@@ -159,10 +159,13 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
               </TableCell>
               <TableCell>{conv.title}</TableCell>
               <TableCell>
-                {conv.template_id ? (
+                {(conv.theme_id || conv.analysis_focus_id || conv.template_id) ? (
                   <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
                     <LayoutTemplate className="h-3 w-3" />
-                    <span className="truncate max-w-[100px]">{conv.template_id}</span>
+                    <span className="truncate max-w-[120px]">
+                      {conv.theme_id || conv.template_id}
+                      {conv.analysis_focus_id ? ` / ${conv.analysis_focus_id}` : ''}
+                    </span>
                   </div>
                 ) : (
                   <span className="text-muted-foreground text-xs italic">none</span>
@@ -218,4 +221,3 @@ export function ConversationTable({ conversations }: ConversationTableProps) {
     </div>
   );
 }
-

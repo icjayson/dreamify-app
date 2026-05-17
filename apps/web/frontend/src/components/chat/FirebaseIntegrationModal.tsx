@@ -5,7 +5,6 @@ import { integrationService, FirebaseProject } from '@/services/integrationServi
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, AlertCircle, CalendarDays, Link2, ShieldCheck } from 'lucide-react';
 import { formatDateForApi, subtractDays } from '@/utils/timestamp';
-import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
 import { fileService } from '@/services/fileService';
 import type { AssetRecord } from '@/services/fileService';
@@ -14,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConnectedEntitiesList } from './ConnectedEntitiesList';
 import { GOOGLE_CONNECTOR_SCOPES } from '@/constants/googleScopes';
 import { sanitizeConnectorError, isOAuthScopeError } from '@/utils/connectorErrors';
+import { connectorModalStyles as modalStyles } from './connectorModalStyles';
 
 const DATE_PRESETS = [
   { value: 'last_7d', label: 'Last 7 days' },
@@ -279,7 +279,7 @@ export default function FirebaseIntegrationModal() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[425px] bg-background text-foreground border-border outline-none z-[200]">
+        <DialogContent className={modalStyles.content}>
           {!emptyRowsDialog ? (
             <>
               <DialogHeader>
@@ -294,7 +294,7 @@ export default function FirebaseIntegrationModal() {
 
               <div className="py-6 space-y-4">
                 {(modalState === 'checking' || isAuthorizing) && (
-                  <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                  <div className={modalStyles.loading}>
                     <Loader2 className="w-8 h-8 animate-spin mb-2 text-[#FFA000]" />
                     <p className="text-sm">
                       {isAuthorizing ? 'Requesting Firebase access…' : 'Checking connection…'}
@@ -309,8 +309,8 @@ export default function FirebaseIntegrationModal() {
                         <ShieldCheck className="w-4 h-4 text-[#FFA000]" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-orange-300">Firebase access required</p>
-                        <p className="text-xs text-gray-400 mt-0.5">
+                        <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Firebase access required</p>
+                        <p className={`${modalStyles.subtleText} mt-0.5`}>
                           {isGoogleLinked
                             ? 'Grant Firebase permission to your connected Google account.'
                             : 'Connect your Google account and grant Firebase permission.'}
@@ -318,14 +318,14 @@ export default function FirebaseIntegrationModal() {
                       </div>
                     </div>
                     {displayError && (
-                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-700 dark:text-red-400 text-sm">
                         <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                         <span>{displayError}</span>
                       </div>
                     )}
                     <Button
                       onClick={handleGrantAccess}
-                      className="bg-white text-black hover:bg-gray-100 text-sm font-medium w-full"
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium w-full"
                     >
                       {isGoogleLinked ? 'Grant Firebase Access' : 'Connect Google Account'}
                     </Button>
@@ -339,39 +339,39 @@ export default function FirebaseIntegrationModal() {
                         <div className="w-8 h-8 rounded-md bg-[#FFA000]/20 flex items-center justify-center shrink-0">
                           <Link2 className="w-4 h-4 text-[#FFA000]" />
                         </div>
-                        <span className="text-sm font-medium truncate text-white">Google account connected</span>
+                        <span className={modalStyles.connectedText}>Google account connected</span>
                       </div>
                     </div>
 
                     {error ? (
-                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-700 dark:text-red-400 text-sm">
                         <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                         <span>{error}</span>
                       </div>
                     ) : projects.length === 0 ? (
-                      <div className="text-center py-6 text-gray-400 text-sm border border-white/10 rounded-lg bg-white/5">
+                      <div className={modalStyles.emptyState}>
                         No Firebase projects found under this connected account.
                       </div>
                     ) : (
                       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="mt-4">
-                        <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 p-1 rounded-lg">
-                          <TabsTrigger value="new" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Connect New Project</TabsTrigger>
-                          <TabsTrigger value="connected" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select Connected Project</TabsTrigger>
+                        <TabsList className={modalStyles.tabsList}>
+                          <TabsTrigger value="new" className={modalStyles.tabsTrigger}>Connect New Project</TabsTrigger>
+                          <TabsTrigger value="connected" className={modalStyles.tabsTrigger}>Select Connected Project</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="new" className="space-y-4 mt-4 outline-none">
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-200">Firebase Project</label>
+                            <label className={modalStyles.label}>Firebase Project</label>
                             <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                              <SelectTrigger className={modalStyles.selectTrigger}>
                                 <SelectValue placeholder="Select a project" />
                               </SelectTrigger>
-                              <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                              <SelectContent className={modalStyles.selectContent}>
                                 {projects.map((proj) => (
                                   <SelectItem key={proj.id} value={proj.id} className="data-[highlighted]:bg-amber-500/15 data-[highlighted]:text-amber-700 dark:data-[highlighted]:text-amber-300">
                                     <div className="flex flex-col">
                                       <span>{proj.name}</span>
-                                      <span className="text-[10px] text-gray-400 uppercase tracking-wider">{proj.source_type}</span>
+                                      <span className={modalStyles.selectMetaText}>{proj.source_type}</span>
                                     </div>
                                   </SelectItem>
                                 ))}
@@ -380,12 +380,12 @@ export default function FirebaseIntegrationModal() {
                           </div>
 
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-200">Date Range</label>
+                            <label className={modalStyles.label}>Date Range</label>
                             <Select value={datePreset} onValueChange={setDatePreset}>
-                              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                              <SelectTrigger className={modalStyles.selectTrigger}>
                                 <SelectValue placeholder="Select date range" />
                               </SelectTrigger>
-                              <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                              <SelectContent className={modalStyles.selectContent}>
                                 {DATE_PRESETS.map((preset) => (
                                   <SelectItem key={preset.value} value={preset.value} className="data-[highlighted]:bg-amber-500/15 data-[highlighted]:text-amber-700 dark:data-[highlighted]:text-amber-300">
                                     {preset.label}
@@ -398,27 +398,27 @@ export default function FirebaseIntegrationModal() {
                           {isCustomRange && (
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-200">Start Date</label>
+                                <label className={modalStyles.label}>Start Date</label>
                                 <div className="relative">
                                   <input
                                     type="date"
                                     value={startDate ? formatDateForApi(startDate) : ''}
                                     onChange={(e) => setStartDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
-                                    className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                    className={modalStyles.dateInput}
                                   />
-                                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                                  <CalendarDays className={modalStyles.dateIcon} />
                                 </div>
                               </div>
                               <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-200">End Date</label>
+                                <label className={modalStyles.label}>End Date</label>
                                 <div className="relative">
                                   <input
                                     type="date"
                                     value={endDate ? formatDateForApi(endDate) : ''}
                                     onChange={(e) => setEndDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
-                                    className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                    className={modalStyles.dateInput}
                                   />
-                                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                                  <CalendarDays className={modalStyles.dateIcon} />
                                 </div>
                               </div>
                             </div>
@@ -443,7 +443,7 @@ export default function FirebaseIntegrationModal() {
                   type="button"
                   variant="ghost"
                   onClick={onClose}
-                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                  className={modalStyles.ghostButton}
                   disabled={syncing}
                 >
                   Cancel
@@ -454,7 +454,7 @@ export default function FirebaseIntegrationModal() {
                     type="button"
                     onClick={handleSync}
                     disabled={activeTab === 'connected' || syncing || !selectedProjectId}
-                    className={`bg-[#FFA000] hover:bg-[#FF8F00] text-white font-medium px-4 py-2 rounded-md transition-colors ${activeTab === 'connected' ? 'opacity-0 pointer-events-none' : ''}`}
+                    className={`bg-[#FFA000] hover:bg-[#FF8F00] text-zinc-950 font-medium px-4 py-2 rounded-md transition-colors ${activeTab === 'connected' ? 'opacity-0 pointer-events-none' : ''}`}
                   >
                     {syncing ? (
                       <>
@@ -472,11 +472,11 @@ export default function FirebaseIntegrationModal() {
             <>
               <DialogHeader>
                 <DialogTitle className="text-xl font-semibold">No data found</DialogTitle>
-                <DialogDescription className="text-gray-400 text-sm">
-                  The <span className="text-white font-medium">{emptyRowsDialog.reportLabel}</span> project returned 0 rows for the selected date range.
+                <DialogDescription className="text-muted-foreground text-sm">
+                  The <span className="text-foreground font-medium">{emptyRowsDialog.reportLabel}</span> project returned 0 rows for the selected date range.
                 </DialogDescription>
               </DialogHeader>
-              <div className="py-4 text-sm text-gray-400">
+              <div className="py-4 text-sm text-muted-foreground">
                 You can try a different date range, or keep the empty file with just the column headers (schema only).
               </div>
               <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -485,7 +485,7 @@ export default function FirebaseIntegrationModal() {
                   variant="ghost"
                   onClick={handleEmptyTryAnotherRange}
                   disabled={discardingEmpty}
-                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                  className={modalStyles.ghostButton}
                 >
                   {discardingEmpty ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Try different dates
@@ -494,7 +494,7 @@ export default function FirebaseIntegrationModal() {
                   type="button"
                   onClick={handleEmptyKeepSchema}
                   disabled={discardingEmpty}
-                  className="bg-[#FFA000] hover:bg-[#FF8F00] text-white font-medium px-4 py-2 rounded-md transition-colors"
+                  className="bg-[#FFA000] hover:bg-[#FF8F00] text-zinc-950 font-medium px-4 py-2 rounded-md transition-colors"
                 >
                   Keep schema
                 </Button>

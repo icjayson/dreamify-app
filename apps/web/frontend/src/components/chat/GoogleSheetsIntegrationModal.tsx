@@ -270,7 +270,7 @@ export default function GoogleSheetsIntegrationModal() {
         <div className="py-6">
           {/* Loading / Authorizing state */}
           {(loading || isAuthorizing) ? (
-            <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <Loader2 className="w-8 h-8 animate-spin mb-2 text-green-500" />
               <p className="text-sm">
                 {isAuthorizing ? 'Requesting Google Drive access…' : 'Authenticating...'}

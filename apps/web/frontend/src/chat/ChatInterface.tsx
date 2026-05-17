@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState, useMemo, useCallback } from "react";
+import { Fragment, useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, X, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap, Maximize2 } from "lucide-react";
+import { CornerRightUp, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap, Maximize2 } from "lucide-react";
 import FileAttachDropdown from "@/components/chat/FileAttachDropdown";
 import { CONNECTORS, CONNECTOR_CATEGORIES, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
@@ -9,28 +9,45 @@ import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { fileService, type UploadResponse, type AssetRecord } from "@/services/fileService";
 import { conversationService } from "@/services/conversationService";
+import { conversationNodesToMessages } from "@/chat/conversationToMessages";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
-import { useChatStore, type UploadedFile, isNonAnalyzableUpload } from "@/chat/useChatStore";
+import {
+  buildAttachmentFromFiles,
+  getExplicitPromptAssetIds,
+  getExplicitPromptFiles,
+  isNonAnalyzableUpload,
+  useChatStore,
+  type UploadedFile,
+} from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
+import type { ThemeSelection } from "@/constants/builtinTemplates";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
 import InlineCsvPreview from "../components/chat/InlineCsvPreview";
 import ChartPreviewChip from "../components/chat/ChartPreviewChip";
+import { DataContextInlineToken } from "@/components/chat/DataContextInlineToken";
+import { ThemeInlineToken } from "@/components/chat/ThemeInlineToken";
 import type { ChartChipData } from "../components/chat/ChartPreviewChip";
 import { ChatVisualArtifact } from "@/components/chat/ChatVisualArtifact";
+import {
+  ClarificationInputOverlay,
+} from "@/components/chat/ClarificationInputOverlay";
+import { getLatestPendingClarificationMessage } from "@/components/chat/clarificationOverlayUtils";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
 import CreditIcon from "./CreditIcon";
 import ModelSelector from "./ModelSelector";
 import { CreditExhaustedCard } from "./CreditExhaustedCard";
 import type { DashboardComponent } from "@/types/dashboard";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import { useTheme } from "@/hooks/useTheme";
 import { formatToDisplay } from "@/utils/timestamp";
+import { normalizeConnectorSource, type DataContextTokenSource } from "@/utils/dataContextTokens";
 import { useUser } from "@clerk/clerk-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { ThinkingEvent } from "@/types/message";
+import type { ClarificationOption, Message, ThinkingEvent } from "@/types/message";
 
 
 // Creative phrase variants per backend step — each key maps to a real Morpheus workflow step
@@ -242,7 +259,7 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
     const lines = textToParse.split('\n')
       .map(line => line.trim())
       .filter(line => line.length > 0);
-    return lines.map(line => line.replace(/^([-\*o]|\d+\.)\s*/, '').trim());
+    return lines.map(line => line.replace(/^([-*o]|\d+\.)\s*/, '').trim());
   }, [prompt, savedTasks]);
 
   const [workflowTasks, setWorkflowTasks] = useState<{ id: string, text: string }[]>([]);
@@ -279,7 +296,7 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
       });
       prevStepRef.current = currentStep;
     }
-  }, [currentStep, isActive, workflowTasks.length, savedTasks]);
+  }, [currentStep, initialSteps, isActive, workflowTasks.length, savedTasks]);
 
   const displayTasks = savedTasks
     ? savedTasks
@@ -660,6 +677,57 @@ const ThinkingProcess = ({ events, fallbackTasks, isActive, inline, compactSurfa
   );
 };
 
+const ClarificationQuestionTrace = ({
+  resolution,
+}: {
+  resolution: NonNullable<Message["clarificationResolution"]>;
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((current) => !current)}
+      className="group mt-2 flex w-fit max-w-full flex-col items-start rounded-md px-0.5 py-1 text-left transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+    >
+      <span className="inline-flex min-h-7 max-w-full items-center gap-2 text-sm text-muted-foreground">
+        <span className="relative flex h-4 w-4 flex-shrink-0 items-center justify-center">
+          <Sparkles className="relative h-3.5 w-3.5 text-primary" />
+        </span>
+        <span className="min-w-0 max-w-[min(620px,calc(100vw-180px))] truncate">
+          Asked 1 question
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 opacity-60 transition-transform ${open ? "rotate-180" : ""} group-hover:opacity-80`} />
+      </span>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.span
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="ml-5 mt-1.5 flex max-w-[min(600px,calc(100vw-190px))] flex-col gap-1 overflow-hidden"
+          >
+            <span className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 text-[13px] leading-5 text-muted-foreground/80">
+              <span className="relative flex h-5 w-4 items-center justify-center">
+                <span className="absolute left-1/2 top-[15px] h-[14px] w-px -translate-x-1/2 bg-primary/15" />
+                <Check className="relative h-3.5 w-3.5 text-primary/55" />
+              </span>
+              <span className="truncate pt-px">{resolution.question}</span>
+            </span>
+            <span className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 text-[13px] leading-5 text-muted-foreground/55">
+              <span className="flex h-5 w-4 items-center justify-center">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/35" />
+              </span>
+              <span className="truncate pt-px">No answer provided</span>
+            </span>
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </button>
+  );
+};
+
 // Fetch project assets for @mention feature
 const fetchProjectAssets = async (projectId: string): Promise<Array<{
   id: string;
@@ -702,7 +770,7 @@ const fetchProjectAssets = async (projectId: string): Promise<Array<{
 
 interface ChatInterfaceProps {
   projectId?: string;
-  onProcessedDataChange?: (data: any) => void;
+  onProcessedDataChange?: (data: unknown) => void;
   onSwitchToDashboard?: (dashboardId?: string) => void;
   onShowCsvPreview?: (assetId: string, filename: string) => void;
   onProjectNameAccepted?: (projectName: string) => void;
@@ -720,6 +788,285 @@ type AttachmentFileItem = {
   syncVersionName?: string;
 };
 
+const CHART_INLINE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  bar: BarChart3,
+  line: TrendingUp,
+  pie: PieChart,
+  donut: PieChart,
+  area: AreaChart,
+  metric: Hash,
+  table: Table2,
+  composed: BarChart3,
+};
+
+type MetadataTokenKind = "theme" | "data" | "chart";
+
+type MetadataTokenDescriptor = {
+  id: string;
+  kind: MetadataTokenKind;
+  priority: number;
+  renderInline: () => JSX.Element;
+  renderOverflow: () => JSX.Element;
+};
+
+const MESSAGE_VISIBLE_TOKEN_COUNT = 1;
+const COMPACT_COMPOSER_VISIBLE_TOKEN_COUNT = 2;
+const FULL_COMPOSER_VISIBLE_TOKEN_COUNT = 3;
+
+type DashboardComponentConfigPreview = {
+  id?: string;
+  title?: string;
+  type?: string;
+};
+
+type DashboardMessageCardProps = {
+  dashboardCard: NonNullable<Message["dashboardCard"]>;
+  isCompact: boolean;
+  isDashboardOpen: boolean;
+  hasMessageContent: boolean;
+  onOpen?: (dashboardId?: string) => void;
+};
+
+function getDashboardSourceLabel(dashboardCard: NonNullable<Message["dashboardCard"]>): string {
+  const accountName = dashboardCard.accountName;
+  if (accountName) return accountName;
+
+  const source = (dashboardCard.sourceType || dashboardCard.sourceFileName || "").toLowerCase();
+  const filename = (dashboardCard.sourceFileName || "").toLowerCase();
+  if (source.includes("ga4") || source.includes("google_analytics") || source.includes("google analytics") || filename.includes("ga4") || filename.includes("google_analytics")) return "GA4 Data";
+  if (source.includes("sheet") || source.includes("google sheets") || filename.includes("google_sheet") || filename.includes("gsheet")) return "Google Sheets Data";
+  if (source.includes("google ads") || source.includes("google_ads") || filename.includes("google_ads")) return "Google Ads Data";
+  if (source.includes("firebase") || filename.includes("firebase")) return "Firebase Data";
+  if (source.includes("tiktok") || filename.includes("tiktok")) return "TikTok Data";
+  if (source.includes("appsflyer") || filename.includes("appsflyer")) return "AppsFlyer Data";
+  if (source.includes("stripe") || filename.includes("stripe")) return "Stripe Data";
+  if (source.includes("meta") || filename.includes("meta_ads")) return "Meta Ads Data";
+  return dashboardCard.sourceFileName.replace(/\.[^/.]+$/, "");
+}
+
+function DashboardMessageCard({
+  dashboardCard,
+  isCompact,
+  isDashboardOpen,
+  hasMessageContent,
+  onOpen,
+}: DashboardMessageCardProps) {
+  const title = dashboardCard.dashboardTitle || "Dashboard";
+  const sourceLabel = getDashboardSourceLabel(dashboardCard);
+  const gradientId = `dashboardCardBarGrad-${dashboardCard.dashboardId || "fallback"}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const secondaryGradientId = `${gradientId}-secondary`;
+  const widthClass = isCompact
+    ? "w-full max-w-full min-w-0"
+    : "w-full min-w-0 max-w-[27rem]";
+  const openDashboard = () => {
+    onOpen?.(dashboardCard.dashboardId);
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Open dashboard"
+          onClick={openDashboard}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openDashboard();
+            }
+          }}
+          className={`group/dashboard relative flex min-h-[56px] ${widthClass} cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-card/80 px-3 py-2.5 text-left shadow-sm outline-none transition-all select-none hover:border-border/80 hover:bg-card focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20 dark:hover:bg-white/[0.07] ${hasMessageContent ? "mt-3" : ""}`}
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <div className="relative grid h-8 w-8 flex-shrink-0 place-items-center overflow-hidden rounded-md bg-gradient-to-br from-violet-500/20 via-blue-500/15 to-cyan-500/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] transition-all duration-300 group-hover/dashboard:from-violet-500/30 group-hover/dashboard:via-blue-500/25 group-hover/dashboard:to-cyan-500/20">
+              <div className="absolute inset-0 rounded-md ring-1 ring-inset ring-border/50 transition-all duration-300 group-hover/dashboard:ring-border dark:ring-white/10 dark:group-hover/dashboard:ring-white/15" />
+              <svg viewBox="0 0 40 40" className="relative h-full w-full" aria-hidden="true">
+                <defs>
+                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(221 83% 70%)" stopOpacity="1" />
+                    <stop offset="100%" stopColor="hsl(260 80% 60%)" stopOpacity="0.6" />
+                  </linearGradient>
+                  <linearGradient id={secondaryGradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(175 80% 60%)" stopOpacity="0.9" />
+                    <stop offset="100%" stopColor="hsl(221 83% 60%)" stopOpacity="0.5" />
+                  </linearGradient>
+                </defs>
+                <path d="M5 15 L11 11 L17 14 L23 7 L29 10 L35 6" stroke="hsl(142 76% 60%)" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.75" />
+                <rect x="5" y="24" width="5" height="11" rx="1.5" fill={`url(#${gradientId})`} opacity="0.5" />
+                <rect x="12" y="20" width="5" height="15" rx="1.5" fill={`url(#${gradientId})`} opacity="0.8" />
+                <rect x="19" y="25" width="5" height="10" rx="1.5" fill={`url(#${secondaryGradientId})`} opacity="0.55" />
+                <rect x="26" y="21" width="5" height="14" rx="1.5" fill={`url(#${gradientId})`} opacity="0.9" />
+                <circle cx="23" cy="7" r="2.1" fill="hsl(142 76% 60%)" opacity="0.9" />
+                <circle cx="23" cy="7" r="3.4" fill="hsl(142 76% 60%)" opacity="0.18" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-medium leading-5 text-foreground dark:text-white">
+                {title}
+              </div>
+              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground dark:text-white/50">
+                <span className="shrink-0 rounded-[5px] border border-border/70 bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-white/10 dark:bg-black/20 dark:text-white/55">
+                  Dashboard
+                </span>
+                <span className="min-w-0 truncate">{sourceLabel}</span>
+              </div>
+            </div>
+          </div>
+          {!isDashboardOpen && (
+            <span className="button-outline inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition-colors group-hover/dashboard:text-foreground dark:text-white/70 dark:group-hover/dashboard:text-white" aria-hidden="true">
+              <Maximize2 className="h-3 w-3" />
+              Open
+            </span>
+          )}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={8}
+        className="z-[300] max-w-[min(90vw,300px)] bg-black/90 text-xs text-white shadow-lg break-words"
+      >
+        {title}{sourceLabel ? ` - ${sourceLabel}` : ""}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function dedupeDataContextTokenSources(sources: DataContextTokenSource[]): DataContextTokenSource[] {
+  const seen = new Set<string>();
+
+  return sources.filter((source) => {
+    const connector = normalizeConnectorSource(source.sourceType);
+    const key = [
+      connector?.name || source.sourceType || source.kind || "file",
+      source.accountName || "",
+      source.propertyName || "",
+      source.syncVersionName || "",
+      source.filename || source.name || "",
+    ].join("|").toLowerCase();
+
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getAttachmentTokenSources(attachment?: Message["attachment"]): DataContextTokenSource[] {
+  if (!attachment) return [];
+
+  if (attachment.files?.length) {
+    return dedupeDataContextTokenSources(attachment.files.map((file) => ({
+      id: file.id,
+      filename: file.name,
+      ext: file.ext,
+      sourceType: file.sourceType,
+      accountName: file.accountName,
+      propertyName: file.propertyName,
+      syncVersionName: file.syncVersionName,
+      status: "processed",
+    })));
+  }
+
+  return dedupeDataContextTokenSources([{
+    filename: attachment.name,
+    kind: attachment.kind,
+    sourceType: attachment.sourceType,
+    accountName: attachment.accountName,
+    propertyName: attachment.propertyName,
+    syncVersionName: attachment.syncVersionName,
+    status: "processed",
+  }]);
+}
+
+function splitMetadataTokens(tokens: MetadataTokenDescriptor[], visibleCount: number) {
+  if (tokens.length <= visibleCount) {
+    return { visibleTokens: tokens, overflowTokens: [] };
+  }
+  const orderedTokens = [...tokens].sort((a, b) => a.priority - b.priority);
+  return {
+    visibleTokens: orderedTokens.slice(0, visibleCount),
+    overflowTokens: orderedTokens.slice(visibleCount),
+  };
+}
+
+function MetadataOverflowToken({ tokens }: { tokens: MetadataTokenDescriptor[] }) {
+  if (tokens.length === 0) return null;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="mr-1.5 inline-flex h-6 shrink-0 items-center rounded-md border border-border/80 bg-background/85 px-2 text-[12px] font-semibold leading-none text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground dark:border-white/15 dark:bg-white/[0.08] dark:text-white/65 dark:hover:bg-white/15 dark:hover:text-white"
+          aria-label={`Show ${tokens.length} more context tags`}
+        >
+          +{tokens.length}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        className="z-[320] w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-xl dark:border-white/15"
+      >
+        <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Context
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {tokens.map((token) => (
+            <Fragment key={token.id}>{token.renderOverflow()}</Fragment>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ChartMentionInlineToken({
+  chart,
+  isDone,
+  className = "mr-1.5",
+}: {
+  chart: NonNullable<Message["chartMentions"]>[number];
+  isDone: boolean;
+  className?: string;
+}) {
+  const ChartIcon = CHART_INLINE_ICONS[chart.type] || BarChart3;
+  const typeLabel = chart.type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={`${className} inline-flex h-6 max-w-full shrink-0 items-center gap-1.5 rounded-md border px-1.5 text-[12px] font-medium leading-none align-baseline shadow-sm ${
+            isDone
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300"
+          }`}
+          title={chart.title}
+          aria-label={`${isDone ? "Edited" : "Editing"} ${typeLabel}: ${chart.title}`}
+        >
+          <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border border-current/20 bg-background/70 dark:bg-black/20">
+            <ChartIcon className="h-3 w-3" />
+          </span>
+          {isDone ? <Check className="h-3 w-3 shrink-0" /> : <Pencil className="h-3 w-3 shrink-0" />}
+          <span className="shrink-0 font-semibold">{typeLabel}</span>
+          <span className="min-w-0 max-w-[9rem] truncate text-foreground/70 dark:text-white/60 sm:max-w-[12rem]">
+            {chart.title}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={8}
+        className="z-[300] max-w-[min(90vw,260px)] !bg-black/90 !text-white text-xs shadow-lg break-words"
+      >
+        {chart.title}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, onProjectNameAccepted, dashboardComponents, isSidePanelOpen = false }: ChatInterfaceProps) => {
   const { resolvedTheme } = useTheme();
   const logoFavicon = "/logo-favicon.png";
@@ -734,6 +1081,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
+  const [dismissedClarificationIds, setDismissedClarificationIds] = useState<Set<string>>(new Set());
+  const [isDismissingClarification, setIsDismissingClarification] = useState(false);
 
   // @Mention state
   // @Mention / Context Picker state
@@ -789,6 +1138,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     sendMessage,
     clearInput,
     processFileWithMessage,
+    submitClarificationResponse,
     stopGeneration,
     setGoogleSheetsModalOpen,
     setGA4ModalOpen,
@@ -825,7 +1175,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const stagedFiles = uploadedFiles.filter(f => f.status !== 'processed' && f.status !== 'error');
+  const stagedFiles = uploadedFiles.filter((file) =>
+    file.status !== 'error' &&
+    (
+      mentionedAssetIds.includes(file.fileID) ||
+      (!file.conversationId && file.status !== 'processed')
+    )
+  );
   const isSendingRef = useRef<boolean>(false);
   const { toast } = useToast();
   const { user: clerkUser } = useUser();
@@ -844,12 +1200,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     if (!dashboardComponents) return [];
     return dashboardComponents
       .filter(c => c.type === 'chart' || c.type === 'metric' || c.type === 'table')
-      .map(c => ({
-        id: (c.component_config as any).id || c.id,
-        componentId: c.id,
-        title: (c.component_config as any).title || 'Untitled',
-        type: (c.component_config as any).type || c.type,
-      }));
+      .map(c => {
+        const config = c.component_config as DashboardComponentConfigPreview;
+        return {
+          id: config.id || c.id,
+          componentId: c.id,
+          title: config.title || 'Untitled',
+          type: config.type || c.type,
+        };
+      });
   }, [dashboardComponents]);
 
   // Speech recognition hook
@@ -994,7 +1353,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
+      .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
 
   const parseMessageToHtml = (raw: string): string => {
@@ -1050,7 +1409,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [dropdownOpen]);
+  }, [dropdownOpen, isContextPickerOpen, setDropdownOpen]);
 
   const handleSend = async (csvSummaryOverride?: string) => {
     if (!inputValue.trim()) return;
@@ -1059,17 +1418,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       toast({ title: "Upload in progress", description: "Please wait for the file to finish uploading.", variant: "destructive" });
       return;
     }
-    const hasValidUploadedFiles = uploadedFiles.some(f => ['uploaded', 'processed', 'accepted'].includes(f.status));
-    if (projectAssets.length === 0 && !hasValidUploadedFiles) {
-      toast({ title: "Upload required", description: "Upload at least one file before asking a question.", variant: "destructive" });
-      return;
-    }
-    const hasAnalyzableUpload = uploadedFiles.some(
+    const promptFiles = getExplicitPromptFiles(uploadedFiles, mentionedAssetIds);
+    const hasValidUploadedFiles = promptFiles.some(f => ['uploaded', 'processed', 'accepted'].includes(f.status));
+    const hasAnalyzableUpload = promptFiles.some(
       (f) => ['uploaded', 'processed', 'accepted'].includes(f.status) && !isNonAnalyzableUpload(f),
     );
     const hasOtherContext =
-      mentionedAssetIds.length > 0 || mentionedCharts.length > 0 || projectAssets.length > 0;
-    if (!hasAnalyzableUpload && !hasOtherContext) {
+      mentionedAssetIds.length > 0 || mentionedCharts.length > 0;
+    if (hasValidUploadedFiles && !hasAnalyzableUpload && !hasOtherContext) {
       toast({
         title: "No data rows to analyze",
         description:
@@ -1095,15 +1451,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         }
       }, 10);
 
-      // Compute active files (exclude restored/processed files) for mentions and attachment
-      const activeFiles = uploadedFiles.filter(f => f.status !== 'processed');
-
-      let finalMentionedIds = [...mentionedAssetIds];
-      activeFiles.forEach(file => {
-        if (file.fileID && !finalMentionedIds.includes(file.fileID)) {
-          finalMentionedIds.push(file.fileID);
-        }
-      });
+      const activeFiles = getExplicitPromptFiles(uploadedFiles, mentionedAssetIds);
+      const finalMentionedIds = getExplicitPromptAssetIds(uploadedFiles, mentionedAssetIds);
 
       // Build chart mentions with full config for backend context
       const chartsWithConfig = mentionedCharts.map(chart => ({
@@ -1114,43 +1463,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
       // Compute attachment badge info from active files only
       // When only charts are mentioned (no files), skip the fallback "all assets" attachment
-      let activeFileAttachment: any = undefined;
-      if (activeFiles.length > 0) {
-        let displayName = activeFiles[0].filename;
-        if (activeFiles.length > 1) {
-          displayName = `${activeFiles.length} files`;
-        }
-        activeFileAttachment = {
-          kind: 'csv',
-          name: displayName,
-          sourceType: activeFiles.length === 1 ? activeFiles[0].sourceType : (activeFiles.length > 1 ? 'Multiple' : undefined),
-          accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
-          propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined,
-          syncVersionName: activeFiles.length === 1 ? activeFiles[0].syncVersionName : undefined,
-          files: activeFiles.map((file) => ({
-            id: file.fileID,
-            name: file.filename,
-            ext: file.ext,
-            sourceType: file.sourceType,
-            accountName: file.accountName,
-            propertyName: file.propertyName,
-            syncVersionName: file.syncVersionName,
-          })),
-        };
-      } else if (projectAssets.length > 0 && finalMentionedIds.length === 0 && !hasChartMentions) {
-        // No explicit files selected and no chart mentions — treat as "all assets" and show badge with count
-        activeFileAttachment = {
-          kind: 'csv',
-          name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files`,
-          sourceType: projectAssets.length > 1 ? 'Multiple' : projectAssets[0]?.sourceType,
-          files: projectAssets.map((asset) => ({
-            id: asset.id,
-            name: asset.name,
-            ext: asset.ext,
-            sourceType: asset.sourceType,
-          })),
-        };
-      }
+      const activeFileAttachment = buildAttachmentFromFiles(activeFiles);
 
       try {
         await processFileWithMessage(messageContent, onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, hasChartMentions ? chartsWithConfig : undefined, selectedModel, refreshSubscription, onProjectNameAccepted);
@@ -1183,12 +1496,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const handleRetry = async () => {
     if (isSendingRef.current) return;
     if (creditUsage?.can_use_credits === false) return;
-    const hasAnalyzableUpload = uploadedFiles.some(
+    const promptFiles = getExplicitPromptFiles(uploadedFiles, mentionedAssetIds);
+    const hasAnalyzableUpload = promptFiles.some(
       (f) => ['uploaded', 'processed', 'accepted'].includes(f.status) && !isNonAnalyzableUpload(f),
     );
     const hasOtherContext =
-      mentionedAssetIds.length > 0 || mentionedCharts.length > 0 || projectAssets.length > 0;
-    if (!hasAnalyzableUpload && !hasOtherContext) {
+      mentionedAssetIds.length > 0 || mentionedCharts.length > 0;
+    if (promptFiles.length > 0 && !hasAnalyzableUpload && !hasOtherContext) {
       toast({
         title: "No data rows to analyze",
         description:
@@ -1199,55 +1513,89 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     }
     isSendingRef.current = true;
     try {
-      const activeFiles = uploadedFiles.filter(f => f.status !== 'processed');
-      let finalMentionedIds = [...mentionedAssetIds];
-      activeFiles.forEach(file => {
-        if (file.fileID && !finalMentionedIds.includes(file.fileID)) {
-          finalMentionedIds.push(file.fileID);
-        }
-      });
-      let activeFileAttachment: any = undefined;
-      if (activeFiles.length > 0) {
-        let displayName = activeFiles[0].filename;
-        if (activeFiles.length === 1 && activeFiles[0].sourceType) {
-          displayName = `${activeFiles[0].sourceType} Data`;
-        } else if (activeFiles.length > 1) {
-          displayName = `${activeFiles.length} files`;
-        }
-        activeFileAttachment = {
-          kind: 'csv',
-          name: displayName,
-          sourceType: activeFiles.length === 1 ? activeFiles[0].sourceType : (activeFiles.length > 1 ? 'Multiple' : undefined),
-          accountName: activeFiles.length === 1 ? activeFiles[0].accountName : undefined,
-          propertyName: activeFiles.length === 1 ? activeFiles[0].propertyName : undefined,
-          syncVersionName: activeFiles.length === 1 ? activeFiles[0].syncVersionName : undefined,
-          files: activeFiles.map((file) => ({
-            id: file.fileID,
-            name: file.filename,
-            ext: file.ext,
-            sourceType: file.sourceType,
-            accountName: file.accountName,
-            propertyName: file.propertyName,
-            syncVersionName: file.syncVersionName,
-          })),
-        };
-      } else if (projectAssets.length > 0 && finalMentionedIds.length === 0) {
-        activeFileAttachment = {
-          kind: 'csv',
-          name: projectAssets.length === 1 ? projectAssets[0].name : `${projectAssets.length} files`,
-          sourceType: projectAssets.length > 1 ? 'Multiple' : projectAssets[0]?.sourceType,
-          files: projectAssets.map((asset) => ({
-            id: asset.id,
-            name: asset.name,
-            ext: asset.ext,
-            sourceType: asset.sourceType,
-          })),
-        };
-      }
+      const activeFiles = getExplicitPromptFiles(uploadedFiles, mentionedAssetIds);
+      const finalMentionedIds = getExplicitPromptAssetIds(uploadedFiles, mentionedAssetIds);
+      const activeFileAttachment = buildAttachmentFromFiles(activeFiles);
 
       await processFileWithMessage("Continue", onProcessedDataChange, projectId, finalMentionedIds, activeFileAttachment, undefined, undefined, refreshSubscription, onProjectNameAccepted);
     } finally {
       isSendingRef.current = false;
+    }
+  };
+
+  const handleClarificationSubmit = async (
+    message: Message,
+    option: ClarificationOption,
+    freeText?: string,
+  ) => {
+    if (!projectId || !message.clarificationRequest) return;
+    await submitClarificationResponse(
+      message.clarificationRequest,
+      option,
+      freeText,
+      projectId,
+      onProcessedDataChange,
+      selectedModel,
+      refreshSubscription,
+      onProjectNameAccepted,
+    );
+    refreshSubscription();
+  };
+
+  const handleClarificationDismiss = async (message: Message) => {
+    const request = message.clarificationRequest;
+    if (!projectId || !currentConversationId || !request) {
+      toast({
+        title: "Unable to dismiss",
+        description: "Conversation context is missing. Please refresh and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsDismissingClarification(true);
+    try {
+      await conversationService.dismissClarification(
+        currentConversationId,
+        projectId,
+        request.clarification_id,
+      );
+      setDismissedClarificationIds((current) => {
+        const next = new Set(current);
+        next.add(request.clarification_id);
+        return next;
+      });
+      setMessages((currentMessages) => currentMessages.map((currentMessage) => (
+        currentMessage.id === message.id
+          ? {
+            ...currentMessage,
+            clarificationResolution: {
+              clarification_id: request.clarification_id,
+              status: "no_answer",
+              question: request.question,
+              resolved_at: new Date().toISOString(),
+            },
+          }
+          : currentMessage
+      )));
+
+      try {
+        const conversationResponse = await conversationService.loadConversation(currentConversationId, projectId);
+        const restoredMessages = conversationNodesToMessages(conversationResponse.conversation);
+        if (restoredMessages.length) {
+          setMessages(restoredMessages);
+        }
+      } catch (reloadError) {
+        console.warn("Clarification dismissed, but conversation reload failed:", reloadError);
+      }
+    } catch (error) {
+      toast({
+        title: "Dismiss failed",
+        description: error instanceof Error ? error.message : "Unable to dismiss the question.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDismissingClarification(false);
     }
   };
 
@@ -1267,11 +1615,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       // Status is 'uploaded' because file exists in project and is ready for processing
       // isFromMention: true indicates this file was selected from @mention dropdown (already exists in conversation)
       // Derive sourceType from asset_type or filename pattern
-      let sourceType: string | undefined;
       const assetType = assetData?.asset_type || '';
-      if (assetType === 'integration_ga4' || assetType === 'GA4') sourceType = 'GA4';
-      else if (assetType === 'integration_gsheets' || assetType === 'Google Sheets') sourceType = 'Google Sheets';
-      else if (assetType === 'integration_meta_ads') sourceType = 'Meta Ads';
+      const sourceType = normalizeConnectorSource(assetType)?.name;
 
       const newFile: UploadedFile = {
         fileID: assetData.asset_id,
@@ -1284,12 +1629,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         columnCount: assetData.column_count,
         isFromMention: true,
         sourceType,
-        schemaOnly: sourceType === 'Meta Ads' && assetData.row_count === 0,
+        schemaOnly: Boolean(sourceType) && assetData.row_count === 0,
         // Since it's from project assets, we might not have account/property name in metadata,
         // but sourceType alone will fix "CSV" label showing as "GA4 Data".
       };
 
-      if (uploadedFiles.length >= 5) {
+      const alreadyAdded = uploadedFiles.some(f => f.fileID === assetData.asset_id);
+      if (!alreadyAdded && uploadedFiles.length >= 5) {
         toast({
           title: "Maximum files reached",
           description: "You can only add up to 5 files at a time.",
@@ -1298,16 +1644,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         setIsContextPickerOpen(false);
         return;
       }
-      if (uploadedFiles.some(f => f.fileID === assetData.asset_id)) {
-        toast({
-          title: "File already added",
-          description: `${selectedAsset.name} is already in your file list.`,
-        });
-        setIsContextPickerOpen(false);
-        return;
-      }
 
-      addFiles([newFile]);
+      if (!alreadyAdded) {
+        addFiles([newFile]);
+      }
       // Track this asset as @mentioned for selective processing
       setMentionedAssetIds(prev =>
         prev.includes(assetData.asset_id) ? prev : [...prev, assetData.asset_id]
@@ -1460,7 +1800,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           const { useChatStore } = await import('@/chat/useChatStore');
           useChatStore.getState().setOriginalFile(null);
         }
-      } catch (_err) { }
+      } catch {
+        /* ignore original-file capture failure */
+      }
 
       toast({ title: "File uploaded", description: `${res.filename} uploaded successfully. You can now ask questions about your data.` });
       return uploadedProjectId;
@@ -1615,16 +1957,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setTemplateModalOpen(true);
   };
 
-  const handleTemplateSelect = (template: { id: string; title: string; description: string; image?: string; category: string; suggestedTheme?: string }) => {
+  const handleTemplateSelect = (template: ThemeSelection) => {
     if (templateModalSource === 'header') {
-      // Header entry point: store the template for next generation but don't
+      // Header entry point: apply the visual theme to the current dashboard but don't
       // show the chip or pre-fill the input (no pre-submit flow needed).
       setSelectedTemplate(template, false);
       return;
     }
     // Toolbar entry point: pre-submit flow — show chip + pre-fill input.
     setSelectedTemplate(template);
-    setInputValue(`Use ${template.title} template to make `);
+    setInputValue(`Use ${template.title} theme to make `);
   };
 
   const handleTemplateRemove = () => {
@@ -1670,6 +2012,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       }
     }
     removeFile(fileID);
+    setMentionedAssetIds(prev => prev.filter(id => id !== fileID));
   };
 
 
@@ -1697,6 +2040,92 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     { text: "Build a comprehensive dashboard from all my connected data.", icon: Users },
   ];
   const compactComposer = isSidePanelOpen;
+  const composerTokenDescriptors: MetadataTokenDescriptor[] = [];
+  if (selectedTemplate && isTemplatePending) {
+    composerTokenDescriptors.push({
+      id: "composer-theme",
+      kind: "theme",
+      priority: 0,
+      renderInline: () => (
+        <ThemeInlineToken
+          theme={selectedTemplate}
+          variant="composer"
+          onRemove={handleTemplateRemove}
+          className="animate-in fade-in slide-in-from-left-2 duration-300"
+        />
+      ),
+      renderOverflow: () => (
+        <ThemeInlineToken
+          theme={selectedTemplate}
+          variant="composer"
+          onRemove={handleTemplateRemove}
+        />
+      ),
+    });
+  }
+  stagedFiles.forEach((file, index) => {
+    composerTokenDescriptors.push({
+      id: `composer-data-${file.fileID || index}`,
+      kind: "data",
+      priority: 10 + index,
+      renderInline: () => (
+        <FilePreviewChip
+          file={file}
+          onRemove={() => removeUploadedFile(file.fileID)}
+        />
+      ),
+      renderOverflow: () => (
+        <FilePreviewChip
+          file={file}
+          onRemove={() => removeUploadedFile(file.fileID)}
+        />
+      ),
+    });
+  });
+  mentionedCharts.forEach((chart, index) => {
+    composerTokenDescriptors.push({
+      id: `composer-chart-${chart.componentId}-${index}`,
+      kind: "chart",
+      priority: 100 + index,
+      renderInline: () => (
+        <ChartPreviewChip
+          chart={chart}
+          onRemove={() => setMentionedCharts(prev => prev.filter(c => c.componentId !== chart.componentId))}
+        />
+      ),
+      renderOverflow: () => (
+        <ChartPreviewChip
+          chart={chart}
+          onRemove={() => setMentionedCharts(prev => prev.filter(c => c.componentId !== chart.componentId))}
+        />
+      ),
+    });
+  });
+  const { visibleTokens: visibleComposerTokens, overflowTokens: overflowComposerTokens } = splitMetadataTokens(
+    composerTokenDescriptors,
+    compactComposer ? COMPACT_COMPOSER_VISIBLE_TOKEN_COUNT : FULL_COMPOSER_VISIBLE_TOKEN_COUNT,
+  );
+  const pendingClarificationMessage = useMemo(
+    () => getLatestPendingClarificationMessage(messages, dismissedClarificationIds),
+    [messages, dismissedClarificationIds],
+  );
+  const pendingClarificationId = pendingClarificationMessage?.clarificationRequest?.clarification_id ?? null;
+  const pendingClarificationUserIndex = useMemo(() => {
+    if (!pendingClarificationMessage) return -1;
+    const clarificationIndex = messages.findIndex((message) => message.id === pendingClarificationMessage.id);
+    for (let index = clarificationIndex - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === "user") return index;
+    }
+    return -1;
+  }, [messages, pendingClarificationMessage]);
+
+  useEffect(() => {
+    if (!pendingClarificationId) return;
+    setIsContextPickerOpen(false);
+    setDropdownOpen(false);
+    setModelDropdownOpen(false);
+    setIsDragging(false);
+  }, [pendingClarificationId, setDropdownOpen]);
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-muted">
@@ -1714,19 +2143,94 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               : "bg-transparent p-0";
           const isAssistant = !isUser && !isSystem;
           const messageGap = "gap-2";
-          // Single canonical content width — every child of the message column inherits this so
-          // user/assistant/dashboard-card/artifact blocks line up on the same vertical rail.
-          const CONTENT_MAX = isSidePanelOpen ? "max-w-full" : "max-w-[760px]";
-          const messageWidthClass = isAssistant && !isSidePanelOpen ? `w-full ${CONTENT_MAX}` : CONTENT_MAX;
+          // Keep artifacts on a wider rail, but constrain prose so chat text wraps at a readable length.
+          const ARTIFACT_RAIL_MAX = isSidePanelOpen ? "max-w-full" : "max-w-[760px]";
+          const TEXT_RAIL_MAX = isSidePanelOpen ? "max-w-full" : "max-w-[38rem]";
+          const messageWidthClass = isAssistant && !isSidePanelOpen ? `w-full ${ARTIFACT_RAIL_MAX}` : TEXT_RAIL_MAX;
           const bubbleWidthClass = isAssistant && !isSidePanelOpen ? "flex-1" : "";
-          const textContentWidthClass = CONTENT_MAX;
-          const compactSurfaceWidthClass = CONTENT_MAX;
+          const textContentWidthClass = TEXT_RAIL_MAX;
           const canCopyMessage = Boolean(message.content && !message.isError);
           const copyMessage = () => {
             if (!message.content) return;
             navigator.clipboard.writeText(message.content);
             toast({ title: "Copied", description: "Message copied to clipboard" });
           };
+          const inlineDataSources = isUser ? getAttachmentTokenSources(message.attachment) : [];
+          const getDataTokenOpenHandler = (source: DataContextTokenSource) => {
+            const assetId = source.id || projectAssets.find(asset => asset.name === (source.filename || source.name))?.id;
+            const fileName = source.filename || source.name || "";
+            if (!assetId || !fileName) return undefined;
+            return () => {
+              if (onShowCsvPreview) {
+                onShowCsvPreview(assetId, fileName);
+              } else {
+                window.open(`/preview/${assetId}`, "_blank");
+              }
+            };
+          };
+          const messageTokenDescriptors: MetadataTokenDescriptor[] = [];
+          if (isUser && message.template) {
+            messageTokenDescriptors.push({
+              id: `theme-${message.id}`,
+              kind: "theme",
+              priority: 0,
+              renderInline: () => <ThemeInlineToken theme={message.template!} className="mr-1.5" />,
+              renderOverflow: () => <ThemeInlineToken theme={message.template!} />,
+            });
+          }
+          if (isUser) {
+            inlineDataSources.forEach((source, sourceIndex) => {
+              const tokenId = `${source.id || source.filename || source.name || "data"}-${sourceIndex}`;
+              messageTokenDescriptors.push({
+                id: `data-${tokenId}`,
+                kind: "data",
+                priority: 10 + sourceIndex,
+                renderInline: () => (
+                  <DataContextInlineToken
+                    source={source}
+                    status={source.schemaOnly ? "schemaOnly" : source.status}
+                    onOpen={getDataTokenOpenHandler(source)}
+                    className="mr-1.5"
+                  />
+                ),
+                renderOverflow: () => (
+                  <DataContextInlineToken
+                    source={source}
+                    status={source.schemaOnly ? "schemaOnly" : source.status}
+                    onOpen={getDataTokenOpenHandler(source)}
+                  />
+                ),
+              });
+            });
+          }
+          if (isUser) {
+            const msgIndex = messages.findIndex(m => m.id === message.id);
+            const nextMsg = msgIndex >= 0 ? messages[msgIndex + 1] : undefined;
+            message.chartMentions?.forEach((chart, chartIndex) => {
+              messageTokenDescriptors.push({
+                id: `chart-${chart.componentId}-${chartIndex}`,
+                kind: "chart",
+                priority: 100 + chartIndex,
+                renderInline: () => (
+                  <ChartMentionInlineToken
+                    chart={chart}
+                    isDone={nextMsg?.role === 'assistant'}
+                  />
+                ),
+                renderOverflow: () => (
+                  <ChartMentionInlineToken
+                    chart={chart}
+                    isDone={nextMsg?.role === 'assistant'}
+                    className=""
+                  />
+                ),
+              });
+            });
+          }
+          const { visibleTokens: visibleMessageTokens, overflowTokens: overflowMessageTokens } = splitMetadataTokens(
+            messageTokenDescriptors,
+            MESSAGE_VISIBLE_TOKEN_COUNT,
+          );
           return (
             <div key={message.id} className="space-y-1">
               <div
@@ -1754,7 +2258,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
                   <div className={`min-w-0 max-w-full rounded-xl text-sm whitespace-pre-wrap break-words overflow-hidden ${bubbleWidthClass} ${bubbleBgClass}`}>
                     {/* Attachment badge (file) — hide full badge when chart mentions are present (compact version shown below instead) */}
-                    {message.attachment && !message.chartMentions?.length && (
+                    {!isUser && message.attachment && !message.chartMentions?.length && (
                       <div className="mb-2">
                         {(() => {
                           const sType = message.attachment.sourceType || '';
@@ -2016,7 +2520,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       </div>
                     )}
                     {/* Chart mention badges — shown when user referenced charts via @chart */}
-                    {message.chartMentions && message.chartMentions.length > 0 && (
+                    {!isUser && message.chartMentions && message.chartMentions.length > 0 && (
                       <div className="mb-2 flex flex-col gap-1.5">
                         {/* Chart mention badges */}
                         {message.chartMentions.map((chart, idx) => {
@@ -2065,23 +2569,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         })}
                       </div>
                     )}
-                    {message.template && (
-                      <div className="mb-2">
-                        <span
-                          className="inline-flex flex-col items-start gap-0.5 px-4 py-1 rounded-lg border border-border dark:border-white/20 bg-card dark:bg-white/10 text-[11px] text-foreground dark:text-white/90 w-full shadow-sm"
-                          title={message.template.title}
-                          aria-label="Selected template"
-                        >
-                          <span className="inline-flex items-center gap-1 text-muted-foreground dark:text-white/70">
-                            <LayoutTemplate className="w-3 h-3 text-muted-foreground dark:text-white/80" />
-                            Template
-                          </span>
-                          <span className="truncate w-full">{message.template.title}</span>
-                        </span>
-                      </div>
-                    )}
                     {/* Render text content if present */}
-                    {message.content && !message.isError && (() => {
+	                    {message.content && !message.isError && (() => {
                       const lineCount = message.content.split('\n').length;
                       const isLong = lineCount > 10 || message.content.length > 600;
                       const isExpanded = expandedMessageIds.has(message.id);
@@ -2090,8 +2579,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           <div className="relative">
                             <div
                               className={`text-foreground dark:text-white leading-relaxed whitespace-pre-wrap break-words [word-break:normal] [hyphens:none] [overflow-wrap:anywhere] transition-all duration-300 ${isLong && !isExpanded ? 'max-h-[15em] overflow-hidden' : ''}`}
-                              dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }}
-                            />
+                            >
+                              {message.role === 'user' && visibleMessageTokens.map((token) => (
+                                <Fragment key={token.id}>{token.renderInline()}</Fragment>
+                              ))}
+                              {message.role === 'user' && <MetadataOverflowToken tokens={overflowMessageTokens} />}
+                              <span dangerouslySetInnerHTML={{ __html: parseMessageToHtml(message.content) }} />
+                            </div>
                             {isLong && !isExpanded && (
                               <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${message.role === 'assistant' ? 'from-muted dark:from-[#18181A] via-muted/80 dark:via-[#18181A]/80' : 'from-muted dark:from-black/100 via-muted/80 dark:via-black/80'} to-transparent pointer-events-none`} />
                             )}
@@ -2118,9 +2612,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                             </button>
                           )}
                         </div>
-                      );
-                    })()}
-                    {message.isError && (
+	                      );
+	                    })()}
+		                    {message.isError && (
                       message.isInsufficientCredits ? (
                         <CreditExhaustedCard
                           tier={subscription?.tier ?? "standard"}
@@ -2149,8 +2643,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         </div>
                       )
                     )}
+                    {message.role === 'assistant' && message.clarificationResolution && (
+                      <ClarificationQuestionTrace resolution={message.clarificationResolution} />
+                    )}
                     {/* Render saved thinking trace (legacy todo tasks are adapted as fallback) */}
-                    {message.role === 'assistant' && ((message.thinkingTrace && message.thinkingTrace.length > 0) || (message.todoTasks && message.todoTasks.length > 0)) && (
+                    {message.role === 'assistant' && !message.clarificationResolution && ((message.thinkingTrace && message.thinkingTrace.length > 0) || (message.todoTasks && message.todoTasks.length > 0)) && (
                       <ThinkingProcess
                         events={message.thinkingTrace}
                         fallbackTasks={message.todoTasks}
@@ -2170,85 +2667,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         ))}
                       </div>
                     )}
-                    {/* Render dashboard card if present */}
-                    {message.role === 'assistant' && message.dashboardCard && (() => {
-                      const sourceLabel = (() => {
-                        const accountName = message.dashboardCard.accountName;
-                        if (accountName) return accountName;
-                        const source = (message.dashboardCard.sourceType || message.dashboardCard.sourceFileName || '').toLowerCase();
-                        const filename = (message.dashboardCard.sourceFileName || '').toLowerCase();
-                        if (source.includes('ga4') || source.includes('google_analytics') || source.includes('google analytics') || filename.includes('ga4') || filename.includes('google_analytics')) return 'GA4 Data';
-                        if (source.includes('sheet') || source.includes('google sheets') || filename.includes('google_sheet') || filename.includes('gsheet')) return 'Google Sheets Data';
-                        if (source.includes('google ads') || source.includes('google_ads') || filename.includes('google_ads')) return 'Google Ads Data';
-                        if (source.includes('firebase') || filename.includes('firebase')) return 'Firebase Data';
-                        if (source.includes('tiktok') || filename.includes('tiktok')) return 'TikTok Data';
-                        if (source.includes('appsflyer') || filename.includes('appsflyer')) return 'AppsFlyer Data';
-                        if (source.includes('stripe') || filename.includes('stripe')) return 'Stripe Data';
-                        if (source.includes('meta') || filename.includes('meta_ads')) return 'Meta Ads Data';
-                        return message.dashboardCard.sourceFileName.replace(/\.[^/.]+$/, "");
-                      })();
-
-                      return (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              aria-label="Open dashboard"
-                              onClick={() => { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); }}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSwitchToDashboard && onSwitchToDashboard(message.dashboardCard?.dashboardId); } }}
-                              className={`group relative flex w-full ${compactSurfaceWidthClass} cursor-pointer items-center justify-between rounded-xl border border-border dark:border-white/10 bg-white/[0.03] p-4 shadow-sm outline-none transition-all select-none hover:border-border/80 dark:hover:border-white/20 hover:bg-white/[0.06] ${message.content ? 'mt-3' : ''}`}
-                            >
-                              <div className="flex min-w-0 flex-1 items-center gap-3.5">
-                                <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-violet-500/20 via-blue-500/15 to-cyan-500/10 transition-all duration-300 group-hover:from-violet-500/30 group-hover:via-blue-500/25 group-hover:to-cyan-500/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
-                                  <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-border/50 dark:ring-white/10 group-hover:ring-border dark:ring-white/15 transition-all duration-300" />
-                                  <svg viewBox="0 0 40 40" className="h-full w-full" aria-hidden="true">
-                                    <defs>
-                                      <linearGradient id="chatBarGrad1" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="hsl(221 83% 70%)" stopOpacity="1" />
-                                        <stop offset="100%" stopColor="hsl(260 80% 60%)" stopOpacity="0.6" />
-                                      </linearGradient>
-                                      <linearGradient id="chatBarGrad2" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="hsl(175 80% 60%)" stopOpacity="0.9" />
-                                        <stop offset="100%" stopColor="hsl(221 83% 60%)" stopOpacity="0.5" />
-                                      </linearGradient>
-                                    </defs>
-                                    <path d="M4 15 L10 11 L16 14 L22 7 L28 10 L36 5" stroke="hsl(142 76% 60%)" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.75" />
-                                    <rect x="4" y="23" width="5" height="13" rx="1.5" fill="url(#chatBarGrad1)" opacity="0.5" />
-                                    <rect x="11" y="19" width="5" height="17" rx="1.5" fill="url(#chatBarGrad1)" opacity="0.8" />
-                                    <rect x="18" y="25" width="5" height="11" rx="1.5" fill="url(#chatBarGrad2)" opacity="0.55" />
-                                    <rect x="25" y="21" width="5" height="15" rx="1.5" fill="url(#chatBarGrad1)" opacity="0.9" />
-                                    <rect x="32" y="27" width="5" height="9" rx="1.5" fill="url(#chatBarGrad2)" opacity="0.6" />
-                                    <circle cx="22" cy="7" r="2.2" fill="hsl(142 76% 60%)" opacity="0.9" />
-                                    <circle cx="22" cy="7" r="3.5" fill="hsl(142 76% 60%)" opacity="0.2" />
-                                  </svg>
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-md truncate font-medium text-foreground dark:text-white">
-                                    {message.dashboardCard.dashboardTitle || "Dashboard"}
-                                  </div>
-                                  <div className="mt-0.5 flex flex-wrap gap-x-2 truncate text-sm text-muted-foreground dark:text-white/50">
-                                    <span className="truncate">Source: {sourceLabel}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              {!isDashboardOpen && (
-                                <button type="button" className="button-gradient ml-4 flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-medium text-white transition-all">
-                                  Open
-                                </button>
-                              )}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            sideOffset={8}
-                            className="z-[300] max-w-[min(90vw,300px)] bg-black/90 text-xs text-white shadow-lg break-words"
-                          >
-                            {message.dashboardCard.dashboardTitle || "Dashboard"}{sourceLabel ? ` — ${sourceLabel}` : ''}
-                          </TooltipContent>
-                        </Tooltip>
-                      );
-                    })()}
+                    {message.role === 'assistant' && message.dashboardCard && (
+                      <DashboardMessageCard
+                        dashboardCard={message.dashboardCard}
+                        isCompact={isSidePanelOpen}
+                        isDashboardOpen={isDashboardOpen}
+                        hasMessageContent={Boolean(message.content)}
+                        onOpen={onSwitchToDashboard}
+                      />
+                    )}
                     <div className={`flex items-center mt-1 ${isUser ? "justify-end" : "justify-start"}`}>
                       <div className={`flex items-center gap-1.5 ${isUser ? "" : "flex-row-reverse"}`}>
                         {canCopyMessage && (
@@ -2273,20 +2700,22 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                   </div>
                 </div>
               </div>
-              {/* Live Deep Thinking Tasks under the user message during active processing */}
-              {message.role === 'user' && isProcessing && index === messages.length - 1 && (
+              {/* Live thinking under the active user message or while waiting for a clarification answer */}
+              {message.role === 'user' && ((isProcessing && index === messages.length - 1) || index === pendingClarificationUserIndex) && (
                 <div className="flex justify-start">
                   <ThinkingProcess
-                    events={thinkingEvents}
-                    fallbackTasks={[
-                      ...priorWorkflowSteps.map(s => ({ id: s, text: mapStepToDisplayText(s) })),
-                      ...(currentWorkflowStep && !priorWorkflowSteps.includes(currentWorkflowStep)
-                        ? [{ id: currentWorkflowStep, text: mapStepToDisplayText(currentWorkflowStep) }]
-                        : []),
-                      ...(!currentWorkflowStep && priorWorkflowSteps.length === 0
-                        ? [{ id: 'start', text: 'Queued for analysis' }]
-                        : []),
-                    ]}
+                    events={index === pendingClarificationUserIndex ? undefined : thinkingEvents}
+                    fallbackTasks={index === pendingClarificationUserIndex
+                      ? [{ id: 'waiting-for-clarification', text: 'Waiting for your answer' }]
+                      : [
+                        ...priorWorkflowSteps.map(s => ({ id: s, text: mapStepToDisplayText(s) })),
+                        ...(currentWorkflowStep && !priorWorkflowSteps.includes(currentWorkflowStep)
+                          ? [{ id: currentWorkflowStep, text: mapStepToDisplayText(currentWorkflowStep) }]
+                          : []),
+                        ...(!currentWorkflowStep && priorWorkflowSteps.length === 0
+                          ? [{ id: 'start', text: 'Queued for analysis' }]
+                          : []),
+                      ]}
                     isActive={true}
                     compactSurface={!isSidePanelOpen}
                   />
@@ -2323,11 +2752,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         <div className={compactComposer ? "m-1.5" : "m-2"}>
           {/* Main Chat Input with Hero Section Styling */}
           <div
-            className={`w-full min-h-[60px] text-sm ${compactComposer ? 'p-3 pb-2' : 'p-4 pb-2'} bg-background dark:bg-[#292929] border border-border dark:border-transparent rounded-xl resize-none transition-all duration-300 relative`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onPasteCapture={handlePaste}
+            className={`w-full min-h-[60px] text-sm ${pendingClarificationMessage ? 'p-2' : compactComposer ? 'p-3 pb-2' : 'p-4 pb-2'} bg-background dark:bg-[#292929] border border-border dark:border-transparent rounded-xl resize-none transition-all duration-300 relative`}
+            onDragOver={pendingClarificationMessage ? undefined : handleDragOver}
+            onDragLeave={pendingClarificationMessage ? undefined : handleDragLeave}
+            onDrop={pendingClarificationMessage ? undefined : handleDrop}
+            onPasteCapture={pendingClarificationMessage ? undefined : handlePaste}
           >
             {/* Drag Overlay */}
             {isDragging && (
@@ -2337,6 +2766,15 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               </div>
             )}
 
+            {pendingClarificationMessage?.clarificationRequest ? (
+              <ClarificationInputOverlay
+                request={pendingClarificationMessage.clarificationRequest}
+                disabled={isProcessing || isDismissingClarification}
+                onDismiss={() => handleClarificationDismiss(pendingClarificationMessage)}
+                onSubmit={(option, freeText) => handleClarificationSubmit(pendingClarificationMessage, option, freeText)}
+              />
+            ) : (
+              <>
             {/* Context Picker */}
             {isContextPickerOpen && (
               <ProjectContextPicker
@@ -2354,48 +2792,44 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               />
             )}
 
-            {/* Active File, Chart & Template Correlations */}
+            {/* Active File, Chart & Theme Correlations */}
             {(stagedFiles.length > 0 || mentionedCharts.length > 0 || (selectedTemplate && isTemplatePending)) && (
-              <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                {/* Template Selection Pill */}
-                {selectedTemplate && isTemplatePending && (
-                  <div className="flex-shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
-                    <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-2 transition-all hover:border-accent/40 outline-none">
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <LayoutTemplate className="w-4 h-4 text-accent" />
-                      </div>
-                      <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
-                        <span className="flex-shrink-0 font-semibold text-accent">
-                          Template:
-                        </span>
-                        <span className="truncate font-medium text-foreground/90 dark:text-white/90">
-                          {selectedTemplate.title}
-                        </span>
-                      </div>
-                      <button
-                        onClick={handleTemplateRemove}
-                        className="group -mr-1 flex h-5 w-5 items-center justify-center rounded-full transition-colors hover:bg-black/5 dark:hover:bg-white/10 active:scale-95"
-                      >
-                        <X className="h-3 w-3 text-muted-foreground dark:text-white/40 transition-colors group-hover:text-foreground dark:group-hover:text-white/60" />
-                      </button>
-                    </div>
-                  </div>
-                )}
+              <div className="mb-3 flex flex-wrap gap-2">
+                {compactComposer ? (
+                  <>
+                    {visibleComposerTokens.map((token) => (
+                      <Fragment key={token.id}>{token.renderInline()}</Fragment>
+                    ))}
+                    <MetadataOverflowToken tokens={overflowComposerTokens} />
+                  </>
+                ) : (
+                  <>
+                    {/* Theme Selection Pill */}
+                    {selectedTemplate && isTemplatePending && (
+                      <ThemeInlineToken
+                        theme={selectedTemplate}
+                        variant="composer"
+                        onRemove={handleTemplateRemove}
+                        className="animate-in fade-in slide-in-from-left-2 duration-300"
+                      />
+                    )}
 
-                {mentionedCharts.map(chart => (
-                  <ChartPreviewChip
-                    key={`chart-${chart.componentId}`}
-                    chart={chart}
-                    onRemove={() => setMentionedCharts(prev => prev.filter(c => c.componentId !== chart.componentId))}
-                  />
-                ))}
-                {stagedFiles.map((file, i) => (
-                  <FilePreviewChip
-                    key={file.fileID || i}
-                    file={file}
-                    onRemove={() => removeUploadedFile(file.fileID)}
-                  />
-                ))}
+                    {mentionedCharts.map(chart => (
+                      <ChartPreviewChip
+                        key={`chart-${chart.componentId}`}
+                        chart={chart}
+                        onRemove={() => setMentionedCharts(prev => prev.filter(c => c.componentId !== chart.componentId))}
+                      />
+                    ))}
+                    {stagedFiles.map((file, i) => (
+                      <FilePreviewChip
+                        key={file.fileID || i}
+                        file={file}
+                        onRemove={() => removeUploadedFile(file.fileID)}
+                      />
+                    ))}
+                  </>
+                )}
               </div>
             )}
 
@@ -2483,32 +2917,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               onConfirm={handleRecordingConfirm}
             />
 
-            {/* Template Tag Row - commented out (not functionable)
-          {selectedTemplate && (
-            <div className="flex justify-start mb-1">
-              <div className="flex items-center gap-2 px-2 py-2 rounded-md bg-muted border border-border text-white">
-                <div className="w-3 h-3 grid grid-cols-2 gap-0.5">
-                  <div className="w-1 h-1 bg-white rounded-sm"></div>
-                  <div className="w-1 h-1 bg-white rounded-sm"></div>
-                  <div className="w-1 h-1 bg-white rounded-sm"></div>
-                  <div className="w-1 h-1 bg-white rounded-sm"></div>
-                </div>
-                <span className="text-xs font-medium">{selectedTemplate.title}</span>
-                <button
-                  onClick={handleTemplateRemove}
-                  className="w-3 h-3 flex items-center justify-center hover:bg-muted-foreground/20 rounded-sm transition-colors"
-                  aria-label="Remove template"
-                >
-                  <svg className="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
-          */}
-
             {/* Credit exhausted banner */}
             {creditUsage?.can_use_credits === false && (
               <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-xl border border-amber-500/20 bg-amber-500/5">
@@ -2574,8 +2982,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 <button
                   onClick={handleCloneTemplateClick}
                   className="p-2 flex items-center justify-center border border-border/50 dark:border-white/30 rounded-md text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white transition-colors"
-                  title="Choose template"
-                  aria-label="Choose template"
+                  title="Choose theme"
+                  aria-label="Choose theme"
                 >
                   <LayoutTemplate className="w-4 h-4" />
                 </button>
@@ -2696,6 +3104,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                 )}
               </div>
             </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -2732,6 +3142,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         open={isTemplateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
         onTemplateSelect={handleTemplateSelect}
+        initialSelection={selectedTemplate}
         source={templateModalSource}
       />
     </div>

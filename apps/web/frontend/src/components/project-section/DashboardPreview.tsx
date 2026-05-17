@@ -503,27 +503,28 @@ const DashboardPreview = ({
     return filtered;
   };
 
-  const selectedTemplate = useChatStore((s) => s.selectedTemplate);
-  const isTemplatePending = useChatStore((s) => s.isTemplatePending);
+  const selectedTheme = useChatStore((s) => s.selectedTheme || s.selectedTemplate);
+  const isThemePending = useChatStore((s) => s.isThemePending || s.isTemplatePending);
 
   // Normalize incoming data (Morpheus-first format)
   const getDashboardStyling = (data: any) => {
-    // A pending template is queued for the NEXT generation (toolbar pre-run pick).
+    // A pending theme is queued for the NEXT generation (toolbar pre-run pick).
     // It must NOT affect the current dashboard's visual theme — only a post-run
-    // template change (isTemplatePending=false) should override the theme here.
-    const effectiveTemplate = isTemplatePending ? null : selectedTemplate;
+    // header theme change should override the theme here.
+    const effectiveThemeSelection = isThemePending ? null : selectedTheme;
 
-    // Materialise styling_recommendations if absent so template override is never silently lost.
+    // Materialise styling_recommendations if absent so theme override is never silently lost.
     // This covers dashboards generated before styling_recommendations became required.
     if (data && !data.styling_recommendations) {
-      data.styling_recommendations = { theme: effectiveTemplate?.suggestedTheme ?? 'monochrome' };
+      data.styling_recommendations = { theme: effectiveThemeSelection?.suggestedTheme ?? data.theme_id ?? 'default' };
     }
     if (data?.styling_recommendations) {
-      // Template theme always takes precedence — the AI may return a generic/default
-      // theme when processing @chart updates (no template context in that prompt),
-      // so we enforce the chosen template's theme on every render.
-      if (effectiveTemplate?.suggestedTheme) {
-        data.styling_recommendations.theme = effectiveTemplate.suggestedTheme;
+      // Selected dashboard theme always takes precedence — the AI may return a generic/default
+      // theme when processing @chart updates (no theme context in that prompt),
+      // so we enforce the chosen theme on every render.
+      const forcedTheme = effectiveThemeSelection?.suggestedTheme ?? data.theme_id;
+      if (forcedTheme) {
+        data.styling_recommendations.theme = forcedTheme;
       }
 
       const converted = convertLLMStylingToChartStyling(data.styling_recommendations);
@@ -531,17 +532,21 @@ const DashboardPreview = ({
 
       if (validation.isValid) {
         // Ensure background matches the theme if AI didn't explicitly provide one
-        if (!data.styling_recommendations.dashboardBackground && effectiveTemplate?.suggestedTheme) {
-          const bg = CHART_THEME_COLORS[effectiveTemplate.suggestedTheme as ChartPresetTheme]?.['bg-dashboard-color'];
+        if (!data.styling_recommendations.dashboardBackground && forcedTheme) {
+          const bg = CHART_THEME_COLORS[forcedTheme as ChartPresetTheme]?.['bg-dashboard-color'];
           if (bg) converted.dashboardBackground = bg;
         }
         return converted;
       }
     }
 
-    // Fallback to effective template's theme if AI didn't return one or it's invalid
-    if (effectiveTemplate?.suggestedTheme) {
-      return getDefaultChartStyling(effectiveTemplate.suggestedTheme as ChartPresetTheme);
+    // Fallback to effective theme if AI didn't return one or it's invalid
+    if (effectiveThemeSelection?.suggestedTheme) {
+      return getDefaultChartStyling(effectiveThemeSelection.suggestedTheme as ChartPresetTheme);
+    }
+
+    if (data?.theme_id && CHART_THEME_COLORS[data.theme_id as ChartPresetTheme]) {
+      return getDefaultChartStyling(data.theme_id as ChartPresetTheme);
     }
 
     return getDefaultChartStyling(CHART_PRESET_THEMES.DEFAULT);
@@ -662,7 +667,7 @@ const DashboardPreview = ({
     // Dashboard-level styling (light theme from backend)
     const dashboardStyling = getDashboardStyling(data);
     const dashboardTile: any = (dashboardStyling as any)?.tile;
-    // Template always wins — override every component's presetTheme with the dashboard-level value
+    // Dashboard theme always wins — override every component's presetTheme with the dashboard-level value
     const resolvedPresetTheme: string | undefined = (dashboardStyling as any)?.presetTheme;
 
     // Metrics (Morpheus: name -> title, optional change/trend)
@@ -845,7 +850,7 @@ const DashboardPreview = ({
         const validatedChartStyling = chartLevelStyling && validateChartStyling(chartLevelStyling).isValid
           ? chartLevelStyling
           : (dashboardStyling || getDefaultChartStyling());
-        // merge dashboard tile defaults; template presetTheme always wins
+        // merge dashboard tile defaults; dashboard presetTheme always wins
         const mergedChartStyling: any = {
           ...validatedChartStyling,
           ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
@@ -914,7 +919,7 @@ const DashboardPreview = ({
             description: t.description || '',
             columns: Array.isArray(t.columns) ? t.columns : [],
             data: Array.isArray(t.data) ? t.data : (Array.isArray(t.rows) ? t.rows : []),
-            // Convert and merge styling with dashboard defaults; template presetTheme always wins
+            // Convert and merge styling with dashboard defaults; dashboard presetTheme always wins
             styling: {
               ...validatedTableStyling,
               ...(resolvedPresetTheme ? { presetTheme: resolvedPresetTheme } : {}),
@@ -939,7 +944,7 @@ const DashboardPreview = ({
 
   // Apply dashboard-level styling to container
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData, selectedTemplate]);
+  const dashboardStylingForContainer = useMemo(() => getDashboardStyling(processedData), [processedData, selectedTheme, isThemePending]);
 
   const effectiveStyling = useMemo(() => {
     const base = dashboardStylingForContainer || getDefaultChartStyling();

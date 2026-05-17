@@ -1,5 +1,8 @@
 import type { Message } from '@/types/message';
+import { EXPLICIT_PROMPT_THEME_SOURCE } from '@/types/message';
 import { ChartType, type DashboardComponent } from '@/types/dashboard';
+import { createThemeSelection } from '@/constants/builtinTemplates';
+import { normalizeConnectorSource } from '@/utils/dataContextTokens';
 
 export interface ConversationNodesToMessagesOptions {
   sourceFileName?: string;
@@ -25,9 +28,103 @@ export interface ConversationNodesToMessagesOptions {
 
 type MessageVisualArtifact = NonNullable<Message['visualArtifacts']>[number];
 type VisualArtifactPayload = Record<string, unknown>;
+type ConversationNodeContent = {
+  type?: string;
+  data?: Record<string, unknown>;
+};
+type ConversationNode = {
+  node_id?: string;
+  role?: string;
+  created_at?: string;
+  metadata?: Record<string, unknown>;
+  contents?: ConversationNodeContent[];
+};
+type ConversationDashboard = {
+  dashboard_id?: string;
+  title?: string;
+};
 
 function asPayload(value: unknown): VisualArtifactPayload | null {
   return value && typeof value === 'object' ? value as VisualArtifactPayload : null;
+}
+
+function asMetadataString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function hasExplicitPromptTheme(metadata: Record<string, unknown>): boolean {
+  return metadata.theme_source === EXPLICIT_PROMPT_THEME_SOURCE;
+}
+
+function getAssetSelectionMode(metadata: Record<string, unknown>): string | null {
+  const direct = metadata.asset_selection;
+  if (typeof direct === 'string') return direct;
+
+  const nested = asPayload(metadata.user_node_metadata);
+  const nestedMode = nested?.asset_selection;
+  return typeof nestedMode === 'string' ? nestedMode : null;
+}
+
+function allowsLastUserAttachmentFallback(metadata: Record<string, unknown>): boolean {
+  return getAssetSelectionMode(metadata) !== 'none';
+}
+
+type MessageAttachmentFile = NonNullable<NonNullable<Message['attachment']>['files']>[number];
+
+function compact<T>(items: Array<T | null>): T[] {
+  return items.filter((item): item is T => item !== null);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function normalizeNodeContent(raw: unknown): ConversationNodeContent | null {
+  const payload = asPayload(raw);
+  if (!payload) return null;
+  return {
+    type: readString(payload.type),
+    data: asPayload(payload.data) || {},
+  };
+}
+
+function normalizeConversationNode(raw: unknown): ConversationNode | null {
+  const payload = asPayload(raw);
+  if (!payload) return null;
+  return {
+    node_id: readString(payload.node_id),
+    role: readString(payload.role),
+    created_at: readString(payload.created_at),
+    metadata: asPayload(payload.metadata) || {},
+    contents: Array.isArray(payload.contents)
+      ? compact(payload.contents.map(normalizeNodeContent))
+      : [],
+  };
+}
+
+function normalizeConversationDashboard(raw: unknown): ConversationDashboard | null {
+  const payload = asPayload(raw);
+  if (!payload) return null;
+  return {
+    dashboard_id: readString(payload.dashboard_id),
+    title: readString(payload.title),
+  };
+}
+
+function normalizeAttachmentFile(data: Record<string, unknown>): MessageAttachmentFile | null {
+  const id = readString(data.id) || readString(data.asset_id) || readString(data.file_id);
+  const name = readString(data.name) || readString(data.filename);
+  if (!id || !name || id === 'all-assets') return null;
+
+  return {
+    id,
+    name,
+    ext: readString(data.extension) || readString(data.ext),
+    sourceType: normalizeConnectorSource(readString(data.sourceType))?.name || readString(data.sourceType),
+    accountName: readString(data.accountName) || readString(data.account_name),
+    propertyName: readString(data.propertyName) || readString(data.property_name),
+    syncVersionName: readString(data.syncVersionName) || readString(data.sync_version_name),
+  };
 }
 
 function normalizeVisualArtifact(raw: unknown, index: number): MessageVisualArtifact | null {
@@ -118,16 +215,46 @@ function normalizeVisualArtifact(raw: unknown, index: number): MessageVisualArti
   };
 }
 
+function getNoAnswerClarificationResponse(node: unknown): { clarificationId: string; resolvedAt?: string } | null {
+  const nodePayload = asPayload(node);
+  if (nodePayload?.role !== 'user') return null;
+  const contents = Array.isArray(nodePayload.contents) ? nodePayload.contents : [];
+  const responseContent = contents.find((content) => {
+    const contentPayload = asPayload(content);
+    const data = asPayload(contentPayload?.data) || {};
+    return (
+      contentPayload?.type === 'clarification_response'
+      && data?.answer_status === 'no_answer'
+      && typeof data?.clarification_id === 'string'
+      && data.clarification_id.trim().length > 0
+    );
+  });
+  const responseData = asPayload(asPayload(responseContent)?.data);
+  const clarificationId = responseData?.clarification_id;
+  if (typeof clarificationId !== 'string' || !clarificationId.trim()) return null;
+  return {
+    clarificationId: clarificationId.trim(),
+    resolvedAt: readString(nodePayload?.created_at),
+  };
+}
+
 /**
  * Converts conversation nodes (and dashboards) to chat Message[] in workflow order.
  * Filters to user + assistant nodes with renderable content; excludes tool-only assistant nodes.
  */
 export function conversationNodesToMessages(
-  conversation: { nodes?: any[]; dashboards?: any[] },
+  conversation: { nodes?: unknown[]; dashboards?: unknown[] },
   options?: ConversationNodesToMessagesOptions
 ): Message[] {
-  const nodes = conversation?.nodes ?? [];
-  const dashboards = conversation?.dashboards ?? [];
+  const nodes = compact((conversation?.nodes ?? []).map(normalizeConversationNode));
+  const dashboards = compact((conversation?.dashboards ?? []).map(normalizeConversationDashboard));
+  const noAnswerClarifications = new Map<string, { resolvedAt?: string }>();
+  nodes.forEach((node) => {
+    const noAnswer = getNoAnswerClarificationResponse(node);
+    if (noAnswer) {
+      noAnswerClarifications.set(noAnswer.clarificationId, { resolvedAt: noAnswer.resolvedAt });
+    }
+  });
 
   // Asset name / account info will track the most recent asset encountered in the flow
   let currentAssetName = options?.sourceFileName ?? 'dashboard';
@@ -135,51 +262,47 @@ export function conversationNodesToMessages(
   let currentSourceType: string | undefined = options?.lastUserMessageAttachment?.sourceType;
 
   const restoredMessages: Message[] = nodes
-    .filter((node: any) => {
+    .filter((node) => {
       if (!node) return false;
-      if (node.role === 'user') return true;
+      if (node.role === 'user') return !getNoAnswerClarificationResponse(node);
       if (node.role === 'assistant') {
         const metadata = node.metadata || {};
         const hasToolCalls = Array.isArray(metadata.tool_calls) && metadata.tool_calls.length > 0;
         if (hasToolCalls || metadata.tool_call_id) return false;
-        const hasRenderableContent = node.contents?.some?.((c: any) => {
+        const hasRenderableContent = node.contents?.some?.((c) => {
           if (c?.type === 'text') {
             const text = c?.data?.text;
             return typeof text === 'string' && text.trim().length > 0;
           }
-          return c?.type === 'dashboard' || c?.type === 'todo_tasks' || c?.type === 'thinking_trace';
+          return c?.type === 'dashboard' || c?.type === 'todo_tasks' || c?.type === 'thinking_trace' || c?.type === 'clarification_request';
         });
         return !!hasRenderableContent;
       }
       return false;
     })
-    .map((node: any, index: number, array: any[]) => {
-      // Check if this is the last user node in the filtered list
-      const isLastUserNode = node.role === 'user' && index === array.filter(n => n.role === 'user').length - 1; // Wait, array is ALL filtered nodes. 
-      // Correct logic to find if it's the last user node:
-      // We can't easily know if it's the "last user node" of the ENTIRE conversation relative to the time, 
-      // but we can check if it's the last node in the array that IS a user node.
-      // Actually, simplest is to check if it's the *last node overall* if the last node is user, but usually last node is assistant.
+    .map((node, index, array) => {
+      const isLastUser = node.role === 'user' && array.slice(index + 1).findIndex((n) => n.role === 'user') === -1;
+      const isAwaitingClarificationForUser = node.role === 'user' && array
+        .slice(index + 1)
+        .some((n) => (
+          n.role === 'assistant' &&
+          n.contents?.some((content) => content.type === 'clarification_request')
+        ));
 
-      // Let's refine the "last user node" check in the context of the map.
-      // We need to identify the user node that triggered the current response.
-      // Generally, that's the last user node in the list.
-
-      // Since `map` doesn't give context of "last of type", let's assume we simply want to attach to the VERY LAST user node found.
-      const isLastUser = node.role === 'user' && array.slice(index + 1).findIndex((n: any) => n.role === 'user') === -1;
-
-      const textContent = node?.contents?.find?.((c: any) => c?.type === 'text');
-      const dashboardContent = node?.contents?.find?.((c: any) => c?.type === 'dashboard');
-      const todoTasksContent = node?.contents?.find?.((c: any) => c?.type === 'todo_tasks');
-      const thinkingTraceContent = node?.contents?.find?.((c: any) => c?.type === 'thinking_trace');
-      const visualArtifactsContent = node?.contents?.find?.((c: any) => c?.type === 'visual_artifacts');
-      const assetContents = node?.contents?.filter?.(
-        (c: any) =>
+      const textContent = node.contents?.find((c) => c.type === 'text');
+      const metadata = node?.metadata || {};
+      const dashboardContent = node.contents?.find((c) => c.type === 'dashboard');
+      const todoTasksContent = node.contents?.find((c) => c.type === 'todo_tasks');
+      const thinkingTraceContent = node.contents?.find((c) => c.type === 'thinking_trace');
+      const clarificationRequestContent = node.contents?.find((c) => c.type === 'clarification_request');
+      const visualArtifactsContent = node.contents?.find((c) => c.type === 'visual_artifacts');
+      const assetContents = node.contents?.filter(
+        (c) =>
           c?.type === 'asset' || c?.type === 'attachment' || c?.type === 'file' || c?.type === 'mention'
       ) ?? [];
       const assetContent = assetContents[0];
-      const chartMentionContents = node?.contents?.filter?.(
-        (c: any) => c?.type === 'chart_mention'
+      const chartMentionContents = node.contents?.filter(
+        (c) => c?.type === 'chart_mention'
       ) ?? [];
 
       // Update the current asset name/account info if this node brings a new asset
@@ -195,10 +318,18 @@ export function conversationNodesToMessages(
         content: textContent?.data?.text || '',
         timestamp: new Date(node?.created_at || Date.now()),
       };
+      if (normalized.role === 'user' && hasExplicitPromptTheme(metadata)) {
+        const themeId = asMetadataString(metadata.theme_id) || asMetadataString(metadata.template_id);
+        const analysisFocusId = asMetadataString(metadata.analysis_focus_id) || asMetadataString(metadata.template_id);
+        const themeSelection = createThemeSelection(themeId || analysisFocusId, analysisFocusId);
+        if (themeSelection) {
+          normalized.template = themeSelection;
+        }
+      }
       if (dashboardContent) {
         const dashboardId = dashboardContent.data?.dashboard_id || '';
         const dashboardMetadata = dashboards.find(
-          (d: any) => d.dashboard_id === dashboardId
+          (d) => d.dashboard_id === dashboardId
         );
         normalized.dashboardCard = {
           sourceFileName: currentAssetName,
@@ -214,9 +345,22 @@ export function conversationNodesToMessages(
       if (thinkingTraceContent?.data?.events && Array.isArray(thinkingTraceContent.data.events)) {
         normalized.thinkingTrace = thinkingTraceContent.data.events;
       }
+      if (clarificationRequestContent?.data) {
+        normalized.clarificationRequest = clarificationRequestContent.data;
+        const clarificationId = readString(clarificationRequestContent.data.clarification_id);
+        const noAnswer = clarificationId ? noAnswerClarifications.get(clarificationId) : null;
+        if (clarificationId && noAnswer) {
+          normalized.clarificationResolution = {
+            clarification_id: clarificationId,
+            status: 'no_answer',
+            question: readString(clarificationRequestContent.data.question) || 'Clarification question',
+            resolved_at: noAnswer.resolvedAt,
+          };
+        }
+      }
       if (Array.isArray(visualArtifactsContent?.data?.artifacts)) {
         const artifacts = visualArtifactsContent.data.artifacts
-          .map((artifact: any, artifactIndex: number) => normalizeVisualArtifact(artifact, artifactIndex))
+          .map((artifact, artifactIndex) => normalizeVisualArtifact(artifact, artifactIndex))
           .filter(Boolean);
         if (artifacts.length > 0) {
           normalized.visualArtifacts = artifacts;
@@ -231,40 +375,30 @@ export function conversationNodesToMessages(
           assetContent?.data?.name ||
           currentAssetName;
 
-        const getSourceTypeFromRaw = (raw?: string): string | undefined => {
-          const lower = (raw || '').toLowerCase();
-          if (lower.includes('ga4') || lower.includes('google_analytics') || lower.includes('google analytics')) return 'GA4';
-          if (lower.includes('sheet') || lower.includes('google sheets')) return 'Google Sheets';
-          if (lower.includes('meta') || lower.includes('meta_ads')) return 'Meta Ads';
-          if (lower.includes('tiktok') || lower.includes('tik_tok')) return 'TikTok';
-          if (lower.includes('google ads') || lower.includes('google_ads')) return 'Google Ads';
-          if (lower.includes('firebase')) return 'Firebase';
-          if (lower.includes('appsflyer')) return 'AppsFlyer';
-          if (lower.includes('stripe')) return 'Stripe';
-          return undefined;
-        };
+        const getSourceTypeFromRaw = (raw?: string): string | undefined => normalizeConnectorSource(raw)?.name;
 
         // Derive sourceType from asset_type stored in the conversation node
         const assetType: string = assetContent?.data?.sourceType || '';
         const fileName: string = firstName || '';
-        const sourceType = assetContents.length > 1 ? 'Multiple' : getSourceTypeFromRaw(assetType);
-        const attachmentFiles = assetContents
-          .map((content: any) => {
-            const data = content?.data || {};
-            const id = data.asset_id || data.file_id;
-            const name = data.filename || data.name;
-            if (!id || !name || id === 'all-assets') return null;
-            return {
-              id,
-              name,
-              ext: data.extension || data.ext,
-              sourceType: getSourceTypeFromRaw(data.sourceType),
-              accountName: data.accountName,
-              propertyName: data.propertyName,
-              syncVersionName: data.syncVersionName || data.sync_version_name,
-            };
-          })
+        const filesFromNodeContents = assetContents
+          .map((content) => normalizeAttachmentFile(asPayload(content?.data) || {}))
           .filter(Boolean) as NonNullable<Message['attachment']>['files'];
+        const filesFromSyntheticMention = Array.isArray(assetContent?.data?.files)
+          ? assetContent.data.files
+            .map((file: unknown) => normalizeAttachmentFile(asPayload(file) || {}))
+            .filter(Boolean) as NonNullable<Message['attachment']>['files']
+          : [];
+        const fallbackFiles = options?.lastUserMessageAttachment?.files ?? [];
+        const attachmentFiles = filesFromNodeContents.length
+          ? filesFromNodeContents
+          : filesFromSyntheticMention.length
+            ? filesFromSyntheticMention
+            : assetContent?.data?.asset_id === 'all-assets'
+              ? fallbackFiles
+              : [];
+        const sourceType = attachmentFiles.length > 1 || assetContents.length > 1
+          ? 'Multiple'
+          : getSourceTypeFromRaw(assetType);
 
         // Track current sourceType for dashboard cards
         if (sourceType) currentSourceType = sourceType;
@@ -279,12 +413,17 @@ export function conversationNodesToMessages(
           syncVersionName: assetContent?.data?.syncVersionName || assetContent?.data?.sync_version_name,
           files: attachmentFiles,
         };
-      } else if (isLastUser && options?.lastUserMessageAttachment) {
+      } else if (
+        isLastUser &&
+        options?.lastUserMessageAttachment &&
+        !isAwaitingClarificationForUser &&
+        allowsLastUserAttachmentFallback(metadata)
+      ) {
         normalized.attachment = options.lastUserMessageAttachment;
       }
       // Restore chart mentions from conversation nodes
       if (chartMentionContents.length > 0) {
-        normalized.chartMentions = chartMentionContents.map((c: any) => ({
+        normalized.chartMentions = chartMentionContents.map((c) => ({
           title: c.data?.title || '',
           type: c.data?.chart_type || 'bar',
           componentId: c.data?.component_id || c.data?.chart_id || '',
@@ -297,14 +436,14 @@ export function conversationNodesToMessages(
         // Look backward for the most recent user message with chart mentions
         const prevUserNodes = nodes
           .slice(0, nodes.indexOf(node))
-          .filter((n: any) => n.role === 'user')
+          .filter((n) => n.role === 'user')
           .reverse();
         const prevUser = prevUserNodes[0];
-        const prevChartMentions = prevUser?.contents?.filter?.(
-          (c: any) => c?.type === 'chart_mention'
+        const prevChartMentions = prevUser?.contents?.filter(
+          (c) => c?.type === 'chart_mention'
         ) ?? [];
         if (prevChartMentions.length > 0) {
-          const chartNames = prevChartMentions.map((c: any) => c.data?.title || 'chart').join(', ');
+          const chartNames = prevChartMentions.map((c) => c.data?.title || 'chart').join(', ');
           normalized.content = `Done! I've updated ${chartNames}. The dashboard has been refreshed with the changes.`;
         }
       }
@@ -329,11 +468,11 @@ export function conversationNodesToMessages(
       if (nextRestored?.role === 'assistant') continue;
 
       // Find this user's node in the original nodes array
-      const userNodeIndex = nodes.findIndex((n: any) => n.node_id === msg.id);
+      const userNodeIndex = nodes.findIndex((n) => n.node_id === msg.id);
       if (userNodeIndex < 0) continue;
 
       // Check if there's an assistant node after this user node in the original array
-      const subsequentAssistant = nodes.slice(userNodeIndex + 1).find((n: any) => n.role === 'assistant');
+      const subsequentAssistant = nodes.slice(userNodeIndex + 1).find((n) => n.role === 'assistant');
       if (!subsequentAssistant) continue;
 
       // The assistant node exists but was filtered out — synthesize a response
@@ -345,9 +484,9 @@ export function conversationNodesToMessages(
       }
 
       // Find the relevant dashboard
-      const dashboardContentInAssistant = subsequentAssistant?.contents?.find?.((c: any) => c?.type === 'dashboard');
+      const dashboardContentInAssistant = subsequentAssistant?.contents?.find((c) => c?.type === 'dashboard');
       const dashboardId = dashboardContentInAssistant?.data?.dashboard_id || '';
-      const dashboardMeta = dashboards.find((d: any) => d.dashboard_id === dashboardId) || dashboards[dashboards.length - 1];
+      const dashboardMeta = dashboards.find((d) => d.dashboard_id === dashboardId) || dashboards[dashboards.length - 1];
 
       finalMessages.push({
         id: subsequentAssistant.node_id || crypto.randomUUID(),

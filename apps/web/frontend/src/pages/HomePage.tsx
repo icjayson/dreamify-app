@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn, TrendingUp, AlertCircle, LayoutDashboard, X } from "lucide-react";
+import { Sparkles, Database, CornerRightUp, LayoutTemplate, Mic, MicOff, Link, FileText, LogIn, TrendingUp, AlertCircle, LayoutDashboard } from "lucide-react";
 import FileAttachDropdown from "@/components/chat/FileAttachDropdown";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -23,10 +23,12 @@ import VideoBackground from '@/components/homepage-section/VideoBackground';
 import ProjectsSection from '@/components/homepage-section/ProjectsSection';
 import ProjectsSidebar from '@/components/homepage-section/ProjectsSidebar';
 import TemplateModal from '@/components/homepage-section/TemplateModal';
+import type { ThemeSelection } from '@/constants/builtinTemplates';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { ToastAction } from "@/components/ui/toast";
 import { CONNECTORS, CONNECTOR_CATEGORIES, type ConnectorItem } from '@/constants/connectors';
 import FilePreviewChip from '@/components/chat/FilePreviewChip';
+import { ThemeInlineToken } from '@/components/chat/ThemeInlineToken';
 import ModelSelector from '@/chat/ModelSelector';
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import ReactGA from 'react-ga4';
@@ -99,6 +101,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     updateFile,
     isProcessing,
     selectedTemplate,
+    isTemplatePending,
     setInputValue,
     setSelectedDataSource,
     setDropdownOpen,
@@ -400,10 +403,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     setTemplateModalOpen(true);
   };
 
-  const handleTemplateSelect = (template: { id: string; title: string; description: string; category: string; suggestedTheme: string; image?: string }) => {
+  const handleTemplateSelect = (template: ThemeSelection) => {
     setSelectedTemplate(template);
-    setInputValue(`Use ${template.title} template to make `);
-    console.log('Template selected:', template);
+    setInputValue(`Use ${template.title} theme to make `);
+    console.log('Theme selected:', template);
   };
 
   const handleTemplateRemove = () => {
@@ -794,39 +797,17 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                 </div>
               )}
 
-              {/* Selection Chips Area - vertical scroll for both files and templates */}
-              {(uploadedFiles.length > 0 || selectedTemplate) && (
-                <div className="mb-3 flex flex-row gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                  {/* Template Selection Pill */}
-                  {selectedTemplate && (
-                    <div className="flex-shrink-0 animate-in fade-in slide-in-from-left-2 duration-300">
-                      <div className="inline-flex max-w-[min(18rem,85vw)] flex-shrink-0 cursor-default items-center gap-2 rounded-full border border-accent bg-accent/10 px-3 py-2 transition-all hover:border-accent outline-none">
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <LayoutTemplate className="w-4 h-4 text-accent" />
-                        </div>
-                        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
-                          <span className="flex-shrink-0 font-semibold text-accent">
-                            Template
-                          </span>
-                          <span className="flex-shrink-0 font-light text-accent/30">•</span>
-                          <span className="min-w-0 flex-1 truncate text-foreground dark:text-white/90" title={selectedTemplate.title}>
-                            {selectedTemplate.title}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTemplate(null);
-                            setInputValue('');
-                          }}
-                          className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-accent/50 transition-colors hover:text-white"
-                          aria-label="Remove template"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
+              {/* Selection Chips Area - vertical scroll for files and themes */}
+              {(uploadedFiles.some(file => file.status !== 'processed' && file.status !== 'error') || (selectedTemplate && isTemplatePending)) && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {/* Theme Selection Pill */}
+                  {selectedTemplate && isTemplatePending && (
+                    <ThemeInlineToken
+                      theme={selectedTemplate}
+                      variant="composer"
+                      onRemove={handleTemplateRemove}
+                      className="animate-in fade-in slide-in-from-left-2 duration-300"
+                    />
                   )}
 
                   {/* File Chips */}
@@ -868,30 +849,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                 onConfirm={handleRecordingConfirm}
               />
 
-              {selectedTemplate && (
-                <div className="flex justify-start mb-3 lg:hidden">
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-foreground">
-                    <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
-                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                    </div>
-                    <span className="text-sm font-medium">{selectedTemplate.title}</span>
-                    <button
-                      onClick={handleTemplateRemove}
-                      className="w-4 h-4 flex items-center justify-center hover:bg-muted-foreground/20 rounded-sm transition-colors"
-                      aria-label="Remove template"
-                    >
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* Buttons Row */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 {/* Left side buttons */}
@@ -923,10 +880,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     onMouseLeave={(e) => {
                       e.currentTarget.classList.remove('btn-primary-hover');
                     }}
-                    aria-label="Clone template"
+                    aria-label="Choose theme"
                   >
                     <LayoutTemplate className="w-4 h-4" />
-                    <span className="hidden sm:inline">Template</span>
+                    <span className="hidden sm:inline">Theme</span>
                   </button>
 
                   {/* Connect Data Source Dropdown */}
@@ -997,29 +954,6 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     )}
                   </div>
 
-                  {/* Selected Template Tag - Desktop Only - commented out (not functionable)
-                {selectedTemplate && (
-                  <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted border border-border text-white">
-                    <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
-                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                      <div className="w-1.5 h-1.5 bg-white rounded-sm"></div>
-                    </div>
-                    <span className="text-sm font-medium">{selectedTemplate.title}</span>
-                    <button
-                      onClick={handleTemplateRemove}
-                      className="w-4 h-4 flex items-center justify-center hover:bg-muted-foreground/20 rounded-sm transition-colors"
-                      aria-label="Remove template"
-                    >
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                */}
                 </div>
 
                 {/* Right side buttons */}
@@ -1133,6 +1067,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
         open={templateModalOpen}
         onClose={() => setTemplateModalOpen(false)}
         onTemplateSelect={handleTemplateSelect}
+        initialSelection={selectedTemplate}
       />
       <FeedbackFloatingButton />
       <FooterSection />

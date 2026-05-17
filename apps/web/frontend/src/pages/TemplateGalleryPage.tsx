@@ -1,70 +1,50 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BUILTIN_TEMPLATES, TEMPLATE_CATEGORIES, DreamifyTemplate, TemplateCategory } from '@/constants/builtinTemplates';
-import { TemplateCard } from '@/components/templates/TemplateCard';
-import { TemplatePreview } from '@/components/templates/TemplatePreview';
-import { VisualSelection } from '@/components/templates/VisualCustomizer';
+import { VISUAL_THEMES, createThemeSelection } from '@/constants/builtinTemplates';
+import TemplateColorPreview from '@/components/templates/TemplateColorPreview';
+import { Button } from '@/components/ui/button';
 
 const TemplateGalleryPage: React.FC = () => {
-  const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'All'>('All');
-  const [previewTemplate, setPreviewTemplate] = useState<DreamifyTemplate | null>(null);
   const navigate = useNavigate();
 
-  const filtered = activeCategory === 'All'
-    ? BUILTIN_TEMPLATES
-    : BUILTIN_TEMPLATES.filter(t => t.category === activeCategory);
-
-  const handleSelect = (template: DreamifyTemplate, visual: VisualSelection) => {
-    sessionStorage.setItem('dreamify:selected_template', JSON.stringify({ templateId: template.id, visual }));
-    navigate('/workspace');
+  const handleSelect = (themeId: string) => {
+    const selection = createThemeSelection(themeId);
+    if (selection) {
+      sessionStorage.setItem('dreamify:selected_theme', JSON.stringify(selection));
+    }
+    navigate('/workspace?tab=new-chat&openTemplate=1');
   };
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-foreground">Templates</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Start with a domain-specific layout. Upload your data and Dreamify will populate it.
+          <h1 className="text-2xl font-semibold text-foreground">Themes</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Choose a visual style for your next dashboard. Analysis focus is selected separately when you start a run.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
-          {(['All', ...TEMPLATE_CATEGORIES] as const).map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
-                activeCategory === cat
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-transparent text-muted-foreground border-border hover:border-primary/40'
-              }`}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {VISUAL_THEMES.map((theme) => (
+            <div
+              key={theme.id}
+              className="group overflow-hidden rounded-lg border border-border bg-card transition-all hover:border-primary/50 hover:shadow-md"
             >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((template) => (
-            <TemplateCard
-              key={template.id}
-              template={template}
-              onPreview={setPreviewTemplate}
-              onSelect={setPreviewTemplate}
-            />
+              <div className="aspect-video overflow-hidden border-b border-border">
+                <TemplateColorPreview theme={theme.id} className="h-full w-full" />
+              </div>
+              <div className="p-4">
+                <h3 className="text-sm font-semibold text-foreground">{theme.name}</h3>
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{theme.description}</p>
+                <Button size="sm" className="mt-4 h-8 w-full text-xs" onClick={() => handleSelect(theme.id)}>
+                  Use Theme
+                </Button>
+              </div>
+            </div>
           ))}
         </div>
       </div>
-
-      <TemplatePreview
-        template={previewTemplate}
-        onClose={() => setPreviewTemplate(null)}
-        onSelect={(template, visual) => {
-          setPreviewTemplate(null);
-          handleSelect(template, visual);
-        }}
-      />
     </div>
   );
 };

@@ -1,20 +1,28 @@
 import { api } from './api';
-import type { ThinkingEvent } from '@/types/message';
+import { EXPLICIT_PROMPT_THEME_SOURCE, type AssetSelectionMode, type ThinkingEvent } from '@/types/message';
+
+export interface ConversationNodeContent {
+  type: string;
+  data: Record<string, unknown>;
+}
 
 export interface ConversationChatRequest {
   conversation_id?: string;
   project_id: string;
   asset_id?: string;  // Optional if conversation_id is provided
-  user_node_contents: Array<{
-    type: string;
-    data: Record<string, any>;
-  }>;
+  user_node_contents: ConversationNodeContent[];
   // Metadata for user node - used for selective asset processing
   user_node_metadata?: {
-    asset_selection: 'explicit' | 'all';
+    asset_selection: AssetSelectionMode;
     selected_asset_ids?: string[];
+    selected_chart_ids?: string[];
+    clarification_id?: string;
+    theme_source?: typeof EXPLICIT_PROMPT_THEME_SOURCE;
   };
   model?: 'pro' | 'fast';
+  theme_id?: string;
+  analysis_focus_id?: string;
+  /** Legacy compatibility only. New callers should use theme_id and analysis_focus_id. */
   template_id?: string;
 }
 
@@ -24,18 +32,18 @@ export interface ConversationChatResponse {
   asset_id?: string;
   project_name?: string;
   project_name_source?: string;
-  workflow_status: Record<string, any>;
+  workflow_status: Record<string, unknown>;
 }
 
 export interface ConversationResponse {
-  conversation: Record<string, any>;
+  conversation: Record<string, unknown>;
 }
 
 export interface WorkflowStatusResponse {
   conversation_id: string;
   node_id: string;
   status: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   updated_at?: string;
 }
 
@@ -45,9 +53,16 @@ export interface WorkflowEventsResponse {
   events: ThinkingEvent[];
 }
 
+export interface ClarificationDismissResponse {
+  success: boolean;
+  message: string;
+  conversation_id: string;
+  clarification_id: string;
+}
+
 export interface DashboardDataResponse {
   dashboard_id: string | null;
-  dashboard_data: Record<string, any> | null;
+  dashboard_data: Record<string, unknown> | null;
 }
 
 class ConversationService {
@@ -105,6 +120,20 @@ class ConversationService {
     throw new Error(response.error || 'Failed to get workflow events');
   }
 
+  async dismissClarification(
+    conversationId: string,
+    projectId: string,
+    clarificationId: string,
+  ): Promise<ClarificationDismissResponse> {
+    const response = await api.post<ClarificationDismissResponse>(
+      `/api/v1/conversation/${conversationId}/clarification/${clarificationId}/dismiss?project_id=${encodeURIComponent(projectId)}`
+    );
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.error || 'Failed to dismiss clarification');
+  }
+
   async getDashboardData(conversationId: string, projectId: string, dashboardId?: string): Promise<DashboardDataResponse | null> {
     try {
       const url = dashboardId
@@ -134,6 +163,22 @@ class ConversationService {
       );
     } catch (error) {
       console.error('Failed to update dashboard template:', error);
+    }
+  }
+
+  async updateDashboardTheme(
+    conversationId: string,
+    dashboardId: string,
+    projectId: string,
+    themeId: string | null,
+  ): Promise<void> {
+    try {
+      await api.put(
+        `/api/v1/conversation/${conversationId}/dashboard/${dashboardId}/theme`,
+        { project_id: projectId, theme_id: themeId },
+      );
+    } catch (error) {
+      console.error('Failed to update dashboard theme:', error);
     }
   }
 

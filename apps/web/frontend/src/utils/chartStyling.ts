@@ -14,13 +14,21 @@ export const CHART_PRESET_THEMES = {
   WARM: 'warm',
   ASH: 'ash',
   SAGE: 'sage',
-  INK: 'ink'
+  INK: 'ink',
+  AURORA: 'aurora',
+  GLACIER: 'glacier',
+  CORAL: 'coral',
+  ORCHID: 'orchid',
+  MINT: 'mint',
+  CRIMSON: 'crimson',
+  COBALT: 'cobalt',
+  SANDSTONE: 'sandstone'
 } as const;
 
 export type ChartPresetTheme = typeof CHART_PRESET_THEMES[keyof typeof CHART_PRESET_THEMES];
 
 /** Themes whose backgrounds are light-colored — require dark text/labels for contrast. */
-export const LIGHT_BACKGROUND_THEMES = new Set<string>(['default', 'chalk', 'warm']);
+export const LIGHT_BACKGROUND_THEMES = new Set<string>(['default', 'chalk', 'warm', 'glacier', 'mint', 'sandstone']);
 
 /** True when the given theme has a light dashboard/card background. */
 export function isLightBackground(theme: string | undefined): boolean {
@@ -47,8 +55,8 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'bg-card-color': '#ffffff',
     'border-card-color': '#e2e8f0',
     'title-color': '#0f172a',
-    'description-color': '#64748b',
-    'element-color': '#64748b',
+    'description-color': '#526174',
+    'element-color': '#526174',
     'data-colors': ['#1e3a5f', '#0d9488', '#d97706', '#dc2626', '#7c3aed', '#0891b2']
   },
   carbon: {
@@ -68,7 +76,7 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'border-card-color': '#2d4157',
     'title-color': '#e2e8f0',
     'description-color': '#94a3b8',
-    'element-color': '#64748b',
+    'element-color': '#72869d',
     'data-colors': ['#60a5fa', '#38bdf8', '#34d399', '#a78bfa', '#fb923c', '#fbbf24']
   },
   chalk: {
@@ -97,8 +105,8 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'bg-card-color': '#3d3d3d',
     'border-card-color': '#505050',
     'title-color': '#f0f0f0',
-    'description-color': '#a0a0a0',
-    'element-color': '#707070',
+    'description-color': '#b3b3b3',
+    'element-color': '#c0c0c0',
     'data-colors': ['#f0f0f0', '#b0c4de', '#c4b5a0', '#f5c842', '#cc8844', '#8b8b8b']
   },
   sage: {
@@ -120,6 +128,86 @@ export const CHART_THEME_COLORS: Record<ChartPresetTheme, ThemeColorSet> = {
     'description-color': '#d6b896',
     'element-color': '#8b7355',
     'data-colors': ['#f59e0b', '#fbbf24', '#f97316', '#ef4444', '#a78bfa', '#60a5fa']
+  },
+  aurora: {
+    'highlight-color': '#a78bfa',
+    'bg-dashboard-color': '#100f24',
+    'bg-card-color': '#1a1833',
+    'border-card-color': '#2b2850',
+    'title-color': '#f1efff',
+    'description-color': '#b8b2e6',
+    'element-color': '#7c74b8',
+    'data-colors': ['#a78bfa', '#22d3ee', '#34d399', '#f472b6', '#f59e0b', '#60a5fa']
+  },
+  glacier: {
+    'highlight-color': '#0284c7',
+    'bg-dashboard-color': '#f3fbff',
+    'bg-card-color': '#ffffff',
+    'border-card-color': '#cfe8f7',
+    'title-color': '#0f2537',
+    'description-color': '#4b6b7d',
+    'element-color': '#6b8795',
+    'data-colors': ['#0284c7', '#06b6d4', '#2563eb', '#14b8a6', '#7c3aed', '#f97316']
+  },
+  coral: {
+    'highlight-color': '#fb7185',
+    'bg-dashboard-color': '#181a1f',
+    'bg-card-color': '#23262d',
+    'border-card-color': '#383d46',
+    'title-color': '#f7f2ef',
+    'description-color': '#b8ada8',
+    'element-color': '#7d8794',
+    'data-colors': ['#fb7185', '#f97316', '#38bdf8', '#34d399', '#a78bfa', '#facc15']
+  },
+  orchid: {
+    'highlight-color': '#e879f9',
+    'bg-dashboard-color': '#1a0f1f',
+    'bg-card-color': '#281532',
+    'border-card-color': '#422052',
+    'title-color': '#fae8ff',
+    'description-color': '#d8b4fe',
+    'element-color': '#a855f7',
+    'data-colors': ['#e879f9', '#c084fc', '#f472b6', '#22d3ee', '#34d399', '#f59e0b']
+  },
+  mint: {
+    'highlight-color': '#059669',
+    'bg-dashboard-color': '#f1fbf6',
+    'bg-card-color': '#ffffff',
+    'border-card-color': '#cdeede',
+    'title-color': '#10251d',
+    'description-color': '#4b6358',
+    'element-color': '#6b8f80',
+    'data-colors': ['#059669', '#10b981', '#0f766e', '#2563eb', '#7c3aed', '#d97706']
+  },
+  crimson: {
+    'highlight-color': '#ef4444',
+    'bg-dashboard-color': '#111827',
+    'bg-card-color': '#1f2937',
+    'border-card-color': '#374151',
+    'title-color': '#f9fafb',
+    'description-color': '#d1d5db',
+    'element-color': '#9ca3af',
+    'data-colors': ['#ef4444', '#f97316', '#f59e0b', '#60a5fa', '#a78bfa', '#34d399']
+  },
+  cobalt: {
+    'highlight-color': '#a3e635',
+    'bg-dashboard-color': '#0b1738',
+    'bg-card-color': '#11245a',
+    'border-card-color': '#1d3a7a',
+    'title-color': '#eff6ff',
+    'description-color': '#bfd7ff',
+    'element-color': '#5da2ff',
+    'data-colors': ['#a3e635', '#22d3ee', '#60a5fa', '#38bdf8', '#f472b6', '#f59e0b']
+  },
+  sandstone: {
+    'highlight-color': '#c2410c',
+    'bg-dashboard-color': '#fbf4ea',
+    'bg-card-color': '#fffaf3',
+    'border-card-color': '#e5c8a8',
+    'title-color': '#2a1609',
+    'description-color': '#7c5b43',
+    'element-color': '#9a7a5d',
+    'data-colors': ['#c2410c', '#d97706', '#0f766e', '#2563eb', '#9333ea', '#dc2626']
   }
 };
 
@@ -259,7 +347,7 @@ export function getDashboardBackgroundStyle(styling: ChartStyling): React.CSSPro
   const bgColor = CHART_THEME_COLORS[theme]?.['bg-dashboard-color'] || CHART_THEME_COLORS[CHART_PRESET_THEMES.DEFAULT]['bg-dashboard-color'];
 
   return {
-    backgroundColor: styling.dashboardBackground || bgColor,
+    backgroundColor: bgColor,
     border: 'none',
     borderRadius: 'inherit'
   };
@@ -284,7 +372,7 @@ export function applyChartStyling(
   const theme = styling.presetTheme as ChartPresetTheme;
   const bgColor = CHART_THEME_COLORS[theme]?.['bg-dashboard-color'];
   if (bgColor) {
-    container.style.backgroundColor = styling.dashboardBackground || bgColor;
+    container.style.backgroundColor = bgColor;
     container.style.border = 'none';
     container.style.borderRadius = 'inherit';
   }
@@ -316,9 +404,9 @@ export function getColorPalette(
  * Assign colors to datasets based on styling configuration using opacity cascade
  */
 export function assignDatasetColors(
-  datasets: Array<{ label: string; data: any[]; color?: string }>,
+  datasets: Array<{ label: string; data: unknown[]; color?: string }>,
   styling: ChartStyling
-): Array<{ label: string; data: any[]; color: string }> {
+): Array<{ label: string; data: unknown[]; color: string }> {
   const colorPalette = getColorPalette(
     styling.presetTheme as ChartPresetTheme,
     datasets.length
@@ -374,6 +462,14 @@ export function convertLLMStylingToChartStyling(
     'ash': CHART_PRESET_THEMES.ASH,
     'sage': CHART_PRESET_THEMES.SAGE,
     'ink': CHART_PRESET_THEMES.INK,
+    'aurora': CHART_PRESET_THEMES.AURORA,
+    'glacier': CHART_PRESET_THEMES.GLACIER,
+    'coral': CHART_PRESET_THEMES.CORAL,
+    'orchid': CHART_PRESET_THEMES.ORCHID,
+    'mint': CHART_PRESET_THEMES.MINT,
+    'crimson': CHART_PRESET_THEMES.CRIMSON,
+    'cobalt': CHART_PRESET_THEMES.COBALT,
+    'sandstone': CHART_PRESET_THEMES.SANDSTONE,
     // legacy
     'corporate': CHART_PRESET_THEMES.CHALK,
     'vibrant': CHART_PRESET_THEMES.SLATE,
@@ -391,7 +487,7 @@ export function convertLLMStylingToChartStyling(
     animationEnabled: llmStyling.animation !== 'none',
     gridVisible: llmStyling.grid !== 'hidden',
     legendPosition: (llmStyling.legend as 'top' | 'bottom' | 'right' | 'none') || 'top',
-    dashboardBackground: llmStyling.dashboardBackground || themeColors['bg-dashboard-color']
+    dashboardBackground: themeColors['bg-dashboard-color']
   };
 }
 
@@ -452,7 +548,9 @@ export function mergeChartStyling(
     animationEnabled: customStyling.animationEnabled ?? defaultStyling.animationEnabled,
     gridVisible: customStyling.gridVisible ?? defaultStyling.gridVisible,
     legendPosition: customStyling.legendPosition || defaultStyling.legendPosition,
-    dashboardBackground: customStyling.dashboardBackground || defaultStyling.dashboardBackground
+    dashboardBackground:
+      CHART_THEME_COLORS[(customStyling.presetTheme || defaultStyling.presetTheme) as ChartPresetTheme]?.['bg-dashboard-color']
+      || defaultStyling.dashboardBackground
   };
 }
 

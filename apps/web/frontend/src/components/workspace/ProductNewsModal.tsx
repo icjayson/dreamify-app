@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import TemplateColorPreview from "@/components/templates/TemplateColorPreview";
-import { BUILTIN_TEMPLATES } from "@/constants/builtinTemplates";
+import { VISUAL_THEMES } from "@/constants/builtinTemplates";
 import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import { cn } from "@/lib/utils";
 import type { ComponentType, ReactNode } from "react";
@@ -61,13 +61,13 @@ export const WORKSPACE_NEWS_ITEMS: WorkspaceNewsItem[] = [
   },
   {
     id: "templates",
-    tag: "TEMPLATES",
-    title: "Launch with beautiful dashboard templates",
+    tag: "THEMES",
+    title: "Launch with beautiful dashboard themes",
     body: [
-      "Pick a ready-made template to get KPI layout, charts, and storytelling structure instantly.",
+      "Pick a ready-made color theme to style metrics, charts, cards, and dashboard background instantly.",
       "Great when you need executive-ready dashboards without starting from scratch.",
     ],
-    ctaLabel: "Create with Template",
+    ctaLabel: "Create with Theme",
     targetTab: "new-chat",
   },
   {
@@ -397,11 +397,11 @@ function ConnectorsBanner() {
 }
 
 function TemplatesBanner() {
-  const templates = BUILTIN_TEMPLATES.slice(0, 3);
+  const templates = VISUAL_THEMES.slice(0, 3);
   const activeTemplate = templates[1] ?? templates[0];
 
   return (
-    <ProductPreviewFrame title="Templates" subtitle="Executive-ready dashboard starts" icon={Sparkles}>
+    <ProductPreviewFrame title="Themes" subtitle="Executive-ready dashboard style" icon={Sparkles}>
       <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[0.86fr_1.14fr]">
         <div className="space-y-2">
           {templates.map((template) => {
@@ -436,12 +436,12 @@ function TemplatesBanner() {
           <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-foreground">Preview</p>
-              <p className="text-[10px] text-muted-foreground">{activeTemplate?.category ?? "Executive"} layout</p>
+              <p className="text-[10px] text-muted-foreground">{activeTemplate?.name ?? "Theme"} palette</p>
             </div>
             <StatusPill tone="success">Dashboard-ready</StatusPill>
           </div>
           <div className="h-[226px] overflow-hidden rounded-lg border border-border/70 bg-muted/40">
-            <TemplateColorPreview theme={activeTemplate?.suggested_theme ?? "default"} className="h-full" />
+            <TemplateColorPreview theme={activeTemplate?.id ?? "default"} className="h-full" />
           </div>
         </div>
       </div>

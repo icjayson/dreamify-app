@@ -355,7 +355,7 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                                                 </div>
                                             </div>
 
-                                            {/* New Sections: Template & Data Sources */}
+                                            {/* New Sections: Theme, Focus & Data Sources */}
                                             <div className="pt-2 border-t mt-2">
                                                 <div className="text-xs font-bold text-primary flex items-center gap-2 mb-3">
                                                     <LayoutTemplate className="h-3.5 w-3.5" />
@@ -365,15 +365,16 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                                                 <div className="space-y-4">
                                                     <div>
                                                         <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center justify-between">
-                                                            Selected Template
-                                                            {selectedConvMeta?.template_id && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+                                                            Selected Theme / Focus
+                                                            {(selectedConvMeta?.theme_id || selectedConvMeta?.analysis_focus_id || selectedConvMeta?.template_id) && <CheckCircle2 className="h-3 w-3 text-green-500" />}
                                                         </div>
                                                         <div className={cn(
                                                             "text-xs p-2.5 rounded-md border flex items-center gap-2",
-                                                            selectedConvMeta?.template_id ? "bg-primary/5 border-primary/20 text-primary font-medium" : "bg-muted/30 border-dashed text-muted-foreground italic"
+                                                            (selectedConvMeta?.theme_id || selectedConvMeta?.analysis_focus_id || selectedConvMeta?.template_id) ? "bg-primary/5 border-primary/20 text-primary font-medium" : "bg-muted/30 border-dashed text-muted-foreground italic"
                                                         )}>
                                                             <LayoutTemplate className="h-3.5 w-3.5 opacity-70" />
-                                                            {selectedConvMeta?.template_id || 'No template selected'}
+                                                            {selectedConvMeta?.theme_id || selectedConvMeta?.template_id || 'No theme selected'}
+                                                            {selectedConvMeta?.analysis_focus_id ? ` / ${selectedConvMeta.analysis_focus_id}` : ''}
                                                         </div>
                                                     </div>
 

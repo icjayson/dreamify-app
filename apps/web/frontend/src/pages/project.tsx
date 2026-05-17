@@ -214,7 +214,6 @@ export default function ProjectPage() {
   const setIsDashboardOpen = useChatStore((s) => s.setIsDashboardOpen);
   const isSidePanelOpen = (shouldShowDashboard && isDashboardOpen) || !!csvPreview;
   const isDashboardVisible = (shouldShowDashboard && isDashboardOpen) || (activeTab === 'dashboard');
-  const selectedTemplate = useChatStore((s) => s.selectedTemplate);
   const setTemplateModalOpen = useChatStore((s) => s.setTemplateModalOpen);
   const isUpdatingDashboard = useChatStore((s) => s.isUpdatingDashboard);
   const currentWorkflowStep = useChatStore((s) => s.currentWorkflowStep);
@@ -277,6 +276,17 @@ export default function ProjectPage() {
       // Use first asset for display name, fallback to "dashboard"
       const primaryAsset = assets[0];
       const assetName = primaryAsset?.filename || "dashboard";
+      const restoredAttachmentFiles = assets
+        .filter((asset) => asset.asset_id || asset.file_id)
+        .map((asset) => ({
+          id: asset.asset_id || asset.file_id,
+          name: asset.filename || asset.name || "data.csv",
+          ext: asset.extension || asset.ext,
+          sourceType: asset.sourceType,
+          accountName: asset.accountName || asset.account_name,
+          propertyName: asset.propertyName || asset.property_name || asset.filename,
+          syncVersionName: asset.syncVersionName || asset.sync_version_name,
+        }));
 
       let assetSourceType: string | undefined;
       const assetType = primaryAsset?.sourceType || '';
@@ -291,11 +301,12 @@ export default function ProjectPage() {
         sourceFileName: assetName,
         lastUserMessageAttachment: primaryAsset ? {
           kind: 'csv',
-          name: primaryAsset.filename || 'data.csv',
+          name: restoredAttachmentFiles.length > 1 ? `${restoredAttachmentFiles.length} files` : primaryAsset.filename || 'data.csv',
           mime: 'text/csv',
-          sourceType: assetSourceType,
-          accountName: primaryAsset.account_name,
-          propertyName: primaryAsset.property_name || primaryAsset.filename
+          sourceType: restoredAttachmentFiles.length > 1 ? 'Multiple' : assetSourceType,
+          accountName: restoredAttachmentFiles.length > 1 ? undefined : primaryAsset.account_name,
+          propertyName: restoredAttachmentFiles.length > 1 ? undefined : primaryAsset.property_name || primaryAsset.filename,
+          files: restoredAttachmentFiles,
         } : undefined
       });
       if (restoredMessages.length) {
@@ -964,11 +975,11 @@ export default function ProjectPage() {
                     <button
                       onClick={() => setTemplateModalOpen(true, 'header')}
                       className="button-outline h-7 px-2.5 rounded-md text-xs flex items-center gap-1.5 text-muted-foreground hover:text-foreground dark:text-white/70 dark:hover:text-white"
-                      title="Choose template"
-                      aria-label="Choose template"
+                      title="Apply theme"
+                      aria-label="Apply theme"
                     >
                       <LayoutTemplate className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Template</span>
+                      <span className="hidden sm:inline">Theme</span>
                     </button>
                     {!!processedData && !isProjectLoading && (
                       <EditModeToolbar onSave={handleSaveDashboard} isSaving={isSaving} />

@@ -162,7 +162,7 @@ export function useChartThemeManager() {
 
 // Hook for theme switching with smooth transitions
 export function useChartThemeTransition(
-  initialTheme: ChartPresetTheme = CHART_PRESET_THEMES.OCEAN,
+  initialTheme: ChartPresetTheme = CHART_PRESET_THEMES.DEFAULT,
   transitionDuration: number = 300
 ) {
   const [currentTheme, setCurrentTheme] = useState<ChartPresetTheme>(initialTheme);
@@ -213,13 +213,12 @@ export function useResponsiveChartTheme() {
 
   const getResponsiveTheme = useCallback((baseTheme: ChartPresetTheme): ChartPresetTheme => {
     if (isMobile) {
-      // Use midnight theme for mobile for better readability
-      return CHART_PRESET_THEMES.MIDNIGHT;
+      // Use a high-contrast dark theme for mobile readability.
+      return CHART_PRESET_THEMES.CARBON;
     }
     
     if (isTablet) {
-      // Use midnight theme for tablet
-      return CHART_PRESET_THEMES.MIDNIGHT;
+      return CHART_PRESET_THEMES.CARBON;
     }
     
     return baseTheme;

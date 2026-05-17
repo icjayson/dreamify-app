@@ -6,12 +6,12 @@ import { integrationService, AppsFlyerApp, AppsFlyerConnectionStatusResponse } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, AlertCircle, CalendarDays, Eye, EyeOff, Smartphone } from 'lucide-react';
 import { formatDateForApi, subtractDays } from '@/utils/timestamp';
-import { cn } from '@/lib/utils';
 import { useChatStore } from '@/chat/useChatStore';
 import { fileService } from '@/services/fileService';
 import type { AssetRecord } from '@/services/fileService';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConnectedEntitiesList } from './ConnectedEntitiesList';
+import { connectorModalStyles as modalStyles } from './connectorModalStyles';
 
 const DATE_PRESETS = [
   { value: 'last_7d', label: 'Last 7 days' },
@@ -312,7 +312,7 @@ export default function AppsFlyerIntegrationModal() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[425px] bg-background text-foreground border-border outline-none z-[200]">
+        <DialogContent className={modalStyles.content}>
           {!emptyRowsDialog ? (
             <>
               <DialogHeader>
@@ -331,7 +331,7 @@ export default function AppsFlyerIntegrationModal() {
 
                 {/* ── Checking ── */}
                 {modalState === 'checking' && (
-                  <div className="flex flex-col items-center py-6 text-gray-400">
+                  <div className={modalStyles.loadingCompact}>
                     <Loader2 className="w-6 h-6 animate-spin mb-2 text-violet-500" />
                     <p className="text-sm">Checking connection…</p>
                   </div>
@@ -341,7 +341,7 @@ export default function AppsFlyerIntegrationModal() {
                 {modalState === 'disconnected' && (
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-200">API Token</label>
+                      <label className={modalStyles.label}>API Token</label>
                       <div className="relative">
                         <Input
                           type={showToken ? 'text' : 'password'}
@@ -349,19 +349,19 @@ export default function AppsFlyerIntegrationModal() {
                           value={apiToken}
                           onChange={(e) => setApiToken(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && !connecting && handleConnect()}
-                          className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 pr-10"
+                          className="bg-background border-border text-foreground placeholder:text-muted-foreground pr-10"
                         />
                         <button
                           type="button"
                           onClick={() => setShowToken((v) => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         >
                           {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
-                      <p className="text-xs text-gray-500">
+                      <p className={modalStyles.subtleText}>
                         Find your token in AppsFlyer{' '}
-                        <span className="text-gray-400">→ username dropdown → Security center → Manage your AppsFlyer tokens</span>
+                        <span className="text-muted-foreground">→ username dropdown → Security center → Manage your AppsFlyer tokens</span>
                       </p>
                     </div>
                   </div>
@@ -373,13 +373,13 @@ export default function AppsFlyerIntegrationModal() {
                     <div className="flex items-center justify-between p-3 border border-violet-500/30 rounded-lg bg-violet-500/10">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
-                        <span className="text-sm font-medium text-white">Connected</span>
+                        <span className="text-sm font-medium text-foreground">Connected</span>
                       </div>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-8 text-gray-400 hover:text-white hover:bg-white/10 px-2"
+                        className={modalStyles.ghostButtonSmall}
                         onClick={handleDisconnect}
                         disabled={disconnecting}
                       >
@@ -388,44 +388,29 @@ export default function AppsFlyerIntegrationModal() {
                     </div>
 
                     {loadingApps ? (
-                      <div className="flex flex-col items-center py-6 text-gray-400">
+                      <div className={modalStyles.loadingCompact}>
                         <Loader2 className="w-6 h-6 animate-spin mb-2 text-violet-500" />
                         <p className="text-sm">Loading apps…</p>
                       </div>
                     ) : apps.length === 0 ? (
-                      <div className="text-center py-5 text-gray-400 text-sm border border-white/10 rounded-lg bg-white/5">
+                      <div className={modalStyles.emptyStateCompact}>
                         No apps found. Make sure your API token has access to at least one app.
                       </div>
                     ) : (
                       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-                        <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 p-1 rounded-lg mb-4">
-                          <TabsTrigger value="new" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Connect New</TabsTrigger>
-                          <TabsTrigger value="connected" className="data-[state=active]:bg-[#3A3A3A] data-[state=active]:text-white rounded-md text-sm transition-all">Select Connected</TabsTrigger>
+                        <TabsList className={modalStyles.tabsListWithMargin}>
+                          <TabsTrigger value="new" className={modalStyles.tabsTrigger}>Connect New</TabsTrigger>
+                          <TabsTrigger value="connected" className={modalStyles.tabsTrigger}>Select Connected</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="new" className="space-y-4 outline-none">
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-200">App</label>
-                          <Select value={selectedAppId} onValueChange={setSelectedAppId}>
-                            <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
-                              <SelectValue placeholder="Select an app" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
-                              {apps.map((app) => (
-                                <SelectItem key={app.app_id} value={app.app_id} className="data-[highlighted]:bg-violet-500/15 data-[highlighted]:text-violet-600 dark:data-[highlighted]:text-violet-300">
-                                  {app.app_name}{app.platform ? ` (${app.platform})` : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
+                            <label className={modalStyles.label}>App</label>
                             <Select value={selectedAppId} onValueChange={setSelectedAppId}>
-                              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                              <SelectTrigger className={modalStyles.selectTrigger}>
                                 <SelectValue placeholder="Select an app" />
                               </SelectTrigger>
-                              <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                              <SelectContent className={modalStyles.selectContent}>
                                 {apps.map((app) => (
                                   <SelectItem key={app.app_id} value={app.app_id} className="data-[highlighted]:bg-violet-500/15 data-[highlighted]:text-violet-600 dark:data-[highlighted]:text-violet-300">
                                     {app.app_name}{app.platform ? ` (${app.platform})` : ''}
@@ -436,12 +421,12 @@ export default function AppsFlyerIntegrationModal() {
                           </div>
 
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-200">Date Range</label>
+                            <label className={modalStyles.label}>Date Range</label>
                             <Select value={datePreset} onValueChange={setDatePreset}>
-                              <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                              <SelectTrigger className={modalStyles.selectTrigger}>
                                 <SelectValue placeholder="Select date range" />
                               </SelectTrigger>
-                              <SelectContent className="bg-[#2A2A2A] border-white/10 text-white z-[201]">
+                              <SelectContent className={modalStyles.selectContent}>
                                 {DATE_PRESETS.map((preset) => (
                                   <SelectItem key={preset.value} value={preset.value} className="data-[highlighted]:bg-violet-500/15 data-[highlighted]:text-violet-600 dark:data-[highlighted]:text-violet-300">
                                     {preset.label}
@@ -454,27 +439,27 @@ export default function AppsFlyerIntegrationModal() {
                           {isCustomRange && (
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-200">Start Date</label>
+                                <label className={modalStyles.label}>Start Date</label>
                                 <div className="relative">
                                   <input
                                     type="date"
                                     value={startDate ? formatDateForApi(startDate) : ''}
                                     onChange={(e) => setStartDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
-                                    className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                    className={modalStyles.dateInput}
                                   />
-                                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                                  <CalendarDays className={modalStyles.dateIcon} />
                                 </div>
                               </div>
                               <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-200">End Date</label>
+                                <label className={modalStyles.label}>End Date</label>
                                 <div className="relative">
                                   <input
                                     type="date"
                                     value={endDate ? formatDateForApi(endDate) : ''}
                                     onChange={(e) => setEndDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
-                                    className="date-input-themed w-full px-3 py-2 pr-10 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+                                    className={modalStyles.dateInput}
                                   />
-                                  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
+                                  <CalendarDays className={modalStyles.dateIcon} />
                                 </div>
                               </div>
                             </div>
@@ -493,7 +478,7 @@ export default function AppsFlyerIntegrationModal() {
 
                 {/* ── Error banner ── */}
                 {error && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-700 dark:text-red-400 text-sm">
                     <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <span>{error}</span>
                   </div>
@@ -505,7 +490,7 @@ export default function AppsFlyerIntegrationModal() {
                   type="button"
                   variant="ghost"
                   onClick={onClose}
-                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                  className={modalStyles.ghostButton}
                   disabled={connecting || syncing}
                 >
                   Cancel
@@ -552,11 +537,11 @@ export default function AppsFlyerIntegrationModal() {
             <>
               <DialogHeader>
                 <DialogTitle className="text-xl font-semibold">No data found</DialogTitle>
-                <DialogDescription className="text-gray-400 text-sm">
-                  The partners report for <span className="text-white font-medium">{emptyRowsDialog.appLabel}</span> returned 0 rows for the selected date range.
+                <DialogDescription className="text-muted-foreground text-sm">
+                  The partners report for <span className="text-foreground font-medium">{emptyRowsDialog.appLabel}</span> returned 0 rows for the selected date range.
                 </DialogDescription>
               </DialogHeader>
-              <div className="py-4 text-sm text-gray-400">
+              <div className="py-4 text-sm text-muted-foreground">
                 You can try a different date range, or keep the empty file with just the column headers (schema only).
               </div>
               <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -565,7 +550,7 @@ export default function AppsFlyerIntegrationModal() {
                   variant="ghost"
                   onClick={handleEmptyTryAnotherRange}
                   disabled={discardingEmpty}
-                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                  className={modalStyles.ghostButton}
                 >
                   {discardingEmpty ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Try different dates

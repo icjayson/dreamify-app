@@ -14,13 +14,22 @@ interface VisualCustomizerProps {
 }
 
 const THEME_LABELS: Record<ChartPresetTheme, string> = {
-  carbon: 'Carbon',
-  slate: 'Slate',
-  chalk: 'Chalk',
-  warm: 'Warm',
-  ash: 'Ash',
-  sage: 'Sage',
-  ink: 'Ink'
+  default: 'Classic Navy',
+  carbon: 'Carbon Blue',
+  slate: 'Slate Blue',
+  chalk: 'Chalk Ink',
+  warm: 'Warm Amber',
+  ash: 'Ash Mono',
+  sage: 'Sage Green',
+  ink: 'Ink Gold',
+  aurora: 'Aurora Violet',
+  glacier: 'Glacier Cyan',
+  coral: 'Coral Graphite',
+  orchid: 'Orchid Plum',
+  mint: 'Mint Paper',
+  crimson: 'Crimson Slate',
+  cobalt: 'Cobalt Lime',
+  sandstone: 'Sandstone Clay',
 };
 
 const STYLE_LABELS: Record<ChartStyleVariant, { label: string; description: string }> = {

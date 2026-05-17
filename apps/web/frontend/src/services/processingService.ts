@@ -5,7 +5,7 @@ export interface ProcessingResponse {
   success: boolean;
   data?: {
     success: boolean;
-    status: 'not_processed' | 'processing' | 'starting' | 'completed' | 'error' | 'accepted' | 'stopped';
+    status: 'not_processed' | 'processing' | 'starting' | 'completed' | 'error' | 'accepted' | 'stopped' | 'awaiting_user_input';
     fileID: string;
     conversation_id?: string;
     message?: string;
@@ -25,7 +25,8 @@ class ProcessingService {
     additionalContents?: ConversationChatRequest['user_node_contents'],
     userNodeMetadata?: ConversationChatRequest['user_node_metadata'],
     model?: 'pro' | 'fast',
-    templateId?: string
+    themeId?: string,
+    analysisFocusId?: string
   ): Promise<ProcessingResponse> {
     try {
       const textContent: ConversationChatRequest['user_node_contents'][number] = {
@@ -44,7 +45,8 @@ class ProcessingService {
         ],
         user_node_metadata: userNodeMetadata,
         ...(model ? { model } : {}),
-        template_id: templateId,
+        ...(themeId ? { theme_id: themeId } : {}),
+        ...(analysisFocusId ? { analysis_focus_id: analysisFocusId } : {}),
       };
       const response = await conversationService.sendChatMessage(request);
       return {
@@ -84,7 +86,8 @@ class ProcessingService {
           success: true,
           status: workflowStatus.status === 'completed' ? 'completed' :
             workflowStatus.status === 'error' ? 'error' :
-              workflowStatus.status === 'stopped' ? 'stopped' : 'processing',
+              workflowStatus.status === 'stopped' ? 'stopped' :
+                workflowStatus.status === 'awaiting_user_input' ? 'awaiting_user_input' : 'processing',
           fileID: '', // Not needed for workflow status
           conversation_id: conversationId,
           workflow_status: workflowStatus,
@@ -133,7 +136,8 @@ class ProcessingService {
           success: true,
           status: workflowEvents.status?.status === 'completed' ? 'completed' :
             workflowEvents.status?.status === 'error' ? 'error' :
-              workflowEvents.status?.status === 'stopped' ? 'stopped' : 'processing',
+              workflowEvents.status?.status === 'stopped' ? 'stopped' :
+                workflowEvents.status?.status === 'awaiting_user_input' ? 'awaiting_user_input' : 'processing',
           fileID: '',
           conversation_id: conversationId,
           workflow_status: workflowEvents.status,
@@ -221,6 +225,20 @@ class ProcessingService {
               conversation_id: conversationId,
               message: 'Workflow stopped by user',
               workflow_status: status.data?.workflow_status,
+            },
+          };
+        }
+
+        if (workflowStatus === 'awaiting_user_input') {
+          return {
+            success: true,
+            data: {
+              success: true,
+              status: 'awaiting_user_input',
+              fileID: assetId,
+              conversation_id: conversationId,
+              workflow_status: status.data?.workflow_status,
+              response_type: 'clarification_request',
             },
           };
         }

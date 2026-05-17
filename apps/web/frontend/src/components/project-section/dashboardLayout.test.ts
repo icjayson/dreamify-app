@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Layout, Layouts } from "react-grid-layout";
 import {
   clampLayoutItem,
+  compactLayoutVertically,
+  compactLayoutsVertically,
   computeStorageKey,
   getMinSizeForType,
+  getComponentLayoutFrame,
   mergeLayoutIntoComponents,
   sanitizeBreakpoint,
   sanitizeLayouts,
@@ -38,7 +41,7 @@ describe("getMinSizeForType", () => {
   });
 
   it("returns metric mins", () => {
-    expect(getMinSizeForType("metric")).toEqual({ minW: 2, minH: 2 });
+    expect(getMinSizeForType("metric")).toEqual({ minW: 6, minH: 2 });
   });
 
   it("returns table mins", () => {
@@ -49,7 +52,7 @@ describe("getMinSizeForType", () => {
 describe("computeStorageKey", () => {
   it("uses the real dashboard id when present", () => {
     expect(computeStorageKey("abc-123", [], "proj-1")).toBe(
-      "dashboard_layout_abc-123_v5",
+      "dashboard_layout_abc-123_v6",
     );
   });
 
@@ -172,14 +175,31 @@ describe("sanitizeBreakpoint — minH/minW clamp (the 'vertical strip' sliver)",
     expect(result[0].w).toBe(12);
   });
 
-  it("applies metric minimums (minW=2, minH=2)", () => {
+  it("applies metric minimums (minW=6, minH=2)", () => {
     const result = sanitizeBreakpoint(
       [mkLayout({ i: "metric_1", h: 1, w: 1 })],
       activeIds,
       minMap,
     );
     expect(result[0].h).toBe(2);
-    expect(result[0].w).toBe(2);
+    expect(result[0].w).toBe(6);
+  });
+
+  it("keeps a row of generated metric cards readable by enforcing the wider floor", () => {
+    const metrics: ComponentLike[] = Array.from({ length: 6 }, (_, i) => ({
+      id: `metric_${i}`,
+      type: "metric",
+    }));
+    const metricIds = new Set(metrics.map((metric) => String(metric.id)));
+    const metricMinMap = buildMinSizeMap(metrics);
+    const result = sanitizeBreakpoint(
+      metrics.map((metric, index) =>
+        mkLayout({ i: String(metric.id), x: index * 4, w: 4, h: 2 }),
+      ),
+      metricIds,
+      metricMinMap,
+    );
+    expect(result.every((item) => item.w >= 6 && item.minW === 6)).toBe(true);
   });
 });
 
@@ -305,11 +325,11 @@ describe("clampLayoutItem — the universal floor used on BOTH backend and local
 });
 
 describe("mergeLayoutIntoComponents — the bridge from RGL layout to S3 dashboard JSON (R6)", () => {
-  type Comp = { id: string | number; type?: string; position?: Record<string, unknown> };
+  type Comp = { id: string | number; type?: string; position?: Record<string, unknown>; layout?: Record<string, unknown> };
 
-  it("writes x/y/w/h/minW/minH into each matching component's position", () => {
+  it("writes x/y/w/h/minW/minH into each matching component's position and layout", () => {
     const components: Comp[] = [
-      { id: "a", position: { existing: "field" } },
+      { id: "a", position: { existing: "field" }, layout: { existingLayout: "field" } },
       { id: "b" },
     ];
     const layout = [
@@ -322,6 +342,11 @@ describe("mergeLayoutIntoComponents — the bridge from RGL layout to S3 dashboa
       existing: "field", // preserves pre-existing fields
     });
     expect(out[1].position).toMatchObject({ x: 12, y: 0, width: 12, height: 10 });
+    expect(out[0].layout).toMatchObject({
+      x: 0, y: 0, w: 12, h: 10, minW: 4, minH: 8,
+      existingLayout: "field",
+    });
+    expect(out[1].layout).toMatchObject({ x: 12, y: 0, w: 12, h: 10 });
   });
 
   it("returns components untouched when layout is null/empty", () => {
@@ -344,6 +369,93 @@ describe("mergeLayoutIntoComponents — the bridge from RGL layout to S3 dashboa
     const components: Comp[] = [{ id: 42 }];
     const out = mergeLayoutIntoComponents(components, [mkLayout({ i: "42", x: 5, y: 5 })]);
     expect(out[0].position).toMatchObject({ x: 5, y: 5 });
+  });
+});
+
+describe("getComponentLayoutFrame — position wins over stale layout", () => {
+  it("uses position when both position and layout exist but disagree", () => {
+    const frame = getComponentLayoutFrame(
+      {
+        id: "chart_1",
+        type: "chart",
+        position: { x: 8, y: 9, width: 10, height: 11, minW: 5, minH: 6 },
+        layout: { x: 1, y: 2, w: 3, h: 4, minW: 1, minH: 2 },
+      },
+      0,
+    );
+    expect(frame).toEqual({ x: 8, y: 9, w: 10, h: 11, minW: 5, minH: 6 });
+  });
+
+  it("falls back to layout for raw Morpheus dashboard JSON without position", () => {
+    const frame = getComponentLayoutFrame(
+      {
+        id: "chart_1",
+        type: "chart",
+        layout: { x: 1, y: 2, w: 3, h: 4, minW: 1, minH: 2 },
+      },
+      0,
+    );
+    expect(frame).toEqual({ x: 1, y: 2, w: 3, h: 4, minW: 1, minH: 2 });
+  });
+});
+
+describe("compactLayoutVertically — removes empty rows after drag/drop", () => {
+  it("pulls items upward without changing x/w/h", () => {
+    const input: Layout[] = [
+      mkLayout({ i: "top", x: 0, y: 0, w: 12, h: 4 }),
+      mkLayout({ i: "bottom", x: 0, y: 20, w: 12, h: 6 }),
+    ];
+    const out = compactLayoutVertically(input);
+    expect(out.find((item) => item.i === "bottom")).toMatchObject({
+      x: 0,
+      y: 4,
+      w: 12,
+      h: 6,
+    });
+  });
+
+  it("keeps horizontal placement and preserves original array order", () => {
+    const input: Layout[] = [
+      mkLayout({ i: "right", x: 12, y: 10, w: 12, h: 4 }),
+      mkLayout({ i: "left", x: 0, y: 10, w: 12, h: 4 }),
+    ];
+    const out = compactLayoutVertically(input);
+    expect(out.map((item) => item.i)).toEqual(["right", "left"]);
+    expect(out[0]).toMatchObject({ x: 12, y: 0, w: 12, h: 4 });
+    expect(out[1]).toMatchObject({ x: 0, y: 0, w: 12, h: 4 });
+  });
+
+  it("does not move an item through a blocking item in the same columns", () => {
+    const input: Layout[] = [
+      mkLayout({ i: "top", x: 0, y: 0, w: 12, h: 6 }),
+      mkLayout({ i: "bottom", x: 0, y: 20, w: 12, h: 6 }),
+    ];
+    const out = compactLayoutVertically(input);
+    expect(out.find((item) => item.i === "bottom")).toMatchObject({ y: 6 });
+  });
+
+  it("treats static items as blockers and leaves them in place", () => {
+    const input: Layout[] = [
+      mkLayout({ i: "static", x: 0, y: 10, w: 12, h: 4, static: true }),
+      mkLayout({ i: "movable", x: 0, y: 20, w: 12, h: 4 }),
+    ];
+    const out = compactLayoutVertically(input);
+    expect(out.find((item) => item.i === "static")).toMatchObject({ y: 10 });
+    expect(out.find((item) => item.i === "movable")).toMatchObject({ y: 14 });
+  });
+
+  it("compacts every breakpoint in a responsive layouts object", () => {
+    const layouts: Layouts = {
+      ...emptyLayouts,
+      lg: [
+        mkLayout({ i: "a", x: 0, y: 0, w: 12, h: 4 }),
+        mkLayout({ i: "b", x: 0, y: 20, w: 12, h: 4 }),
+      ],
+      md: [mkLayout({ i: "a", x: 0, y: 10, w: 12, h: 4 })],
+    };
+    const out = compactLayoutsVertically(layouts);
+    expect(out.lg.find((item) => item.i === "b")).toMatchObject({ y: 4 });
+    expect(out.md[0]).toMatchObject({ y: 0 });
   });
 });
 

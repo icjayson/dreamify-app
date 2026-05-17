@@ -14,20 +14,24 @@ export type ComponentLike = {
   id: string | number;
   type: string;
   layout?: Partial<Layout> & { x?: number; y?: number; w?: number; h?: number; minW?: number; minH?: number };
-  position?: { x?: number; y?: number; width?: number; height?: number };
+  position?: { x?: number; y?: number; width?: number; height?: number; minW?: number; minH?: number };
   component_config?: { data?: unknown[] };
 };
 
 export type MinSize = { minW: number; minH: number };
+export type ComponentLayoutFrame = Pick<Layout, "x" | "y" | "w" | "h"> & Partial<Pick<Layout, "minW" | "minH">>;
 
-export const STORAGE_KEY_VERSION = "v5";
+export const STORAGE_KEY_VERSION = "v6";
 
 /**
  * Per-type minimum width/height in grid units. The 24-col grid uses 30px row
  * height, so chart minH=8 ⇒ 240px floor.
  */
 export function getMinSizeForType(type: string): MinSize {
-  if (type === "metric") return { minW: 2, minH: 2 };
+  // Metric cards include title, value, comparison text, and often a sparkline.
+  // On the 24-col grid, minW=6 caps a metric row at four cards so Morpheus
+  // cannot squeeze 5-6 cards into unreadable tiles.
+  if (type === "metric") return { minW: 6, minH: 2 };
   if (type === "table") return { minW: 12, minH: 8 };
   return { minW: 4, minH: 8 }; // charts
 }
@@ -123,16 +127,92 @@ export function shouldFillSparse(components: ComponentLike[], type: string): boo
   return nonMetricCount === 1;
 }
 
+function finiteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * Resolve the grid frame for a component. `position` is authoritative because
+ * drag/resize persistence writes the user's latest coordinates there. `layout`
+ * remains as compatibility input for raw Morpheus dashboard JSON.
+ */
+export function getComponentLayoutFrame(component: ComponentLike, index: number): ComponentLayoutFrame {
+  const position = component.position || {};
+  const layout = component.layout || {};
+  return {
+    x: finiteNumber(position.x) ? position.x : (finiteNumber(layout.x) ? layout.x : index % 12),
+    y: finiteNumber(position.y) ? position.y : (finiteNumber(layout.y) ? layout.y : Math.floor(index / 12)),
+    w: finiteNumber(position.width) ? position.width : (finiteNumber(layout.w) ? layout.w : 4),
+    h: finiteNumber(position.height) ? position.height : (finiteNumber(layout.h) ? layout.h : 10),
+    minW: finiteNumber(position.minW) ? position.minW : (finiteNumber(layout.minW) ? layout.minW : undefined),
+    minH: finiteNumber(position.minH) ? position.minH : (finiteNumber(layout.minH) ? layout.minH : undefined),
+  };
+}
+
+function collides(a: Layout, b: Layout): boolean {
+  if (a.i === b.i) return false;
+  if (a.x + a.w <= b.x) return false;
+  if (a.x >= b.x + b.w) return false;
+  if (a.y + a.h <= b.y) return false;
+  if (a.y >= b.y + b.h) return false;
+  return true;
+}
+
+function sortByRowCol(layout: Layout[]): Layout[] {
+  return [...layout].sort((a, b) => {
+    if (a.y !== b.y) return a.y - b.y;
+    if (a.x !== b.x) return a.x - b.x;
+    return a.i.localeCompare(b.i);
+  });
+}
+
+/**
+ * Remove vertical gaps while keeping every item's x/w/h intact. RGL compaction
+ * can be disabled during initial render to avoid internal cache churn, so this
+ * pure compactor is the canonical step before render/save.
+ */
+export function compactLayoutVertically(layout: Layout[] | undefined | null): Layout[] {
+  if (!Array.isArray(layout) || layout.length === 0) return [];
+
+  const cloned = layout.map((item) => ({ ...item }));
+  const byId = new Map(cloned.map((item) => [item.i, item]));
+  const placed: Layout[] = cloned.filter((item) => item.static);
+
+  sortByRowCol(cloned)
+    .filter((item) => !item.static)
+    .forEach((item) => {
+      while (item.y > 0) {
+        const candidate = { ...item, y: item.y - 1 };
+        if (placed.some((other) => collides(candidate, other))) break;
+        item.y -= 1;
+      }
+      placed.push(item);
+      byId.set(item.i, item);
+    });
+
+  return layout.map((item) => byId.get(item.i) || item);
+}
+
+export function compactLayoutsVertically(layouts: Layouts): Layouts {
+  return {
+    lg: compactLayoutVertically(layouts.lg),
+    md: compactLayoutVertically(layouts.md),
+    sm: compactLayoutVertically(layouts.sm),
+    xs: compactLayoutVertically(layouts.xs),
+    xxs: compactLayoutVertically(layouts.xxs),
+  };
+}
+
 /**
  * Merge the latest RGL Layout entries back into the component list as
- * `position: {x, y, width, height}`. This is what gets pushed to S3 so the
- * dashboard JSON itself carries the user's layout — no more localStorage as
- * source of truth.
+ * both `position: {x, y, width, height}` and `layout: {x, y, w, h}`. This is
+ * what gets pushed to S3 so the dashboard JSON itself carries the user's
+ * layout — no more localStorage as source of truth.
  *
  * Components without a matching layout entry are returned untouched (preserves
- * any pre-existing position).
+ * any pre-existing position/layout fields).
  */
-export function mergeLayoutIntoComponents<C extends { id: string | number; position?: Record<string, unknown> }>(
+export function mergeLayoutIntoComponents<C extends { id: string | number; position?: Record<string, unknown>; layout?: Record<string, unknown> }>(
   components: C[],
   layout: Layout[] | undefined | null,
 ): C[] {
@@ -150,6 +230,15 @@ export function mergeLayoutIntoComponents<C extends { id: string | number; posit
         y: l.y,
         width: l.w,
         height: l.h,
+        minW: l.minW,
+        minH: l.minH,
+      },
+      layout: {
+        ...(c.layout || {}),
+        x: l.x,
+        y: l.y,
+        w: l.w,
+        h: l.h,
         minW: l.minW,
         minH: l.minH,
       },

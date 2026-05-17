@@ -36,6 +36,9 @@ import {
   sanitizeLayouts,
   shouldFillSparse,
   clampLayoutItem,
+  getComponentLayoutFrame,
+  compactLayoutVertically,
+  compactLayoutsVertically,
   mergeLayoutIntoComponents,
 } from "@/components/project-section/dashboardLayout";
 
@@ -642,6 +645,15 @@ const DashboardPreview = ({
     // If we let the full parser run it would re-build from the raw Morpheus arrays
     // (metrics/charts/tables), completely discarding the applied edits. Detect this
     // case and pass the data straight through instead.
+    const nestedDashboardConfig = data.dashboard_config;
+    if (nestedDashboardConfig && Array.isArray(nestedDashboardConfig.components) && nestedDashboardConfig.layout) {
+      return {
+        id: overrideId || nestedDashboardConfig.id || data.id || 'processed_dashboard',
+        layout: nestedDashboardConfig.layout,
+        components: nestedDashboardConfig.components,
+      };
+    }
+
     if (Array.isArray(data.components) && data.layout) {
       return {
         id: overrideId || data.id || 'processed_dashboard',
@@ -1097,10 +1109,10 @@ const DashboardPreview = ({
   const componentsToBaseLayout = (components: any[]): Layout[] => {
     return components.map((c: any, index: number) => {
       const typeMin = getMinSizeForType(c.type);
-      const src = c.layout || {};
-      let x = Number.isFinite(src.x) ? src.x : (Number.isFinite(c.position?.x) ? c.position.x : (index % 12));
-      const y = Number.isFinite(src.y) ? src.y : (Number.isFinite(c.position?.y) ? c.position.y : Math.floor(index / 12));
-      let w = Number.isFinite(src.w) ? src.w : (Number.isFinite(c.position?.width) ? c.position.width : 4);
+      const src = getComponentLayoutFrame(c, index);
+      let x = src.x;
+      const y = src.y;
+      let w = src.w;
       // R5: when the dashboard is sparse, widen the sole non-metric to span
       // the full 24-col grid so it doesn't render pinned to a corner.
       if (shouldFillSparse(components, c.type)) {
@@ -1109,7 +1121,7 @@ const DashboardPreview = ({
       }
 
       // Calculate dynamic height for tables if not explicitly provided
-      let h = Number.isFinite(src.h) ? src.h : (Number.isFinite(c.position?.height) ? c.position.height : 10);
+      let h = src.h;
 
       if (c.type === 'table' && c.component_config?.data) {
         const rowCount = Array.isArray(c.component_config.data) ? c.component_config.data.length : 0;
@@ -1120,7 +1132,7 @@ const DashboardPreview = ({
           const calculatedH = Math.ceil(6 + (Math.min(rowCount, 10) * 1.5));
           // Use calculated height if it's larger than provided height, or if no height provided
           // This ensures we show up to 10 rows by default while respecting larger user overrides if they exist
-          h = Number.isFinite(src.h) ? Math.max(src.h, calculatedH) : (Number.isFinite(c.position?.height) ? Math.max(c.position.height, calculatedH) : calculatedH);
+          h = Math.max(h, calculatedH);
         }
       }
 
@@ -1171,13 +1183,15 @@ const DashboardPreview = ({
       didSplit = result.didSplit;
     }
 
+    baseLg = compactLayoutVertically(baseLg);
+
     return {
       layouts: {
         lg: baseLg,
-        md: scaleLayoutForCols(baseLg, 24, 12),
-        sm: scaleLayoutForCols(baseLg, 24, 8),
-        xs: scaleLayoutForCols(baseLg, 24, 4),
-        xxs: scaleLayoutForCols(baseLg, 24, 2)
+        md: compactLayoutVertically(scaleLayoutForCols(baseLg, 24, 12)),
+        sm: compactLayoutVertically(scaleLayoutForCols(baseLg, 24, 8)),
+        xs: compactLayoutVertically(scaleLayoutForCols(baseLg, 24, 4)),
+        xxs: compactLayoutVertically(scaleLayoutForCols(baseLg, 24, 2))
       } as Layouts,
       didSplit
     };
@@ -1189,29 +1203,51 @@ const DashboardPreview = ({
     () => computeStorageKey(activeDashboard?.id, activeDashboard?.components, projectId),
     [activeDashboard?.id, activeDashboard?.components, projectId],
   );
+  const layoutComponentKey = useMemo(() => {
+    if (!activeDashboard?.components) return "none";
+    const componentKey = activeDashboard.components
+      .map((component: { id?: unknown; type?: unknown }) => `${String(component.id)}:${String(component.type)}`)
+      .join("|");
+    return `${activeDashboard?.id || "processed_dashboard"}:${componentKey}`;
+  }, [activeDashboard?.id, activeDashboard?.components]);
 
   const [layouts, setLayouts] = useState<Layouts>({ lg: [], md: [], sm: [], xs: [], xxs: [] });
+  const layoutsRef = useRef<Layouts>({ lg: [], md: [], sm: [], xs: [], xxs: [] });
+  const userLayoutCommitRef = useRef<{ storageKey: string; layoutComponentKey: string; layouts: Layouts; expiresAt: number } | null>(null);
   const [isLayoutReady, setIsLayoutReady] = useState(false);
-  // Compaction is what makes RGL "pack" tiles upward.
-  // We suppress compaction when applying a brand-new dashboard layout (e.g. chart edits coming from chat),
-  // because that can re-pack other tiles and break top KPI positions.
-  // Once the user manually drags/resizes, we restore compaction so drag/drop behaves normally.
-  const [compactTypeMode, setCompactTypeMode] = useState<"none" | "vertical">("vertical");
+
+  useEffect(() => {
+    layoutsRef.current = layouts;
+  }, [layouts]);
 
   // Initialize or update layouts when active dashboard changes
   useEffect(() => {
+    const pendingUserLayout = userLayoutCommitRef.current;
+    if (
+      pendingUserLayout &&
+      pendingUserLayout.storageKey === storageKey &&
+      pendingUserLayout.layoutComponentKey === layoutComponentKey &&
+      Date.now() < pendingUserLayout.expiresAt
+    ) {
+      layoutsRef.current = pendingUserLayout.layouts;
+      setLayouts(pendingUserLayout.layouts);
+      setIsLayoutReady(true);
+      return;
+    }
+
     setIsLayoutReady(false);
     if (!activeDashboard) {
-      setLayouts({ lg: [], md: [], sm: [], xs: [], xxs: [] });
+      const emptyLayouts: Layouts = { lg: [], md: [], sm: [], xs: [], xxs: [] };
+      layoutsRef.current = emptyLayouts;
+      setLayouts(emptyLayouts);
       return;
     }
 
     const initialResult = buildLayoutsFromComponents(activeDashboard.components, isExporting);
-    // New layout coming from backend/chat: suppress compaction during this render.
-    setCompactTypeMode("none");
 
     // Skip local storage layouts entirely if exporting to force our reflow layout
     if (isExporting) {
+      layoutsRef.current = initialResult.layouts;
       setLayouts(initialResult.layouts);
       if (onExportLayoutChange) {
         onExportLayoutChange(initialResult.didSplit);
@@ -1237,6 +1273,7 @@ const DashboardPreview = ({
             activeDashboard.components,
           );
           if (fullyCovered) {
+            layoutsRef.current = sanitized;
             setLayouts(sanitized);
             setIsLayoutReady(true);
             return;
@@ -1248,9 +1285,10 @@ const DashboardPreview = ({
     }
 
     // Default to the backend's generated layout if storage fails or layout is deemed invalidated.
+    layoutsRef.current = initialResult.layouts;
     setLayouts(initialResult.layouts);
     setIsLayoutReady(true);
-  }, [activeDashboard, storageKey, isExporting, disablePersistence]);
+  }, [activeDashboard, storageKey, layoutComponentKey, isExporting, disablePersistence]);
 
   // R6: one-time legacy cache eviction. Every existing user has a corrupted
   // `dashboard_layout_*` localStorage entry that keeps bleeding the stretched
@@ -1297,22 +1335,29 @@ const DashboardPreview = ({
     return () => window.clearTimeout(id);
   }, [isLayoutReady, layouts, activeDashboard, isExporting, storageKey]);
 
-  const [currentBreakpoint, setCurrentBreakpoint] = useState<string>('lg');
+  const currentBreakpointRef = useRef<string>('lg');
 
   const handleLayoutChange = (current: Layout[], all: Layouts) => {
     if (!isLayoutReady) return;
-    setLayouts(all);
+    const compactedCurrent = compactLayoutVertically(current);
+    const activeBreakpoint = currentBreakpointRef.current as keyof typeof cols;
+    const compactedAll = compactLayoutsVertically({
+      ...all,
+      [activeBreakpoint]: compactedCurrent,
+    });
+    layoutsRef.current = compactedAll;
+    setLayouts(compactedAll);
     // Persist per dashboard id (skipped for ephemeral previews and for s3 mode,
     // which persists via the debounced S3 push fired from handleDragResizeStop).
     if (LAYOUT_SOURCE === "localstorage" && !disablePersistence) {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(all));
+        localStorage.setItem(storageKey, JSON.stringify(compactedAll));
       } catch (_e) { /* ignore */ }
     }
 
     // Sync back to dashboard state only when using real configuration
     if (!processedData && dashboardState.configuration && updateComponent) {
-      const byId = new Map(current.map((item) => [item.i, item]));
+      const byId = new Map(compactedCurrent.map((item) => [item.i, item]));
       dashboardState.configuration.components.forEach((comp) => {
         const l = byId.get(String(comp.id));
         if (l) {
@@ -1324,15 +1369,24 @@ const DashboardPreview = ({
 
   const handleDragResizeStop = (current: Layout[], oldItem: any, newItem: any) => {
     if (!isLayoutReady) return;
-    const currentCols = cols[currentBreakpoint as keyof typeof cols] || 24;
-    const scaledAll = { ...layouts };
+    const activeBreakpoint = currentBreakpointRef.current as keyof typeof cols;
+    const currentCols = cols[activeBreakpoint] || 24;
+    const scaledAll = { ...layoutsRef.current };
+    const compactedCurrent = compactLayoutVertically(current);
 
-    scaledAll.lg = currentBreakpoint === 'lg' ? current : scaleLayoutForCols(current, currentCols, cols.lg);
-    scaledAll.md = currentBreakpoint === 'md' ? current : scaleLayoutForCols(current, currentCols, cols.md);
-    scaledAll.sm = currentBreakpoint === 'sm' ? current : scaleLayoutForCols(current, currentCols, cols.sm);
-    scaledAll.xs = currentBreakpoint === 'xs' ? current : scaleLayoutForCols(current, currentCols, cols.xs);
-    scaledAll.xxs = currentBreakpoint === 'xxs' ? current : scaleLayoutForCols(current, currentCols, cols.xxs);
+    scaledAll.lg = activeBreakpoint === 'lg' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.lg));
+    scaledAll.md = activeBreakpoint === 'md' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.md));
+    scaledAll.sm = activeBreakpoint === 'sm' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.sm));
+    scaledAll.xs = activeBreakpoint === 'xs' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.xs));
+    scaledAll.xxs = activeBreakpoint === 'xxs' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.xxs));
 
+    layoutsRef.current = scaledAll;
+    userLayoutCommitRef.current = {
+      storageKey,
+      layoutComponentKey,
+      layouts: scaledAll,
+      expiresAt: Date.now() + 5000,
+    };
     setLayouts(scaledAll);
     if (LAYOUT_SOURCE === "localstorage" && !disablePersistence) {
       try {
@@ -1350,8 +1404,14 @@ const DashboardPreview = ({
   };
 
   const handleBreakpointChange = (newBreakpoint: string) => {
-    setCurrentBreakpoint(newBreakpoint);
+    currentBreakpointRef.current = newBreakpoint;
   };
+
+  useEffect(() => {
+    if (!onEditedComponentsChange || !activeDashboard || !isLayoutReady) return;
+    const layoutMergedComponents = mergeLayoutIntoComponents(editedDisplayComponents as any[], layouts.lg);
+    onEditedComponentsChange(layoutMergedComponents, activeDashboard ?? null);
+  }, [activeDashboard, editedDisplayComponents, isLayoutReady, layouts.lg, onEditedComponentsChange]);
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -1742,13 +1802,11 @@ const DashboardPreview = ({
                 rowHeight={rowHeight}
                 isDraggable
                 isResizable
-                compactType={compactTypeMode === "none" ? null : "vertical"}
+                compactType="vertical"
                 resizeHandles={['se', 'e', 's', 'w', 'n']}
                 draggableCancel="button, input, select, textarea, a, [contenteditable], .dashboard-card-menu-trigger, .react-resizable-handle"
                 onLayoutChange={handleLayoutChange}
                 onBreakpointChange={handleBreakpointChange}
-                onDragStart={() => setCompactTypeMode("vertical")}
-                onResizeStart={() => setCompactTypeMode("vertical")}
                 onDragStop={handleDragResizeStop}
                 onResizeStop={handleDragResizeStop}
               >

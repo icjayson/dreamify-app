@@ -1,9 +1,9 @@
 import { Fragment, useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { CornerRightUp, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, Mic, MicOff, FileText, LayoutTemplate, Square, Check, CheckCircle, FileStack, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap, Maximize2 } from "lucide-react";
-import FileAttachDropdown from "@/components/chat/FileAttachDropdown";
-import { CONNECTORS, CONNECTOR_CATEGORIES, type ConnectorItem } from "@/constants/connectors";
+import { CornerRightUp, User, Sparkles, BarChart3, Database, TrendingUp, Users, DollarSign, ChevronDown, ChevronUp, ChevronRight, Link, FileText, Square, Check, CheckCircle, AlertCircle, ChevronsUpDown, ChevronsDownUp, Copy, PieChart, AreaChart, Hash, Table2, Pencil, CircleDashed, Circle, ListTodo, Zap, Maximize2 } from "lucide-react";
+import { ComposerAddMenu } from "@/components/chat/ComposerAddMenu";
+import { CONNECTORS, type ConnectorItem } from "@/constants/connectors";
 import TextareaAutosize from 'react-textarea-autosize';
 import RecordingBarSidebar from '@/components/ui/recording-bar-sidebar';
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
@@ -1402,7 +1402,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       }
 
       // Close context picker if clicked outside
-      if (isContextPickerOpen && !target.closest('.project-context-picker-container') && !target.closest('.project-context-trigger')) {
+      if (isContextPickerOpen && !target.closest('.project-context-picker-container') && !target.closest('.project-context-trigger') && !target.closest('.composer-add-menu')) {
         setIsContextPickerOpen(false);
       }
     };
@@ -1957,6 +1957,35 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setTemplateModalOpen(true);
   };
 
+  const handleAddProjectContextClick = () => {
+    setPickerTriggerMode('button');
+    setMentionQuery('');
+    setModelDropdownOpen(false);
+    setDropdownOpen(false);
+
+    window.setTimeout(() => {
+      setIsContextPickerOpen(true);
+      if (projectId && projectAssets.length === 0) {
+        fetchProjectAssets(projectId).then(setProjectAssets);
+      }
+    }, 0);
+  };
+
+  const getDataSourceColors = (sourceName: string) => {
+    const colors: { [key: string]: { bg: string; border: string; text: string; hover: string } } = {
+      "Google Sheets": { bg: "bg-green-500", border: "border-green-400", text: "text-white", hover: "hover:bg-green-600" },
+      "GA4": { bg: "bg-orange-500", border: "border-orange-400", text: "text-white", hover: "hover:bg-orange-600" },
+      "Meta": { bg: "bg-blue-600", border: "border-blue-500", text: "text-white", hover: "hover:bg-blue-700" },
+      "TikTok": { bg: "bg-zinc-900", border: "border-zinc-800", text: "text-white", hover: "hover:bg-black" },
+      "Airtable": { bg: "bg-blue-400", border: "border-blue-300", text: "text-white", hover: "hover:bg-blue-500" },
+      "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
+      "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
+      "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
+      "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" }
+    };
+    return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
+  };
+
   const handleTemplateSelect = (template: ThemeSelection) => {
     if (templateModalSource === 'header') {
       // Header entry point: apply the visual theme to the current dashboard but don't
@@ -2013,24 +2042,6 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     }
     removeFile(fileID);
     setMentionedAssetIds(prev => prev.filter(id => id !== fileID));
-  };
-
-
-
-  // Function to get colors for each data source
-  const getDataSourceColors = (sourceName: string) => {
-    const colors: { [key: string]: { bg: string; border: string; text: string; hover: string } } = {
-      "Google Sheets": { bg: "bg-green-500", border: "border-green-400", text: "text-white", hover: "hover:bg-green-600" },
-      "GA4": { bg: "bg-orange-500", border: "border-orange-400", text: "text-white", hover: "hover:bg-orange-600" },
-      "Meta": { bg: "bg-blue-600", border: "border-blue-500", text: "text-white", hover: "hover:bg-blue-700" },
-      "TikTok": { bg: "bg-zinc-900", border: "border-zinc-800", text: "text-white", hover: "hover:bg-black" },
-      "Airtable": { bg: "bg-blue-400", border: "border-blue-300", text: "text-white", hover: "hover:bg-blue-500" },
-      "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
-      "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
-      "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
-      "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" }
-    };
-    return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
   };
 
   const suggestedPrompts = [
@@ -2947,50 +2958,23 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
             {/* Buttons Row */}
             <div className={`chat-composer-actions flex items-center justify-between ${compactComposer ? 'flex-wrap gap-2' : 'gap-2'}`}>
-              {/* Left side - File Upload and Data Connector Buttons */}
+              {/* Left side - secondary composer actions */}
               <div className={`flex items-center ${compactComposer ? 'min-w-0 flex-wrap gap-1.5' : 'gap-2'}`}>
-                {/* File attach dropdown */}
-                <FileAttachDropdown
+                <ComposerAddMenu
                   onUpload={handleFileUpload}
-                  compact
-                  cloneToProject
-                />
-
-                {/* Project Context Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsContextPickerOpen(prev => !prev);
-                    setPickerTriggerMode('button');
-                    if (!isContextPickerOpen) {
-                      setModelDropdownOpen(false);
-                      setDropdownOpen(false);
-                      // Ensure assets are loaded
-                      if (projectId && projectAssets.length === 0) {
-                        fetchProjectAssets(projectId).then(setProjectAssets);
-                      }
-                    }
+                  onAddProjectContext={handleAddProjectContextClick}
+                  onChooseTheme={handleCloneTemplateClick}
+                  onOpen={() => {
+                    setModelDropdownOpen(false);
+                    setDropdownOpen(false);
+                    setIsContextPickerOpen(false);
                   }}
-                  className={`project-context-trigger p-2 flex items-center justify-center border border-border/50 dark:border-white/30 rounded-md text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white transition-colors ${isContextPickerOpen && pickerTriggerMode === 'button' ? 'bg-muted dark:bg-white/10 text-foreground dark:text-white' : ''
-                    }`}
-                  title="Project Context"
-                >
-                  <FileStack className="w-4 h-4" />
-                </button>
-
-                {/* Template Button */}
-                <button
-                  onClick={handleCloneTemplateClick}
-                  className="p-2 flex items-center justify-center border border-border/50 dark:border-white/30 rounded-md text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white transition-colors"
-                  title="Choose theme"
-                  aria-label="Choose theme"
-                >
-                  <LayoutTemplate className="w-4 h-4" />
-                </button>
+                />
 
                 {/* Data Connector Dropup */}
                 <div className="relative data-source-dropdown">
                   <button
+                    type="button"
                     onClick={() => {
                       const newState = !dropdownOpen;
                       setDropdownOpen(newState);
@@ -2999,58 +2983,60 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         setIsContextPickerOpen(false);
                       }
                     }}
-                    className={`p-2 flex items-center justify-center gap-1 rounded-md transition-all duration-200 ${selectedDataSource
+                    className={`flex h-[34px] items-center justify-center gap-1 rounded-md px-2 transition-all duration-200 ${selectedDataSource
                       ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
-                      : 'border border-border/50 dark:border-white/30 text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white'
+                      : 'border border-border/50 text-muted-foreground hover:text-foreground dark:border-white/30 dark:text-gray-400 dark:hover:text-white'
                       }`}
                     aria-expanded={dropdownOpen}
                     aria-haspopup="true"
                     aria-label="Connect data source"
+                    title="Connect data source"
                   >
-                    <Link className="w-4 h-4" />
-                    <ChevronUp className={`w-3 h-3 transition-transform duration-200 ${selectedDataSource ? 'text-white' : 'text-muted-foreground/60 dark:text-white/60'
+                    <Link className="h-4 w-4" />
+                    <ChevronUp className={`h-3 w-3 transition-transform duration-200 ${selectedDataSource ? 'text-white' : 'text-muted-foreground/60 dark:text-white/60'
                       } ${dropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
 
                   {dropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-1 w-[min(13rem,calc(100vw_-_2rem))] bg-background/95 backdrop-blur-sm border border-border/30 rounded-xl shadow-2xl z-10 p-2">
-                      <p className="px-2 pt-1 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground dark:text-white/25">Popular</p>
+                    <div className="absolute bottom-full left-0 z-[300] mb-2 w-[min(13rem,calc(100vw_-_2rem))] rounded-xl border border-border/30 bg-background/95 p-2 shadow-2xl backdrop-blur-sm">
+                      <p className="px-2 pb-1.5 pt-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground dark:text-white/25">Popular</p>
 
-                      {/* Active connectors */}
                       {CONNECTORS.filter(c => ['GA4', 'Google Ads', 'Firebase', 'Google Sheets'].includes(c.name)).map(con => (
                         <button
                           key={con.name}
+                          type="button"
                           onClick={() => handleIntegrationClick(con)}
-                          className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted dark:hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                          className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted dark:hover:bg-white/10"
                         >
-                          <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0" />
+                          <img src={con.icon} alt={con.name} className="h-4 w-4 flex-shrink-0 object-contain" />
                           <span className="text-foreground dark:text-white/90">{con.name}</span>
                         </button>
                       ))}
 
-                      {/* SOON connectors — disabled, toast only */}
                       {([
                         { name: 'Meta Ads', icon: '/meta.png', category: 'Advertising Platform' as const },
                         { name: 'TikTok Ads', icon: '/tiktok.png', category: 'Advertising Platform' as const },
                       ] as const).map(con => (
                         <button
                           key={con.name}
+                          type="button"
                           onClick={() => handleIntegrationClick(con)}
-                          className="w-full px-2 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted dark:hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                          className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted dark:hover:bg-white/10"
                         >
-                          <img src={con.icon} alt={con.name} className="w-4 h-4 object-contain flex-shrink-0 opacity-50" />
+                          <img src={con.icon} alt={con.name} className="h-4 w-4 flex-shrink-0 object-contain opacity-50" />
                           <span className="text-muted-foreground dark:text-white/50">{con.name}</span>
-                          <span className="ml-auto text-[9px] text-white/30">SOON</span>
+                          <span className="ml-auto text-[9px] text-muted-foreground/70 dark:text-white/30">SOON</span>
                         </button>
                       ))}
 
-                      <div className="border-t border-white/10 mt-1.5 pt-1.5">
+                      <div className="mt-1.5 border-t border-border/60 pt-1.5 dark:border-white/10">
                         <button
+                          type="button"
                           onClick={() => { setDropdownOpen(false); setAllConnectorsModalOpen(true); }}
-                          className="w-full px-2 py-1.5 text-left text-xs text-muted-foreground hover:text-foreground dark:text-white/50 dark:hover:text-white flex items-center gap-1.5 rounded-md hover:bg-muted dark:hover:bg-white/10 transition-colors"
+                          className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
                         >
                           Browse all connectors
-                          <ChevronRight className="w-3 h-3 ml-auto" />
+                          <ChevronRight className="ml-auto h-3 w-3" />
                         </button>
                       </div>
                     </div>

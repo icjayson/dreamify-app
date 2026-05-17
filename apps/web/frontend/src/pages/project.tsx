@@ -229,6 +229,41 @@ export default function ProjectPage() {
   // save handler always sees the latest value without being in its dependency array.
   const editedComponentsRef = useRef<any[]>([]);
   const activeDashboardMetaRef = useRef<any>(null);
+  const processedDataRef = useRef<Record<string, unknown> | null>(processedData);
+
+  useEffect(() => {
+    processedDataRef.current = processedData;
+  }, [processedData]);
+
+  const buildProcessedDashboardPayload = useCallback((
+    baseProcessedData: Record<string, unknown> | null,
+    components: unknown[],
+  ): Record<string, unknown> | null => {
+    if (!baseProcessedData) return null;
+    const meta = activeDashboardMetaRef.current;
+    const normalizedCore = {
+      id: meta?.id || 'processed_dashboard',
+      layout: meta?.layout || { type: 'grid', grid_columns: 12, grid_rows: 20 },
+      components,
+    };
+    return baseProcessedData?.dashboard_config
+      ? { ...baseProcessedData, dashboard_config: normalizedCore }
+      : { ...baseProcessedData, ...normalizedCore };
+  }, []);
+
+  const syncProcessedDashboardData = useCallback((payload: Record<string, unknown>) => {
+    setProcessedData(payload);
+    processedDataRef.current = payload;
+    const store = useChatStore.getState();
+    const targetFile =
+      store.uploadedFiles.find((file) => file.conversationId === currentConversationId) ||
+      store.uploadedFiles.find((file) => file.projectId === projectId && file.processedData) ||
+      store.uploadedFiles.find((file) => file.projectId === projectId) ||
+      store.uploadedFiles[0];
+    if (targetFile) {
+      store.updateFile(targetFile.fileID, { processedData: payload });
+    }
+  }, [currentConversationId, projectId]);
 
   const handleEditedComponentsChange = useCallback(
     (components: any[], activeDashboard: any | null) => {
@@ -566,11 +601,15 @@ export default function ProjectPage() {
 
   // Sync processedData from store to local state
   useEffect(() => {
-    const processedFile = uploadedFiles.find(f => f.processedData);
+    const processedFile =
+      uploadedFiles.find(f => f.conversationId === currentConversationId && f.processedData) ||
+      uploadedFiles.find(f => f.projectId === projectId && f.processedData) ||
+      uploadedFiles.find(f => f.processedData);
     if (processedFile?.processedData) {
+      processedDataRef.current = processedFile.processedData;
       setProcessedData(processedFile.processedData);
     }
-  }, [uploadedFiles]);
+  }, [currentConversationId, projectId, uploadedFiles]);
 
   // Warn before leaving with unsaved edits
   useEffect(() => {
@@ -599,19 +638,13 @@ export default function ProjectPage() {
     }
     if (!components || components.length === 0) return;
     if (!currentConversationId || !selectedDashboardId || !projectId) return;
-    if (!processedData) return;
+    const baseProcessedData = processedDataRef.current;
+    if (!baseProcessedData) return;
     try {
       // Refresh in-flight refs so a subsequent manual Save sees the new positions.
       editedComponentsRef.current = components;
-      const meta = activeDashboardMetaRef.current;
-      const normalizedCore = {
-        id: meta?.id || 'processed_dashboard',
-        layout: meta?.layout || { type: 'grid', grid_columns: 12, grid_rows: 20 },
-        components,
-      };
-      const payload: Record<string, unknown> = processedData?.dashboard_config
-        ? { ...processedData, dashboard_config: normalizedCore }
-        : { ...processedData, ...normalizedCore };
+      const payload = buildProcessedDashboardPayload(baseProcessedData, components);
+      if (!payload) return;
       // Fire-and-forget. No toast, no spinner — this is the silent counterpart
       // to `handleSaveDashboard`. Errors surface only via console + telemetry.
       const result = await conversationService.saveDashboardData(
@@ -622,7 +655,7 @@ export default function ProjectPage() {
       );
       if (result.success) {
         // Keep processedData in sync so the next render sees the persisted positions.
-        setProcessedData(payload);
+        syncProcessedDashboardData(payload);
       } else {
         // eslint-disable-next-line no-console
         console.warn('[DashboardPreview] auto-save layout failed', result.error);
@@ -631,17 +664,22 @@ export default function ProjectPage() {
       // eslint-disable-next-line no-console
       console.warn('[DashboardPreview] auto-save layout exception', e);
     }
-  }, [currentConversationId, selectedDashboardId, projectId, processedData]);
+  }, [buildProcessedDashboardPayload, currentConversationId, selectedDashboardId, projectId, syncProcessedDashboardData]);
 
   const handleLayoutPersist = useCallback((components: any[]) => {
     pendingLayoutSaveRef.current = components;
+    editedComponentsRef.current = components;
+    const optimisticPayload = buildProcessedDashboardPayload(processedDataRef.current, components);
+    if (optimisticPayload) {
+      syncProcessedDashboardData(optimisticPayload);
+    }
     if (layoutSaveTimerRef.current !== null) {
       window.clearTimeout(layoutSaveTimerRef.current);
     }
     layoutSaveTimerRef.current = window.setTimeout(() => {
       void flushLayoutSave();
     }, 700);
-  }, [flushLayoutSave]);
+  }, [buildProcessedDashboardPayload, flushLayoutSave, syncProcessedDashboardData]);
 
   // Flush pending auto-save when the user navigates away or closes the tab so
   // the last drag isn't lost.
@@ -664,29 +702,16 @@ export default function ProjectPage() {
   }, [flushLayoutSave]);
 
   const handleSaveDashboard = useCallback(async () => {
-    if (!currentConversationId || !selectedDashboardId || !projectId || !processedData) return;
+    const baseProcessedData = processedDataRef.current;
+    if (!currentConversationId || !selectedDashboardId || !projectId || !baseProcessedData) return;
     setIsSaving(true);
     try {
       // Use the already-normalized + edits-applied components captured by the ref.
       // This avoids re-parsing the raw Morpheus payload (which has no `components` field)
       // and losing the applied edits.
       const mergedComponents = editedComponentsRef.current;
-      const meta = activeDashboardMetaRef.current;
-
-      // Build a normalized payload that the normalizeDashboard shortcut recognises:
-      // { components, layout, id } at the top level (and preserve any outer wrapper
-      // fields like `dashboard_config` if the original data used that shape).
-      const normalizedCore = {
-        id: meta?.id || 'processed_dashboard',
-        layout: meta?.layout || { type: 'grid', grid_columns: 12, grid_rows: 20 },
-        components: mergedComponents,
-      };
-
-      // Re-attach any non-dashboard fields from the original processedData so the
-      // backend receives a complete document.
-      const payload: Record<string, unknown> = processedData?.dashboard_config
-        ? { ...processedData, dashboard_config: normalizedCore }
-        : { ...processedData, ...normalizedCore };
+      const payload = buildProcessedDashboardPayload(baseProcessedData, mergedComponents);
+      if (!payload) return;
 
       const result = await conversationService.saveDashboardData(
         currentConversationId,
@@ -698,7 +723,7 @@ export default function ProjectPage() {
         markSaved();
         // Store the normalized-format data so normalizeDashboard takes the shortcut
         // on the next render and doesn't rebuild from raw arrays, discarding the edits.
-        setProcessedData(payload);
+        syncProcessedDashboardData(payload);
         toast({ title: 'Dashboard saved', duration: 2000 });
       } else {
         toast({ title: 'Save failed', description: result.error, variant: 'destructive' });
@@ -708,7 +733,7 @@ export default function ProjectPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [currentConversationId, selectedDashboardId, projectId, processedData, markSaved, toast]);
+  }, [buildProcessedDashboardPayload, currentConversationId, selectedDashboardId, projectId, markSaved, toast, syncProcessedDashboardData]);
 
   const handleDownloadCsvPreview = useCallback(async () => {
     if (!csvPreview) return;

@@ -43,6 +43,102 @@ MODEL_ID_MAP = {
     "fast": os.environ.get("DREAMIFY_FAST_MODEL", "gemini-3-flash-preview"),
 }
 
+VALID_THEME_IDS = {
+    "default",
+    "carbon",
+    "slate",
+    "chalk",
+    "warm",
+    "ash",
+    "sage",
+    "ink",
+    "aurora",
+    "glacier",
+    "coral",
+    "orchid",
+    "mint",
+    "crimson",
+    "cobalt",
+    "sandstone",
+}
+
+VALID_ANALYSIS_FOCUS_IDS = {
+    "saas_growth",
+    "ecommerce_sales",
+    "finance_overview",
+    "marketing_funnel",
+    "ops_performance",
+    "product_analytics",
+    "hr_workforce",
+    "executive_summary",
+}
+
+LEGACY_TEMPLATE_THEME_MAP = {
+    "default": "default",
+    "saas_growth": "carbon",
+    "ecommerce_sales": "slate",
+    "finance_overview": "chalk",
+    "marketing_funnel": "sage",
+    "ops_performance": "ash",
+    "product_analytics": "ink",
+    "hr_workforce": "warm",
+    "executive_summary": "carbon",
+}
+
+
+def _resolve_theme_id(theme_id: Optional[str], template_id: Optional[str] = None) -> Optional[str]:
+    resolved = theme_id or (LEGACY_TEMPLATE_THEME_MAP.get(template_id or "") if template_id else None)
+    if resolved and resolved not in VALID_THEME_IDS:
+        raise HTTPException(status_code=400, detail=f"Invalid theme_id: {resolved}")
+    return resolved
+
+
+def _resolve_analysis_focus_id(
+    analysis_focus_id: Optional[str],
+    template_id: Optional[str] = None,
+) -> Optional[str]:
+    resolved = analysis_focus_id
+    if not resolved and template_id in VALID_ANALYSIS_FOCUS_IDS:
+        resolved = template_id
+    if resolved and resolved not in VALID_ANALYSIS_FOCUS_IDS:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid analysis_focus_id: {resolved}"
+        )
+    return resolved
+
+
+def _apply_theme_fields_to_dashboard(
+    dashboard_data: Dict[str, Any],
+    theme_id: Optional[str],
+    analysis_focus_id: Optional[str] = None,
+    legacy_template_id: Optional[str] = None,
+    update_analysis_focus: bool = False,
+) -> None:
+    if theme_id:
+        dashboard_data["theme_id"] = theme_id
+        styling = dashboard_data.get("styling_recommendations")
+        if not isinstance(styling, dict):
+            styling = {}
+            dashboard_data["styling_recommendations"] = styling
+        styling["theme"] = theme_id
+    else:
+        dashboard_data.pop("theme_id", None)
+        styling = dashboard_data.get("styling_recommendations")
+        if isinstance(styling, dict):
+            styling.pop("theme", None)
+
+    if update_analysis_focus:
+        if analysis_focus_id:
+            dashboard_data["analysis_focus_id"] = analysis_focus_id
+        else:
+            dashboard_data.pop("analysis_focus_id", None)
+
+    if legacy_template_id is not None:
+        if legacy_template_id:
+            dashboard_data["template_id"] = legacy_template_id
+        else:
+            dashboard_data.pop("template_id", None)
+
 PLACEHOLDER_PROJECT_NAMES = {"", "untitled project", "new project"}
 TITLE_STOPWORDS = {
     "a",
@@ -205,6 +301,9 @@ class ConversationChatRequest(BaseModel):
     # Metadata for user node - used for selective asset processing
     user_node_metadata: Optional[Dict[str, Any]] = None
     model: Optional[str] = "fast"
+    theme_id: Optional[str] = None
+    analysis_focus_id: Optional[str] = None
+    # Legacy compatibility: old frontend sent use-case template IDs here.
     template_id: Optional[str] = None
 
 
@@ -218,6 +317,9 @@ class ConversationChatResponse(BaseModel):
 
 class ConversationResponse(BaseModel):
     conversation: Dict[str, Any]
+
+
+VALID_ASSET_SELECTION_MODES = {"none", "explicit", "all"}
 
 
 def _load_existing_conversation(
@@ -235,6 +337,127 @@ def _load_existing_conversation(
     return load_conversation(s3_bucket, s3_key)
 
 
+def _asset_ids_from_contents(contents: List[Dict[str, Any]]) -> List[str]:
+    asset_ids: List[str] = []
+    for content in contents:
+        if content.get("type") not in {"asset", "attachment"}:
+            continue
+        asset_id = str((content.get("data") or {}).get("asset_id") or "").strip()
+        if asset_id and asset_id not in asset_ids:
+            asset_ids.append(asset_id)
+    return asset_ids
+
+
+def _find_clarification_request(
+    conversation: Optional[Dict[str, Any]], clarification_id: str
+) -> Optional[Dict[str, Any]]:
+    if not conversation or not clarification_id:
+        return None
+    for node in reversed(conversation.get("nodes", [])):
+        if node.get("role") != "assistant":
+            continue
+        for content in node.get("contents", []):
+            if content.get("type") != "clarification_request":
+                continue
+            data = content.get("data") or {}
+            if data.get("clarification_id") == clarification_id:
+                return data
+    return None
+
+
+def _validate_asset_ids(user_id: str, project_id: str, asset_ids: List[str]) -> None:
+    for asset_id in asset_ids:
+        asset = assets_repo.get_asset(user_id, asset_id)
+        if not asset:
+            raise HTTPException(status_code=400, detail=f"Invalid asset_id: {asset_id}")
+        if asset.get("project_id") != project_id:
+            raise HTTPException(status_code=403, detail=f"Asset is not in this project: {asset_id}")
+
+
+def _validate_clarification_responses(
+    contents: List[Dict[str, Any]],
+    existing_conversation: Optional[Dict[str, Any]],
+) -> None:
+    for content in contents:
+        if content.get("type") != "clarification_response":
+            continue
+        data = content.get("data") or {}
+        clarification_id = str(data.get("clarification_id") or "").strip()
+        selected_option_id = str(data.get("selected_option_id") or "").strip()
+        if not clarification_id:
+            raise HTTPException(status_code=400, detail="clarification_id is required")
+        request = _find_clarification_request(existing_conversation, clarification_id)
+        if not request:
+            raise HTTPException(status_code=400, detail="Clarification request not found")
+        valid_option_ids = {str(option.get("id")) for option in request.get("options", [])}
+        if selected_option_id and selected_option_id not in valid_option_ids:
+            raise HTTPException(status_code=400, detail="Invalid clarification option")
+
+
+def _normalize_user_node_metadata(
+    contents: List[Dict[str, Any]],
+    metadata: Optional[Dict[str, Any]],
+    user_id: str,
+    project_id: str,
+) -> Dict[str, Any]:
+    normalized = dict(metadata or {})
+    content_asset_ids = _asset_ids_from_contents(contents)
+    selected_asset_ids = [
+        str(asset_id)
+        for asset_id in normalized.get("selected_asset_ids", [])
+        if str(asset_id).strip()
+    ]
+    for asset_id in content_asset_ids:
+        if asset_id not in selected_asset_ids:
+            selected_asset_ids.append(asset_id)
+
+    selection_mode = normalized.get("asset_selection")
+    if not selection_mode:
+        selection_mode = "explicit" if selected_asset_ids else "none"
+    if selection_mode not in VALID_ASSET_SELECTION_MODES:
+        raise HTTPException(status_code=400, detail="Invalid asset_selection")
+
+    if selection_mode == "none" and selected_asset_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="selected_asset_ids are not allowed when asset_selection is none",
+        )
+    if selection_mode == "explicit" and not selected_asset_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="selected_asset_ids are required when asset_selection is explicit",
+        )
+    if selected_asset_ids:
+        _validate_asset_ids(user_id, project_id, selected_asset_ids)
+        normalized["selected_asset_ids"] = selected_asset_ids
+    else:
+        normalized.pop("selected_asset_ids", None)
+    normalized["asset_selection"] = selection_mode
+    return normalized
+
+
+def _project_asset_summaries(user_id: str, project_id: str) -> List[Dict[str, Any]]:
+    assets = assets_repo.list_assets(user_id=user_id, project_id=project_id)
+    summaries: List[Dict[str, Any]] = []
+    for asset in assets:
+        asset_id = asset.get("asset_id")
+        if not asset_id:
+            continue
+        summaries.append(
+            {
+                "asset_id": asset_id,
+                "file_id": asset.get("file_id"),
+                "filename": asset.get("filename") or "",
+                "extension": asset.get("extension") or "",
+                "asset_type": asset.get("asset_type") or "",
+                "row_count": asset.get("row_count"),
+                "column_count": asset.get("column_count"),
+                "status": asset.get("status"),
+            }
+        )
+    return summaries
+
+
 def _create_user_node(
     contents: List[Dict[str, Any]], metadata: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
@@ -250,6 +473,44 @@ def _create_user_node(
     if metadata:
         node["metadata"] = metadata
     return node
+
+
+def _has_no_answer_clarification_response(
+    conversation: Dict[str, Any], clarification_id: str
+) -> bool:
+    for node in conversation.get("nodes", []):
+        if node.get("role") != "user":
+            continue
+        for content in node.get("contents", []):
+            data = content.get("data") or {}
+            if (
+                content.get("type") == "clarification_response"
+                and data.get("clarification_id") == clarification_id
+                and data.get("answer_status") == "no_answer"
+            ):
+                return True
+    return False
+
+
+def _create_no_answer_clarification_node(clarification_id: str) -> Dict[str, Any]:
+    return _create_user_node(
+        [
+            {
+                "type": "clarification_response",
+                "data": {
+                    "clarification_id": clarification_id,
+                    "selected_option_id": None,
+                    "answer_status": "no_answer",
+                    "free_text": None,
+                },
+            }
+        ],
+        {
+            "hidden": True,
+            "clarification_id": clarification_id,
+            "clarification_answer_status": "no_answer",
+        },
+    )
 
 
 def _create_greeting_node() -> Dict[str, Any]:
@@ -389,6 +650,22 @@ async def conversation_chat(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    existing_conversation: Optional[Dict[str, Any]] = None
+    if request.conversation_id:
+        existing_conversation = _load_existing_conversation(
+            user_id, request.project_id, request.conversation_id
+        )
+
+    _validate_clarification_responses(
+        request.user_node_contents, existing_conversation
+    )
+    user_node_metadata = _normalize_user_node_metadata(
+        request.user_node_contents,
+        request.user_node_metadata,
+        user_id,
+        request.project_id,
+    )
+
     # Extract assets from user_node_contents and update their status
     assets_to_process = []
     for content in request.user_node_contents:
@@ -409,17 +686,24 @@ async def conversation_chat(
 
     model_alias = request.model or "fast"
     resolved_model = MODEL_ID_MAP.get(model_alias, MODEL_ID_MAP["fast"])
+    theme_id = _resolve_theme_id(request.theme_id, request.template_id)
+    analysis_focus_id = _resolve_analysis_focus_id(
+        request.analysis_focus_id, request.template_id
+    )
 
-    user_node_metadata = request.user_node_metadata or {}
     user_node_metadata["chat_mode"] = model_alias
     user_node_metadata["resolved_model"] = resolved_model
+    if theme_id:
+        user_node_metadata["theme_id"] = theme_id
+    if analysis_focus_id:
+        user_node_metadata["analysis_focus_id"] = analysis_focus_id
 
     user_node = _create_user_node(enriched_contents, user_node_metadata)
 
     is_new_conversation = False
     if request.conversation_id:
         # Load existing conversation and update
-        conversation = _load_existing_conversation(
+        conversation = existing_conversation or _load_existing_conversation(
             user_id, request.project_id, request.conversation_id
         )
         conversation = _update_conversation_with_user_node(conversation, user_node)
@@ -436,13 +720,22 @@ async def conversation_chat(
             dynamo_metadata = existing_meta.get("metadata", {})
             dynamo_metadata["chat_mode"] = model_alias
             dynamo_metadata["resolved_model"] = resolved_model
+            if theme_id:
+                dynamo_metadata["theme_id"] = theme_id
+            if analysis_focus_id:
+                dynamo_metadata["analysis_focus_id"] = analysis_focus_id
             if request.template_id:
                 dynamo_metadata["template_id"] = request.template_id
             conversations_repo.update_conversation_metadata(
                 request.project_id, conversation_id, dynamo_metadata
             )
 
-            # Also update conversation object to persist template_id in S3
+            # Also update conversation object to persist theme/focus metadata in S3
+            conversation.setdefault("metadata", {})
+            if theme_id:
+                conversation["metadata"]["theme_id"] = theme_id
+            if analysis_focus_id:
+                conversation["metadata"]["analysis_focus_id"] = analysis_focus_id
             conversation["metadata"]["template_id"] = (
                 request.template_id or conversation["metadata"].get("template_id")
             )
@@ -475,6 +768,8 @@ async def conversation_chat(
             "updated_at": now_iso,
             "metadata": {
                 **metadata,
+                "theme_id": theme_id,
+                "analysis_focus_id": analysis_focus_id,
                 "template_id": request.template_id,
             },
             "nodes": [greeting_node, user_node],
@@ -531,7 +826,10 @@ async def conversation_chat(
         "project_id": request.project_id,
         "user_id": user_id,
         "model": resolved_model,
+        "theme_id": theme_id,
+        "analysis_focus_id": analysis_focus_id,
         "template_id": request.template_id,
+        "project_assets": _project_asset_summaries(user_id, request.project_id),
     }
 
     try:
@@ -712,6 +1010,13 @@ class StopWorkflowResponse(BaseModel):
     conversation_id: str
 
 
+class ClarificationDismissResponse(BaseModel):
+    success: bool
+    message: str
+    conversation_id: str
+    clarification_id: str
+
+
 @router.get(
     "/conversation/{conversation_id}/dashboard", response_model=DashboardDataResponse
 )
@@ -865,17 +1170,18 @@ class UpdateDashboardTemplateRequest(BaseModel):
     template_id: Optional[str] = None
 
 
-@router.put("/conversation/{conversation_id}/dashboard/{dashboard_id}/template")
-async def update_dashboard_template(
+class UpdateDashboardThemeRequest(BaseModel):
+    project_id: str
+    theme_id: Optional[str] = None
+
+
+def _load_dashboard_artifact_for_update(
     conversation_id: str,
     dashboard_id: str,
-    request: UpdateDashboardTemplateRequest,
-    user_id: str = Depends(require_user),
-):
-    """Update the template_id field inside a saved dashboard JSON in S3."""
-    conversation_meta = conversations_repo.get_conversation(
-        request.project_id, conversation_id
-    )
+    project_id: str,
+    user_id: str,
+) -> tuple[str, str, Dict[str, Any]]:
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
     if not conversation_meta:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation_meta.get("user_id") != user_id:
@@ -913,11 +1219,14 @@ async def update_dashboard_template(
             status_code=500, detail=f"Failed to load dashboard: {str(e)}"
         )
 
-    if request.template_id is not None:
-        dashboard_data["template_id"] = request.template_id
-    else:
-        dashboard_data.pop("template_id", None)
+    return bucket, key, dashboard_data
 
+
+def _save_dashboard_artifact_update(
+    bucket: str,
+    key: str,
+    dashboard_data: Dict[str, Any],
+) -> None:
     try:
         updated_bytes = json.dumps(dashboard_data, ensure_ascii=False, indent=2).encode(
             "utf-8"
@@ -927,6 +1236,47 @@ async def update_dashboard_template(
         raise HTTPException(
             status_code=500, detail=f"Failed to save dashboard: {str(e)}"
         )
+
+
+@router.put("/conversation/{conversation_id}/dashboard/{dashboard_id}/theme")
+async def update_dashboard_theme(
+    conversation_id: str,
+    dashboard_id: str,
+    request: UpdateDashboardThemeRequest,
+    user_id: str = Depends(require_user),
+):
+    """Update the visual theme inside a saved dashboard JSON in S3."""
+    theme_id = _resolve_theme_id(request.theme_id)
+    bucket, key, dashboard_data = _load_dashboard_artifact_for_update(
+        conversation_id, dashboard_id, request.project_id, user_id
+    )
+    _apply_theme_fields_to_dashboard(dashboard_data, theme_id)
+    _save_dashboard_artifact_update(bucket, key, dashboard_data)
+
+    return {"success": True}
+
+
+@router.put("/conversation/{conversation_id}/dashboard/{dashboard_id}/template")
+async def update_dashboard_template(
+    conversation_id: str,
+    dashboard_id: str,
+    request: UpdateDashboardTemplateRequest,
+    user_id: str = Depends(require_user),
+):
+    """Legacy wrapper: map old template_id to theme_id/focus fields."""
+    theme_id = _resolve_theme_id(None, request.template_id)
+    analysis_focus_id = _resolve_analysis_focus_id(None, request.template_id)
+    bucket, key, dashboard_data = _load_dashboard_artifact_for_update(
+        conversation_id, dashboard_id, request.project_id, user_id
+    )
+    _apply_theme_fields_to_dashboard(
+        dashboard_data,
+        theme_id,
+        analysis_focus_id,
+        request.template_id,
+        update_analysis_focus=True,
+    )
+    _save_dashboard_artifact_update(bucket, key, dashboard_data)
 
     return {"success": True}
 
@@ -995,6 +1345,72 @@ async def save_dashboard_data(
         dashboard_id,
     )
     return {"success": True}
+
+
+@router.post(
+    "/conversation/{conversation_id}/clarification/{clarification_id}/dismiss",
+    response_model=ClarificationDismissResponse,
+)
+async def dismiss_clarification(
+    conversation_id: str,
+    clarification_id: str,
+    project_id: str = Query(..., description="Project ID"),
+    user_id: str = Depends(require_user),
+):
+    """Persist a no-answer clarification response and stop the pending workflow."""
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation_meta:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_meta.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    s3_bucket = conversation_meta["s3_bucket"]
+    s3_key = conversation_meta["s3_key"]
+    conversation = load_conversation(s3_bucket, s3_key)
+
+    clarification = _find_clarification_request(conversation, clarification_id)
+    if not clarification:
+        raise HTTPException(status_code=404, detail="Clarification request not found")
+
+    if not _has_no_answer_clarification_response(conversation, clarification_id):
+        conversation.setdefault("nodes", []).append(
+            _create_no_answer_clarification_node(clarification_id)
+        )
+        conversation["updated_at"] = utc_now_iso()
+        save_conversation(s3_bucket, s3_key, conversation)
+        backup_key = _conversation_keys(user_id, project_id, conversation_id)["backup"]
+        if backup_key != s3_key:
+            save_conversation(s3_bucket, backup_key, conversation)
+
+    now_iso = utc_now_iso()
+    stop_metadata = {
+        "step": "clarification_dismissed",
+        "message": "Clarification dismissed without an answer",
+        "clarification_id": clarification_id,
+        "reason_code": clarification.get("reason_code"),
+        "answer_status": "no_answer",
+        "stopped_at": now_iso,
+        "stopped_by": user_id,
+    }
+    workflow_nodes_repo.upsert_node_status(
+        conversation_id=conversation_id,
+        node_id="workflow",
+        status="stopped",
+        metadata=stop_metadata,
+    )
+    workflow_nodes_repo.upsert_node_status(
+        conversation_id=conversation_id,
+        node_id="stop_signal",
+        status="stopped",
+        metadata=stop_metadata,
+    )
+
+    return ClarificationDismissResponse(
+        success=True,
+        message="Clarification dismissed",
+        conversation_id=conversation_id,
+        clarification_id=clarification_id,
+    )
 
 
 @router.post(

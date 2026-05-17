@@ -199,6 +199,14 @@ Available Themes (choose ONE):
 - ash: Mid gray, neutral white accent — ultra-minimal
 - sage: Desaturated dark green, muted sage — calm, financial
 - ink: Near-black warm tint, amber/gold — premium, media
+- aurora: Deep indigo, violet/cyan — executive dark dashboard
+- glacier: Icy light, cyan-blue — crisp report dashboard
+- coral: Graphite dark, coral — high-contrast operating dashboard
+- orchid: Dark plum, orchid pink — expressive product dashboard
+- mint: Soft mint light, emerald — fresh analytical report
+- crimson: Dark slate, crimson — urgent signal dashboard
+- cobalt: Deep cobalt, electric lime — energetic technical dashboard
+- sandstone: Warm sand, terracotta — editorial business dashboard
 
 CRITICAL THEME REQUIREMENT:
 1. Choose ONE theme for the entire dashboard output

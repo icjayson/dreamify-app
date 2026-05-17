@@ -133,6 +133,7 @@ class AgentState(BaseModel):
 
     # Template guidance
     template_spec: Optional[Dict[str, Any]] = Field(default=None, description="Active template content spec for guided generation")
+    theme_id: Optional[str] = Field(default=None, description="Selected visual theme for dashboard styling")
     
     @property
     def file_path(self) -> Optional[str]:

@@ -45,7 +45,11 @@ class RunRequest(BaseModel):
     project_id: str
     user_id: str
     model: Optional[str] = None
+    theme_id: Optional[str] = None
+    analysis_focus_id: Optional[str] = None
+    # Legacy compatibility: older backend payloads sent use-case template IDs.
     template_id: Optional[str] = None
+    project_assets: List[Dict[str, Any]] = []
 
 
 class StatusRequest(BaseModel):
@@ -56,6 +60,65 @@ class StatusRequest(BaseModel):
 # Backend API URL for updating file records
 BACKEND_API_URL = config.app.backend_url.rstrip("/")
 MORPHEUS_API_KEY = config.app.morpheus_api_key
+
+VALID_THEME_IDS = {
+    "default",
+    "carbon",
+    "slate",
+    "chalk",
+    "warm",
+    "ash",
+    "sage",
+    "ink",
+    "aurora",
+    "glacier",
+    "coral",
+    "orchid",
+    "mint",
+    "crimson",
+    "cobalt",
+    "sandstone",
+}
+LEGACY_TEMPLATE_THEME_MAP = {
+    "default": "default",
+    "saas_growth": "carbon",
+    "ecommerce_sales": "slate",
+    "finance_overview": "chalk",
+    "marketing_funnel": "sage",
+    "ops_performance": "ash",
+    "product_analytics": "ink",
+    "hr_workforce": "warm",
+    "executive_summary": "carbon",
+}
+
+
+def _resolve_theme_id(theme_id: Optional[str], template_id: Optional[str] = None) -> Optional[str]:
+    resolved = theme_id or LEGACY_TEMPLATE_THEME_MAP.get(template_id or "")
+    return resolved if resolved in VALID_THEME_IDS else None
+
+
+def _apply_theme_to_dashboard_data(data: Dict[str, Any], theme_id: Optional[str]) -> None:
+    if not theme_id or not isinstance(data, dict):
+        return
+    data["theme_id"] = theme_id
+    styling_recommendations = data.get("styling_recommendations")
+    if not isinstance(styling_recommendations, dict):
+        styling_recommendations = {}
+        data["styling_recommendations"] = styling_recommendations
+    styling_recommendations["theme"] = theme_id
+
+    for key in ("metrics", "charts", "tables"):
+        items = data.get(key)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            styling = item.get("styling")
+            if not isinstance(styling, dict):
+                styling = {}
+                item["styling"] = styling
+            styling["theme"] = theme_id
 
 STEP_FRIENDLY_MAP: Dict[str, str] = {
     "start": "Waking up...",
@@ -641,8 +704,9 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
     Extract asset content items from conversation nodes.
 
     Respects user_node_metadata.asset_selection to filter assets:
+    - 'none' or no metadata: Return no assets
     - 'explicit' with selected_asset_ids: Only return those specific assets
-    - 'all' or no metadata: Return all assets in conversation
+    - 'all': Return all assets in conversation
     """
     nodes = conversation.get("nodes", [])
 
@@ -655,10 +719,14 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
 
     # Check metadata for selection mode
     metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
-    selection_mode = metadata.get("asset_selection", "all")
+    selection_mode = metadata.get("asset_selection", "none")
     selected_ids = set(metadata.get("selected_asset_ids", []))
 
     logger.info(f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}")
+
+    if selection_mode == "none":
+        logger.info("Asset selection is none; no conversation assets will be downloaded")
+        return []
 
     # Extract all assets from conversation
     assets = []
@@ -693,8 +761,167 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
         )
         return filtered_assets
 
-    # Default: return all assets
-    return assets
+    if selection_mode == "all":
+        return assets
+
+    return []
+
+
+DATA_CONTEXT_PROMPT_RE = _re.compile(
+    r"\b("
+    r"trend|chart|graph|plot|visuali[sz]e|dashboard|report|metric|metrics|"
+    r"sessions?|users?|visitors?|traffic|revenue|sales|orders?|spend|clicks?|"
+    r"impressions?|ctr|cpc|roas|conversion|conversions?|compare|ranking|top|bottom"
+    r")\b",
+    _re.IGNORECASE,
+)
+
+
+def _latest_user_node(conversation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    for node in reversed(conversation.get("nodes", [])):
+        if node.get("role") == "user":
+            return node
+    return None
+
+
+def _latest_user_prompt(conversation: Dict[str, Any]) -> Optional[str]:
+    latest_user = _latest_user_node(conversation)
+    if not latest_user:
+        return None
+    for content in latest_user.get("contents", []):
+        if content.get("type") == "text":
+            text = (content.get("data") or {}).get("text")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+    return None
+
+
+def _latest_user_has_clarification_response(conversation: Dict[str, Any]) -> bool:
+    latest_user = _latest_user_node(conversation)
+    if not latest_user:
+        return False
+    return any(
+        content.get("type") == "clarification_response"
+        for content in latest_user.get("contents", [])
+    )
+
+
+def _is_data_context_needed(user_prompt: Optional[str]) -> bool:
+    return bool(user_prompt and DATA_CONTEXT_PROMPT_RE.search(user_prompt))
+
+
+def _asset_label(asset: Dict[str, Any]) -> str:
+    filename = str(asset.get("filename") or "Data source").strip()
+    source = str(asset.get("asset_type") or "").replace("integration_", "").replace("_", " ").strip()
+    return source.title() if source else filename
+
+
+def _rank_project_assets_for_prompt(
+    project_assets: List[Dict[str, Any]], user_prompt: Optional[str]
+) -> List[Dict[str, Any]]:
+    prompt = (user_prompt or "").lower()
+
+    def score(asset: Dict[str, Any]) -> int:
+        raw = " ".join(
+            str(asset.get(key) or "").lower()
+            for key in ("filename", "asset_type", "extension")
+        )
+        total = 0
+        if any(term in prompt for term in ("visitor", "traffic", "session", "user", "ga4", "analytics")):
+            total += 5 if any(term in raw for term in ("ga4", "analytics", "visitor", "traffic")) else 0
+        if any(term in prompt for term in ("ad", "campaign", "spend", "click", "impression")):
+            total += 5 if "ads" in raw or "campaign" in raw else 0
+        if any(term in prompt for term in ("revenue", "sales", "order", "payment")):
+            total += 5 if any(term in raw for term in ("stripe", "shopify", "sales", "revenue")) else 0
+        total += 1 if asset.get("row_count") not in (None, 0, "0") else 0
+        return total
+
+    return sorted(project_assets, key=score, reverse=True)
+
+
+def _build_data_context_clarification(
+    user_prompt: Optional[str],
+    project_assets: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    ranked_assets = _rank_project_assets_for_prompt(project_assets, user_prompt)
+    options: List[Dict[str, Any]] = []
+    for asset in ranked_assets[:6]:
+        asset_id = str(asset.get("asset_id") or "").strip()
+        if not asset_id:
+            continue
+        row_count = asset.get("row_count")
+        column_count = asset.get("column_count")
+        shape = ""
+        if row_count is not None and column_count is not None:
+            shape = f" ({row_count} rows, {column_count} columns)"
+        options.append(
+            {
+                "id": f"asset:{asset_id}",
+                "label": _asset_label(asset),
+                "description": f"{asset.get('filename') or 'Project data'}{shape}",
+                "recommended": len(options) == 0,
+                "metadata": {
+                    "asset_ids": [asset_id],
+                    "asset_selection": "explicit",
+                    "asset": asset,
+                },
+            }
+        )
+
+    all_asset_ids = [
+        str(asset.get("asset_id"))
+        for asset in ranked_assets
+        if str(asset.get("asset_id") or "").strip()
+    ]
+    if len(all_asset_ids) > 1:
+        options.append(
+            {
+                "id": "all_project_data",
+                "label": "Use all project data",
+                "description": "Broader context, slower and less precise if sources are unrelated",
+                "metadata": {
+                    "asset_ids": all_asset_ids,
+                    "asset_selection": "all",
+                },
+            }
+        )
+
+    options.append(
+        {
+            "id": "answer_without_data",
+            "label": "Answer without data",
+            "description": "Explain what data is needed instead of analyzing",
+            "metadata": {"asset_selection": "none"},
+        }
+    )
+
+    return {
+        "clarification_id": str(uuid.uuid4()),
+        "reason_code": "missing_data_context",
+        "question": "Choose the data context",
+        "options": options,
+        "allow_free_text": True,
+        "required": True,
+    }
+
+
+def _append_clarification_request_node(
+    conversation: Dict[str, Any], clarification: Dict[str, Any]
+) -> None:
+    text = "I need one choice before I analyze. No data source was selected, so I will not guess."
+    conversation.setdefault("nodes", []).append(
+        {
+            "node_id": f"node_{uuid.uuid4().hex[:8]}",
+            "role": "assistant",
+            "status": "awaiting_user_input",
+            "created_at": datetime.now().isoformat(),
+            "contents": [
+                {"type": "text", "data": {"text": text}},
+                {"type": "clarification_request", "data": clarification},
+            ],
+        }
+    )
+    conversation["updated_at"] = datetime.now().isoformat()
 
 
 def _postprocess_workflow_to_conversation_nodes(
@@ -791,7 +1018,10 @@ def _process_conversation_background(
     user_id: str,
     wait_for_previous: bool = False,
     model_override: Optional[str] = None,
+    theme_id: Optional[str] = None,
+    analysis_focus_id: Optional[str] = None,
     template_id: Optional[str] = None,
+    project_assets: Optional[List[Dict[str, Any]]] = None,
 ):
     """Background processing function for workflow execution."""
     temp_file_path = None
@@ -859,10 +1089,41 @@ def _process_conversation_background(
 
         conversation_bucket, _ = _parse_s3_uri(conversation_uri)
         dashboards_cache = _load_existing_dashboards(conversation)
+        user_prompt = _latest_user_prompt(conversation)
 
         # Extract all assets from conversation nodes
         assets = _extract_assets_from_nodes(conversation)
         logger.info(f"Found {len(assets)} asset(s) in conversation {conversation_id}")
+
+        if (
+            not assets
+            and _is_data_context_needed(user_prompt)
+            and not _latest_user_has_clarification_response(conversation)
+        ):
+            clarification = _build_data_context_clarification(
+                user_prompt, project_assets or []
+            )
+            _append_clarification_request_node(conversation, clarification)
+            thinking_tracer.emit(
+                "final",
+                "Need data context",
+                "Paused for the user to choose which project data source to analyze.",
+            )
+            _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
+            _persist_conversation(
+                conversation_uri, conversation_backup_uri, conversation
+            )
+            _post_node_status_sync(
+                conversation_id,
+                "awaiting_user_input",
+                {
+                    "step": "clarification",
+                    "response_type": "clarification_request",
+                    "clarification_id": clarification["clarification_id"],
+                    "reason_code": clarification["reason_code"],
+                },
+            )
+            return
 
         # Handle file download - download all assets, or skip entirely for Q&A
         temp_file_paths = []
@@ -948,11 +1209,16 @@ def _process_conversation_background(
         # Store primary_asset for later use in error handling and completion
         primary_asset = assets[0] if assets else None
 
-        workflow = StatefulAnalyzeCSVWorkflow(model_override=model_override, template_id=template_id)
+        effective_theme_id = _resolve_theme_id(theme_id, template_id)
+        workflow = StatefulAnalyzeCSVWorkflow(
+            model_override=model_override,
+            theme_id=effective_theme_id,
+            analysis_focus_id=analysis_focus_id,
+            template_id=template_id,
+        )
         _collecting_post_status(conversation_id, "processing", {"step": "run_workflow"})
 
         # Extract user prompt and chart_mention context from latest user node
-        user_prompt = None
         chart_mentions = []
         nodes = conversation.get("nodes", [])
         for node in reversed(nodes):
@@ -1231,6 +1497,10 @@ def _process_conversation_background(
         result_data = result.get("data", {}) if result else {}
         if not isinstance(result_data, dict):
             result_data = {}
+        effective_theme_id = _resolve_theme_id(theme_id, template_id)
+        _apply_theme_to_dashboard_data(result_data, effective_theme_id)
+        if analysis_focus_id:
+            result_data["analysis_focus_id"] = analysis_focus_id
 
         file_identifier = (
             primary_asset.get("file_id") or primary_asset.get("asset_id")
@@ -1315,6 +1585,10 @@ def _process_conversation_background(
         new_dashboard_record = None
         result_data = result.get("data")
         if result_data and isinstance(result_data, dict) and conversation_bucket:
+            effective_theme_id = _resolve_theme_id(theme_id, template_id)
+            _apply_theme_to_dashboard_data(result_data, effective_theme_id)
+            if analysis_focus_id:
+                result_data["analysis_focus_id"] = analysis_focus_id
             if template_id:
                 result_data["template_id"] = template_id
             logger.info(
@@ -1624,7 +1898,10 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
             request.user_id,
             is_previous_running,
             request.model,
+            request.theme_id,
+            request.analysis_focus_id,
             request.template_id,
+            request.project_assets,
         )
 
         return {

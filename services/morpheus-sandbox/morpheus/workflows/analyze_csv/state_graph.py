@@ -38,7 +38,13 @@ class StatefulAnalyzeCSVWorkflow:
     transitions between nodes based on state and execution results.
     """
 
-    def __init__(self, model_override=None, template_id: Optional[str] = None):
+    def __init__(
+        self,
+        model_override=None,
+        theme_id: Optional[str] = None,
+        analysis_focus_id: Optional[str] = None,
+        template_id: Optional[str] = None,
+    ):
         """Initialize workflow with model, tools, and node registry."""
         self.config = load_config()
         self.model = get_model_for_agent(model_override=model_override)
@@ -47,17 +53,19 @@ class StatefulAnalyzeCSVWorkflow:
         self.tools = [self.python_tool, get_available_chart_types]
         self.model_with_tools = self.model.bind_tools(self.tools)
 
+        self.theme_id = theme_id
         self.template_spec = None
-        if template_id:
+        focus_id = analysis_focus_id or template_id
+        if focus_id:
             try:
                 from morpheus.templates.builtin_templates import get_template
-                self.template_spec = get_template(template_id)
+                self.template_spec = get_template(focus_id)
                 if self.template_spec:
-                    logger.info(f"Template '{template_id}' loaded: {self.template_spec['name']}")
+                    logger.info(f"Analysis focus '{focus_id}' loaded: {self.template_spec['name']}")
                 else:
-                    logger.warning(f"Template '{template_id}' not found, ignoring")
+                    logger.warning(f"Analysis focus '{focus_id}' not found, ignoring")
             except Exception as e:
-                logger.warning(f"Failed to load template '{template_id}': {e}")
+                logger.warning(f"Failed to load analysis focus '{focus_id}': {e}")
 
         # Detect reasoning strategy based on model type
         # OpenAI models (with Responses API) → internal reasoning loop
@@ -734,6 +742,7 @@ class StatefulAnalyzeCSVWorkflow:
             conversation_uri=conversation_uri,
             conversation_backup_uri=conversation_backup_uri,
             template_spec=self.template_spec,
+            theme_id=self.theme_id,
         )
 
         logger.info(
@@ -936,8 +945,9 @@ class StatefulAnalyzeCSVWorkflow:
         Extract asset information from conversation nodes.
 
         Respects user_node_metadata.asset_selection to filter assets:
+        - 'none' or no metadata: Return no assets
         - 'explicit' with selected_asset_ids: Only return those specific assets
-        - 'all' or no metadata: Return all assets in conversation
+        - 'all': Return all assets in conversation
 
         Args:
             conversation: Conversation dict
@@ -956,12 +966,16 @@ class StatefulAnalyzeCSVWorkflow:
 
         # Check metadata for selection mode
         metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
-        selection_mode = metadata.get("asset_selection", "all")
+        selection_mode = metadata.get("asset_selection", "none")
         selected_ids = set(metadata.get("selected_asset_ids", []))
 
         logger.info(
             f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}"
         )
+
+        if selection_mode == "none":
+            logger.info("Asset selection is none; no conversation assets will be used")
+            return []
 
         # Extract all assets from conversation
         assets = []
@@ -1002,8 +1016,10 @@ class StatefulAnalyzeCSVWorkflow:
             )
             return filtered_assets
 
-        # Default: return all assets
-        return assets
+        if selection_mode == "all":
+            return assets
+
+        return []
 
     def _check_workflow_stopped(self, state: AgentState) -> bool:
         """

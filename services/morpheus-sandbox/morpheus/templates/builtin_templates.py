@@ -1,6 +1,6 @@
 """
-Built-in domain content specs for template-guided dashboard generation.
-Visual specs are handled client-side; this file only contains content specs.
+Built-in analysis focus specs for dashboard generation.
+Visual themes are handled separately; this file only contains domain guidance.
 """
 
 from typing import Any, Dict, List, Optional
@@ -19,7 +19,7 @@ BUILTIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "id": "saas_growth",
         "name": "SaaS Growth",
         "prompt_prefix": (
-            "[TEMPLATE CONTRACT: SaaS Growth]\n"
+            "[ANALYSIS FOCUS: SaaS Growth]\n"
             "Domain context: This is a SaaS business dashboard. Focus on subscription economics and growth metrics.\n\n"
             "REQUIRED METRICS (must appear as metric components):\n"
             "- Monthly Recurring Revenue (MRR) with month-over-month change\n"
@@ -41,7 +41,7 @@ BUILTIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "id": "ecommerce_sales",
         "name": "E-commerce Sales",
         "prompt_prefix": (
-            "[TEMPLATE CONTRACT: E-commerce Sales]\n"
+            "[ANALYSIS FOCUS: E-commerce Sales]\n"
             "Domain context: This is an e-commerce business dashboard. Focus on transaction volume, conversion, and basket metrics.\n\n"
             "REQUIRED METRICS (must appear as metric components):\n"
             "- Gross Merchandise Value (GMV) or Total Revenue\n"
@@ -62,7 +62,7 @@ BUILTIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "id": "finance_overview",
         "name": "Finance Overview",
         "prompt_prefix": (
-            "[TEMPLATE CONTRACT: Finance Overview]\n"
+            "[ANALYSIS FOCUS: Finance Overview]\n"
             "Domain context: This is a financial reporting dashboard. Focus on P&L, margins, and cash metrics.\n\n"
             "REQUIRED METRICS (must appear as metric components):\n"
             "- Total Revenue for the period\n"
@@ -83,7 +83,7 @@ BUILTIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "id": "marketing_funnel",
         "name": "Marketing Funnel",
         "prompt_prefix": (
-            "[TEMPLATE CONTRACT: Marketing Funnel]\n"
+            "[ANALYSIS FOCUS: Marketing Funnel]\n"
             "Domain context: This is a marketing performance dashboard. Focus on funnel metrics, campaign effectiveness, and acquisition cost.\n\n"
             "REQUIRED METRICS (must appear as metric components):\n"
             "- Total Impressions or Reach\n"
@@ -104,7 +104,7 @@ BUILTIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "id": "ops_performance",
         "name": "Operations Performance",
         "prompt_prefix": (
-            "[TEMPLATE CONTRACT: Operations Performance]\n"
+            "[ANALYSIS FOCUS: Operations Performance]\n"
             "Domain context: This is an operations dashboard. Focus on throughput, reliability, SLA compliance, and resource utilization.\n\n"
             "REQUIRED METRICS (must appear as metric components):\n"
             "- Throughput (volume processed per period)\n"
@@ -125,7 +125,7 @@ BUILTIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "id": "product_analytics",
         "name": "Product Analytics",
         "prompt_prefix": (
-            "[TEMPLATE CONTRACT: Product Analytics]\n"
+            "[ANALYSIS FOCUS: Product Analytics]\n"
             "Domain context: This is a product analytics dashboard. Focus on user engagement, retention, and feature adoption.\n\n"
             "REQUIRED METRICS (must appear as metric components):\n"
             "- Daily Active Users (DAU)\n"
@@ -146,7 +146,7 @@ BUILTIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "id": "hr_workforce",
         "name": "HR & Workforce",
         "prompt_prefix": (
-            "[TEMPLATE CONTRACT: HR & Workforce]\n"
+            "[ANALYSIS FOCUS: HR & Workforce]\n"
             "Domain context: This is an HR analytics dashboard. Focus on workforce size, attrition, hiring velocity, and tenure.\n\n"
             "REQUIRED METRICS (must appear as metric components):\n"
             "- Total Headcount\n"
@@ -167,7 +167,7 @@ BUILTIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "id": "executive_summary",
         "name": "Executive Summary",
         "prompt_prefix": (
-            "[TEMPLATE CONTRACT: Executive Summary]\n"
+            "[ANALYSIS FOCUS: Executive Summary]\n"
             "Domain context: This is an executive summary dashboard. Identify the 5 most important KPIs from the data.\n\n"
             "REQUIRED METRICS: Identify and include the top 3-5 most important KPIs from the provided data.\n\n"
             "REQUIRED CHARTS (must appear):\n"

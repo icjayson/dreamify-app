@@ -139,7 +139,7 @@ Return ONLY a JSON code block with this exact top-level shape:
       ],
       "config": {"animation": true, "showGrid": true, "showLegend": true},
       "styling": {
-        "theme": "monochrome",
+        "theme": "default",
         "title": "title-color",
         "description": "description-color",
         "cartesianGrid": "element-color/75",
@@ -174,7 +174,7 @@ For table artifacts, use:
     {"channel": "Facebook", "value": 123}
   ],
   "styling": {
-    "theme": "monochrome",
+    "theme": "default",
     "title": "title-color",
     "description": "description-color",
     "headerBg": "highlight-color/10",
@@ -421,13 +421,28 @@ Use semantic tokens in ALL styling objects (NOT hex/HSL except trendUp/trendDown
 - border-card-color: for card borders
 
 Available Themes (choose ONE for entire dashboard):
-- monochrome
+- default: Clean monochrome, navy accent
+- carbon: Very dark, blue accent
+- slate: Dark blue-gray, cool blue accent
+- chalk: Pure white/light, dark ink text
+- warm: Warm off-white, rust/amber accent
+- ash: Mid gray, neutral white accent
+- sage: Desaturated dark green, muted sage accent
+- ink: Near-black warm tint, amber/gold accent
+- aurora: Deep indigo, violet/cyan accent
+- glacier: Icy light, cyan-blue accent
+- coral: Graphite dark, coral accent
+- orchid: Dark plum, orchid pink accent
+- mint: Soft mint light, emerald accent
+- crimson: Dark slate, crimson accent
+- cobalt: Deep cobalt, electric lime accent
+- sandstone: Warm sand, terracotta accent
 
 CRITICAL THEME REQUIREMENT:
 - Choose ONE theme for the entire dashboard
 - EVERY metric, chart, and table styling object MUST include "theme" field
 - ALL cards MUST use the SAME theme value
-- Example: {"theme": "monochrome", "title": "title-color", ...}
+- Example: {"theme": "carbon", "title": "title-color", ...}
 
 
 OUTPUT FORMAT:
@@ -460,7 +475,7 @@ Generate JSON with this EXACT structure:
         "percentage_change": 12.27
       },
       "styling": {
-        "theme": "monochrome",
+        "theme": "default",
         "title": "title-color",
         "value": "highlight-color",
         "trendUp": "hsl(142 76% 36%)",
@@ -493,7 +508,7 @@ Generate JSON with this EXACT structure:
       ],
       "config": {"animation": true, "showGrid": true, "showLegend": true},
       "styling": {
-        "theme": "monochrome",
+        "theme": "default",
         "title": "title-color",
         "description": "description-color",
         "cartesianGrid": "element-color/75",
@@ -526,7 +541,7 @@ Generate JSON with this EXACT structure:
         {"col1": "Product B", "col2": 98500.25}
       ],
       "styling": {
-        "theme": "monochrome",
+        "theme": "default",
         "title": "title-color",
         "description": "description-color",
         "headerBackground": "highlight-color/10",
@@ -551,7 +566,7 @@ Generate JSON with this EXACT structure:
     "duplicates": 12
   },
   "styling_recommendations": {
-    "theme": "monochrome",
+    "theme": "default",
     "colorPalette": [],
     "dashboardBackground": null
   }
@@ -1186,7 +1201,7 @@ You MUST output a valid JSON code block in this EXACT format:
         }}
       ],
       "config": {{"animation": true, "showGrid": true, "showLegend": true}},
-      "styling": {{"theme": "monochrome", "title": "title-color", "description": "description-color", "cartesianGrid": "element-color/75", "xAxis": "element-color", "yAxis": "element-color", "legend": "highlight-color", "dataElements": "highlight-color", "tile": {{"background": "bg-card-color", "borderColor": "border-card-color", "borderWidth": 1, "borderRadius": 12}}}}
+      "styling": {{"theme": "default", "title": "title-color", "description": "description-color", "cartesianGrid": "element-color/75", "xAxis": "element-color", "yAxis": "element-color", "legend": "highlight-color", "dataElements": "highlight-color", "tile": {{"background": "bg-card-color", "borderColor": "border-card-color", "borderWidth": 1, "borderRadius": 12}}}}
     }}
   ],
   "tables": [],
@@ -2285,7 +2300,7 @@ It's better to have fewer charts with REAL data than more charts with FAKE data.
     else:
         validation_result = {"valid": False, "error": f"Unknown output type: {output_type}"}
 
-    # Template compliance check
+    # Analysis focus compliance check
     if state.template_spec and state.working_memory.dashboard_json:
         dashboard_json = state.working_memory.dashboard_json
         required_keywords = state.template_spec.get("required_metric_keywords", [])
@@ -2305,14 +2320,14 @@ It's better to have fewer charts with REAL data than more charts with FAKE data.
 
             if match_ratio < 0.3:
                 logger.warning(
-                    f"Template compliance low: {matched}/{len(required_keywords)} keywords found. "
-                    f"Template: {state.template_spec.get('name')}"
+                    f"Analysis focus compliance low: {matched}/{len(required_keywords)} keywords found. "
+                    f"Focus: {state.template_spec.get('name')}"
                 )
                 state.working_memory.errors.append({
                     "node": "node_validation",
-                    "type": "template_compliance",
+                    "type": "analysis_focus_compliance",
                     "message": (
-                        f"Dashboard does not contain expected metrics for template "
+                        f"Dashboard does not contain expected metrics for analysis focus "
                         f"'{state.template_spec.get('name')}'. "
                         f"Found {matched}/{len(required_keywords)} required metric keywords."
                     ),
@@ -2418,6 +2433,17 @@ def _format_state_for_prompt_basic(state: AgentState) -> str:
     route_decision = state.working_memory.tool_outputs.get("route_decision")
     if route_decision:
         sections.append(f"""MODE: {route_decision.get('next_step')}""")
+
+    if state.theme_id:
+        sections.append(f"""SELECTED VISUAL THEME:
+- Use theme "{state.theme_id}" for styling_recommendations.theme and every metric/chart/table styling.theme.
+- Do not choose a different dashboard theme unless the selected theme is invalid.""")
+
+    if state.template_spec:
+        prompt_prefix = state.template_spec.get("prompt_prefix", "")
+        if prompt_prefix:
+            sections.append(f"""SELECTED ANALYSIS FOCUS:
+{prompt_prefix}""")
     
     if state.working_memory.errors:
         recent_errors = state.working_memory.errors[-2:]

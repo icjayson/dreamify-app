@@ -5,7 +5,7 @@ import AccountCenterModal from "@/components/homepage-section/AccountCenterModal
 const TIER_LIMIT = 1000;
 
 interface HeaderCreditBadgeProps {
-  creditsRemaining: number;
+  creditsRemaining: number | null;
   monthlyCreditsUsed?: number;
 }
 
@@ -17,12 +17,13 @@ const HeaderCreditBadge: React.FC<HeaderCreditBadgeProps> = ({
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
   const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans" | "preferences">("plans");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasCreditBalance = creditsRemaining !== null;
 
-  const used = monthlyCreditsUsed ?? (TIER_LIMIT - creditsRemaining);
-  const pct = TIER_LIMIT > 0 ? Math.max(0, Math.min(1, creditsRemaining / TIER_LIMIT)) : 0;
+  const used = monthlyCreditsUsed ?? (hasCreditBalance ? TIER_LIMIT - creditsRemaining : null);
+  const pct = TIER_LIMIT > 0 && hasCreditBalance ? Math.max(0, Math.min(1, creditsRemaining / TIER_LIMIT)) : 0;
 
   // Credit state coloring (same as ModelSelector)
-  const creditState = creditsRemaining === 0 ? 'empty' : pct <= 0.1 ? 'critical' : pct <= 0.3 ? 'warning' : 'ok';
+  const creditState = !hasCreditBalance ? 'loading' : creditsRemaining === 0 ? 'empty' : pct <= 0.1 ? 'critical' : pct <= 0.3 ? 'warning' : 'ok';
   const strokeColor = creditState === 'empty' || creditState === 'critical'
     ? '#ef4444' : creditState === 'warning'
       ? '#f59e0b' : 'hsl(var(--primary))';
@@ -75,7 +76,11 @@ const HeaderCreditBadge: React.FC<HeaderCreditBadgeProps> = ({
           <Sparkles className="w-3.5 h-3.5 text-white" />
         </div>
         <span className="text-sm sm:text-md font-semibold text-foreground dark:text-white/90 tabular-nums">
-          {creditsRemaining.toLocaleString()}
+          {hasCreditBalance ? (
+            creditsRemaining.toLocaleString()
+          ) : (
+            <span className="block h-4 w-8 rounded bg-foreground/10 dark:bg-white/10 animate-pulse" aria-label="Loading credits" />
+          )}
         </span>
 
         {/* Hover popup */}
@@ -119,7 +124,7 @@ const HeaderCreditBadge: React.FC<HeaderCreditBadgeProps> = ({
                   />
                 </svg>
                 <span className="relative text-base font-bold text-foreground dark:text-white leading-none">
-                  {creditsRemaining}
+                  {hasCreditBalance ? creditsRemaining : "..."}
                 </span>
               </div>
 
@@ -129,7 +134,7 @@ const HeaderCreditBadge: React.FC<HeaderCreditBadgeProps> = ({
                   Remaining Credits
                 </p>
                 <p className="text-[11px] text-muted-foreground/60 dark:text-white/40 leading-snug mt-1">
-                  {used.toLocaleString()} / {TIER_LIMIT.toLocaleString()} used this month
+                  {used !== null ? `${used.toLocaleString()} / ${TIER_LIMIT.toLocaleString()}` : `... / ${TIER_LIMIT.toLocaleString()}`} used this month
                 </p>
                 <button
                   onClick={openPlansModal}

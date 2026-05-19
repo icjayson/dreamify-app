@@ -8,7 +8,7 @@ import CreditIcon from "./CreditIcon";
 interface ModelSelectorProps {
   selectedModel: 'pro' | 'fast';
   onSelect: (model: 'pro' | 'fast') => void;
-  creditsRemaining: number;
+  creditsRemaining: number | null;
   creditsMonthlyLimit?: number;
   isOpen: boolean;
   onToggle: () => void;
@@ -36,6 +36,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const selectedModelLabel = selectedModel === 'fast' ? 'Standard' : 'Pro';
   const selectedModelShortLabel = selectedModel === 'fast' ? 'Std' : 'Pro';
   const selectorTooltip = `${selectedModelLabel} model selector`;
+  const hasCreditBalance = creditsRemaining !== null;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -48,8 +49,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen, onToggle]);
 
-  const creditPct = creditsMonthlyLimit > 0 ? creditsRemaining / creditsMonthlyLimit : 0;
-  const creditState = creditsRemaining === 0 ? 'empty' : creditPct <= 0.1 ? 'critical' : creditPct <= 0.3 ? 'warning' : 'ok';
+  const creditPct = creditsMonthlyLimit > 0 && hasCreditBalance ? creditsRemaining / creditsMonthlyLimit : 1;
+  const creditState = !hasCreditBalance ? 'loading' : creditsRemaining === 0 ? 'empty' : creditPct <= 0.1 ? 'critical' : creditPct <= 0.3 ? 'warning' : 'ok';
 
   if (!isSignedIn) return null;
   return (
@@ -175,7 +176,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                   <span className="text-xs text-muted-foreground dark:text-white/60">Credit</span>
                 </div>
                 <span className={`text-xs font-bold ${creditState === 'empty' || creditState === 'critical' ? 'text-red-500 dark:text-red-400' : creditState === 'warning' ? 'text-amber-500 dark:text-amber-400' : 'text-foreground dark:text-white'}`}>
-                  {creditsRemaining.toLocaleString()} <span className="text-muted-foreground dark:text-white/30 font-normal">/ {creditsMonthlyLimit.toLocaleString()}</span>
+                  {hasCreditBalance ? creditsRemaining.toLocaleString() : "..."} <span className="text-muted-foreground dark:text-white/30 font-normal">/ {creditsMonthlyLimit.toLocaleString()}</span>
                 </span>
               </div>
               <div className="h-1 w-full bg-black/10 dark:bg-white/5 rounded-full overflow-hidden">

@@ -28,7 +28,8 @@ const Header = () => {
   const logoHorizon = resolvedTheme === 'dark' ? "/logo-horizon.png" : "/logo-horizon-dark.png";
   const logoWatermark = resolvedTheme === 'dark' ? "/logo-watermark.png" : "/logo-horizon-dark.png";
   const tierLimit = 1000;
-  const creditPct = tierLimit > 0 ? creditsRemaining / tierLimit : 0;
+  const hasCreditBalance = creditsRemaining !== null;
+  const creditPct = tierLimit > 0 && hasCreditBalance ? creditsRemaining / tierLimit : 0;
 
   useEffect(() => {
     const handleOpen = () => setShowProjectsBtn(false);
@@ -327,7 +328,7 @@ const Header = () => {
                             <span className="text-sm text-foreground">Credit</span>
                           </div>
                           <span className="text-sm font-bold text-foreground dark:text-white tabular-nums">
-                            {creditsRemaining.toLocaleString()}
+                            {hasCreditBalance ? creditsRemaining.toLocaleString() : "..."}
                             <span className="text-foreground/30 dark:text-white/30 font-normal"> / {tierLimit.toLocaleString()}</span>
                           </span>
                         </div>

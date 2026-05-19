@@ -143,8 +143,9 @@ export const PricingContent: React.FC = () => {
 export const PlansCreditsContent: React.FC = () => {
   const { creditsRemaining, creditUsage } = useSubscription();
   const tierLimit = 1000;
-  const used = creditUsage?.monthly_credits_used ?? (tierLimit - creditsRemaining);
-  const pct = tierLimit > 0 ? Math.max(0, Math.min(1, creditsRemaining / tierLimit)) : 0;
+  const hasCreditBalance = creditsRemaining !== null;
+  const used = creditUsage?.monthly_credits_used ?? (hasCreditBalance ? tierLimit - creditsRemaining : null);
+  const pct = tierLimit > 0 && hasCreditBalance ? Math.max(0, Math.min(1, creditsRemaining / tierLimit)) : 0;
 
   return (
     <div className="w-full p-6">
@@ -185,7 +186,7 @@ export const PlansCreditsContent: React.FC = () => {
         <div className="col-span-2 w-full rounded-xl dark:border-white/10 border-border dark:bg-white/[0.03] bg-foreground/3 p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-muted-foreground dark:text-white/70">Credits remaining</span>
-            <span className="text-2xl font-bold text-foreground dark:text-white tabular-nums">{creditsRemaining.toLocaleString()}</span>
+            <span className="text-2xl font-bold text-foreground dark:text-white tabular-nums">{hasCreditBalance ? creditsRemaining.toLocaleString() : "..."}</span>
           </div>
           <div className="h-3 w-full dark:bg-white/10 bg-foreground/10 rounded-full overflow-hidden mb-4">
             <div
@@ -199,7 +200,7 @@ export const PlansCreditsContent: React.FC = () => {
                 <p className="text-sm text-foreground/80 dark:text-white/80">Monthly credits</p>
                 <p className="text-[11px] text-muted-foreground dark:text-white/40">Resets monthly on the 1st</p>
               </div>
-              <span className="text-sm font-semibold text-foreground dark:text-white tabular-nums">{used.toLocaleString()} / {tierLimit.toLocaleString()}</span>
+              <span className="text-sm font-semibold text-foreground dark:text-white tabular-nums">{used !== null ? used.toLocaleString() : "..."} / {tierLimit.toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -608,5 +609,3 @@ const AccountCenterModal: React.FC<AccountCenterModalProps> = ({ open, activeTab
 };
 
 export default AccountCenterModal;
-
-

@@ -22,7 +22,7 @@ import HeaderCreditBadge from "@/components/ui/HeaderCreditBadge";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useProjects } from "@/hooks/useProjects";
 import ProjectsSidebar from "@/components/homepage-section/ProjectsSidebar";
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { PanelRightClose } from "lucide-react";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -789,16 +789,6 @@ export default function ProjectPage() {
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden md:inline">Back</span>
               </button>
-              {shouldShowDashboard && !isDashboardOpen && (
-                <button
-                  onClick={() => { setIsDashboardOpen(true); setActiveTab('dashboard'); }}
-                  className="button-outline h-8 w-8 rounded-md flex items-center justify-center transition-colors"
-                  title="Show dashboard"
-                  aria-label="Show dashboard"
-                >
-                  <PanelRightOpen className="w-4 h-4" />
-                </button>
-              )}
             </div>
             <div className="flex min-w-0 flex-1 basis-full items-center gap-2 order-3 md:order-2 md:basis-0 md:mr-auto pl-1 md:pl-0 mt-1 md:mt-0">
               <span className="hidden md:inline max-w-[8rem] shrink-0 text-sm text-muted-foreground truncate" title={displayName}>{displayName}</span>

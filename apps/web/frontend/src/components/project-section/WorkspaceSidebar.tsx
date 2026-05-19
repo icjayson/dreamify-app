@@ -156,7 +156,8 @@ export default function WorkspaceSidebar({
   const avatarUrl = user?.imageUrl;
 
   const tierLimit = 1000;
-  const creditPct = tierLimit > 0 ? creditsRemaining / tierLimit : 0;
+  const hasCreditBalance = creditsRemaining !== null;
+  const creditPct = tierLimit > 0 && hasCreditBalance ? creditsRemaining / tierLimit : 0;
 
   return (
     <aside
@@ -378,7 +379,7 @@ export default function WorkspaceSidebar({
                     <span className="text-sm text-foreground">Credit</span>
                   </div>
                   <span className="text-sm font-bold text-foreground tabular-nums">
-                    {creditsRemaining.toLocaleString()}
+                    {hasCreditBalance ? creditsRemaining.toLocaleString() : "..."}
                     <span className="text-muted-foreground font-normal"> / {tierLimit.toLocaleString()}</span>
                   </span>
                 </div>

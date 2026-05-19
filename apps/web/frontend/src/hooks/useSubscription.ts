@@ -19,7 +19,7 @@ interface CreditUsage {
 interface UseSubscriptionReturn {
   subscription: SubscriptionInfo | null;
   creditUsage: CreditUsage | null;
-  creditsRemaining: number;
+  creditsRemaining: number | null;
   isLoading: boolean;
   error: string | null;
   refreshSubscription: () => Promise<void>;
@@ -33,7 +33,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
   const { getToken } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [creditUsage, setCreditUsage] = useState<CreditUsage | null>(null);
-  const [creditsRemaining, setCreditsRemaining] = useState<number>(100);
+  const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -202,6 +202,11 @@ export const useSubscription = (): UseSubscriptionReturn => {
   useEffect(() => {
     if (user) {
       refreshSubscription();
+    } else {
+      setSubscription(null);
+      setCreditUsage(null);
+      setCreditsRemaining(null);
+      setIsLoading(false);
     }
   }, [user?.id]);
 

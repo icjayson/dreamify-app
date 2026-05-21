@@ -317,8 +317,8 @@ const DeepThinkingTasks = ({ prompt, isActive, currentStep, savedTasks, initialS
     : `w-full ${compactSurface ? "max-w-[720px]" : "max-w-[85%]"} mt-3 ml-[38px] bg-card dark:bg-[#1E1E1E] border border-border dark:border-white/10 rounded-xl overflow-hidden shadow-md dark:shadow-sm`;
 
   const headerClass = isLiveMode
-    ? "grid grid-cols-[1fr_auto] items-center px-4 py-2 bg-secondary/50 dark:bg-[#18181B] border-b border-border dark:border-white/5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/[0.02] transition-colors"
-    : "flex items-center justify-between px-4 py-2 bg-secondary/50 dark:bg-[#18181B] border-b border-border dark:border-white/5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/[0.02] transition-colors";
+    ? "grid grid-cols-[1fr_auto] items-center px-4 py-2 bg-muted/50 dark:bg-[#18181B] border-b border-border dark:border-white/5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/[0.02] transition-colors"
+    : "flex items-center justify-between px-4 py-2 bg-muted/50 dark:bg-[#18181B] border-b border-border dark:border-white/5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/[0.02] transition-colors";
 
   return (
     <div className={wrapperClass}>

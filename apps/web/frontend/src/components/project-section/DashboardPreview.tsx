@@ -41,6 +41,14 @@ import {
   compactLayoutsVertically,
   mergeLayoutIntoComponents,
 } from "@/components/project-section/dashboardLayout";
+import {
+  extractNumericValue,
+  extractSparklineData,
+  filterDashboardDataByDateRange,
+  parseDateLabel,
+  resolveMetricSparklineData,
+  shouldApplyDashboardDateRange,
+} from "@/components/project-section/dashboardMetricData";
 
 // Source of truth for the dashboard layout.
 //   "s3"           — the `position` field on each component (loaded from S3) wins.
@@ -68,6 +76,8 @@ import type { ChartChipData } from "@/components/chat/ChartPreviewChip";
 import { exportChartAsPng } from "@/utils/exportUtils";
 
 const SELECT_CHART_CONTEXT_EVENT = "dreamify:select-chart-context";
+const DASHBOARD_CARD_MENU_ITEM_CLASS =
+  "cursor-pointer gap-2 py-2 hover:bg-[var(--dashboard-menu-hover)] hover:text-[var(--dashboard-title)] focus:bg-[var(--dashboard-menu-hover)] focus:text-[var(--dashboard-title)] data-[highlighted]:bg-[var(--dashboard-menu-hover)] data-[highlighted]:text-[var(--dashboard-title)]";
 
 const DATE_PRESETS = [
   { value: "full_range", label: "Full range" },
@@ -110,6 +120,7 @@ function buildPremiumDashboardVars(theme: ChartPresetTheme): PremiumDashboardSty
     "--dashboard-command-bg": hexToRgba(colors["bg-dashboard-color"], isLight ? 0.92 : 0.88),
     "--dashboard-control-bg": hexToRgba(colors["bg-card-color"], isLight ? 0.9 : 0.84),
     "--dashboard-control-hover": hexToRgba(accent, isLight ? 0.1 : 0.18),
+    "--dashboard-menu-hover": hexToRgba(colors["title-color"], isLight ? 0.08 : 0.12),
     "--dashboard-popover-bg": colors["bg-card-color"],
     "--dashboard-card-shadow": isLight
       ? "0 12px 28px rgba(15, 23, 42, 0.07)"
@@ -269,72 +280,6 @@ const DashboardPreview = ({
 
   // No automatic dashboard generation on mount
 
-  // Utility function to parse date labels
-  const parseDateLabel = (label: string): Date | null => {
-    if (!label) return null;
-    // Try ISO format first
-    const iso = new Date(label);
-    if (!isNaN(iso.getTime())) return iso;
-
-    // Try common formats
-    const formats = [
-      /^(\d{4})-(\d{2})-(\d{2})/, // YYYY-MM-DD
-      /^(\d{2})\/(\d{2})\/(\d{4})/, // MM/DD/YYYY
-      /^(\d{2})-(\d{2})-(\d{2})$/, // MM-DD-YY
-    ];
-
-    for (const format of formats) {
-      const match = label.match(format);
-      if (match) {
-        if (format === formats[0]) {
-          // YYYY-MM-DD
-          return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
-        } else if (format === formats[1]) {
-          // MM/DD/YYYY
-          return new Date(parseInt(match[3]), parseInt(match[1]) - 1, parseInt(match[2]));
-        } else if (format === formats[2]) {
-          // MM-DD-YY
-          const year = parseInt(match[3]) + (parseInt(match[3]) < 50 ? 2000 : 1900);
-          return new Date(year, parseInt(match[1]) - 1, parseInt(match[2]));
-        }
-      }
-    }
-
-    return null;
-  };
-
-  // Utility function to extract numeric value from formatted string
-  const extractNumericValue = (value: string | number): number | null => {
-    if (typeof value === 'number') {
-      return isFinite(value) ? value : null;
-    }
-    if (typeof value !== 'string') {
-      return null;
-    }
-    // Remove common formatting: commas, currency symbols, percentage signs, whitespace
-    const cleaned = value.replace(/[,\s$€£¥%]/g, '');
-    const parsed = parseFloat(cleaned);
-    return isFinite(parsed) ? parsed : null;
-  };
-
-  // Utility function to extract sparkline data from chart
-  const extractSparklineData = (chart: any): Array<{ label: string, value: number }> | undefined => {
-    if (!chart) return undefined;
-
-    // Try to get data from first dataset
-    if (Array.isArray(chart.datasets) && chart.datasets.length > 0) {
-      const firstDataset = chart.datasets[0];
-      if (Array.isArray(firstDataset.data) && firstDataset.data.length > 0) {
-        return firstDataset.data.map((item: any) => ({
-          label: item.label || String(item.label),
-          value: typeof item.value === 'number' ? item.value : parseFloat(String(item.value)) || 0
-        }));
-      }
-    }
-
-    return undefined;
-  };
-
   // Utility function to compute time_comparison from sparkline data
   const computeTimeComparisonFromData = (
     sparklineData: Array<{ label: string, value: number }> | undefined,
@@ -424,86 +369,7 @@ const DashboardPreview = ({
 
   // Utility function to filter data by date range
   const filterDataByDateRange = (data: any, dateRange: DateRange | undefined): any => {
-    if (!dateRange || !dateRange.from || !dateRange.to || !data) {
-      return data;
-    }
-
-    const filtered = JSON.parse(JSON.stringify(data)); // Deep clone
-
-    // Filter charts
-    if (Array.isArray(filtered.charts)) {
-      filtered.charts = filtered.charts.map((chart: any) => {
-        if (!Array.isArray(chart.datasets)) return chart;
-
-        const filteredChart = { ...chart };
-        filteredChart.datasets = chart.datasets.map((dataset: any) => {
-          if (!Array.isArray(dataset.data)) return dataset;
-
-          const filteredDataset = { ...dataset };
-          filteredDataset.data = dataset.data.filter((item: any) => {
-            const itemDate = parseDateLabel(item.label || String(item.label));
-            if (!itemDate) return true; // Keep items without valid dates
-            return itemDate >= dateRange.from! && itemDate <= dateRange.to!;
-          });
-
-          return filteredDataset;
-        });
-
-        return filteredChart;
-      });
-    }
-
-    // Recalculate metrics from filtered chart data
-    if (Array.isArray(filtered.metrics)) {
-      filtered.metrics = filtered.metrics.map((metric: any) => {
-        // Try to find related chart
-        let relatedChart = null;
-        if (metric.related_chart_id) {
-          relatedChart = filtered.charts?.find((c: any) => c.id === metric.related_chart_id);
-        } else {
-          relatedChart = findMatchingChartForMetric(metric.title || metric.name, filtered.charts || []);
-        }
-
-        if (relatedChart && Array.isArray(relatedChart.datasets) && relatedChart.datasets.length > 0) {
-          const dataset = relatedChart.datasets[0];
-          if (Array.isArray(dataset.data) && dataset.data.length > 0) {
-            const values = dataset.data.map((item: any) => {
-              const val = typeof item.value === 'number' ? item.value : parseFloat(String(item.value)) || 0;
-              return val;
-            }).filter((v: number) => !isNaN(v));
-
-            if (values.length > 0) {
-              // Recalculate metric value (sum for totals, average for averages)
-              const metricTitleLower = (metric.title || metric.name || '').toLowerCase();
-              let newValue: number;
-
-              if (metricTitleLower.includes('total') || metricTitleLower.includes('sum')) {
-                newValue = values.reduce((sum: number, val: number) => sum + val, 0);
-              } else if (metricTitleLower.includes('average') || metricTitleLower.includes('avg') || metricTitleLower.includes('mean')) {
-                newValue = values.reduce((sum: number, val: number) => sum + val, 0) / values.length;
-              } else {
-                // Default to sum
-                newValue = values.reduce((sum: number, val: number) => sum + val, 0);
-              }
-
-              // Format the value similar to original
-              const originalValue = metric.value;
-              if (typeof originalValue === 'string' && originalValue.includes('$')) {
-                metric.value = `$${newValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-              } else if (typeof originalValue === 'string' && originalValue.includes('%')) {
-                metric.value = `${newValue.toFixed(2)}%`;
-              } else {
-                metric.value = newValue.toLocaleString('en-US');
-              }
-            }
-          }
-        }
-
-        return metric;
-      });
-    }
-
-    return filtered;
+    return filterDashboardDataByDateRange(data, dateRange);
   };
 
   const selectedTheme = useChatStore((s) => s.selectedTheme || s.selectedTemplate);
@@ -688,28 +554,15 @@ const DashboardPreview = ({
         // Extract numeric value from formatted string
         const numericValue = extractNumericValue(m.value);
 
-        // Extract sparkline data first (needed for time_comparison computation)
-        let sparklineData: Array<{ label: string, value: number }> | undefined;
+        // Extract sparkline data first (needed for time_comparison computation).
+        // Prefer the metric's own series; when falling back to a related chart,
+        // resolve the dataset by metric title/id instead of blindly using datasets[0].
+        let sparklineData: Array<{ label: string, value: number }> | undefined = resolveMetricSparklineData(m, data.charts || []);
 
-        // Priority 1: Direct sparkline data from LLM
-        if (m.sparkline_data && Array.isArray(m.sparkline_data)) {
-          sparklineData = m.sparkline_data.map((item: any) => ({
-            label: item.label || String(item.label),
-            value: typeof item.value === 'number' ? item.value : parseFloat(String(item.value)) || 0
-          }));
-        }
-        // Priority 2: Related chart ID
-        else if (m.related_chart_id) {
-          const relatedChart = data.charts?.find((c: any) => c.id === m.related_chart_id);
-          if (relatedChart) {
-            sparklineData = extractSparklineData(relatedChart);
-          }
-        }
-        // Priority 3: Heuristic matching (fallback)
-        else {
+        if (!sparklineData) {
           const matchingChart = findMatchingChartForMetric(m.title || m.name, data.charts || []);
           if (matchingChart) {
-            sparklineData = extractSparklineData(matchingChart);
+            sparklineData = extractSparklineData(matchingChart, m);
           }
         }
 
@@ -1027,8 +880,9 @@ const DashboardPreview = ({
   const filteredProcessedData = useMemo(() => {
     const dataToFilter = rawDataForDateRange;
     if (!dataToFilter) return null;
+    if (!shouldApplyDashboardDateRange(datePreset, dateRange)) return dataToFilter;
     return filterDataByDateRange(dataToFilter, dateRange);
-  }, [rawDataForDateRange, dateRange]);
+  }, [rawDataForDateRange, datePreset, dateRange]);
 
   // Grid layout config
   const ResponsiveGridLayout = useMemo(() => WidthProvider(Responsive), []);
@@ -1928,7 +1782,7 @@ const DashboardPreview = ({
                                 {!editMode && (
                                   <>
                                     <DropdownMenuItem
-                                      className="cursor-pointer gap-2 py-2"
+                                      className={DASHBOARD_CARD_MENU_ITEM_CLASS}
                                       onSelect={() => {
                                         setEditMode(true);
                                         setSelectedComponent(cellKey);
@@ -1938,7 +1792,7 @@ const DashboardPreview = ({
                                       Edit
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
-                                      className="cursor-pointer gap-2 py-2"
+                                      className={DASHBOARD_CARD_MENU_ITEM_CLASS}
                                       onSelect={() => {
                                         window.dispatchEvent(
                                           new CustomEvent(SELECT_CHART_CONTEXT_EVENT, {
@@ -1951,7 +1805,7 @@ const DashboardPreview = ({
                                       Fix in chat
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
-                                      className="cursor-pointer gap-2 py-2"
+                                      className={DASHBOARD_CARD_MENU_ITEM_CLASS}
                                       disabled={exportingIds.has(cellKey)}
                                       onSelect={async () => {
                                         const cardEl = document.querySelector<HTMLElement>(

@@ -35,6 +35,10 @@ export interface ProjectListResponse {
   error?: string;
 }
 
+const getErrorMessage = (error: unknown, fallback: string) => (
+  error instanceof Error ? error.message : fallback
+);
+
 class ProjectService {
   private baseUrl = '/api/v1/user/project';
 
@@ -55,6 +59,15 @@ class ProjectService {
       return { success: true, projects: res.data.projects || [] };
     }
     return { success: false, projects: [], error: res.error || 'Failed to list projects' };
+  }
+
+  async listRecentProjects(limit = 10): Promise<ProjectListResponse> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    const res = await api.get<{ projects: ProjectRecord[] }>(`${this.baseUrl}/recent?${params.toString()}`);
+    if (res.success && res.data) {
+      return { success: true, projects: res.data.projects || [] };
+    }
+    return { success: false, projects: [], error: res.error || 'Failed to list recent projects' };
   }
 
   async getProject(projectId: string): Promise<ProjectResponse> {
@@ -104,8 +117,8 @@ class ProjectService {
         return { success: true, s3_key: res.data.s3_key };
       }
       return { success: false, error: res.error || 'Failed to upload dashboard preview' };
-    } catch (e: any) {
-      return { success: false, error: e?.message || 'Upload failed' };
+    } catch (e: unknown) {
+      return { success: false, error: getErrorMessage(e, 'Upload failed') };
     }
   }
 
@@ -120,8 +133,8 @@ class ProjectService {
         return { url: res.data.url };
       }
       return { error: 'No preview URL available' };
-    } catch (e: any) {
-      return { error: e?.message || 'Failed to get preview URL' };
+    } catch (e: unknown) {
+      return { error: getErrorMessage(e, 'Failed to get preview URL') };
     }
   }
 }

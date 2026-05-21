@@ -59,9 +59,12 @@ class StatefulAnalyzeCSVWorkflow:
         if focus_id:
             try:
                 from morpheus.templates.builtin_templates import get_template
+
                 self.template_spec = get_template(focus_id)
                 if self.template_spec:
-                    logger.info(f"Analysis focus '{focus_id}' loaded: {self.template_spec['name']}")
+                    logger.info(
+                        f"Analysis focus '{focus_id}' loaded: {self.template_spec['name']}"
+                    )
                 else:
                     logger.warning(f"Analysis focus '{focus_id}' not found, ignoring")
             except Exception as e:
@@ -70,14 +73,19 @@ class StatefulAnalyzeCSVWorkflow:
         # Detect reasoning strategy based on model type
         # OpenAI models (with Responses API) → internal reasoning loop
         # Gemini models → split REASONING ⇄ EXECUTION loop
-        model_name = getattr(self.model, 'model_name', '') or getattr(self.model, 'model', '')
+        model_name = getattr(self.model, "model_name", "") or getattr(
+            self.model, "model", ""
+        )
         self.use_internal_reasoning = not str(model_name).startswith("gemini")
-        logger.info(f"Reasoning strategy: {'INTERNAL' if self.use_internal_reasoning else 'SPLIT'} (model={model_name})")
+        logger.info(
+            f"Reasoning strategy: {'INTERNAL' if self.use_internal_reasoning else 'SPLIT'} (model={model_name})"
+        )
 
         # Node registry: maps node names to node functions
         self.nodes = {
             "START": nodes.node_start,
             "EXPLORE_FILES": nodes.node_explore_files,
+            "ASK_FIRST": nodes.node_ask_first,
             "ROUTING": nodes.node_routing,
             "REASONING": nodes.node_reasoning,
             "REASONING_INTERNAL": nodes.node_reasoning_internal,
@@ -565,7 +573,7 @@ class StatefulAnalyzeCSVWorkflow:
                 start_time = time.time()
 
                 # Pass quick_model for lightweight nodes, full model for reasoning
-                if state.current_node in ("EXPLORE_FILES", "ROUTING"):
+                if state.current_node in ("EXPLORE_FILES", "ASK_FIRST", "ROUTING"):
                     node_model = self.quick_model
                 else:
                     node_model = self.model
@@ -788,6 +796,7 @@ class StatefulAnalyzeCSVWorkflow:
             system_prompt = DASHBOARD_SYSTEM_PROMPT
         elif mode == "qa_visual":
             from .nodes import QA_VISUAL_SYSTEM_PROMPT
+
             system_prompt = QA_VISUAL_SYSTEM_PROMPT
         else:
             system_prompt = QA_SYSTEM_PROMPT
@@ -902,6 +911,10 @@ class StatefulAnalyzeCSVWorkflow:
                 workflow_output.output_data = {
                     "content": state.output.get("content"),
                     "artifacts": state.output.get("artifacts", []),
+                }
+            elif state.output.get("type") == "clarification_request":
+                workflow_output.output_data = {
+                    "clarification": state.output.get("clarification"),
                 }
 
         # Add error if failed
@@ -1109,6 +1122,13 @@ class StatefulAnalyzeCSVWorkflow:
             reasoning = route.get("reasoning", "")[:80]
             return f"Routing to '{next_step}' mode - {reasoning}"
 
+        elif node == "ASK_FIRST":
+            ask_first = state.working_memory.tool_outputs.get("ask_first", {})
+            reason = ask_first.get("reason_code")
+            if reason:
+                return f"Paused for user decision: {reason}"
+            return "Checking whether a user decision is needed..."
+
         elif node == "REASONING":
             pending = state.working_memory.tool_outputs.get("pending_action", {})
             action_type = pending.get("action_type", "")
@@ -1157,6 +1177,8 @@ class StatefulAnalyzeCSVWorkflow:
                 return f"Completed: Generated dashboard with {charts} chart(s) and {metrics} metric(s)"
             elif output_type == "message":
                 return "Completed: Generated response"
+            elif output_type == "clarification_request":
+                return "Paused for user clarification"
             return "Workflow completed successfully"
 
         elif node == "ERROR":

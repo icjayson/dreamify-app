@@ -1,5 +1,10 @@
-import warnings 
-warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality isn't compatible with Python 3.14", category=UserWarning)
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message="Core Pydantic V1 functionality isn't compatible with Python 3.14",
+    category=UserWarning,
+)
 
 from datetime import datetime
 import json
@@ -19,6 +24,16 @@ import aiohttp
 import requests
 
 from morpheus.workflows.analyze_csv.state_graph import StatefulAnalyzeCSVWorkflow
+from morpheus.workflows.analyze_csv.ask_first import (
+    answered_clarification_reason_codes,
+    build_analysis_context_clarification,
+    build_clarification_message,
+    build_data_context_clarification as _policy_build_data_context_clarification,
+    choose_data_context_reason_code,
+    is_data_context_needed as _policy_is_data_context_needed,
+    latest_effective_user_prompt,
+    latest_user_has_clarification_response as _policy_latest_user_has_clarification_response,
+)
 from utils.config import config
 from utils.dynamodb import save_dashboard_metadata
 from utils.health import check_health
@@ -92,16 +107,22 @@ LEGACY_TEMPLATE_THEME_MAP = {
 }
 
 
-def _resolve_theme_id(theme_id: Optional[str], template_id: Optional[str] = None) -> Optional[str]:
+def _resolve_theme_id(
+    theme_id: Optional[str], template_id: Optional[str] = None
+) -> Optional[str]:
     resolved = theme_id or LEGACY_TEMPLATE_THEME_MAP.get(template_id or "")
     return resolved if resolved in VALID_THEME_IDS else None
 
 
-def _effective_theme_id(theme_id: Optional[str], template_id: Optional[str] = None) -> str:
+def _effective_theme_id(
+    theme_id: Optional[str], template_id: Optional[str] = None
+) -> str:
     return _resolve_theme_id(theme_id, template_id) or "default"
 
 
-def _apply_theme_to_dashboard_data(data: Dict[str, Any], theme_id: Optional[str]) -> None:
+def _apply_theme_to_dashboard_data(
+    data: Dict[str, Any], theme_id: Optional[str]
+) -> None:
     if not theme_id or not isinstance(data, dict):
         return
     data["theme_id"] = theme_id
@@ -124,11 +145,13 @@ def _apply_theme_to_dashboard_data(data: Dict[str, Any], theme_id: Optional[str]
                 item["styling"] = styling
             styling["theme"] = theme_id
 
+
 STEP_FRIENDLY_MAP: Dict[str, str] = {
     "start": "Waking up...",
     "load_conversation": "Reading conversation context...",
     "download_asset": "Analyzing file structure...",
     "run_workflow": "Booting up data engine...",
+    "ask_first": "Checking whether I need your choice...",
     "routing": "Understanding your goal...",
     "reasoning": "Planning the best visualization...",
     "execution": "Crunching the numbers...",
@@ -139,7 +162,14 @@ STEP_FRIENDLY_MAP: Dict[str, str] = {
 }
 
 # Only persist meaningful AI processing steps (exclude infrastructure/setup steps)
-SAVEABLE_WORKFLOW_STEPS = {"load_conversation",  "download_asset", "routing","execution", "synthesis", "validation"}
+SAVEABLE_WORKFLOW_STEPS = {
+    "load_conversation",
+    "download_asset",
+    "routing",
+    "execution",
+    "synthesis",
+    "validation",
+}
 
 
 STEP_PHASE_MAP: Dict[str, str] = {
@@ -220,7 +250,9 @@ class ThinkingTracer:
             "metadata": metadata or {},
         }
         self.events.append(event)
-        _post_workflow_event_sync(self.conversation_id, self.run_id, self.sequence, event)
+        _post_workflow_event_sync(
+            self.conversation_id, self.run_id, self.sequence, event
+        )
         return event
 
     def emit_status(self, metadata: Optional[Dict[str, Any]], status: str) -> None:
@@ -237,7 +269,9 @@ class ThinkingTracer:
         self.emit(
             phase=STEP_PHASE_MAP.get(step, "analysis"),
             title=STEP_TITLE_MAP.get(step, STEP_FRIENDLY_MAP.get(step, "Processing")),
-            summary=metadata.get("log") or metadata.get("message") or metadata.get("error"),
+            summary=metadata.get("log")
+            or metadata.get("message")
+            or metadata.get("error"),
             detail=metadata.get("error"),
             status=event_status,
             metadata={
@@ -253,7 +287,9 @@ class ThinkingTracer:
             copied = dict(event)
             if finalize and copied.get("status") == "active":
                 copied["status"] = "completed"
-                copied["completed_at"] = copied.get("completed_at") or datetime.now().isoformat()
+                copied["completed_at"] = (
+                    copied.get("completed_at") or datetime.now().isoformat()
+                )
             events.append(copied)
         return events
 
@@ -294,8 +330,11 @@ def _attach_thinking_trace(
         conversation["nodes"].append(last_assistant_node)
 
     contents = last_assistant_node.setdefault("contents", [])
-    contents[:] = [content for content in contents if content.get("type") != "thinking_trace"]
+    contents[:] = [
+        content for content in contents if content.get("type") != "thinking_trace"
+    ]
     contents.append({"type": "thinking_trace", "data": {"events": events}})
+
 
 logger.info(
     "Config AWS credentials present: %s",
@@ -721,15 +760,66 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
             latest_user_node = node
             break
 
-    # Check metadata for selection mode
+    def clarification_response_metadata(
+        node: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if not node:
+            return {}
+        for content in node.get("contents", []):
+            if content.get("type") != "clarification_response":
+                continue
+            data = content.get("data") or {}
+            metadata = data.get("metadata")
+            return metadata if isinstance(metadata, dict) else {}
+        return {}
+
+    def previous_asset_selection(
+        before_node: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        before_index = nodes.index(before_node) if before_node in nodes else len(nodes)
+        for node in reversed(nodes[:before_index]):
+            if node.get("role") != "user":
+                continue
+            node_metadata = node.get("metadata", {}) or {}
+            response_metadata = clarification_response_metadata(node)
+            selection_mode = response_metadata.get(
+                "asset_selection", node_metadata.get("asset_selection")
+            )
+            selected_asset_ids = (
+                response_metadata.get("asset_ids")
+                or node_metadata.get("selected_asset_ids")
+                or []
+            )
+            if selection_mode in {"explicit", "all", "none"}:
+                return {
+                    "asset_selection": selection_mode,
+                    "selected_asset_ids": selected_asset_ids,
+                }
+        return None
+
+    # Check metadata for selection mode. A non-asset clarification such as
+    # output_mode should inherit the previous data choice instead of clearing it.
     metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
+    response_metadata = clarification_response_metadata(latest_user_node)
     selection_mode = metadata.get("asset_selection", "none")
     selected_ids = set(metadata.get("selected_asset_ids", []))
+    response_has_asset_decision = "asset_selection" in response_metadata
+    if (
+        selection_mode == "none"
+        and response_metadata
+        and not response_has_asset_decision
+    ):
+        prior_selection = previous_asset_selection(latest_user_node)
+        if prior_selection:
+            selection_mode = prior_selection.get("asset_selection", selection_mode)
+            selected_ids = set(prior_selection.get("selected_asset_ids", []))
 
     logger.info(f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}")
 
     if selection_mode == "none":
-        logger.info("Asset selection is none; no conversation assets will be downloaded")
+        logger.info(
+            "Asset selection is none; no conversation assets will be downloaded"
+        )
         return []
 
     # Extract all assets from conversation
@@ -771,148 +861,47 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
     return []
 
 
-DATA_CONTEXT_PROMPT_RE = _re.compile(
-    r"\b("
-    r"trend|chart|graph|plot|visuali[sz]e|dashboard|report|metric|metrics|"
-    r"sessions?|users?|visitors?|traffic|revenue|sales|orders?|spend|clicks?|"
-    r"impressions?|ctr|cpc|roas|conversion|conversions?|compare|ranking|top|bottom"
-    r")\b",
-    _re.IGNORECASE,
-)
-
-
-def _latest_user_node(conversation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    for node in reversed(conversation.get("nodes", [])):
-        if node.get("role") == "user":
-            return node
-    return None
-
-
 def _latest_user_prompt(conversation: Dict[str, Any]) -> Optional[str]:
-    latest_user = _latest_user_node(conversation)
-    if not latest_user:
-        return None
-    for content in latest_user.get("contents", []):
-        if content.get("type") == "text":
-            text = (content.get("data") or {}).get("text")
-            if isinstance(text, str) and text.strip():
-                return text.strip()
-    return None
+    return latest_effective_user_prompt(conversation)
 
 
 def _latest_user_has_clarification_response(conversation: Dict[str, Any]) -> bool:
-    latest_user = _latest_user_node(conversation)
-    if not latest_user:
-        return False
-    return any(
-        content.get("type") == "clarification_response"
-        for content in latest_user.get("contents", [])
-    )
+    return _policy_latest_user_has_clarification_response(conversation)
 
 
 def _is_data_context_needed(user_prompt: Optional[str]) -> bool:
-    return bool(user_prompt and DATA_CONTEXT_PROMPT_RE.search(user_prompt))
-
-
-def _asset_label(asset: Dict[str, Any]) -> str:
-    filename = str(asset.get("filename") or "Data source").strip()
-    source = str(asset.get("asset_type") or "").replace("integration_", "").replace("_", " ").strip()
-    return source.title() if source else filename
-
-
-def _rank_project_assets_for_prompt(
-    project_assets: List[Dict[str, Any]], user_prompt: Optional[str]
-) -> List[Dict[str, Any]]:
-    prompt = (user_prompt or "").lower()
-
-    def score(asset: Dict[str, Any]) -> int:
-        raw = " ".join(
-            str(asset.get(key) or "").lower()
-            for key in ("filename", "asset_type", "extension")
-        )
-        total = 0
-        if any(term in prompt for term in ("visitor", "traffic", "session", "user", "ga4", "analytics")):
-            total += 5 if any(term in raw for term in ("ga4", "analytics", "visitor", "traffic")) else 0
-        if any(term in prompt for term in ("ad", "campaign", "spend", "click", "impression")):
-            total += 5 if "ads" in raw or "campaign" in raw else 0
-        if any(term in prompt for term in ("revenue", "sales", "order", "payment")):
-            total += 5 if any(term in raw for term in ("stripe", "shopify", "sales", "revenue")) else 0
-        total += 1 if asset.get("row_count") not in (None, 0, "0") else 0
-        return total
-
-    return sorted(project_assets, key=score, reverse=True)
+    return _policy_is_data_context_needed(user_prompt)
 
 
 def _build_data_context_clarification(
     user_prompt: Optional[str],
     project_assets: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    ranked_assets = _rank_project_assets_for_prompt(project_assets, user_prompt)
-    options: List[Dict[str, Any]] = []
-    for asset in ranked_assets[:6]:
-        asset_id = str(asset.get("asset_id") or "").strip()
-        if not asset_id:
-            continue
-        row_count = asset.get("row_count")
-        column_count = asset.get("column_count")
-        shape = ""
-        if row_count is not None and column_count is not None:
-            shape = f" ({row_count} rows, {column_count} columns)"
-        options.append(
-            {
-                "id": f"asset:{asset_id}",
-                "label": _asset_label(asset),
-                "description": f"{asset.get('filename') or 'Project data'}{shape}",
-                "recommended": len(options) == 0,
-                "metadata": {
-                    "asset_ids": [asset_id],
-                    "asset_selection": "explicit",
-                    "asset": asset,
-                },
-            }
-        )
-
-    all_asset_ids = [
-        str(asset.get("asset_id"))
-        for asset in ranked_assets
-        if str(asset.get("asset_id") or "").strip()
-    ]
-    if len(all_asset_ids) > 1:
-        options.append(
-            {
-                "id": "all_project_data",
-                "label": "Use all project data",
-                "description": "Broader context, slower and less precise if sources are unrelated",
-                "metadata": {
-                    "asset_ids": all_asset_ids,
-                    "asset_selection": "all",
-                },
-            }
-        )
-
-    options.append(
-        {
-            "id": "answer_without_data",
-            "label": "Answer without data",
-            "description": "Explain what data is needed instead of analyzing",
-            "metadata": {"asset_selection": "none"},
-        }
+    return _policy_build_data_context_clarification(
+        user_prompt,
+        project_assets,
+        reason_code="missing_data_context",
     )
 
-    return {
-        "clarification_id": str(uuid.uuid4()),
-        "reason_code": "missing_data_context",
-        "question": "Choose the data context",
-        "options": options,
-        "allow_free_text": True,
-        "required": True,
-    }
+
+def _build_data_context_clarification_for_prompt(
+    user_prompt: Optional[str],
+    project_assets: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    if not project_assets:
+        return build_analysis_context_clarification(user_prompt)
+    reason_code = choose_data_context_reason_code(user_prompt, project_assets)
+    return _policy_build_data_context_clarification(
+        user_prompt,
+        project_assets,
+        reason_code=reason_code,
+    )
 
 
 def _append_clarification_request_node(
     conversation: Dict[str, Any], clarification: Dict[str, Any]
 ) -> None:
-    text = "I need one choice before I analyze. No data source was selected, so I will not guess."
+    text = build_clarification_message(clarification)
     conversation.setdefault("nodes", []).append(
         {
             "node_id": f"node_{uuid.uuid4().hex[:8]}",
@@ -1002,7 +991,7 @@ def _postprocess_workflow_to_conversation_nodes(
         msg_usage = getattr(msg, "usage_metadata", None)
         if hasattr(msg, "get") and msg_usage is None:
             msg_usage = msg.get("usage_metadata")
-            
+
         if msg_usage:
             metadata["usage"] = msg_usage
 
@@ -1029,6 +1018,7 @@ def _process_conversation_background(
 ):
     """Background processing function for workflow execution."""
     temp_file_path = None
+    temp_file_paths: List[str] = []
     processed_json_s3_key = None
     conversation: Optional[Dict[str, Any]] = None
     conversation_bucket: Optional[str] = None
@@ -1040,8 +1030,14 @@ def _process_conversation_background(
         thinking_tracer.emit_status(metadata, status)
         if metadata and isinstance(metadata, dict):
             step = metadata.get("step")
-            if step and step in SAVEABLE_WORKFLOW_STEPS and step not in {s["id"] for s in collected_steps}:
-                display_text = metadata.get("log") or STEP_FRIENDLY_MAP.get(step, "Processing...")
+            if (
+                step
+                and step in SAVEABLE_WORKFLOW_STEPS
+                and step not in {s["id"] for s in collected_steps}
+            ):
+                display_text = metadata.get("log") or STEP_FRIENDLY_MAP.get(
+                    step, "Processing..."
+                )
                 collected_steps.append({"id": step, "text": display_text})
         return _post_node_status_sync(conv_id, status, metadata)
 
@@ -1102,9 +1098,16 @@ def _process_conversation_background(
         if (
             not assets
             and _is_data_context_needed(user_prompt)
-            and not _latest_user_has_clarification_response(conversation)
+            and not (
+                answered_clarification_reason_codes(conversation)
+                & {
+                    "missing_data_context",
+                    "multiple_matching_assets",
+                    "analysis_context",
+                }
+            )
         ):
-            clarification = _build_data_context_clarification(
+            clarification = _build_data_context_clarification_for_prompt(
                 user_prompt, project_assets or []
             )
             _append_clarification_request_node(conversation, clarification)
@@ -1113,7 +1116,9 @@ def _process_conversation_background(
                 "Need data context",
                 "Paused for the user to choose which project data source to analyze.",
             )
-            _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
+            _attach_thinking_trace(
+                conversation, thinking_tracer.snapshot(finalize=True)
+            )
             _persist_conversation(
                 conversation_uri, conversation_backup_uri, conversation
             )
@@ -1265,8 +1270,12 @@ def _process_conversation_background(
                 detail=error_msg,
                 status="error",
             )
-            _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
-            _persist_conversation(conversation_uri, conversation_backup_uri, conversation)
+            _attach_thinking_trace(
+                conversation, thinking_tracer.snapshot(finalize=True)
+            )
+            _persist_conversation(
+                conversation_uri, conversation_backup_uri, conversation
+            )
             _collecting_post_status(
                 conversation_id,
                 "error",
@@ -1278,6 +1287,42 @@ def _process_conversation_background(
         response_type = result.get(
             "type", "dashboard_config"
         )  # Default to dashboard for backward compatibility
+
+        if response_type == "clarification_request":
+            clarification = result.get("clarification") or result.get("data")
+            if not isinstance(clarification, dict):
+                error_msg = "Workflow requested clarification without a valid payload"
+                logger.error(error_msg)
+                _collecting_post_status(
+                    conversation_id,
+                    "error",
+                    {"step": "clarification", "error": error_msg},
+                )
+                return
+
+            _append_clarification_request_node(conversation, clarification)
+            thinking_tracer.emit(
+                "final",
+                "Need your choice",
+                build_clarification_message(clarification),
+            )
+            _attach_thinking_trace(
+                conversation, thinking_tracer.snapshot(finalize=True)
+            )
+            _persist_conversation(
+                conversation_uri, conversation_backup_uri, conversation
+            )
+            _post_node_status_sync(
+                conversation_id,
+                "awaiting_user_input",
+                {
+                    "step": "clarification",
+                    "response_type": "clarification_request",
+                    "clarification_id": clarification["clarification_id"],
+                    "reason_code": clarification["reason_code"],
+                },
+            )
+            return
 
         # Postprocess workflow messages into conversation nodes
         workflow_output = result.get("workflow_output")
@@ -1301,8 +1346,15 @@ def _process_conversation_background(
                 try:
                     tokens_url = f"{BACKEND_API_URL}/api/v1/morpheus/project/{project_id}/conversation/{conversation_id}/tokens"
                     headers = {"X-Morpheus-Key": MORPHEUS_API_KEY}
-                    requests.put(tokens_url, json={"total_tokens": total_tokens}, headers=headers, timeout=5)
-                    logger.info(f"Updated total tokens for conversation {conversation_id}: {total_tokens}")
+                    requests.put(
+                        tokens_url,
+                        json={"total_tokens": total_tokens},
+                        headers=headers,
+                        timeout=5,
+                    )
+                    logger.info(
+                        f"Updated total tokens for conversation {conversation_id}: {total_tokens}"
+                    )
                 except Exception as exc:
                     logger.warning(f"Failed to update total tokens: {exc}")
 
@@ -1405,7 +1457,9 @@ def _process_conversation_background(
                 "Answer ready",
                 f"Prepared the response with {len(artifacts)} inline visual artifact(s).",
             )
-            _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
+            _attach_thinking_trace(
+                conversation, thinking_tracer.snapshot(finalize=True)
+            )
             _persist_conversation(
                 conversation_uri, conversation_backup_uri, conversation
             )
@@ -1426,7 +1480,9 @@ def _process_conversation_background(
                 },
             )
 
-            logger.info(f"QA visual workflow completed for conversation {conversation_id}")
+            logger.info(
+                f"QA visual workflow completed for conversation {conversation_id}"
+            )
             return
 
         # Handle Q&A responses (type == "message")
@@ -1447,7 +1503,9 @@ def _process_conversation_background(
                 "Answer ready",
                 "Prepared the response from the available project context.",
             )
-            _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
+            _attach_thinking_trace(
+                conversation, thinking_tracer.snapshot(finalize=True)
+            )
             _persist_conversation(
                 conversation_uri, conversation_backup_uri, conversation
             )
@@ -1789,7 +1847,9 @@ def _process_conversation_background(
                     detail=str(exc),
                     status="error",
                 )
-                _attach_thinking_trace(conversation, thinking_tracer.snapshot(finalize=True))
+                _attach_thinking_trace(
+                    conversation, thinking_tracer.snapshot(finalize=True)
+                )
                 _persist_conversation(
                     conversation_uri, conversation_backup_uri, conversation
                 )

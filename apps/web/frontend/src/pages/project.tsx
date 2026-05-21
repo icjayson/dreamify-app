@@ -279,6 +279,7 @@ export default function ProjectPage() {
     'load_conversation': 'Loading context...',
     'download_asset': 'Analyzing data...',
     'run_workflow': 'Processing changes...',
+    'ask_first': 'Checking assumptions...',
     'routing': 'Understanding your request...',
     'reasoning': 'Planning changes...',
     'execution': 'Applying updates...',

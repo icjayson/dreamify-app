@@ -263,6 +263,49 @@ describe("useChatStore theme intent", () => {
     });
   });
 
+  it("submits non-asset ask-first metadata without attaching data context", async () => {
+    const request = {
+      clarification_id: "clarify_output",
+      reason_code: "output_mode",
+      question: "What should I produce?",
+      options: [],
+    };
+    const option = {
+      id: "inline_visual",
+      label: "Inline visual answer",
+      metadata: {
+        route_mode: "qa_visual",
+      },
+    };
+
+    await useChatStore
+      .getState()
+      .submitClarificationResponse(request, option, "Keep it compact", "project_1");
+
+    const userMessage = useChatStore.getState().messages.find(message => message.role === "user");
+    expect(userMessage?.content).toBe("Inline visual answer\nKeep it compact");
+    expect(userMessage?.attachment).toBeUndefined();
+    const call = mockedProcessingService.runProcessing.mock.calls[0];
+    expect(call[4]).toEqual([
+      {
+        type: "clarification_response",
+        data: {
+          clarification_id: "clarify_output",
+          selected_option_id: "inline_visual",
+          selected_option_label: "Inline visual answer",
+          free_text: "Keep it compact",
+          metadata: {
+            route_mode: "qa_visual",
+          },
+        },
+      },
+    ]);
+    expect(call[5]).toEqual({
+      asset_selection: "none",
+      clarification_id: "clarify_output",
+    });
+  });
+
   it("does not send theme metadata when the theme is dashboard state only", async () => {
     const restoredTheme = createThemeSelection("crimson", "default");
     useChatStore.setState({

@@ -414,7 +414,7 @@ export interface PendingAction {
 }
 
 // Ordered sequence of workflow steps (used to reconstruct prior steps on resume)
-const STEP_ORDER = ['initializing', 'initialized', 'load_conversation', 'download_asset', 'run_workflow', 'explore_files', 'routing', 'reasoning', 'reasoning_internal', 'execution', 'synthesis', 'validation', 'finish'];
+const STEP_ORDER = ['initializing', 'initialized', 'load_conversation', 'download_asset', 'run_workflow', 'explore_files', 'ask_first', 'routing', 'reasoning', 'reasoning_internal', 'execution', 'synthesis', 'validation', 'finish'];
 
 const getPriorWorkflowSteps = (step: string): string[] => {
   const stepIdx = STEP_ORDER.indexOf(step);

@@ -77,6 +77,41 @@ describe("clarification overlay option helpers", () => {
       "source: GA4",
     ]);
   });
+
+  it("renders agentic non-asset decision metadata as readable details", () => {
+    expect(getClarificationOptionDetails({
+      id: "inline_visual",
+      label: "Inline visual answer",
+      description: "Answer in chat",
+      impact: "Fastest visual path",
+      metadata: {
+        route_mode: "qa_visual",
+        target_chart_id: "chart_1",
+        chart_title: "Revenue Trend",
+        date_column: "created_at",
+        time_grain: "weekly",
+        metric_column: "revenue",
+        aggregation: "sum",
+        join_strategy: "auto",
+        update_scope: "current",
+        next_action: "provide_data",
+        context_request: "metric_scope",
+      },
+    })).toEqual([
+      "Answer in chat",
+      "Impact: Fastest visual path",
+      "Output: Inline visual answer",
+      "Target chart: Revenue Trend",
+      "Date column: created_at",
+      "Time grain: weekly",
+      "Metric: revenue",
+      "Aggregation: sum",
+      "Join strategy: Infer best join",
+      "Scope: Update current dashboard",
+      "Next: Add or connect data first",
+      "Context: Metric, period, or segment",
+    ]);
+  });
 });
 
 describe("clarification overlay keyboard helpers", () => {

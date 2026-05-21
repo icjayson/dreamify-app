@@ -124,6 +124,11 @@ const STEP_VARIANTS: Record<string, string[]> = {
     "Scanning columns and samples...",
     "Getting familiar with the dataset...",
   ],
+  'ask_first': [
+    "Checking whether I should ask first...",
+    "Looking for any risky guesses...",
+    "Seeing if your choice is needed...",
+  ],
   'execution': [
     "Crunching the numbers...",
     "Running the analysis...",

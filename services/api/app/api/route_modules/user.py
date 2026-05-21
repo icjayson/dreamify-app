@@ -322,6 +322,16 @@ async def list_projects_endpoint(
     return ProjectListResponse(projects=[_map_project(item) for item in projects])
 
 
+@router.get("/user/project/recent", response_model=ProjectListResponse)
+async def list_recent_projects_endpoint(
+    limit: int = Query(10, description="Maximum number of recent projects to return"),
+    user_id: str = Depends(require_user),
+):
+    safe_limit = max(1, min(limit, 50))
+    projects = projects_repo.list_recent_projects(user_id, limit=safe_limit)
+    return ProjectListResponse(projects=[_map_project(item) for item in projects])
+
+
 def _get_project_or_404(user_id: str, project_id: str) -> dict:
     project = projects_repo.get_project(user_id, project_id)
     if not project:

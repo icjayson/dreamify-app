@@ -8,11 +8,14 @@ from typing import Dict, List, Optional
 import logging
 
 from boto3.dynamodb.conditions import Key, Attr  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
 from utils.dynamodb.client import get_table
 from utils.dynamodb.tables import tables
 
 logger = logging.getLogger(__name__)
+
+RECENT_PROJECTS_INDEX = "user_id_updated_at_index"
 
 
 def _now_iso() -> str:
@@ -54,6 +57,53 @@ def list_projects(user_id: str) -> List[Dict]:
         ScanIndexForward=False,
     )
     return resp.get("Items", [])
+
+
+def _project_timestamp(item: Dict) -> float:
+    value = item.get("updated_at") or item.get("created_at")
+    if not value:
+        return 0
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0
+
+
+def _sort_recent_projects(items: List[Dict]) -> List[Dict]:
+    return sorted(items, key=_project_timestamp, reverse=True)
+
+
+def _can_fallback_from_index_error(exc: ClientError) -> bool:
+    error = exc.response.get("Error", {})
+    code = error.get("Code", "")
+    message = error.get("Message", "").lower()
+    return (
+        code in {"ValidationException", "ResourceNotFoundException"}
+        and "index" in message
+    )
+
+
+def list_recent_projects(user_id: str, limit: int = 10) -> List[Dict]:
+    table = get_table(tables.projects)
+    safe_limit = max(1, min(int(limit or 10), 50))
+
+    try:
+        resp = table.query(
+            IndexName=RECENT_PROJECTS_INDEX,
+            KeyConditionExpression=Key("user_id").eq(user_id),
+            ScanIndexForward=False,
+            Limit=safe_limit,
+        )
+        return resp.get("Items", [])[:safe_limit]
+    except ClientError as exc:
+        if not _can_fallback_from_index_error(exc):
+            raise
+        logger.info(
+            "Recent projects GSI %s unavailable; falling back to base project query",
+            RECENT_PROJECTS_INDEX,
+        )
+
+    return _sort_recent_projects(list_projects(user_id))[:safe_limit]
 
 
 def get_project(user_id: str, project_id: str) -> Optional[Dict]:

@@ -306,6 +306,76 @@ def test_chat_request_rejects_invalid_clarification_option():
     assert exc.value.status_code == 400
 
 
+def test_chat_request_accepts_non_asset_clarification_metadata():
+    from app.api.route_modules import conversation
+
+    project = {"project_id": "project_1", "user_id": "user_1", "name": "Untitled Project"}
+    existing = {
+        "nodes": [
+            {
+                "role": "assistant",
+                "contents": [
+                    {
+                        "type": "clarification_request",
+                        "data": {
+                            "clarification_id": "clarify_output",
+                            "reason_code": "output_mode",
+                            "options": [{"id": "inline_visual", "label": "Inline visual answer"}],
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+    request = conversation.ConversationChatRequest(
+        conversation_id="conversation_1",
+        project_id="project_1",
+        user_node_contents=[
+            {"type": "text", "data": {"text": "Inline visual answer"}},
+            {
+                "type": "clarification_response",
+                "data": {
+                    "clarification_id": "clarify_output",
+                    "selected_option_id": "inline_visual",
+                    "selected_option_label": "Inline visual answer",
+                    "metadata": {"route_mode": "qa_visual"},
+                },
+            },
+        ],
+    )
+    saved = {}
+    post = MagicMock(return_value=_MorpheusResponse())
+
+    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
+        conversation, "_load_existing_conversation", return_value=existing
+    ), patch.object(
+        conversation,
+        "save_conversation",
+        side_effect=lambda bucket, key, body: saved.setdefault("conversation", body),
+    ), patch.object(
+        conversation.projects_repo,
+        "update_project",
+        return_value={**project, "latest_conversation_id": "conversation_1"},
+    ), patch.object(
+        conversation.conversations_repo, "get_conversation", return_value=None
+    ), patch.object(
+        conversation.requests, "post", post
+    ), patch.object(
+        conversation.credit_service_instance, "get_model_cost", return_value=1
+    ), patch.object(conversation.credit_service_instance, "consume_credits"), patch.object(
+        conversation.asyncio, "sleep", new=_no_sleep
+    ), patch.object(conversation.assets_repo, "list_assets", return_value=[]):
+        asyncio.run(conversation.conversation_chat(request, user_id="user_1"))
+
+    user_node = saved["conversation"]["nodes"][-1]
+    assert user_node["metadata"]["asset_selection"] == "none"
+    response_content = user_node["contents"][1]
+    assert response_content["type"] == "clarification_response"
+    assert response_content["data"]["metadata"]["route_mode"] == "qa_visual"
+    payload = post.call_args.kwargs["json"]
+    assert payload["conversation_id"] == "conversation_1"
+
+
 def test_dismiss_clarification_rejects_unauthorized_conversation():
     from fastapi import HTTPException
     from app.api.route_modules import conversation

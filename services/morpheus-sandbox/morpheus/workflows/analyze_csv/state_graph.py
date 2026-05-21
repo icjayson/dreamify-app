@@ -53,7 +53,7 @@ class StatefulAnalyzeCSVWorkflow:
         self.tools = [self.python_tool, get_available_chart_types]
         self.model_with_tools = self.model.bind_tools(self.tools)
 
-        self.theme_id = theme_id
+        self.theme_id = theme_id or "default"
         self.template_spec = None
         focus_id = analysis_focus_id or template_id
         if focus_id:

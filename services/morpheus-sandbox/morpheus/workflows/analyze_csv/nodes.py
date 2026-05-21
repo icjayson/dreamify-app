@@ -420,7 +420,7 @@ Use semantic tokens in ALL styling objects (NOT hex/HSL except trendUp/trendDown
 - bg-card-color: for card backgrounds
 - border-card-color: for card borders
 
-Available Themes (choose ONE for entire dashboard):
+Available Themes (use default unless a selected visual theme is provided):
 - default: Clean monochrome, navy accent
 - carbon: Very dark, blue accent
 - slate: Dark blue-gray, cool blue accent
@@ -439,10 +439,10 @@ Available Themes (choose ONE for entire dashboard):
 - sandstone: Warm sand, terracotta accent
 
 CRITICAL THEME REQUIREMENT:
-- Choose ONE theme for the entire dashboard
+- Use "default" for the entire dashboard unless a selected visual theme is explicitly provided in workflow context
 - EVERY metric, chart, and table styling object MUST include "theme" field
 - ALL cards MUST use the SAME theme value
-- Example: {"theme": "carbon", "title": "title-color", ...}
+- Example: If the selected workflow theme is "carbon", use {"theme": "carbon", "title": "title-color", ...}
 
 
 OUTPUT FORMAT:
@@ -579,7 +579,7 @@ CRITICAL OUTPUT RULES:
 2. Include actual computed data in ALL datasets - NEVER empty arrays []
 3. NO SQL queries or "query" fields - only embedded data values computed via Python
 4. Apply semantic color tokens (not hex/HSL except for trendUp/trendDown)
-5. Choose ONE theme and use consistently across all components
+5. Use the selected workflow theme if provided; otherwise use "default" consistently across all components
 6. Transform table column names to human-readable format
 7. All datasets[].data[] must contain objects with "label" and "value" keys
 8. All numeric values must be actual numbers from your Python computations
@@ -648,6 +648,20 @@ ROUTING RULES:
    - Asks about capabilities or general questions
 
 Remember: Bias toward 'qa_visual' for data questions. Use 'dashboard' only for saved/reusable multi-visual dashboard work."""
+
+
+_DASHBOARD_REPAIR_RE = re.compile(
+    r"("
+    r"\b(fix|repair|wrong|incorrect|bug|broken|update|change|correct|same\s+(number|value)|metric\s+cards?)\b"
+    r"|sai|giống\s+nhau|giong\s+nhau|không\s+đúng|khong\s+dung|sửa|sua"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_dashboard_repair_request(prompt: str) -> bool:
+    """Detect user requests that are about fixing an existing dashboard artifact."""
+    return bool(_DASHBOARD_REPAIR_RE.search(prompt or ""))
 
 
 def _file_has_at_least_one_data_row(file_path: str) -> bool:
@@ -957,6 +971,9 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
     """
     logger.info("Running ROUTING node")
 
+    has_asset = len(state.user_state.user_assets) > 0
+    dashboard_count = len(state.user_state.dashboards)
+
     # Short-circuit: If user @mentioned a chart, force chart modification mode
     if state.chart_mentions:
         chart_titles = [cm.get("title", "Unknown") for cm in state.chart_mentions]
@@ -968,13 +985,18 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
         }
         return state
 
+    if dashboard_count > 0 and _looks_like_dashboard_repair_request(state.input_prompt):
+        logger.info("Dashboard repair requested against an existing dashboard")
+        state.working_memory.tool_outputs["route_decision"] = {
+            "next_step": "dashboard",
+            "reasoning": "User is reporting/fixing an existing dashboard, so generate a corrected dashboard artifact.",
+            "is_dashboard_repair": True,
+        }
+        return state
+
     # Get or create model
     if model is None:
         model = get_model_for_quick_agent()
-    
-    # Extract context flags
-    has_asset = len(state.user_state.user_assets) > 0
-    dashboard_count = len(state.user_state.dashboards)
     
     # Format router system prompt with context
     router_prompt = ROUTER_SYSTEM_PROMPT.format(
@@ -1215,7 +1237,37 @@ CRITICAL RULES:
 - Output ONLY the modified chart in "charts" array. Other dashboard components will be preserved automatically.
 - You MUST output the JSON code block — do NOT just describe the changes in text."""
             elif mode == "dashboard":
-                instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
+                if route_decision.get("is_dashboard_repair", False):
+                    latest_dashboard_id = None
+                    latest_dashboard = None
+                    if state.user_state.dashboards:
+                        latest_dashboard_id, latest_dashboard = list(state.user_state.dashboards.items())[-1]
+                    existing_dashboard_context = (
+                        json.dumps(latest_dashboard, ensure_ascii=False, indent=2)
+                        if latest_dashboard
+                        else "{}"
+                    )
+                    instruction = f"""User is asking to REPAIR an existing dashboard artifact, not just answer a question.
+
+User's repair request: {state.input_prompt}
+
+Existing dashboard ID: {latest_dashboard_id or "unknown"}
+Existing dashboard JSON:
+```json
+{existing_dashboard_context}
+```
+
+{file_info}
+
+REPAIR WORKFLOW:
+1. Use Python_REPL to reload the selected data and recompute the affected values.
+2. Generate a COMPLETE replacement dashboard JSON, preserving existing layout/styling where reasonable.
+3. Metric cards must use the correct metric-specific values. If multiple metrics share one related chart, do not copy the first dataset into every metric; match each metric to its own column/dataset.
+4. For ambiguous metric names like A1, A3, A7, use the latest value unless the metric title explicitly says total, sum, average, avg, or mean.
+
+CRITICAL: You MUST output a dashboard JSON code block. Do NOT answer with text only, and do NOT stop after saying the data was reloaded or analyzed."""
+                else:
+                    instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
             elif mode == "qa_visual":
                 instruction = f"User asks a focused data question that should be answered with text plus inline chart/table artifact(s): {state.input_prompt}\n\n{file_info}"
             else:

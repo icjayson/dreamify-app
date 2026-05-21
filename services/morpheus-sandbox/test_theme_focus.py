@@ -37,6 +37,14 @@ def test_state_prompt_context_includes_selected_theme():
     assert "styling_recommendations.theme" in context
 
 
+def test_effective_theme_defaults_silently_when_no_theme_selected():
+    from server import _effective_theme_id
+
+    assert _effective_theme_id(None, None) == "default"
+    assert _effective_theme_id("aurora", None) == "aurora"
+    assert _effective_theme_id(None, "hr_workforce") == "warm"
+
+
 def test_state_prompt_context_includes_analysis_focus_contract():
     state = _state(
         template_spec={
@@ -49,6 +57,26 @@ def test_state_prompt_context_includes_analysis_focus_contract():
 
     assert "SELECTED ANALYSIS FOCUS" in context
     assert "Focus on headcount and attrition" in context
+
+
+def test_vietnamese_metric_card_fix_routes_to_dashboard_repair():
+    state = AgentState(
+        user_state=UserState(
+            user_id="user_1",
+            project_id="project_1",
+            conversation_id="conversation_1",
+            dashboards={"dash_1": {"metrics": [{"title": "A1", "value": "1227"}]}},
+        ),
+        working_memory=WorkingMemory(),
+        workflow_history=WorkflowHistory(),
+        input_prompt="sai rồi sao số A1 A3 A7 trên metrics card lại giống nhau",
+    )
+
+    routed = nodes.node_routing(state)
+    decision = routed.working_memory.tool_outputs["route_decision"]
+
+    assert decision["next_step"] == "dashboard"
+    assert decision["is_dashboard_repair"] is True
 
 
 def test_apply_theme_to_dashboard_data_forces_all_component_styles():
@@ -68,6 +96,25 @@ def test_apply_theme_to_dashboard_data_forces_all_component_styles():
     assert dashboard["metrics"][0]["styling"]["theme"] == "cobalt"
     assert dashboard["charts"][0]["styling"]["theme"] == "cobalt"
     assert dashboard["tables"][0]["styling"]["theme"] == "cobalt"
+
+
+def test_apply_default_theme_to_dashboard_data_when_theme_is_silent():
+    from server import _apply_theme_to_dashboard_data
+
+    dashboard = {
+        "metrics": [{"styling": {"theme": "slate"}}],
+        "charts": [{"styling": {}}],
+        "tables": [{}],
+        "styling_recommendations": {"theme": "carbon"},
+    }
+
+    _apply_theme_to_dashboard_data(dashboard, "default")
+
+    assert dashboard["theme_id"] == "default"
+    assert dashboard["styling_recommendations"]["theme"] == "default"
+    assert dashboard["metrics"][0]["styling"]["theme"] == "default"
+    assert dashboard["charts"][0]["styling"]["theme"] == "default"
+    assert dashboard["tables"][0]["styling"]["theme"] == "default"
 
 
 def test_extract_assets_respects_none_selection():

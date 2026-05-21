@@ -190,7 +190,7 @@ Use these semantic tokens in ALL styling objects:
 - bg-card-color: for card backgrounds
 - border-card-color: for card borders
 
-Available Themes (choose ONE):
+Available Themes (use default unless a selected visual theme is provided):
 - default: Clean monochrome, white accent — works with any data (DEFAULT)
 - carbon: Very dark, blue accent — high-end dark dashboard
 - slate: Dark blue-gray, cool blue — technical, data-heavy
@@ -209,10 +209,10 @@ Available Themes (choose ONE):
 - sandstone: Warm sand, terracotta — editorial business dashboard
 
 CRITICAL THEME REQUIREMENT:
-1. Choose ONE theme for the entire dashboard output
+1. Use "default" for the entire dashboard output unless a selected visual theme is explicitly provided in workflow context
 2. EVERY metric, chart, and table styling object MUST include "theme" field with the chosen theme
 3. ALL cards in the same output MUST use the SAME theme value
-4. Example: If you choose "carbon", every styling object should start with: {"theme": "carbon", "title": "title-color", ...}
+4. Example: If the selected workflow theme is "carbon", every styling object should start with: {"theme": "carbon", "title": "title-color", ...}
 
 ================================================================================
 OUTPUT FORMAT (Dashboard Mode Only)
@@ -343,7 +343,7 @@ CRITICAL OUTPUT RULES:
 - Include actual computed data in all datasets
 - NEVER leave datasets as empty arrays
 - Apply semantic color tokens (not hex/HSL values)
-- Choose ONE theme and use it consistently
+- Use the selected workflow theme if provided; otherwise use "default" consistently
 - Transform table column names to human-readable format
 - Always end with the structured JSON output matching the frontend contract
 

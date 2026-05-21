@@ -97,6 +97,10 @@ def _resolve_theme_id(theme_id: Optional[str], template_id: Optional[str] = None
     return resolved if resolved in VALID_THEME_IDS else None
 
 
+def _effective_theme_id(theme_id: Optional[str], template_id: Optional[str] = None) -> str:
+    return _resolve_theme_id(theme_id, template_id) or "default"
+
+
 def _apply_theme_to_dashboard_data(data: Dict[str, Any], theme_id: Optional[str]) -> None:
     if not theme_id or not isinstance(data, dict):
         return
@@ -1209,7 +1213,7 @@ def _process_conversation_background(
         # Store primary_asset for later use in error handling and completion
         primary_asset = assets[0] if assets else None
 
-        effective_theme_id = _resolve_theme_id(theme_id, template_id)
+        effective_theme_id = _effective_theme_id(theme_id, template_id)
         workflow = StatefulAnalyzeCSVWorkflow(
             model_override=model_override,
             theme_id=effective_theme_id,
@@ -1497,7 +1501,7 @@ def _process_conversation_background(
         result_data = result.get("data", {}) if result else {}
         if not isinstance(result_data, dict):
             result_data = {}
-        effective_theme_id = _resolve_theme_id(theme_id, template_id)
+        effective_theme_id = _effective_theme_id(theme_id, template_id)
         _apply_theme_to_dashboard_data(result_data, effective_theme_id)
         if analysis_focus_id:
             result_data["analysis_focus_id"] = analysis_focus_id
@@ -1585,7 +1589,7 @@ def _process_conversation_background(
         new_dashboard_record = None
         result_data = result.get("data")
         if result_data and isinstance(result_data, dict) and conversation_bucket:
-            effective_theme_id = _resolve_theme_id(theme_id, template_id)
+            effective_theme_id = _effective_theme_id(theme_id, template_id)
             _apply_theme_to_dashboard_data(result_data, effective_theme_id)
             if analysis_focus_id:
                 result_data["analysis_focus_id"] = analysis_focus_id

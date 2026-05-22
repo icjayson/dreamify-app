@@ -1,6 +1,20 @@
 import { api } from './api';
 import { conversationService, ConversationChatRequest } from './conversationService';
 
+type ProcessingDashboardData = Record<string, unknown> & {
+  theme_id?: string | null;
+  analysis_focus_id?: string | null;
+  template_id?: string | null;
+};
+
+type WorkflowStatusMetadata = Record<string, unknown> & {
+  content?: string;
+  error?: string;
+  response_type?: string;
+  step?: string;
+  title?: string;
+};
+
 export interface ProcessingResponse {
   success: boolean;
   data?: {
@@ -10,9 +24,15 @@ export interface ProcessingResponse {
     conversation_id?: string;
     message?: string;
     error?: string;
-    processed_data?: any;
-    dashboard_data?: any;
-    [key: string]: any;
+    processed_data?: ProcessingDashboardData | null;
+    dashboard_data?: ProcessingDashboardData | null;
+    project_name?: string;
+    response_type?: string;
+    workflow_status?: {
+      status?: string;
+      metadata?: WorkflowStatusMetadata;
+    };
+    [key: string]: unknown;
   };
 }
 
@@ -79,7 +99,7 @@ class ProcessingService {
     abortSignal?: AbortSignal
   ): Promise<ProcessingResponse> {
     try {
-      const workflowStatus = await conversationService.getWorkflowStatus(conversationId, projectId);
+      const workflowStatus = await conversationService.getWorkflowStatus(conversationId, projectId, abortSignal);
       return {
         success: true,
         data: {
@@ -320,6 +340,18 @@ class ProcessingService {
         // Continue polling if status is 'processing' or other intermediate states
 
       } catch (error) {
+        if (abortSignal?.aborted) {
+          return {
+            success: false,
+            data: {
+              success: false,
+              status: 'error',
+              fileID: assetId,
+              conversation_id: conversationId,
+              error: 'Processing aborted',
+            },
+          };
+        }
         // Log error but continue polling - this handles temporary network glitches
         console.warn(`Polling attempt ${attempts + 1}/${maxAttempts} failed:`, error);
         // Don't return error immediately - let it retry
@@ -327,7 +359,23 @@ class ProcessingService {
       }
 
       attempts += 1;
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      await new Promise((resolve) => {
+        const timeoutId = setTimeout(resolve, intervalMs);
+        if (!abortSignal) return;
+        if (abortSignal.aborted) {
+          clearTimeout(timeoutId);
+          resolve(undefined);
+          return;
+        }
+        abortSignal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timeoutId);
+            resolve(undefined);
+          },
+          { once: true }
+        );
+      });
     }
 
     // Only return error after all attempts exhausted

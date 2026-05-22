@@ -15,6 +15,29 @@ import {
 // are clicked in rapid succession, only the latest fetch's result is
 // applied; older in-flight resolutions are discarded by request-id check.
 let selectDashboardSeq = 0;
+let workflowRunSeq = 0;
+let activeWorkflowRunId: number | null = null;
+
+function beginWorkflowRun(): number {
+  workflowRunSeq += 1;
+  activeWorkflowRunId = workflowRunSeq;
+  return workflowRunSeq;
+}
+
+function invalidateWorkflowRuns(): void {
+  workflowRunSeq += 1;
+  activeWorkflowRunId = null;
+}
+
+function isWorkflowRunActive(runId: number): boolean {
+  return activeWorkflowRunId === runId;
+}
+
+function finishWorkflowRun(runId: number): void {
+  if (activeWorkflowRunId === runId) {
+    activeWorkflowRunId = null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Per-dashboard visual theme persistence. The old template map is still read
@@ -1013,27 +1036,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearInput: () => set({ inputValue: "" }),
 
-	  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: unknown) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: unknown }>, model?: 'pro' | 'fast', onAccepted?: () => void, onProjectNameAccepted?: (projectName: string) => void) => {
-	    const state = get();
-	    const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep, setPriorWorkflowSteps } = state;
-	    const promptTheme = getPendingPromptTheme(state);
-	    const promptThemeId = getThemeId(promptTheme);
-	    const promptAnalysisFocusId = getAnalysisFocusId(promptTheme);
-	    const promptThemeMetadata = getPromptThemeMetadata(promptTheme);
+		  processFileWithMessage: async (content: string, onProcessedDataChange?: (data: unknown) => void, projectIdParam?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: unknown }>, model?: 'pro' | 'fast', onAccepted?: () => void, onProjectNameAccepted?: (projectName: string) => void) => {
+		    const state = get();
+		    const { uploadedFiles, updateFile, setIsProcessing, setIsTyping, addMessage, updateMessages, messages, setDashboardTheme, setIsThemeChanging, hasShownInitialDashboard, dashboardTheme, currentConversationId, setCurrentConversationId, setCurrentWorkflowStep, setPriorWorkflowSteps } = state;
+		    const promptTheme = getPendingPromptTheme(state);
+		    const promptThemeId = getThemeId(promptTheme);
+		    const promptAnalysisFocusId = getAnalysisFocusId(promptTheme);
+		    const promptThemeMetadata = getPromptThemeMetadata(promptTheme);
+	    const explicitAssetIds = getExplicitPromptAssetIds(uploadedFiles, mentionedAssetIds ?? []);
+	    const explicitPromptFiles = getExplicitPromptFiles(uploadedFiles, explicitAssetIds);
+	    const freshPromptUploads = uploadedFiles.filter(isFreshPromptUpload);
+	    const workflowProjectId = projectIdParam || freshPromptUploads[0]?.projectId || null;
+	    let workflowConversationId: string | null = currentConversationId;
 
-    // Create new AbortController for this processing session
-    const abortController = new AbortController();
-    set({ abortController, currentProjectId: projectIdParam || null, thinkingEvents: [], priorWorkflowSteps: [] });
+	    // Create new AbortController for this processing session
+	    const workflowRunId = beginWorkflowRun();
+	    const abortController = new AbortController();
+	    const isSameWorkflowContext = (conversationId?: string | null) => {
+	      const current = get();
+	      if (workflowProjectId && current.currentProjectId !== workflowProjectId) return false;
+	      if (conversationId && current.currentConversationId !== conversationId) return false;
+	      return true;
+	    };
+	    const isCurrentWorkflowRun = (conversationId?: string | null) => (
+	      isWorkflowRunActive(workflowRunId) &&
+	      !abortController.signal.aborted &&
+	      isSameWorkflowContext(conversationId)
+	    );
+	    set({ abortController, currentProjectId: workflowProjectId, thinkingEvents: [], priorWorkflowSteps: [] });
 
-    // Clear current workflow step at start
-    setCurrentWorkflowStep(null);
-    setPriorWorkflowSteps([]);
+	    // Clear current workflow step at start
+	    setCurrentWorkflowStep(null);
+	    setPriorWorkflowSteps([]);
 
-    const explicitAssetIds = getExplicitPromptAssetIds(uploadedFiles, mentionedAssetIds ?? []);
-    const explicitPromptFiles = getExplicitPromptFiles(uploadedFiles, explicitAssetIds);
-    const freshPromptUploads = uploadedFiles.filter(isFreshPromptUpload);
-
-    // Text-only message path: allow theme change after initial dashboard shown, only if currently light
+	    // Text-only message path: allow theme change after initial dashboard shown, only if currently light
     // @mentioned files should use Q&A path (they're already in conversation)
     const hasUploadedFiles = freshPromptUploads.length > 0;
 
@@ -1064,10 +1100,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           role: "assistant",
           content: "Project context is required. Please ensure you are in a project workspace.",
           timestamp: new Date(),
-        };
-        addMessage(errorMessage);
-        return;
-      }
+	        };
+	        addMessage(errorMessage);
+	        set({ abortController: null });
+	        finishWorkflowRun(workflowRunId);
+	        return;
+	      }
 
       // Process Q&A (with or without existing conversation)
       const lastMessage = messages[messages.length - 1];
@@ -1188,14 +1226,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const assetSelectionMetadata = explicitAssetIds.length > 0
           ? { asset_selection: 'explicit' as const, selected_asset_ids: explicitAssetIds, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) }
           : { asset_selection: 'none' as const, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) };
-        const userNodeMetadata = {
-          ...assetSelectionMetadata,
-          ...promptThemeMetadata,
-        };
+	        const userNodeMetadata = {
+	          ...assetSelectionMetadata,
+	          ...promptThemeMetadata,
+	        };
+	        if (!isCurrentWorkflowRun(workflowConversationId)) return;
 
-	        // Call processing service with file attachment if available
-	        const startResult = await processingService.runProcessing(
-	          projectId,
+		        // Call processing service with file attachment if available
+		        const startResult = await processingService.runProcessing(
+		          projectId,
 	          assetId,
           content,
           currentConversationId || undefined,  // Use existing conversation if available
@@ -1203,10 +1242,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	          userNodeMetadata,
 	          model,
 	          promptThemeId,
-	          promptAnalysisFocusId
-	        );
+		          promptAnalysisFocusId
+		        );
+	        if (!isCurrentWorkflowRun(workflowConversationId)) return;
 
-        console.log('Q&A processing result:', startResult);
+	        console.log('Q&A processing result:', startResult);
 
         if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
           // Invoke onAccepted callback to allow early UI updates (e.g. credit refresh)
@@ -1216,19 +1256,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
             onProjectNameAccepted?.(acceptedProjectName.trim());
           }
 
-          const conversationId = startResult.data?.conversation_id || currentConversationId;
-          if (conversationId) {
-            setCurrentConversationId(conversationId);
-          }
+	          const conversationId = startResult.data?.conversation_id || currentConversationId;
+	          if (conversationId) {
+	            workflowConversationId = conversationId;
+	            setCurrentConversationId(conversationId);
+	          }
 
           // Poll for completion
           const finalResult = await processingService.pollProcessingStatus(
             '',  // No assetId for Q&A
             projectId,
-            conversationId,
-            (status) => {
-              // Update status based on workflow status
-              const workflowStatus = status.data?.workflow_status?.status;
+	            conversationId,
+	            (status) => {
+	              if (!isCurrentWorkflowRun(conversationId)) return;
+	              // Update status based on workflow status
+	              const workflowStatus = status.data?.workflow_status?.status;
 
               // For QnA: DON'T update uploadedFile status to 'processing'
               // This prevents ProjectPage from showing "Generating Dashboard"
@@ -1252,16 +1294,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
             },
             360,
             5000,
-            abortController.signal
-          );
+	            abortController.signal
+	          );
+	          if (!isCurrentWorkflowRun(conversationId)) return;
 
-          console.log('Q&A final result:', finalResult);
+	          console.log('Q&A final result:', finalResult);
 
 	          if (finalResult.data?.success && finalResult.data?.status === 'awaiting_user_input') {
 	            try {
-	              const { conversationService } = await import('@/services/conversationService');
-	              const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-	              const restoredMessages = conversationNodesToMessages(conversationResponse.conversation);
+		              const { conversationService } = await import('@/services/conversationService');
+		              const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+		              if (!isCurrentWorkflowRun(conversationId)) return;
+		              const restoredMessages = conversationNodesToMessages(conversationResponse.conversation);
 	              if (restoredMessages.length) {
 	                get().setMessages(restoredMessages);
 	              }
@@ -1277,9 +1321,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	            if (finalResult.data?.dashboard_data) {
               // Dashboard response - load conversation to get LLM's actual response text
               try {
-                const { conversationService } = await import('@/services/conversationService');
-                const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-                const conversation = conversationResponse.conversation;
+	                const { conversationService } = await import('@/services/conversationService');
+	                const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+	                if (!isCurrentWorkflowRun(conversationId)) return;
+	                const conversation = conversationResponse.conversation;
 
                 // Extract dashboard_id from conversation
                 const dashboards = conversation.dashboards || [];
@@ -1319,14 +1364,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   }
 
                   // Auto-capture PNG preview (fire-and-forget, non-blocking)
-                  const _captureProjectId = projectId;
-                  const _captureDashboardId = dashboardId;
-                  setTimeout(async () => {
-                    try {
-                      const { captureDashboardAsWebpBlob } = await import('@/utils/exportUtils');
-                      const blob = await captureDashboardAsWebpBlob('dashboard-preview-root');
-                      if (blob && _captureProjectId && _captureDashboardId) {
-                        const { projectService } = await import('@/services/projectService');
+	                  const _captureProjectId = projectId;
+	                  const _captureDashboardId = dashboardId;
+	                  const _captureConversationId = conversationId;
+	                  setTimeout(async () => {
+	                    try {
+	                      if (!isSameWorkflowContext(_captureConversationId) || get().selectedDashboardId !== _captureDashboardId) return;
+	                      const { captureDashboardAsWebpBlob } = await import('@/utils/exportUtils');
+	                      const blob = await captureDashboardAsWebpBlob('dashboard-preview-root');
+	                      if (!isSameWorkflowContext(_captureConversationId) || get().selectedDashboardId !== _captureDashboardId) return;
+	                      if (blob && _captureProjectId && _captureDashboardId) {
+	                        const { projectService } = await import('@/services/projectService');
                         await projectService.uploadDashboardPreview(_captureProjectId, _captureDashboardId, blob);
                         console.log('Dashboard preview captured and uploaded for project', _captureProjectId);
                       }
@@ -1399,8 +1447,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
                   get().setMessages(restoredMessages);
                 }
-              } catch (error) {
-                console.error('Failed to load conversation for dashboard response:', error);
+	              } catch (error) {
+	                if (!isCurrentWorkflowRun(conversationId)) return;
+	                console.error('Failed to load conversation for dashboard response:', error);
                 // No fallback message
                 updateMessages((prev) => ([
                   ...prev,
@@ -1425,9 +1474,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	                set({ isThemePending: false, isTemplatePending: false });
 	              }
 	              try {
-                const { conversationService } = await import('@/services/conversationService');
-                const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-                const conversation = conversationResponse.conversation;
+	                const { conversationService } = await import('@/services/conversationService');
+	                const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+	                if (!isCurrentWorkflowRun(conversationId)) return;
+	                const conversation = conversationResponse.conversation;
                 const restoredMessages = conversationNodesToMessages(conversation);
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
@@ -1441,17 +1491,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       hasShownInitialDashboard: true,
                       isInitialLoading: false,
                     });
-                    get().selectDashboard(dashId, projectId).then((data) => {
-                      if (data && onProcessedDataChange) {
-                        onProcessedDataChange(data);
-                      }
-                    });
+	                    get().selectDashboard(dashId, projectId).then((data) => {
+	                      if (data && onProcessedDataChange && isCurrentWorkflowRun(conversationId)) {
+	                        onProcessedDataChange(data);
+	                      }
+	                    });
                   }
                 }
                 // Update file status to processed to hide chip
                 get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'processed' }));
-              } catch (error) {
-                console.error('Failed to load conversation for Q&A response:', error);
+	              } catch (error) {
+	                if (!isCurrentWorkflowRun(conversationId)) return;
+	                console.error('Failed to load conversation for Q&A response:', error);
                 // Fallback to workflow status metadata
                 const workflowStatus = finalResult.data?.workflow_status;
                 const responseText = workflowStatus?.metadata?.content ||
@@ -1496,9 +1547,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           ]));
         }
-      } catch (error) {
-        console.error('Q&A processing error:', error);
-        explicitPromptFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
+	      } catch (error) {
+	        if (!isCurrentWorkflowRun(workflowConversationId)) return;
+	        console.error('Q&A processing error:', error);
+	        explicitPromptFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
         const errObj = error as Record<string, unknown>;
         const errDetail = (errObj?.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
         const isInsufficientCredits =
@@ -1515,12 +1567,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
             isError: true,
             isInsufficientCredits,
           }
-        ]));
-      } finally {
-        setIsTyping(false);
-        setIsProcessing(false);
-        set({ isUpdatingDashboard: false });
-      }
+	        ]));
+	      } finally {
+	        if (isWorkflowRunActive(workflowRunId) && isSameWorkflowContext(workflowConversationId)) {
+	          setIsTyping(false);
+	          setIsProcessing(false);
+	          set({ isUpdatingDashboard: false, abortController: null });
+	          finishWorkflowRun(workflowRunId);
+	        }
+	      }
       return;
     }
 
@@ -1629,13 +1684,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      const assetSelectionMetadata = explicitAssetIds.length > 0
 	        ? { asset_selection: 'explicit' as const, selected_asset_ids: explicitAssetIds, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) }
 	        : { asset_selection: 'none' as const, ...(mentionedCharts && mentionedCharts.length > 0 ? { selected_chart_ids: mentionedCharts.map(c => c.componentId) } : {}) };
-	      const userNodeMetadata = {
-	        ...assetSelectionMetadata,
-	        ...promptThemeMetadata,
-	      };
+		      const userNodeMetadata = {
+		        ...assetSelectionMetadata,
+		        ...promptThemeMetadata,
+		      };
+	      if (!isCurrentWorkflowRun(workflowConversationId)) return;
 
-	      const startResult = await processingService.runProcessing(
-	        projectId,
+		      const startResult = await processingService.runProcessing(
+		        projectId,
 	        firstUploadedFile.fileID,
         content,
         firstUploadedFile.conversationId || currentConversationId || undefined,
@@ -1643,9 +1699,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	        userNodeMetadata,
 	        model,
 	        promptThemeId,
-	        promptAnalysisFocusId
-	      );
-      console.log('Run processing result:', startResult);
+		        promptAnalysisFocusId
+		      );
+	      if (!isCurrentWorkflowRun(workflowConversationId)) return;
+	      console.log('Run processing result:', startResult);
       // processing or accepted
       if (startResult.data?.success && (startResult.data?.status === 'processing' || startResult.data?.status === 'accepted')) {
         // Invoke onAccepted callback to allow early UI updates (e.g. credit refresh)
@@ -1655,19 +1712,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
           onProjectNameAccepted?.(acceptedProjectName.trim());
         }
 
-        const conversationId = startResult.data?.conversation_id;
-        if (conversationId) {
-          set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, conversationId })), currentConversationId: conversationId }));
-          setCurrentConversationId(conversationId);
-        }
+	        const conversationId = startResult.data?.conversation_id;
+	        if (conversationId) {
+	          workflowConversationId = conversationId;
+	          set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, conversationId })), currentConversationId: conversationId }));
+	          setCurrentConversationId(conversationId);
+	        }
 
         console.log('Processing started, beginning polling...');
         const finalResult = await processingService.pollProcessingStatus(
           firstUploadedFile.fileID,
-          projectId,
-          conversationId,
-          (status) => {
-            const workflowStatus = status.data?.workflow_status?.status;
+	          projectId,
+	          conversationId,
+	          (status) => {
+	            if (!isCurrentWorkflowRun(conversationId)) return;
+	            const workflowStatus = status.data?.workflow_status?.status;
             if (workflowStatus === 'processing') {
               set((s) => ({ uploadedFiles: s.uploadedFiles.map(f => ({ ...f, status: 'processing' as const })) }));
             } else if (workflowStatus === 'error' || workflowStatus === 'stopped') {
@@ -1688,15 +1747,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
           360, // max attempts (30 minutes)
           5000, // 5 second intervals
-          abortController.signal
-        );
-        console.log('Final polling result:', finalResult);
+	          abortController.signal
+	        );
+	        if (!isCurrentWorkflowRun(conversationId)) return;
+	        console.log('Final polling result:', finalResult);
 
 	        if (finalResult.data?.success && finalResult.data?.status === 'awaiting_user_input') {
 	          try {
-	            const { conversationService } = await import('@/services/conversationService');
-	            const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-	            const restoredMessages = conversationNodesToMessages(conversationResponse.conversation);
+		            const { conversationService } = await import('@/services/conversationService');
+		            const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+		            if (!isCurrentWorkflowRun(conversationId)) return;
+		            const restoredMessages = conversationNodesToMessages(conversationResponse.conversation);
 	            if (restoredMessages.length) {
 	              get().setMessages(restoredMessages);
 	            }
@@ -1715,9 +1776,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
             // Load conversation to get LLM's actual response text and dashboard_id
             try {
-              const { conversationService } = await import('@/services/conversationService');
-              const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-              const conversation = conversationResponse.conversation;
+	              const { conversationService } = await import('@/services/conversationService');
+	              const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+	              if (!isCurrentWorkflowRun(conversationId)) return;
+	              const conversation = conversationResponse.conversation;
 
               // Extract dashboard_id from conversation
               const dashboards = conversation.dashboards || [];
@@ -1743,13 +1805,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 }
 
                 // Auto-capture PNG preview (fire-and-forget, non-blocking)
-                const _captureProjectId2 = projectId;
-                const _captureDashboardId2 = dashboardId;
-                setTimeout(async () => {
-                  try {
-                    const { captureDashboardAsWebpBlob } = await import('@/utils/exportUtils');
-                    const blob = await captureDashboardAsWebpBlob('dashboard-preview-root');
-                    if (blob && _captureProjectId2 && _captureDashboardId2) {
+	                const _captureProjectId2 = projectId;
+	                const _captureDashboardId2 = dashboardId;
+	                const _captureConversationId2 = conversationId;
+	                setTimeout(async () => {
+	                  try {
+	                    if (!isSameWorkflowContext(_captureConversationId2) || get().selectedDashboardId !== _captureDashboardId2) return;
+	                    const { captureDashboardAsWebpBlob } = await import('@/utils/exportUtils');
+	                    const blob = await captureDashboardAsWebpBlob('dashboard-preview-root');
+	                    if (!isSameWorkflowContext(_captureConversationId2) || get().selectedDashboardId !== _captureDashboardId2) return;
+	                    if (blob && _captureProjectId2 && _captureDashboardId2) {
                       const { projectService } = await import('@/services/projectService');
                       await projectService.uploadDashboardPreview(_captureProjectId2, _captureDashboardId2, blob);
                       console.log('Dashboard preview captured and uploaded for project', _captureProjectId2);
@@ -1808,8 +1873,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               // DON'T clear uploadedFile - ProjectPage needs it to determine dashboard display
               // The FilePreviewChip will be hidden based on processing status
               // setUploadedFile(null); // REMOVED - causes dashboard to disappear in ProjectPage
-            } catch (error) {
-              console.error('Failed to load conversation for dashboard response:', error);
+	            } catch (error) {
+	              if (!isCurrentWorkflowRun(conversationId)) return;
+	              console.error('Failed to load conversation for dashboard response:', error);
               // No fallback message
               updateMessages((prev) => ([
                 ...prev,
@@ -1842,9 +1908,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	              set({ isThemePending: false, isTemplatePending: false });
 	            }
 	            try {
-              const { conversationService } = await import('@/services/conversationService');
-              const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-              const conversation = conversationResponse.conversation;
+	              const { conversationService } = await import('@/services/conversationService');
+	              const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+	              if (!isCurrentWorkflowRun(conversationId)) return;
+	              const conversation = conversationResponse.conversation;
               const restoredMessages = conversationNodesToMessages(conversation);
               console.log('Q&A conversation loaded, restored', restoredMessages.length, 'messages');
               if (restoredMessages.length) {
@@ -1859,15 +1926,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     hasShownInitialDashboard: true,
                     isInitialLoading: false,
                   });
-                  get().selectDashboard(dashId, projectId).then((data) => {
-                    if (data && onProcessedDataChange) {
-                      onProcessedDataChange(data);
-                    }
-                  });
+	                  get().selectDashboard(dashId, projectId).then((data) => {
+	                    if (data && onProcessedDataChange && isCurrentWorkflowRun(conversationId)) {
+	                      onProcessedDataChange(data);
+	                    }
+	                  });
                 }
               }
-            } catch (error) {
-              console.error('Failed to load conversation for Q&A response:', error);
+	            } catch (error) {
+	              if (!isCurrentWorkflowRun(conversationId)) return;
+	              console.error('Failed to load conversation for Q&A response:', error);
               // Fallback to workflow status metadata
               const workflowStatus = finalResult.data?.workflow_status;
               const responseText = workflowStatus?.metadata?.content ||
@@ -1930,9 +1998,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         ]));
       }
-    } catch (error) {
-      console.error('Processing error:', error);
-      get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
+	    } catch (error) {
+	      if (!isCurrentWorkflowRun(workflowConversationId)) return;
+	      console.error('Processing error:', error);
+	      get().uploadedFiles.forEach(f => updateFile(f.fileID, { status: 'error' }));
       const errObj = error as Record<string, unknown>;
       const errDetail = (errObj?.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
       const isInsufficientCredits =
@@ -1949,12 +2018,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isError: true,
           isInsufficientCredits,
         }
-      ]));
-    } finally {
-      setIsTyping(false);
-      setIsProcessing(false);
-      set({ isUpdatingDashboard: false, abortController: null });
-    }
+	      ]));
+	    } finally {
+	      if (isWorkflowRunActive(workflowRunId) && isSameWorkflowContext(workflowConversationId)) {
+	        setIsTyping(false);
+	        setIsProcessing(false);
+	        set({ isUpdatingDashboard: false, abortController: null });
+	        finishWorkflowRun(workflowRunId);
+	      }
+	    }
   },
 
   submitClarificationResponse: async (
@@ -1985,8 +2057,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      throw new Error('Conversation context missing for clarification response');
 	    }
 
-    const abortController = new AbortController();
-    set({ abortController, currentProjectId: projectId, thinkingEvents: [], priorWorkflowSteps: [] });
+	    const workflowRunId = beginWorkflowRun();
+	    const abortController = new AbortController();
+	    let workflowConversationId = currentConversationId;
+	    const isSameWorkflowContext = (conversationId?: string | null) => {
+	      const current = get();
+	      if (current.currentProjectId !== projectId) return false;
+	      if (conversationId && current.currentConversationId !== conversationId) return false;
+	      return true;
+	    };
+	    const isCurrentWorkflowRun = (conversationId?: string | null) => (
+	      isWorkflowRunActive(workflowRunId) &&
+	      !abortController.signal.aborted &&
+	      isSameWorkflowContext(conversationId)
+	    );
+	    set({ abortController, currentProjectId: projectId, thinkingEvents: [], priorWorkflowSteps: [] });
     setCurrentWorkflowStep(null);
     setPriorWorkflowSteps([]);
 
@@ -2012,8 +2097,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setIsTyping(true);
     setIsProcessing(true);
 
-    try {
-	      const startResult = await processingService.runProcessing(
+	    try {
+		      const startResult = await processingService.runProcessing(
 	        projectId,
 	        null,
         displayText,
@@ -2027,10 +2112,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	        },
 	        model,
 	        promptThemeId,
-	        promptAnalysisFocusId,
-	      );
+		        promptAnalysisFocusId,
+		      );
+	      if (!isCurrentWorkflowRun(workflowConversationId)) return;
 
-      if (!(startResult.data?.success && (startResult.data.status === 'processing' || startResult.data.status === 'accepted'))) {
+	      if (!(startResult.data?.success && (startResult.data.status === 'processing' || startResult.data.status === 'accepted'))) {
         throw new Error(startResult.data?.error || 'Failed to submit clarification response');
       }
 
@@ -2040,15 +2126,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         onProjectNameAccepted?.(acceptedProjectName.trim());
       }
 
-      const conversationId = startResult.data?.conversation_id || currentConversationId;
-      setCurrentConversationId(conversationId);
+	      const conversationId = startResult.data?.conversation_id || currentConversationId;
+	      workflowConversationId = conversationId;
+	      setCurrentConversationId(conversationId);
 
       const finalResult = await processingService.pollProcessingStatus(
         '',
-        projectId,
-        conversationId,
-        (status) => {
-          const workflowStatus = status.data?.workflow_status?.status;
+	        projectId,
+	        conversationId,
+	        (status) => {
+	          if (!isCurrentWorkflowRun(conversationId)) return;
+	          const workflowStatus = status.data?.workflow_status?.status;
           if (workflowStatus === 'error' || workflowStatus === 'stopped' || workflowStatus === 'awaiting_user_input') {
             setIsProcessing(false);
             setIsTyping(false);
@@ -2061,17 +2149,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         360,
         5000,
-        abortController.signal,
-      );
+	        abortController.signal,
+	      );
+	      if (!isCurrentWorkflowRun(conversationId)) return;
 
-	      if (finalResult.data?.success && finalResult.data?.status === 'completed') {
+		      if (finalResult.data?.success && finalResult.data?.status === 'completed') {
 	        if (promptTheme) {
 	          persistPendingThemeSelection(null);
 	          set({ isThemePending: false, isTemplatePending: false });
 	        }
-	        const { conversationService } = await import('@/services/conversationService');
-        const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-        const conversation = conversationResponse.conversation;
+		        const { conversationService } = await import('@/services/conversationService');
+	        const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+	        if (!isCurrentWorkflowRun(conversationId)) return;
+	        const conversation = conversationResponse.conversation;
         const restoredMessages = conversationNodesToMessages(conversation);
         if (restoredMessages.length) {
           get().setMessages(restoredMessages);
@@ -2084,24 +2174,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
             hasShownInitialDashboard: true,
             isInitialLoading: false,
           });
-          get().selectDashboard(dashId, projectId).then((data) => {
-            if (data && onProcessedDataChange) {
-              onProcessedDataChange(data);
-            }
-          });
+	          get().selectDashboard(dashId, projectId).then((data) => {
+	            if (data && onProcessedDataChange && isCurrentWorkflowRun(conversationId)) {
+	              onProcessedDataChange(data);
+	            }
+	          });
         }
       } else if (finalResult.data?.success && finalResult.data?.status === 'awaiting_user_input') {
-        const { conversationService } = await import('@/services/conversationService');
-        const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-        const restoredMessages = conversationNodesToMessages(conversationResponse.conversation);
+	        const { conversationService } = await import('@/services/conversationService');
+	        const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+	        if (!isCurrentWorkflowRun(conversationId)) return;
+	        const restoredMessages = conversationNodesToMessages(conversationResponse.conversation);
         if (restoredMessages.length) {
           get().setMessages(restoredMessages);
         }
       } else if (finalResult.data?.status === 'error' || !finalResult.success) {
         throw new Error(finalResult.data?.error || 'Clarification response processing failed');
       }
-    } catch (error) {
-      console.error('Clarification response error:', error);
+	    } catch (error) {
+	      if (!isCurrentWorkflowRun(workflowConversationId)) return;
+	      console.error('Clarification response error:', error);
       updateMessages((prev) => ([
         ...prev,
         {
@@ -2112,52 +2204,66 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isError: true,
         },
       ]));
-    } finally {
-      setIsTyping(false);
-      setIsProcessing(false);
-      set({ abortController: null });
-    }
+	    } finally {
+	      if (isWorkflowRunActive(workflowRunId) && isSameWorkflowContext(workflowConversationId)) {
+	        setIsTyping(false);
+	        setIsProcessing(false);
+	        set({ abortController: null });
+	        finishWorkflowRun(workflowRunId);
+	      }
+	    }
   },
 
-  resumeWorkflowPolling: async (projectId: string, conversationId: string, onProcessedDataChange?: (data: unknown) => void) => {
-    // Pre-check (synchronous): processFileWithMessage sets abortController synchronously
-    // before its first await, so this catches concurrent fresh-start workflows
-    if (get().abortController !== null || get().isProcessing) return;
+	  resumeWorkflowPolling: async (projectId: string, conversationId: string, onProcessedDataChange?: (data: unknown) => void) => {
+	    // Pre-check (synchronous): processFileWithMessage sets abortController synchronously
+	    // before its first await, so this catches concurrent fresh-start workflows
+	    if (get().abortController !== null || get().isProcessing) return;
 
-    const { processingService } = await import('@/services/processingService');
+	    const workflowRunId = beginWorkflowRun();
+	    const abortController = new AbortController();
+	    const isSameWorkflowContext = () => {
+	      const current = get();
+	      return current.currentProjectId === projectId && current.currentConversationId === conversationId;
+	    };
+	    const isCurrentWorkflowRun = () => (
+	      isWorkflowRunActive(workflowRunId) &&
+	      !abortController.signal.aborted &&
+	      isSameWorkflowContext()
+	    );
+	    set({ abortController, currentProjectId: projectId });
 
-    // Check if a workflow is actually in progress before doing anything
-    const statusCheck = await processingService.getWorkflowStatus(conversationId, projectId);
-    if (statusCheck.data?.status !== 'processing') {
-      // Not actively processing (completed, error, stopped, starting/404) — nothing to resume
-      return;
-    }
+	    const { setIsProcessing, setIsTyping, setCurrentWorkflowStep, setCurrentConversationId } = get();
 
-    // Post-check: close the race window — processFileWithMessage may have started while
-    // getWorkflowStatus was in-flight (abortController is set synchronously, isProcessing lags)
-    if (get().abortController !== null || get().isProcessing) return;
+	    try {
+	      const { processingService } = await import('@/services/processingService');
+	      if (!isCurrentWorkflowRun()) return;
 
-    const { setIsProcessing, setIsTyping, setCurrentWorkflowStep, setCurrentConversationId } = get();
+	      // Check if a workflow is actually in progress before doing anything
+	      const statusCheck = await processingService.getWorkflowStatus(conversationId, projectId, abortController.signal);
+	      if (!isCurrentWorkflowRun()) return;
+	      if (statusCheck.data?.status !== 'processing') {
+	        // Not actively processing (completed, error, stopped, starting/404) — nothing to resume
+	        return;
+	      }
 
-    // Seed the step display with whatever the backend currently reports
-    const initialStep = statusCheck.data?.workflow_status?.metadata?.step;
-    if (initialStep) {
-      setCurrentWorkflowStep(initialStep);
-      // Compute all steps that logically preceded this one so the UI can show them as completed
-      set({ priorWorkflowSteps: getPriorWorkflowSteps(initialStep) });
-    }
+	      // Seed the step display with whatever the backend currently reports
+	      const initialStep = statusCheck.data?.workflow_status?.metadata?.step;
+	      if (initialStep) {
+	        setCurrentWorkflowStep(initialStep);
+	        // Compute all steps that logically preceded this one so the UI can show them as completed
+	        set({ priorWorkflowSteps: getPriorWorkflowSteps(initialStep) });
+	      }
 
-    const abortController = new AbortController();
-    set({ abortController, isProcessing: true, isTyping: true });
-    setCurrentConversationId(conversationId);
+	      set({ isProcessing: true, isTyping: true });
+	      setCurrentConversationId(conversationId);
 
-    try {
-      const finalResult = await processingService.pollProcessingStatus(
-        '',
-        projectId,
-        conversationId,
-        (status) => {
-          const workflowStatus = status.data?.workflow_status?.status;
+	      const finalResult = await processingService.pollProcessingStatus(
+	        '',
+	        projectId,
+	        conversationId,
+	        (status) => {
+	          if (!isCurrentWorkflowRun()) return;
+	          const workflowStatus = status.data?.workflow_status?.status;
           if (workflowStatus === 'error' || workflowStatus === 'stopped') {
             setIsProcessing(false);
             setIsTyping(false);
@@ -2169,15 +2275,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         },
         360,
-        5000,
-        abortController.signal
-      );
+	        5000,
+	        abortController.signal
+	      );
+	      if (!isCurrentWorkflowRun()) return;
 
-      if (finalResult.data?.success && finalResult.data?.status === 'completed') {
-        const { conversationService } = await import('@/services/conversationService');
-        const { conversationNodesToMessages } = await import('@/chat/conversationToMessages');
-        const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
-        const conversation = conversationResponse.conversation;
+	      if (finalResult.data?.success && finalResult.data?.status === 'completed') {
+	        const { conversationService } = await import('@/services/conversationService');
+	        const { conversationNodesToMessages } = await import('@/chat/conversationToMessages');
+	        const conversationResponse = await conversationService.loadConversation(conversationId, projectId);
+	        if (!isCurrentWorkflowRun()) return;
+	        const conversation = conversationResponse.conversation;
         const restoredMessages = conversationNodesToMessages(conversation);
         if (restoredMessages.length) {
           get().setMessages(restoredMessages);
@@ -2199,30 +2307,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
             isThemePending: false,
             isTemplatePending: false,
           });
-          get().selectDashboard(dashId, projectId).then((data) => {
-            if (data && onProcessedDataChange) onProcessedDataChange(data);
-          });
-        } else if (finalResult.data?.dashboard_data && onProcessedDataChange) {
-          onProcessedDataChange(finalResult.data.dashboard_data);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to resume workflow polling:', error);
-    } finally {
-      setIsTyping(false);
-      setIsProcessing(false);
-      set({ abortController: null });
-    }
-  },
+	          get().selectDashboard(dashId, projectId).then((data) => {
+	            if (data && onProcessedDataChange && isCurrentWorkflowRun()) onProcessedDataChange(data);
+	          });
+	        } else if (finalResult.data?.dashboard_data && onProcessedDataChange && isCurrentWorkflowRun()) {
+	          onProcessedDataChange(finalResult.data.dashboard_data);
+	        }
+	      }
+	    } catch (error) {
+	      if (!isCurrentWorkflowRun()) return;
+	      console.error('Failed to resume workflow polling:', error);
+	    } finally {
+	      if (isWorkflowRunActive(workflowRunId) && isSameWorkflowContext()) {
+	        setIsTyping(false);
+	        setIsProcessing(false);
+	        set({ abortController: null });
+	        finishWorkflowRun(workflowRunId);
+	      }
+	    }
+	  },
 
   stopGeneration: async () => {
     const state = get();
     const { abortController, currentConversationId, setIsProcessing, setIsTyping } = state;
 
     // Abort the polling if controller exists
-    if (abortController && !abortController.signal.aborted) {
-      abortController.abort();
-    }
+	    if (abortController && !abortController.signal.aborted) {
+	      abortController.abort();
+	    }
+	    invalidateWorkflowRuns();
 
     if (currentConversationId) {
       try {
@@ -2244,28 +2357,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  resetChat: (preserveTemplate = false) => {
-    if (!preserveTemplate) {
-      persistPendingThemeSelection(null);
-    }
+	  resetChat: (preserveTemplate = false) => {
+	    const activeAbortController = get().abortController;
+	    if (activeAbortController && !activeAbortController.signal.aborted) {
+	      activeAbortController.abort();
+	    }
+	    invalidateWorkflowRuns();
+	    if (!preserveTemplate) {
+	      persistPendingThemeSelection(null);
+	    }
     const preservedTheme = preserveTemplate ? (get().selectedTheme || get().selectedTemplate) : null;
     set({
       inputValue: "",
       isTyping: false,
       messages: initialMessages,
-      uploadedFiles: [],
-      currentConversationId: null,
-      currentProjectId: null,
-      isProcessing: false,
-      currentWorkflowStep: null,
+	      uploadedFiles: [],
+	      currentConversationId: null,
+	      currentProjectId: null,
+	      abortController: null,
+	      isProcessing: false,
+	      currentWorkflowStep: null,
       priorWorkflowSteps: [],
       thinkingEvents: [],
       dropdownOpen: false,
       selectedDataSource: "",
       isListening: false,
       transcript: "",
-      detectedLanguage: null,
-      selectedDashboardId: null,
+	      detectedLanguage: null,
+	      hasShownInitialDashboard: false,
+	      isInitialLoading: false,
+	      isDashboardOpen: false,
+	      isUpdatingDashboard: false,
+	      isSwitchingDashboard: false,
+	      previousDashboardData: null,
+	      changedComponentIds: new Set<string>(),
+	      selectedDashboardId: null,
       selectedTheme: preservedTheme,
       selectedAnalysisFocusId: preservedTheme?.analysisFocusId ?? null,
       selectedTemplate: preservedTheme,
@@ -2274,11 +2400,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // We explicitly DO NOT clear integration modal states here
       // to preserve them across navigation/reloads during picking.
     });
-  },
+	  },
 
-  selectDashboard: async (dashboardId: string, projectId: string): Promise<unknown> => {
-    const { currentConversationId, updateFile } = get();
-    if (!currentConversationId) return null;
+	  selectDashboard: async (dashboardId: string, projectId: string): Promise<unknown> => {
+	    const { currentConversationId, currentProjectId, updateFile } = get();
+	    if (!currentConversationId || currentProjectId !== projectId) return null;
 
     // Monotonic request id for cancel-and-replace: rapid clicks on different
     // dashboards must end with only the latest result applied. We stash the
@@ -2295,16 +2421,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isSwitchingDashboard: true });
     try {
       const { conversationService } = await import('@/services/conversationService');
-      const response = await conversationService.getDashboardData(
-        currentConversationId,
-        projectId,
-        dashboardId
-      );
+	      const response = await conversationService.getDashboardData(
+	        currentConversationId,
+	        projectId,
+	        dashboardId
+	      );
 
-      // A newer click superseded this one — discard.
-      if (myReq !== selectDashboardSeq) return null;
+	      // A newer click superseded this one — discard.
+	      if (myReq !== selectDashboardSeq) return null;
+	      const current = get();
+	      if (current.currentProjectId !== projectId || current.currentConversationId !== currentConversationId) return null;
 
-      if (response?.dashboard_data) {
+	      if (response?.dashboard_data) {
         // Prefer theme_id baked into the dashboard JSON, then legacy template_id,
         // then localStorage mappings for dashboards generated before this split.
         const serverThemeId = response.dashboard_data.theme_id as string | undefined;
@@ -2326,10 +2454,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isThemePending: false,
           isTemplatePending: false,
         });
-        // Update file only if one exists in store
+        // Update only a file that belongs to this active dashboard context.
         const files = get().uploadedFiles;
-        if (files.length > 0) {
-          updateFile(files[0].fileID, { processedData: response.dashboard_data });
+        const targetFile =
+          files.find((file) => file.projectId === projectId && file.conversationId === currentConversationId) ||
+          files.find((file) => file.projectId === projectId);
+        if (targetFile) {
+          updateFile(targetFile.fileID, { processedData: response.dashboard_data });
         }
         return response.dashboard_data;
       }

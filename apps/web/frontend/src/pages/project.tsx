@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Download, LayoutTemplate, Loader2, Pencil, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
 import EditModeToolbar from "@/components/charts/edit/EditModeToolbar";
@@ -256,10 +256,9 @@ export default function ProjectPage() {
     processedDataRef.current = payload;
     const store = useChatStore.getState();
     const targetFile =
-      store.uploadedFiles.find((file) => file.conversationId === currentConversationId) ||
+      store.uploadedFiles.find((file) => file.projectId === projectId && file.conversationId === currentConversationId) ||
       store.uploadedFiles.find((file) => file.projectId === projectId && file.processedData) ||
-      store.uploadedFiles.find((file) => file.projectId === projectId) ||
-      store.uploadedFiles[0];
+      store.uploadedFiles.find((file) => file.projectId === projectId);
     if (targetFile) {
       store.updateFile(targetFile.fileID, { processedData: payload });
     }
@@ -289,9 +288,24 @@ export default function ProjectPage() {
   };
   const updatingStepText = currentWorkflowStep ? (UPDATING_STEP_MAP[currentWorkflowStep] || 'Updating...') : 'Updating dashboard...';
 
-  const hydrateConversation = useCallback(async (projId: string, conversationId: string) => {
+  const activeProjectIdRef = useRef<string | null>(projectId);
+  const hydrateRequestSeqRef = useRef(0);
+  const dashboardQuerySeqRef = useRef(0);
+
+  useEffect(() => {
+    activeProjectIdRef.current = projectId;
+  }, [projectId]);
+
+  const hydrateConversation = useCallback(async (projId: string, conversationId: string, requestSeq: number) => {
+    const isCurrentHydration = () => (
+      activeProjectIdRef.current === projId &&
+      hydrateRequestSeqRef.current === requestSeq &&
+      useChatStore.getState().currentProjectId === projId
+    );
+
     try {
       const convoResponse = await conversationService.loadConversation(conversationId, projId);
+      if (!isCurrentHydration()) return false;
       const conversation = convoResponse.conversation;
       const nodes = conversation?.nodes ?? [];
 
@@ -351,6 +365,7 @@ export default function ProjectPage() {
       setCurrentConversationId(conversationId);
 
       const dashboardResponse = await conversationService.getDashboardData(conversationId, projId);
+      if (!isCurrentHydration()) return false;
       if (dashboardResponse?.dashboard_data && primaryAsset) {
         let sourceType: string | undefined;
         const assetType = primaryAsset.sourceType || '';
@@ -382,13 +397,16 @@ export default function ProjectPage() {
         setIsDashboardOpen(true);
         setActiveTab('dashboard');
       }
+      return true;
     } catch (error) {
+      if (!isCurrentHydration()) return false;
       console.error('Failed to hydrate conversation', error);
       toast({
         title: "Unable to restore project",
         description: "Failed to load previous conversation. You can start a new one.",
         variant: "destructive",
       });
+      return false;
     }
   }, [setMessages, setCurrentConversationId, toast, setHasShownInitialDashboard]);
 
@@ -396,16 +414,24 @@ export default function ProjectPage() {
   const lastAppliedDashboardQueryRef = useRef<string | null>(null);
 
   // Reset and hydrate when project changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!projectId) return;
+    activeProjectIdRef.current = projectId;
+    const loadSeq = hydrateRequestSeqRef.current + 1;
+    hydrateRequestSeqRef.current = loadSeq;
 
     // Only reset if it's a DIFFERENT project
     if (projectRef.current !== projectId) {
       console.log('Project ID changed, resetting chat state:', projectId);
-      const pendingAction = useChatStore.getState().pendingAction;
       useChatStore.getState().resetChat();
       useFileStore.getState().resetFileState();
       useChatStore.getState().setCurrentProjectId(projectId);
+      setProcessedData(null);
+      processedDataRef.current = null;
+      setCsvPreview(null);
+      setCsvPreviewMeta(null);
+      setActiveTab('chat');
+      dashboardQuerySeqRef.current += 1;
       projectRef.current = projectId;
     }
 
@@ -425,7 +451,8 @@ export default function ProjectPage() {
             const latestConversationId = response.project.latest_conversation_id;
             if (latestConversationId) {
               hasConversation = true;
-              await hydrateConversation(response.project.id, latestConversationId);
+              const hydrated = await hydrateConversation(response.project.id, latestConversationId, loadSeq);
+              if (!hydrated || cancelled || hydrateRequestSeqRef.current !== loadSeq || activeProjectIdRef.current !== projectId) return;
               // Resume polling if a workflow is still running (e.g. after page reload / F5)
               void useChatStore.getState().resumeWorkflowPolling(
                 response.project.id,
@@ -526,7 +553,10 @@ export default function ProjectPage() {
       return;
     }
     lastAppliedDashboardQueryRef.current = queryKey;
+    const requestSeq = dashboardQuerySeqRef.current + 1;
+    dashboardQuerySeqRef.current = requestSeq;
     selectDashboard(dashboardIdFromQuery, projectId).then((data) => {
+      if (dashboardQuerySeqRef.current !== requestSeq || activeProjectIdRef.current !== projectId) return;
       if (!data) return;
       setProcessedData(data);
       setCsvPreview(null);
@@ -602,10 +632,10 @@ export default function ProjectPage() {
 
   // Sync processedData from store to local state
   useEffect(() => {
+    if (!projectId) return;
     const processedFile =
-      uploadedFiles.find(f => f.conversationId === currentConversationId && f.processedData) ||
-      uploadedFiles.find(f => f.projectId === projectId && f.processedData) ||
-      uploadedFiles.find(f => f.processedData);
+      uploadedFiles.find(f => f.projectId === projectId && f.conversationId === currentConversationId && f.processedData) ||
+      uploadedFiles.find(f => f.projectId === projectId && f.processedData);
     if (processedFile?.processedData) {
       processedDataRef.current = processedFile.processedData;
       setProcessedData(processedFile.processedData);
@@ -877,6 +907,9 @@ export default function ProjectPage() {
                   <ChatInterface
                     projectId={projectId ?? undefined}
                     onProcessedDataChange={(data) => {
+                      if (!projectId || activeProjectIdRef.current !== projectId || useChatStore.getState().currentProjectId !== projectId) {
+                        return;
+                      }
                       // This is called when processing and dashboard generation is complete
                       if (data) {
                         // Diff detection: compare old vs new dashboard data for edit feedback
@@ -896,6 +929,7 @@ export default function ProjectPage() {
                     }}
                     onSwitchToDashboard={(dashboardId) => {
                       if (dashboardId && projectId) {
+                        const expectedProjectId = projectId;
                         // Always fetch on click — auto-open flows in
                         // useChatStore set selectedDashboardId before the
                         // data has loaded, so a "same id" guard would
@@ -903,6 +937,7 @@ export default function ProjectPage() {
                         // panel empty. Rapid different-id clicks are still
                         // handled correctly via selectDashboardSeq.
                         selectDashboard(dashboardId, projectId).then((data) => {
+                          if (activeProjectIdRef.current !== expectedProjectId) return;
                           // null can mean stale-supersede or genuine
                           // failure — selectDashboard logs the error case
                           // to the console; we don't toast here to avoid

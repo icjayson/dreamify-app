@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsRight, Clock, Download, FolderPlus, Pencil, Plug, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarCheck, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsRight, Clock, Database, Download, ExternalLink, FolderPlus, LayoutDashboard, Pencil, Plug, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -93,8 +93,6 @@ export default function ConnectorEntityDetailView(props: Props) {
     selectedHistoryRunId,
     setSelectedHistoryRunId,
     setActiveAssetId,
-    isHistoryExpanded,
-    setIsHistoryExpanded,
     refreshModalOpen,
     setRefreshModalOpen,
     refreshDatePreset,
@@ -113,6 +111,7 @@ export default function ConnectorEntityDetailView(props: Props) {
   } = props;
 
   const connectorKey = selectedConnectorCard.connectorKey;
+  const connectorMeta = CONNECTORS.find((c) => c.name === selectedConnectorCard.connectorName);
   const isGoogleSheetsConnector = connectorKey === "google_sheets";
   const isGA4Connector = connectorKey === "ga4";
   const isMetaAdsConnector = connectorKey === "meta_ads";
@@ -181,6 +180,9 @@ export default function ConnectorEntityDetailView(props: Props) {
     () => sortedConnectorHistory.find((run) => run.status?.toLowerCase() === "success" && !!(run.completed_at || run.triggered_at)),
     [sortedConnectorHistory]
   );
+  const lastSyncLabel = lastSuccessfulSync?.completed_at || lastSuccessfulSync?.triggered_at
+    ? formatRunTimestampLabel(lastSuccessfulSync.completed_at || lastSuccessfulSync.triggered_at)
+    : "No successful sync yet";
   const syncVersionNumberByRunId = React.useMemo(() => {
     const getRunTimestamp = (run: ConnectorEntityRunItem) => {
       const raw = run.completed_at || run.triggered_at;
@@ -383,11 +385,11 @@ export default function ConnectorEntityDetailView(props: Props) {
 
   return (
     <>
-      <div className="mb-2">
+      <div className="mb-3">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground hover:underline pb-2"
+          className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to connectors
@@ -401,36 +403,67 @@ export default function ConnectorEntityDetailView(props: Props) {
             : "h-auto overflow-visible"
         }`}
       >
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${CONNECTORS.find((c) => c.name === selectedConnectorCard.connectorName)?.iconBg ?? "bg-muted dark:bg-white/5"}`}>
-              {CONNECTORS.find((c) => c.name === selectedConnectorCard.connectorName)?.icon ? (
+        <div className="mb-4 overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm ring-1 ring-foreground/5">
+          <div className="relative p-4 sm:p-5">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_140%_at_0%_0%,hsl(var(--primary)/0.12),transparent_48%),radial-gradient(80%_120%_at_100%_0%,hsl(var(--accent)/0.10),transparent_50%)]"
+            />
+            <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-center gap-3.5">
+                <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl shadow-sm ring-1 ring-border/60 ${connectorMeta?.iconBg ?? "bg-muted dark:bg-white/5"}`}>
+              {connectorMeta?.icon ? (
                 <img
-                  src={CONNECTORS.find((c) => c.name === selectedConnectorCard.connectorName)?.icon}
+                  src={connectorMeta.icon}
                   alt={selectedConnectorCard.connectorName}
-                  className={`w-7 h-7 object-contain ${selectedConnectorCard.connectorName === "TikTok Ads" ? "scale-125" : ""}`}
+                  className={`h-8 w-8 object-contain ${selectedConnectorCard.connectorName === "TikTok Ads" ? "scale-125" : ""}`}
                 />
               ) : (
-                <Plug className="w-4 h-4 text-muted-foreground" />
+                <Plug className="h-5 w-5 text-muted-foreground" />
               )}
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-semibold text-base truncate">{selectedConnectorCard.entityName}</h3>
-              <p className="text-sm text-muted-foreground truncate">{selectedConnectorCard.connectorName}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Last synced {lastSuccessfulSync?.completed_at || lastSuccessfulSync?.triggered_at
-                  ? formatRunTimestampLabel(lastSuccessfulSync.completed_at || lastSuccessfulSync.triggered_at)
-                  : "—"}
-              </p>
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-1 inline-flex items-center rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    Connected entity
+                  </div>
+                  <h3 className="truncate text-xl font-semibold tracking-tight text-foreground">{selectedConnectorCard.entityName}</h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span>{selectedConnectorCard.connectorName}</span>
+                    <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                    <span>{lastSyncLabel}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Sync versions</div>
+                  <div className="mt-0.5 text-sm font-semibold">{connectorHistory.length}</div>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Linked projects</div>
+                  <div className="mt-0.5 text-sm font-semibold">{connectorDetail?.related_projects.length ?? 0}</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v as "overview" | "data-table")} className="flex-1 min-h-0 flex flex-col">
           <div className="flex items-center justify-between gap-3">
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="data-table">Data Table</TabsTrigger>
+            <TabsList className="rounded-xl border border-border/60 bg-background/70 p-1 shadow-sm">
+              <TabsTrigger
+                value="overview"
+                className="rounded-lg px-4 text-muted-foreground transition-colors hover:bg-primary/5 hover:text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="data-table"
+                className="rounded-lg px-4 text-muted-foreground transition-colors hover:bg-primary/5 hover:text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                Data Table
+              </TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-2">
               {scheduleDefaults && (
@@ -471,29 +504,59 @@ export default function ConnectorEntityDetailView(props: Props) {
                 <div className="text-sm text-muted-foreground">Loading connector detail...</div>
               ) : connectorDetail ? (
                 <div className="text-sm flex h-full min-h-0 flex-col">
-                  <div className="text-sm text-muted-foreground mb-3 flex-shrink-0">
-                    Overview and project links for this connector data.
+                  <div className="mb-3 flex flex-shrink-0 items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">Overview</div>
+                      <div className="text-sm text-muted-foreground">
+                        Connector health, source details, and dashboards using this data.
+                      </div>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-shrink-0">
-                    <div className="rounded-md border border-border/50 bg-card px-3 py-2.5">
-                      <div className="text-xs text-muted-foreground mb-1">Source</div>
-                      <div className="font-medium">{connectorDetail.display_name}</div>
+                    <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm ring-1 ring-foreground/5">
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Database className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Source</div>
+                        <div className="mt-1 truncate text-base font-semibold">{connectorDetail.display_name}</div>
+                      </div>
                     </div>
-                    <div className="rounded-md border border-border/50 bg-card px-3 py-2.5">
-                      <div className="text-xs text-muted-foreground mb-1">Account</div>
-                      <div className="font-medium truncate">{connectorDetail.account_name || selectedConnectorCard.entityName || "—"}</div>
+                    <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm ring-1 ring-foreground/5">
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+                        <Plug className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Account</div>
+                        <div className="mt-1 truncate text-base font-semibold">{connectorDetail.account_name || selectedConnectorCard.entityName || "—"}</div>
+                      </div>
                     </div>
-                    <div className="rounded-md border border-border/50 bg-card px-3 py-2.5">
-                      <div className="text-xs text-muted-foreground mb-1">Last synced</div>
-                      <div className="font-medium">{connectorDetail.last_synced_at ? formatToDisplay(connectorDetail.last_synced_at, { format: "full" }) : "—"}</div>
+                    <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm ring-1 ring-foreground/5">
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-300">
+                        <CalendarCheck className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Last synced</div>
+                        <div className="mt-1 truncate text-base font-semibold">{connectorDetail.last_synced_at ? formatToDisplay(connectorDetail.last_synced_at, { format: "full" }) : "—"}</div>
+                      </div>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-border/50 bg-card px-3 py-3 mt-3 flex-1 min-h-0 flex flex-col overflow-hidden">
-                    <div className="text-xs font-medium text-muted-foreground mb-2 flex-shrink-0">Related projects / dashboards</div>
+                  <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm ring-1 ring-foreground/5">
+                    <div className="mb-3 flex flex-shrink-0 items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">Related projects</div>
+                        <div className="text-xs text-muted-foreground">Dashboards and project contexts created from this connector.</div>
+                      </div>
+                      <div className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                        {connectorDetail.related_projects.length} total
+                      </div>
+                    </div>
                     {connectorDetail.related_projects.length === 0 ? (
-                      <div className="flex-1 min-h-0 text-muted-foreground">No related projects yet.</div>
+                      <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border/70 text-muted-foreground">
+                        No related projects yet.
+                      </div>
                     ) : (
-                      <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
+                      <div className="space-y-3 overflow-y-auto pr-1 flex-1 min-h-0">
                         {connectorDetail.related_projects.map((project) => (
                           <div
                             key={`${project.project_id}-${project.latest_dashboard_id || "no-dash"}-${project.conversation_id || ""}`}
@@ -506,22 +569,23 @@ export default function ConnectorEntityDetailView(props: Props) {
                                 onOpenRelatedProject(project.project_id, project.latest_dashboard_id);
                               }
                             }}
-                            className={`rounded-xl border border-border/50 bg-background/50 p-3.5 transition-all hover:bg-background/80 hover:border-border/70 ${
-                              project.latest_dashboard_id ? "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4 items-stretch" : ""
+                            className={`group rounded-2xl border border-border/60 bg-gradient-to-br from-background to-muted/25 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md ${
+                              project.latest_dashboard_id ? "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-stretch" : ""
                             } cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40`}
                           >
                             <div className={`min-w-0 flex flex-col justify-between ${project.latest_dashboard_id ? "" : ""}`}>
                               <div>
-                                <div className="inline-flex items-center rounded-full bg-muted/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground mb-2">
+                                <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                  <LayoutDashboard className="h-3 w-3" />
                                   Project
                                 </div>
-                                <div className="text-sm font-semibold leading-5 line-clamp-2">{project.project_name}</div>
+                                <div className="line-clamp-2 text-base font-semibold leading-6 text-foreground">{project.project_name}</div>
                               </div>
-                              <div className="mt-2.5 space-y-1.5">
+                              <div className="mt-3 space-y-1.5">
                                 <div className="text-xs text-muted-foreground truncate">
                                   <span className="text-foreground/80">Created:</span>{" "}
                                 {project.project_created_at
-                                  ? `Created ${formatToDisplay(project.project_created_at, { format: "full" })}`
+                                  ? formatToDisplay(project.project_created_at, { format: "full" })
                                   : "Created date unknown"}
                                 </div>
                                 <div className="text-xs text-muted-foreground truncate">
@@ -542,23 +606,24 @@ export default function ConnectorEntityDetailView(props: Props) {
                               {project.latest_dashboard_id && (
                                 <button
                                   type="button"
-                                  className="mt-3 inline-flex items-center rounded-full border border-border/50 px-2.5 py-1 text-[11px] font-medium text-muted-foreground w-fit transition-all hover:text-foreground hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm"
+                                  className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-foreground hover:shadow-sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onOpenRelatedProject(project.project_id, project.latest_dashboard_id);
                                   }}
                                 >
+                                  <ExternalLink className="h-3.5 w-3.5" />
                                   Dashboard: {project.dashboard_title || "Untitled dashboard"}
                                 </button>
                               )}
                             </div>
                             {project.latest_dashboard_id && (
-                              <div className="relative w-full h-[170px] rounded-lg overflow-hidden bg-muted/30 border border-border/40 shadow-sm">
+                              <div className="relative h-[185px] w-full overflow-hidden rounded-xl border border-border/60 bg-muted/30 shadow-sm ring-1 ring-foreground/5">
                                 {relatedProjectPreviewUrls[project.project_id] ? (
                                   <img
                                     src={relatedProjectPreviewUrls[project.project_id]}
                                     alt={`${project.project_name} preview`}
-                                    className="h-full w-full object-cover object-top"
+                                    className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.02]"
                                     onError={(e) => {
                                       (e.target as HTMLImageElement).style.display = "none";
                                     }}
@@ -569,14 +634,14 @@ export default function ConnectorEntityDetailView(props: Props) {
                                     Preview is loading...
                                   </div>
                                 )}
-                                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 to-transparent" />
-                                <div className="absolute bottom-2 left-2 right-2 text-[11px] font-medium text-white truncate">
+                                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
+                                <div className="absolute bottom-2.5 left-3 right-3 truncate text-[11px] font-semibold text-white drop-shadow">
                                   {project.dashboard_title || "Untitled dashboard"}
                                 </div>
                               </div>
                             )}
                             {!project.latest_dashboard_id && (
-                              <div className="mt-3 text-xs text-muted-foreground">
+                              <div className="mt-4 rounded-xl border border-dashed border-border/70 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
                                 This project has no dashboard preview yet.
                               </div>
                             )}
@@ -593,21 +658,66 @@ export default function ConnectorEntityDetailView(props: Props) {
           )}
           {detailTab === "data-table" && (
           <TabsContent value="data-table" className="mt-4 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <div className="text-sm text-muted-foreground">Preview and sync history for this connector data.</div>
+            <div className="mb-3 flex flex-shrink-0 items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">Data snapshot</div>
+                <div className="text-sm text-muted-foreground">Preview rows, inspect sync versions, and export or reuse snapshots.</div>
+              </div>
+              {selectedHistoryRun && (
+                <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+                    <Database className="h-3.5 w-3.5" />
+                    {(selectedHistoryRun.rows_fetched ?? connectorDetail?.latest_asset?.row_count ?? 0).toLocaleString()} rows
+                    <span className="h-1 w-1 rounded-full bg-primary/50" />
+                    {(selectedHistoryRun.columns_fetched ?? connectorDetail?.latest_asset?.column_count ?? 0).toLocaleString()} columns
+                  </div>
+                  {!isGoogleSheetsConnector && (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/80 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm">
+                      <CalendarDays className="h-3.5 w-3.5 text-primary" />
+                      {hasExplicitTimeRange ? (
+                        <>
+                          <span>{timeStart}</span>
+                          <ChevronsRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span>{timeEnd}</span>
+                        </>
+                      ) : (
+                        <span>{selectedDatePreset}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex gap-4 flex-1 min-h-0">
-              <div className="min-h-0 rounded-md border border-border/50 p-2 flex flex-col min-w-0 flex-1">
-                {activeAssetId ? <CsvPreviewPanel assetId={activeAssetId} /> : <div className="h-full min-h-[280px] flex items-center justify-center text-sm text-muted-foreground">No data snapshot available yet.</div>}
+              <div className="min-h-0 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-2 shadow-sm ring-1 ring-foreground/5">
+                <div className="mb-2 flex flex-shrink-0 items-center justify-between gap-2 px-1">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-foreground">
+                      <span className="font-medium text-muted-foreground">Current preview:</span>{" "}
+                      {selectedHistoryRun ? getSyncVersionName(selectedHistoryRun, 0) : "No sync version selected"}
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                    {activeAssetId ? "Loaded" : "No snapshot"}
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/50 bg-background">
+                  {activeAssetId ? <CsvPreviewPanel assetId={activeAssetId} /> : <div className="h-full min-h-[280px] flex items-center justify-center text-sm text-muted-foreground">No data snapshot available yet.</div>}
+                </div>
               </div>
-              <div className={`h-full min-h-0 flex-shrink-0 transition-all duration-200 ${isPanelCollapsed ? "w-10" : "w-[280px]"}`}>
-                <div className="h-full rounded-lg border border-border/50 bg-card flex flex-col overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-border/50 px-2 py-1.5">
-                    {!isPanelCollapsed && <span className="text-sm font-medium">Sync panel</span>}
+              <div className={`h-full min-h-0 flex-shrink-0 transition-all duration-200 ${isPanelCollapsed ? "w-11" : "w-[300px]"}`}>
+                <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm ring-1 ring-foreground/5">
+                  <div className="flex items-center justify-between border-b border-border/60 bg-background/60 px-3 py-2.5">
+                    {!isPanelCollapsed && (
+                      <div>
+                        <span className="text-sm font-semibold text-foreground">Sync history</span>
+                        <div className="text-[11px] text-muted-foreground">{sortedConnectorHistory.length} versions available</div>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => setIsPanelCollapsed((prev) => !prev)}
-                      className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 hover:bg-muted/60"
+                      className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-card transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                       aria-label={isPanelCollapsed ? "Expand sync history panel" : "Collapse sync history panel"}
                       title={isPanelCollapsed ? "Expand panel" : "Collapse panel"}
                     >
@@ -615,55 +725,11 @@ export default function ConnectorEntityDetailView(props: Props) {
                     </button>
                   </div>
                   {!isPanelCollapsed && (
-                    <div className="h-full min-h-0 flex flex-col gap-3 p-3">
-                <div className="rounded-lg border border-border/50 bg-card px-3 py-2.5 overflow-hidden flex-shrink-0">
-                  <h4 className="text-sm font-medium mb-2">Active sync config</h4>
-                  {selectedHistoryRun ? (
-                    <div className="grid grid-cols-2 gap-1.5 text-xs">
-                      <div className="rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
-                        <div className="text-xl font-semibold leading-none">
-                          {((numberField(configSnapshot, "rows") ?? selectedHistoryRun.rows_fetched ?? connectorDetail?.latest_asset?.row_count) ?? 0).toLocaleString()}
-                        </div>
-                        <div className="text-muted-foreground mt-1">Rows</div>
+                    <div className="flex h-full min-h-0 flex-col p-3">
+                    {sortedConnectorHistory.length === 0 ? (
+                      <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border/70 bg-background/50 px-3 text-center text-xs text-muted-foreground">
+                        No sync runs yet.
                       </div>
-                      <div className="rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
-                        <div className="text-xl font-semibold leading-none">
-                          {((numberField(configSnapshot, "columns") ?? selectedHistoryRun.columns_fetched ?? connectorDetail?.latest_asset?.column_count) ?? 0).toLocaleString()}
-                        </div>
-                        <div className="text-muted-foreground mt-1">Columns</div>
-                      </div>
-                      {!isGoogleSheetsConnector && (
-                        <div className="col-span-2 rounded-md border border-border/50 bg-background/60 px-2.5 py-2">
-                          <div className="text-lg font-semibold leading-none flex items-center gap-1.5">
-                            {hasExplicitTimeRange ? (
-                              <>
-                                <span>{timeStart}</span>
-                                <ChevronsRight className="w-4 h-4 text-muted-foreground" />
-                                <span>{timeEnd}</span>
-                              </>
-                            ) : (
-                              <span>{selectedDatePreset}</span>
-                            )}
-                          </div>
-                          <div className="text-muted-foreground mt-1">Time range</div>
-                        </div>
-                      )}
-                      {isMetaAdsConnector && <div className="text-muted-foreground">Campaigns: {selectedCampaignIds.length ? selectedCampaignIds.join(", ") : "All"}</div>}
-                      {isMetaAdsConnector && <div className="text-muted-foreground">Adsets: {selectedAdsetIds.length ? selectedAdsetIds.join(", ") : "All"}</div>}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground">No run selected.</div>
-                  )}
-                </div>
-
-                <div className={`rounded-lg border border-border/50 bg-card px-3 py-2.5 overflow-hidden ${isHistoryExpanded ? "flex-1 min-h-0 flex flex-col" : "flex-shrink-0"}`}>
-                  <button onClick={() => setIsHistoryExpanded((prev) => !prev)} className="w-full flex items-center justify-between text-sm font-medium mb-2">
-                    <span>Sync history</span>
-                    {isHistoryExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                  {isHistoryExpanded && (
-                    sortedConnectorHistory.length === 0 ? (
-                      <div className="text-xs text-muted-foreground">No sync runs yet.</div>
                     ) : (
                       <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
                         {sortedConnectorHistory.map((run, index) => {
@@ -676,8 +742,10 @@ export default function ConnectorEntityDetailView(props: Props) {
                               setSelectedHistoryRunId(run.run_id);
                               if (run.asset_id) setActiveAssetId(run.asset_id);
                             }}
-                            className={`w-full rounded-md border px-2.5 py-2 text-xs transition-colors cursor-pointer ${
-                              isActiveRun ? "border-blue-300 bg-blue-50" : "border-border/50 hover:bg-muted/40"
+                            className={`w-full rounded-xl border px-2.5 py-2 text-xs transition-all cursor-pointer ${
+                              isActiveRun
+                                ? "border-primary/35 bg-primary/10 shadow-sm ring-1 ring-primary/10"
+                                : "border-border/60 bg-card/70 hover:border-primary/25 hover:bg-primary/5"
                             }`}
                           >
                             <div className="flex items-start gap-2 flex-wrap">
@@ -734,7 +802,7 @@ export default function ConnectorEntityDetailView(props: Props) {
                                 )}
                               </div>
                               {isActiveRun && (
-                                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-800">
+                                <span className="inline-flex items-center rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground">
                                   Active
                                 </span>
                               )}
@@ -760,7 +828,7 @@ export default function ConnectorEntityDetailView(props: Props) {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 w-7 p-0 hover:bg-foreground/5 hover:text-foreground"
+                                    className="h-7 w-7 p-0 hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                                     disabled={!run.asset_id}
                                     title="Export this version as CSV"
                                     aria-label="Export this version as CSV"
@@ -774,7 +842,7 @@ export default function ConnectorEntityDetailView(props: Props) {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 w-7 p-0 hover:bg-foreground/5 hover:text-foreground"
+                                    className="h-7 w-7 p-0 hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                                     title="Rename"
                                     aria-label="Rename"
                                     onClick={(e) => {
@@ -793,7 +861,7 @@ export default function ConnectorEntityDetailView(props: Props) {
                                 <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 text-[11px] hover:bg-foreground/5 hover:text-foreground flex-1 justify-center"
+                                className="h-7 flex-1 justify-center text-[11px] hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                                 disabled={!run.asset_id}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -807,7 +875,7 @@ export default function ConnectorEntityDetailView(props: Props) {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 w-7 p-0 hover:bg-foreground/5 hover:text-foreground"
+                                  className="h-7 w-7 p-0 hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                                   disabled={!run.asset_id}
                                   title="Export this version as CSV"
                                   aria-label="Export this version as CSV"
@@ -821,7 +889,7 @@ export default function ConnectorEntityDetailView(props: Props) {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 w-7 p-0 hover:bg-foreground/5 hover:text-foreground"
+                                  className="h-7 w-7 p-0 hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                                   title="Rename"
                                   aria-label="Rename"
                                   onClick={(e) => {
@@ -836,9 +904,7 @@ export default function ConnectorEntityDetailView(props: Props) {
                           </div>
                         )})}
                       </div>
-                    )
-                  )}
-                </div>
+                    )}
                     </div>
                   )}
                 </div>

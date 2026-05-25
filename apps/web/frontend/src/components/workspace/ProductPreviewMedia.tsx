@@ -6,6 +6,8 @@ interface ProductPreviewMediaProps {
   darkSrc: string;
   alt: string;
   className?: string;
+  imageClassName?: string;
+  showBackground?: boolean;
 }
 
 export default function ProductPreviewMedia({
@@ -13,6 +15,8 @@ export default function ProductPreviewMedia({
   darkSrc,
   alt,
   className,
+  imageClassName,
+  showBackground = true,
 }: ProductPreviewMediaProps) {
   const { resolvedTheme } = useTheme();
   const src = resolvedTheme === "dark" ? darkSrc : lightSrc;
@@ -24,14 +28,18 @@ export default function ProductPreviewMedia({
         className
       )}
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_70%_20%,hsl(var(--primary)/0.18),transparent_55%),radial-gradient(120%_80%_at_20%_85%,hsl(var(--accent)/0.16),transparent_55%)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -inset-20 animate-pulse-glow bg-[radial-gradient(50%_50%_at_50%_50%,hsl(var(--primary)/0.12),transparent_70%)]"
-      />
+      {showBackground && (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_70%_20%,hsl(var(--primary)/0.18),transparent_55%),radial-gradient(120%_80%_at_20%_85%,hsl(var(--accent)/0.16),transparent_55%)]"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -inset-20 animate-pulse-glow bg-[radial-gradient(50%_50%_at_50%_50%,hsl(var(--primary)/0.12),transparent_70%)]"
+          />
+        </>
+      )}
 
       <div className="relative w-full animate-scale-in">
         <div className="animate-float">
@@ -42,7 +50,10 @@ export default function ProductPreviewMedia({
               alt={alt}
               loading="eager"
               draggable={false}
-              className="block h-auto w-full select-none object-cover animate-fade-in"
+              className={cn(
+                "block h-auto w-full select-none object-cover animate-fade-in",
+                imageClassName
+              )}
             />
           </div>
         </div>

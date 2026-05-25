@@ -40,10 +40,11 @@ import { TermsContent, TERMS_METADATA, TERMS_TOC } from "@/pages/Terms";
 import HiddenDashboardCapturer from "@/components/workspace/HiddenDashboardCapturer";
 import WorkspaceFiles from "@/components/workspace/WorkspaceFiles";
 import ConnectorEntityDetailView from "@/components/workspace/ConnectorEntityDetailView";
-import ProductNewsModal, {
+import ProductNewsModal from "@/components/workspace/ProductNewsModal";
+import {
   WORKSPACE_NEWS_ITEMS,
   type WorkspaceNewsItem,
-} from "@/components/workspace/ProductNewsModal";
+} from "@/components/workspace/workspaceNewsContent";
 import OnboardingModal from "@/components/workspace/OnboardingModal";
 import { useProjects } from "@/hooks/useProjects";
 import { projectService, type ProjectRecord } from "@/services/projectService";
@@ -340,6 +341,7 @@ export default function WorkspacePage() {
   // ── Dashboard data ───────────────────────────────────────────────────────────
   const [allProjects, setAllProjects] = useState<ProjectRecord[]>([]);
   const [dashboardsLoading, setDashboardsLoading] = useState(false);
+  const [dashboardSort, setDashboardSort] = useState<"latest" | "az">("latest");
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
   const fetchAllProjects = useCallback(async () => {
@@ -374,6 +376,18 @@ export default function WorkspacePage() {
   }, [activeTab, fetchAllProjects]);
 
   const dashboardProjects = allProjects.filter((p) => p.latest_dashboard_id);
+  const sortedDashboardProjects = useMemo(() => {
+    return [...dashboardProjects].sort((a, b) => {
+      if (dashboardSort === "az") {
+        const titleA = (a.dashboard_title || a.name || "").toLowerCase();
+        const titleB = (b.dashboard_title || b.name || "").toLowerCase();
+        return titleA.localeCompare(titleB);
+      }
+      const tA = a.updated_at ? Date.parse(a.updated_at) : 0;
+      const tB = b.updated_at ? Date.parse(b.updated_at) : 0;
+      return tB - tA;
+    });
+  }, [dashboardProjects, dashboardSort]);
 
   const handlePreviewGenerated = useCallback((projectId: string, url: string) => {
     setPreviewUrls((prev) => ({ ...prev, [projectId]: url }));
@@ -939,7 +953,7 @@ export default function WorkspacePage() {
   }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen]);
 
   const isAesthetic = layoutStyle === "aesthetic" && activeTab === "new-chat";
-  const showWorkspaceHeaderActions = activeTab !== "files" && activeTab !== "schedules";
+  const showWorkspaceHeaderActions = activeTab === "new-chat";
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -1211,9 +1225,19 @@ export default function WorkspacePage() {
               </>
             ) : (
               <>
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold text-foreground dark:text-white mb-1">Connectors</h2>
-                  <p className="text-sm text-muted-foreground">Connect your data sources to build dashboards faster.</p>
+                <div className="mb-6 overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm ring-1 ring-foreground/5">
+                  <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold tracking-tight text-foreground dark:text-white">Connectors</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">Connect your data sources to build dashboards faster.</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+                        <Plug className="h-3.5 w-3.5" />
+                        {myConnectedCards.length} connected
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <div className="mb-8">
                   <h3 className="text-sm font-semibold text-foreground mb-1">Active Data Connectors</h3>
@@ -1442,15 +1466,47 @@ export default function WorkspacePage() {
                 projectsNeedingPreview={projectsNeedingPreview}
                 onPreviewGenerated={handlePreviewGenerated}
               />
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold text-foreground dark:text-white mb-1">My Dashboards</h2>
-                <p className="text-sm text-muted-foreground">All dashboards you have created across your projects.</p>
+              <div className="mb-6 overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm ring-1 ring-foreground/5">
+                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold tracking-tight text-foreground dark:text-white">My Dashboards</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">Browse every dashboard you have created across your projects.</p>
+                  </div>
+                  {!dashboardsLoading && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+                        <LayoutDashboard className="h-3.5 w-3.5" />
+                        {dashboardProjects.length} dashboard{dashboardProjects.length !== 1 ? "s" : ""}
+                      </span>
+                      <div className="inline-flex rounded-full border border-border/60 bg-background/70 p-0.5">
+                        {[
+                          { key: "latest", label: "Latest" },
+                          { key: "az", label: "A-Z" },
+                        ].map((option) => (
+                          <button
+                            key={option.key}
+                            type="button"
+                            onClick={() => setDashboardSort(option.key as "latest" | "az")}
+                            className={cn(
+                              "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                              dashboardSort === option.key
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               {dashboardsLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <Card key={i} className="animate-pulse overflow-hidden">
-                      <div className="w-full aspect-[4/5] bg-muted/50" />
+                    <Card key={i} className="animate-pulse overflow-hidden rounded-2xl border-border/60 bg-card/80">
+                      <div className="aspect-[4/5] w-full bg-muted/50" />
                       <CardContent className="p-4">
                         <div className="h-4 bg-muted rounded mb-2 w-3/4" />
                         <div className="h-3 bg-muted/50 rounded w-1/2" />
@@ -1474,14 +1530,8 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {[...dashboardProjects]
-                    .sort((a, b) => {
-                      const tA = a.updated_at ? Date.parse(a.updated_at) : 0;
-                      const tB = b.updated_at ? Date.parse(b.updated_at) : 0;
-                      return tB - tA; // newest first
-                    })
-                    .map((project) => {
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {sortedDashboardProjects.map((project) => {
                     const title = project.dashboard_title || project.name || "Untitled Dashboard";
                     const source = getSource(project);
                     const previewUrl = previewUrls[project.id];
@@ -1493,10 +1543,10 @@ export default function WorkspacePage() {
                       <Card
                         key={project.id}
                         onClick={() => navigate(`/workspace/project?projectId=${project.id}`)}
-                        className="overflow-hidden hover:border-primary/40 cursor-pointer transition-all group"
+                        className="group cursor-pointer overflow-hidden rounded-2xl border-border/60 bg-card/85 shadow-sm ring-1 ring-foreground/5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-lg hover:shadow-primary/10"
                       >
-                        {/* 16:9 preview area */}
-                        <div className="w-full aspect-[4/5] overflow-hidden relative bg-gradient-to-br from-violet-500/10 via-blue-500/8 to-cyan-500/5">
+                        {/* 4:5 preview area */}
+                        <div className="relative aspect-[4/5] w-full overflow-hidden bg-gradient-to-br from-primary/10 via-blue-500/8 to-cyan-500/5">
                           {previewUrl ? (
                             <img
                               src={previewUrl}
@@ -1520,7 +1570,7 @@ export default function WorkspacePage() {
                         <svg
                           viewBox="0 0 160 90"
                           className="w-full h-full"
-                          preserveAspectRatio="xMidYMid meet"
+                          preserveAspectRatio="xMidYMid slice"
                           aria-hidden="true"
                         >
                           <defs>
@@ -1549,16 +1599,18 @@ export default function WorkspacePage() {
                       </div>
 
                       {/* Hover overlay */}
-                      <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/5 transition-colors duration-300 pointer-events-none" />
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/55 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                     </div>
 
                     {/* Card info */}
                     <CardContent className="p-4">
-                      <h3 className="font-medium text-sm mb-1.5 truncate text-foreground">{title}</h3>
+                      <h3 className="mb-2 truncate text-sm font-semibold text-foreground">{title}</h3>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs text-muted-foreground truncate">Source: {source}</p>
+                        <p className="inline-flex min-w-0 items-center rounded-full bg-muted/60 px-2 py-1 text-xs text-muted-foreground">
+                          <span className="truncate">Source: {source}</span>
+                        </p>
                         {createdAt && (
-                          <p className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{createdAt}</p>
+                          <p className="flex-shrink-0 whitespace-nowrap text-xs text-muted-foreground">{createdAt}</p>
                         )}
                       </div>
                     </CardContent>

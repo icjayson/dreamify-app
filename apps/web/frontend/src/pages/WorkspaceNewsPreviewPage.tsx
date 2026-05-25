@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import ProductNewsModal, {
+import ProductNewsModal from "@/components/workspace/ProductNewsModal";
+import {
   WORKSPACE_NEWS_ITEMS,
   type WorkspaceNewsItem,
-} from "@/components/workspace/ProductNewsModal";
+} from "@/components/workspace/workspaceNewsContent";
 import OnboardingModal from "@/components/workspace/OnboardingModal";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

@@ -362,56 +362,58 @@ export default function WorkspaceFiles() {
     <div className="space-y-5 animate-fade-in">
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-foreground tracking-tight">Files</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage your uploaded data files</p>
-        </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Stats pills */}
-          {!loading && (
-            <div className="hidden sm:flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-foreground/5 border border-border/40 text-xs text-muted-foreground">
-                <File className="w-3 h-3" />
-                <span className="tabular-nums font-medium text-foreground">{files.length}</span>
-                <span>file{files.length !== 1 ? "s" : ""}</span>
-              </div>
-              {totalSize > 0 && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-foreground/5 border border-border/40 text-xs text-muted-foreground">
-                  <HardDrive className="w-3 h-3" />
-                  <span className="font-medium text-foreground">{formatBytes(totalSize)}</span>
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm ring-1 ring-foreground/5">
+        <div className="relative flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-foreground tracking-tight">Files</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">Manage uploaded datasets and start new projects from the same place.</p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Stats pills */}
+            {!loading && (
+              <div className="hidden sm:flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs text-primary">
+                  <File className="w-3 h-3" />
+                  <span className="tabular-nums font-medium text-foreground">{files.length}</span>
+                  <span>file{files.length !== 1 ? "s" : ""}</span>
                 </div>
-              )}
-            </div>
-          )}
-          <button
-            onClick={() => fetchFiles(true)}
-            disabled={refreshing}
-            className="p-2 rounded-lg hover:bg-foreground/8 text-muted-foreground hover:text-foreground transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
-          </button>
-          {/* Upload button — moved to header */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="button-gradient flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-          >
-            <CloudUpload className="w-4 h-4" />
-            Upload file
-          </button>
+                {totalSize > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background/70 border border-border/60 text-xs text-muted-foreground">
+                    <HardDrive className="w-3 h-3" />
+                    <span className="font-medium text-foreground">{formatBytes(totalSize)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => fetchFiles(true)}
+              disabled={refreshing}
+              className="p-2 rounded-lg border border-transparent hover:border-border/60 hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+            </button>
+            {/* Upload button — moved to header */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="button-gradient flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
+            >
+              <CloudUpload className="w-4 h-4" />
+              Upload file
+            </button>
+          </div>
         </div>
       </div>
 
       {/* ── Upload card ─────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-border/50 bg-background overflow-hidden shadow-sm">
+      <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-card via-background to-primary/5 overflow-hidden shadow-sm ring-1 ring-foreground/5">
         {/* Drop zone */}
         <div
           className={cn(
-            "relative flex flex-col items-center justify-center py-10 cursor-pointer transition-all duration-200 select-none group",
+            "relative flex flex-col items-center justify-center py-9 cursor-pointer transition-all duration-200 select-none group",
             isDragging
               ? "bg-primary/5"
-              : "hover:bg-muted/30"
+              : "hover:bg-primary/5"
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -422,7 +424,7 @@ export default function WorkspaceFiles() {
           <div
             className={cn(
               "absolute inset-4 rounded-xl border-2 border-dashed transition-colors duration-200 pointer-events-none",
-              isDragging ? "border-primary/70" : "border-border/50 group-hover:border-primary/30"
+              isDragging ? "border-primary/70" : "border-primary/25 group-hover:border-primary/45"
             )}
           />
 
@@ -432,13 +434,13 @@ export default function WorkspaceFiles() {
               "relative w-14 h-14 rounded-2xl flex items-center justify-center mb-3 transition-all duration-300",
               isDragging
                 ? "gradient-panel scale-110 glow-primary"
-                : "bg-foreground/5 group-hover:bg-primary/10"
+                : "bg-primary/10 text-primary group-hover:bg-primary/15"
             )}
           >
             <CloudUpload
               className={cn(
                 "w-7 h-7 transition-colors duration-200",
-                isDragging ? "text-white" : "text-muted-foreground group-hover:text-primary"
+                isDragging ? "text-white" : "text-primary"
               )}
             />
           </div>
@@ -491,12 +493,12 @@ export default function WorkspaceFiles() {
       )}
 
       {/* ── File list ────────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-border/50 bg-background overflow-hidden shadow-sm">
+      <div className="rounded-2xl border border-border/60 bg-card/80 overflow-hidden shadow-sm ring-1 ring-foreground/5">
 
         {/* Toolbar */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-muted/10">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/70">
           {/* Search */}
-          <div className="flex items-center gap-2 flex-1 min-w-0 rounded-lg px-3 py-2 bg-muted/50 border border-border/30 focus-within:border-primary/40 focus-within:bg-background transition-all duration-200">
+          <div className="flex items-center gap-2 flex-1 min-w-0 rounded-xl px-3 py-2 bg-card border border-border/50 focus-within:border-primary/45 focus-within:ring-4 focus-within:ring-primary/10 transition-all duration-200">
             <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             <input
               type="text"
@@ -545,7 +547,7 @@ export default function WorkspaceFiles() {
 
         {/* Table header */}
         <div
-          className="grid items-center px-4 py-2.5 border-b border-border/30 bg-muted/20"
+          className="grid items-center px-4 py-2.5 border-b border-border/30 bg-muted/30"
           style={{ gridTemplateColumns: "2.5rem 1fr 6.5rem 9rem 6rem" }}
         >
           <RoundCheckbox checked={allSelected} onChange={toggleAll} />
@@ -597,8 +599,8 @@ export default function WorkspaceFiles() {
                 className={cn(
                   "grid items-center px-4 py-3 border-b border-border/15 last:border-b-0 transition-colors group cursor-default",
                   selected.has(file.fileID)
-                    ? "bg-primary/5 hover:bg-primary/8"
-                    : "hover:bg-muted/25",
+                    ? "bg-primary/5 hover:bg-primary/10"
+                    : "hover:bg-primary/5",
                   idx === 0 && "rounded-t-none"
                 )}
                 style={{ gridTemplateColumns: "2.5rem 1fr 6.5rem 9rem 6rem" }}
@@ -696,7 +698,7 @@ export default function WorkspaceFiles() {
 
         {/* Footer count */}
         {!loading && (filteredFiles.length > 0 || hiddenDuplicateCount > 0) && (
-          <div className="px-4 py-2 border-t border-border/20 bg-muted/10 flex items-center justify-between gap-3 flex-wrap">
+          <div className="px-4 py-2 border-t border-border/20 bg-background/70 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground">
                 {selected.size > 0

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, ArrowRight, Home, User, Clock } from 'lucide-react';
 import WaveBackground from '../../../src/ui/lightswind/wave-background';
+import { MetaPixel } from '@/hooks/useMetaPixel';
 
 const SuccessPage: React.FC = () => {
   const navigate = useNavigate();
@@ -12,6 +13,19 @@ const SuccessPage: React.FC = () => {
     const sessionIdParam = searchParams.get('session_id');
     if (sessionIdParam) {
       setSessionId(sessionIdParam);
+
+      // Track Purchase/Subscribe events
+      MetaPixel.track('Purchase', {
+        content_name: 'Dreamify Pro',
+        content_category: 'subscription',
+        value: 25.00,
+        currency: 'USD',
+      });
+      MetaPixel.track('Subscribe', {
+        value: 25.00,
+        currency: 'USD',
+        predicted_ltv: 300.00,
+      });
     }
   }, [searchParams]);
 

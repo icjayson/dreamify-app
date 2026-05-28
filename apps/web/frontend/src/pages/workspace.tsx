@@ -65,6 +65,7 @@ import { formatToDisplay } from "@/utils/timestamp";
 import { useSubscription } from "@/hooks/useSubscription";
 import HeaderCreditBadge from "@/components/ui/HeaderCreditBadge";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { MetaPixel } from "@/hooks/useMetaPixel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ConnectorStatus {
@@ -463,6 +464,12 @@ export default function WorkspacePage() {
   } = useChatStore();
 
   const handleIntegrationClick = (connectorName: string) => {
+    // Track Lead event for connector integration attempts
+    MetaPixel.track('Lead', {
+      content_name: connectorName,
+      content_category: 'connector_integration',
+    });
+
     if (connectorName === 'GA4') {
       setGA4ModalOpen(true);
     } else if (connectorName === 'Google Sheets') {
@@ -612,6 +619,12 @@ export default function WorkspacePage() {
     const onboardingStorageKey = `dreamify:workspace:onboarding:seen:${user.id}`;
     localStorage.setItem(onboardingStorageKey, "true");
     setOnboardingModalOpen(false);
+
+    // Track CompleteRegistration when user completes onboarding
+    MetaPixel.track('CompleteRegistration', {
+      content_name: 'Dreamify Onboarding',
+      status: true,
+    });
   }, [user?.id]);
 
   const displayName = user?.fullName || user?.firstName || "My Workspace";

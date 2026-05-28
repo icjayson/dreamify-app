@@ -412,14 +412,19 @@ export default function WorkspaceNewChat() {
       <div className="w-full max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-4xl mx-auto">
 
         {/* Heading */}
-        <div className="mb-8 animate-slide-up">
+        <div className="mb-8 pt-20 overflow-visible animate-slide-up">
           {/* Logo watermark */}
-          <div className="flex justify-start mb-4">
-            <img
-              src="/logo-watermark.png"
-              alt="Dreamify"
-              className="w-16 h-16 object-contain"
-            />
+          <div className="flex justify-start mb-4 overflow-visible">
+            <div className="w-16 h-16 overflow-visible flex items-center justify-center">
+              <video
+                src="/dreamify-mascot-1.webm"
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-16 h-16 object-contain animate-mascot-wave"
+              />
+            </div>
           </div>
 
           {/* Heading text — static prefix + rolling suffix */}

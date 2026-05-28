@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useUser, useAuth } from '@clerk/clerk-react';
 import { API_CONFIG } from '@/api/config';
+import { MetaPixel } from '@/hooks/useMetaPixel';
 
 interface SubscriptionInfo {
   subscription_id: string;
@@ -145,6 +146,14 @@ export const useSubscription = (): UseSubscriptionReturn => {
       if (!data.success) {
         throw new Error(data.error || 'Failed to create checkout session');
       }
+
+      // Track InitiateCheckout event
+      MetaPixel.track('InitiateCheckout', {
+        content_name: 'Dreamify Pro',
+        content_category: 'subscription',
+        value: 25.00,
+        currency: 'USD',
+      });
 
       // Redirect to Polar Checkout
       window.location.href = data.url;

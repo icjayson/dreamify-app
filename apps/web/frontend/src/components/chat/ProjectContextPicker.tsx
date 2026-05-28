@@ -86,12 +86,12 @@ const ProjectContextPicker = ({
     const hasNothing = !hasCharts && !hasFiles;
 
     return (
-        <div className={`absolute bottom-full left-0 mb-2 w-full max-w-md bg-[#1e1e1e] border border-white/20 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto ${className}`}>
+        <div className={`absolute bottom-full left-0 mb-2 w-full max-w-md bg-popover border border-border rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto ${className}`}>
             <div className="p-2">
                 {/* Charts Section */}
                 {hasCharts && (
                     <>
-                        <p className="text-xs text-white/50 px-2 py-1 flex items-center gap-1.5">
+                        <p className="text-xs text-muted-foreground px-2 py-1 flex items-center gap-1.5">
                             <BarChart3 className="w-3 h-3" />
                             Charts
                         </p>
@@ -103,13 +103,13 @@ const ProjectContextPicker = ({
                                         <button
                                             type="button"
                                             onClick={() => onChartSelect?.(chart)}
-                                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left outline-none"
+                                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted rounded-lg transition-colors text-left outline-none"
                                         >
-                                            <IconComponent className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                                            <span className="text-sm text-white truncate flex-1">
+                                            <IconComponent className="w-4 h-4 text-purple-500 dark:text-purple-400 flex-shrink-0" />
+                                            <span className="text-sm text-foreground truncate flex-1">
                                                 {chart.title}
                                             </span>
-                                            <span className="text-[10px] text-purple-400/70 bg-purple-400/10 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
+                                            <span className="text-[10px] text-purple-500/80 dark:text-purple-400/70 bg-purple-500/10 dark:bg-purple-400/10 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
                                                 {formatChartType(chart.type)}
                                             </span>
                                         </button>
@@ -118,7 +118,7 @@ const ProjectContextPicker = ({
                                         side="right"
                                         align="start"
                                         sideOffset={8}
-                                        className="max-w-[260px] bg-black/90 text-xs text-white shadow-lg break-words z-[300]"
+                                        className="max-w-[260px] text-xs shadow-lg break-words z-[300]"
                                     >
                                         {chart.title}
                                     </TooltipContent>
@@ -130,13 +130,13 @@ const ProjectContextPicker = ({
 
                 {/* Divider between sections */}
                 {hasCharts && hasFiles && (
-                    <div className="border-t border-white/10 my-1" />
+                    <div className="border-t border-border my-1" />
                 )}
 
                 {/* Datasets Section */}
                 {hasFiles && (
                     <>
-                        <p className="text-xs text-white/50 px-2 py-1 flex items-center gap-1.5">
+                        <p className="text-xs text-muted-foreground px-2 py-1 flex items-center gap-1.5">
                             <FileText className="w-3 h-3" />
                             Datasets
                         </p>
@@ -146,23 +146,23 @@ const ProjectContextPicker = ({
                                     <button
                                         type="button"
                                         onClick={() => onSelect(asset)}
-                                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors text-left outline-none"
+                                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted rounded-lg transition-colors text-left outline-none"
                                     >
                                         {asset.sourceType === 'GA4' ? (
                                             <img src="/GA4.png" alt="GA4 Logo" className="flex-shrink-0 w-4 h-4 object-contain" />
                                         ) : (
-                                            <FileText className="w-4 h-4 text-white/70 flex-shrink-0" />
+                                            <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                                         )}
-                                        <span className="text-sm text-white truncate flex-1">
+                                        <span className="text-sm text-foreground truncate flex-1">
                                             {asset.sourceType ? `${asset.sourceType} Data` : asset.name}
                                         </span>
                                         {asset.sourceType ? (
                                             <div className="flex-shrink-0 flex items-center gap-1">
                                                 <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                                                <span className="text-xs text-green-500/90 font-medium tracking-wide">Connected</span>
+                                                <span className="text-xs text-green-600 dark:text-green-500/90 font-medium tracking-wide">Connected</span>
                                             </div>
                                         ) : (
-                                            <span className="text-xs text-white/50">{asset.ext}</span>
+                                            <span className="text-xs text-muted-foreground">{asset.ext}</span>
                                         )}
                                         {onPreview && (
                                             <div
@@ -178,7 +178,7 @@ const ProjectContextPicker = ({
                                                         onPreview(asset.id);
                                                     }
                                                 }}
-                                                className="p-1 hover:bg-white/20 rounded-md transition-colors text-white/50 hover:text-white"
+                                                className="p-1 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
                                                 title="Preview dataset"
                                             >
                                                 <Eye className="w-4 h-4" />
@@ -190,7 +190,7 @@ const ProjectContextPicker = ({
                                     side="right"
                                     align="start"
                                     sideOffset={8}
-                                    className="max-w-[260px] bg-black/90 text-xs text-white shadow-lg break-words z-[300]"
+                                    className="max-w-[260px] text-xs shadow-lg break-words z-[300]"
                                 >
                                     {asset.name}
                                 </TooltipContent>
@@ -201,7 +201,7 @@ const ProjectContextPicker = ({
 
                 {/* Empty state */}
                 {hasNothing && (
-                    <p className="text-xs text-white/40 px-3 py-2">
+                    <p className="text-xs text-muted-foreground/70 px-3 py-2">
                         {isChartQuery ? "No charts available. Generate a dashboard first." : emptyMessage}
                     </p>
                 )}

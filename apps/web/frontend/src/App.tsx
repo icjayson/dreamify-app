@@ -7,6 +7,7 @@ import { SignedIn, SignedOut, AuthenticateWithRedirectCallback, useAuth } from "
 import { PolarProvider } from "./contexts/PolarContext";
 import ReactGA from "react-ga4";
 import { useEffect } from "react";
+import { useMetaPixel } from "./hooks/useMetaPixel";
 import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
 import PricingPage from "./pages/Pricing";
@@ -51,9 +52,13 @@ const AppContent = () => {
   const location = useLocation();
   const { isSignedIn, isLoaded } = useAuth();
 
+  // Google Analytics pageview tracking
   useEffect(() => {
     ReactGA.send({ hitType: "pageview", page: location.pathname + location.search });
   }, [location]);
+
+  // Meta Pixel pageview tracking
+  useMetaPixel();
 
   const isAppPath =
     location.pathname.startsWith("/workspace") ||

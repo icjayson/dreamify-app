@@ -48,6 +48,7 @@ import { normalizeConnectorSource, type DataContextTokenSource } from "@/utils/d
 import { useUser } from "@clerk/clerk-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { ClarificationOption, Message, ThinkingEvent } from "@/types/message";
+import { MetaPixel } from "@/hooks/useMetaPixel";
 
 
 // Creative phrase variants per backend step — each key maps to a real Morpheus workflow step
@@ -1043,11 +1044,10 @@ function ChartMentionInlineToken({
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className={`${className} inline-flex h-6 max-w-full shrink-0 items-center gap-1.5 rounded-md border px-1.5 text-[12px] font-medium leading-none align-baseline shadow-sm ${
-            isDone
+          className={`${className} inline-flex h-6 max-w-full shrink-0 items-center gap-1.5 rounded-md border px-1.5 text-[12px] font-medium leading-none align-baseline shadow-sm ${isDone
               ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
               : "border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300"
-          }`}
+            }`}
           title={chart.title}
           aria-label={`${isDone ? "Edited" : "Editing"} ${typeLabel}: ${chart.title}`}
         >
@@ -1442,6 +1442,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     isSendingRef.current = true;
     const messageContent = inputValue.trim();
 
+    // Track Search event for each user query
+    MetaPixel.track('Search', {
+      search_string: messageContent.slice(0, 100),
+      content_category: 'ai_query',
+    });
+
     try {
       // Delegate adding the user message to the store's process flow to avoid duplicates
       clearInput();
@@ -1570,7 +1576,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         next.add(request.clarification_id);
         return next;
       });
-      setMessages((currentMessages) => currentMessages.map((currentMessage) => (
+      setMessages(messages.map((currentMessage) => (
         currentMessage.id === message.id
           ? {
             ...currentMessage,
@@ -2586,7 +2592,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       </div>
                     )}
                     {/* Render text content if present */}
-	                    {message.content && !message.isError && (() => {
+                    {message.content && !message.isError && (() => {
                       const lineCount = message.content.split('\n').length;
                       const isLong = lineCount > 10 || message.content.length > 600;
                       const isExpanded = expandedMessageIds.has(message.id);
@@ -2628,9 +2634,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                             </button>
                           )}
                         </div>
-	                      );
-	                    })()}
-		                    {message.isError && (
+                      );
+                    })()}
+                    {message.isError && (
                       message.isInsufficientCredits ? (
                         <CreditExhaustedCard
                           tier={subscription?.tier ?? "standard"}
@@ -2791,165 +2797,165 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               />
             ) : (
               <>
-            {/* Context Picker */}
-            {isContextPickerOpen && (
-              <ProjectContextPicker
-                files={
-                  pickerTriggerMode === 'mention'
-                    ? projectAssets.filter(asset => asset.name.toLowerCase().includes(mentionQuery.toLowerCase()))
-                    : projectAssets
-                }
-                charts={isDashboardOpen ? availableCharts : []}
-                onSelect={handleAssetSelect}
-                onChartSelect={handleChartSelect}
-                onPreview={(fileId) => window.open(`/preview/${fileId}`, '_blank')}
-                query={mentionQuery}
-                className={`project-context-picker-container max-w-[calc(100vw_-_2rem)] ${compactComposer ? 'max-w-full' : ''} ${pickerTriggerMode === 'button' ? 'bottom-full left-0 mb-2' : ''}`}
-              />
-            )}
-
-            {/* Active File, Chart & Theme Correlations */}
-            {(stagedFiles.length > 0 || mentionedCharts.length > 0 || (selectedTemplate && isTemplatePending)) && (
-              <div className="mb-3 flex flex-wrap gap-2">
-                {compactComposer ? (
-                  <>
-                    {visibleComposerTokens.map((token) => (
-                      <Fragment key={token.id}>{token.renderInline()}</Fragment>
-                    ))}
-                    <MetadataOverflowToken tokens={overflowComposerTokens} />
-                  </>
-                ) : (
-                  <>
-                    {/* Theme Selection Pill */}
-                    {selectedTemplate && isTemplatePending && (
-                      <ThemeInlineToken
-                        theme={selectedTemplate}
-                        variant="composer"
-                        onRemove={handleTemplateRemove}
-                        className="animate-in fade-in slide-in-from-left-2 duration-300"
-                      />
-                    )}
-
-                    {mentionedCharts.map(chart => (
-                      <ChartPreviewChip
-                        key={`chart-${chart.componentId}`}
-                        chart={chart}
-                        onRemove={() => setMentionedCharts(prev => prev.filter(c => c.componentId !== chart.componentId))}
-                      />
-                    ))}
-                    {stagedFiles.map((file, i) => (
-                      <FilePreviewChip
-                        key={file.fileID || i}
-                        file={file}
-                        onRemove={() => removeUploadedFile(file.fileID)}
-                      />
-                    ))}
-                  </>
+                {/* Context Picker */}
+                {isContextPickerOpen && (
+                  <ProjectContextPicker
+                    files={
+                      pickerTriggerMode === 'mention'
+                        ? projectAssets.filter(asset => asset.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+                        : projectAssets
+                    }
+                    charts={isDashboardOpen ? availableCharts : []}
+                    onSelect={handleAssetSelect}
+                    onChartSelect={handleChartSelect}
+                    onPreview={(fileId) => window.open(`/preview/${fileId}`, '_blank')}
+                    query={mentionQuery}
+                    className={`project-context-picker-container max-w-[calc(100vw_-_2rem)] ${compactComposer ? 'max-w-full' : ''} ${pickerTriggerMode === 'button' ? 'bottom-full left-0 mb-2' : ''}`}
+                  />
                 )}
-              </div>
-            )}
 
-            {/* Textarea Row */}
-            <div className="relative mb-3">
-              {/* Expand/Collapse button */}
-              {inputValue.length > 100 && (
-                <button
-                  onClick={() => setIsInputExpanded(!isInputExpanded)}
-                  className="absolute top-0 right-0 p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-black/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/10 transition-all z-10"
-                  title={isInputExpanded ? 'Collapse input' : 'Expand input'}
-                  type="button"
-                >
-                  {isInputExpanded ? <ChevronsDownUp className="w-3.5 h-3.5" /> : <ChevronsUpDown className="w-3.5 h-3.5" />}
-                </button>
-              )}
-              <TextareaAutosize
-                minRows={2}
-                maxRows={isInputExpanded ? 20 : 6}
-                value={inputValue}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setInputValue(value);
+                {/* Active File, Chart & Theme Correlations */}
+                {(stagedFiles.length > 0 || mentionedCharts.length > 0 || (selectedTemplate && isTemplatePending)) && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {compactComposer ? (
+                      <>
+                        {visibleComposerTokens.map((token) => (
+                          <Fragment key={token.id}>{token.renderInline()}</Fragment>
+                        ))}
+                        <MetadataOverflowToken tokens={overflowComposerTokens} />
+                      </>
+                    ) : (
+                      <>
+                        {/* Theme Selection Pill */}
+                        {selectedTemplate && isTemplatePending && (
+                          <ThemeInlineToken
+                            theme={selectedTemplate}
+                            variant="composer"
+                            onRemove={handleTemplateRemove}
+                            className="animate-in fade-in slide-in-from-left-2 duration-300"
+                          />
+                        )}
 
-                  // Detect @ mention
-                  const cursorPos = e.target.selectionStart || 0;
-                  const textBeforeCursor = value.slice(0, cursorPos);
-                  const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+                        {mentionedCharts.map(chart => (
+                          <ChartPreviewChip
+                            key={`chart-${chart.componentId}`}
+                            chart={chart}
+                            onRemove={() => setMentionedCharts(prev => prev.filter(c => c.componentId !== chart.componentId))}
+                          />
+                        ))}
+                        {stagedFiles.map((file, i) => (
+                          <FilePreviewChip
+                            key={file.fileID || i}
+                            file={file}
+                            onRemove={() => removeUploadedFile(file.fileID)}
+                          />
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
 
-                  if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
-                    // User just typed @
-                    setIsContextPickerOpen(true);
-                    setPickerTriggerMode('mention');
-                    setMentionQuery('');
-                    setMentionCursorPos(cursorPos);
+                {/* Textarea Row */}
+                <div className="relative mb-3">
+                  {/* Expand/Collapse button */}
+                  {inputValue.length > 100 && (
+                    <button
+                      onClick={() => setIsInputExpanded(!isInputExpanded)}
+                      className="absolute top-0 right-0 p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-black/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/10 transition-all z-10"
+                      title={isInputExpanded ? 'Collapse input' : 'Expand input'}
+                      type="button"
+                    >
+                      {isInputExpanded ? <ChevronsDownUp className="w-3.5 h-3.5" /> : <ChevronsUpDown className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
+                  <TextareaAutosize
+                    minRows={2}
+                    maxRows={isInputExpanded ? 20 : 6}
+                    value={inputValue}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setInputValue(value);
 
-                    // Mutual Exclusion
-                    setModelDropdownOpen(false);
-                    setDropdownOpen(false);
+                      // Detect @ mention
+                      const cursorPos = e.target.selectionStart || 0;
+                      const textBeforeCursor = value.slice(0, cursorPos);
+                      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
-                    // Fetch assets if not already loaded
-                    if (projectId && projectAssets.length === 0) {
-                      fetchProjectAssets(projectId).then(setProjectAssets);
-                    }
-                  } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
-                    // User is typing after @
-                    const query = textBeforeCursor.slice(lastAtIndex + 1);
-                    if (!/\s/.test(query)) {
-                      // No space means still in mention mode
-                      setMentionQuery(query);
-                      setIsContextPickerOpen(true);
-                      setPickerTriggerMode('mention');
+                      if (lastAtIndex !== -1 && lastAtIndex === cursorPos - 1) {
+                        // User just typed @
+                        setIsContextPickerOpen(true);
+                        setPickerTriggerMode('mention');
+                        setMentionQuery('');
+                        setMentionCursorPos(cursorPos);
 
-                      // Mutual Exclusion
-                      setModelDropdownOpen(false);
-                      setDropdownOpen(false);
-                    } else {
-                      setIsContextPickerOpen(false);
-                    }
-                  } else {
-                    // Only close if we are in mention mode (don't close button mode on typing)
-                    if (pickerTriggerMode === 'mention') {
-                      setIsContextPickerOpen(false);
-                    }
-                  }
-                }}
-                placeholder={isListening ? 'Listening...' : "Use @ to select the data file to analyze"}
-                className={`w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60 chat-scrollbar-hide ${inputValue.length > 100 ? 'pr-6' : ''}`}
-                data-chat-input
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleSend();
-                  }
-                }}
-              />
-            </div>
+                        // Mutual Exclusion
+                        setModelDropdownOpen(false);
+                        setDropdownOpen(false);
 
-            {/* Recording Bar - Positioned between textarea and buttons */}
-            <RecordingBarSidebar
-              isVisible={isListening}
-              detectedLanguage={detectedLanguage}
-              onCancel={handleRecordingCancel}
-              onConfirm={handleRecordingConfirm}
-            />
+                        // Fetch assets if not already loaded
+                        if (projectId && projectAssets.length === 0) {
+                          fetchProjectAssets(projectId).then(setProjectAssets);
+                        }
+                      } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
+                        // User is typing after @
+                        const query = textBeforeCursor.slice(lastAtIndex + 1);
+                        if (!/\s/.test(query)) {
+                          // No space means still in mention mode
+                          setMentionQuery(query);
+                          setIsContextPickerOpen(true);
+                          setPickerTriggerMode('mention');
 
-            {/* Credit exhausted banner */}
-            {creditUsage?.can_use_credits === false && (
-              <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-xl border border-amber-500/20 bg-amber-500/5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="text-xs text-amber-300/80 truncate">Monthly credits used · Resets next month</span>
+                          // Mutual Exclusion
+                          setModelDropdownOpen(false);
+                          setDropdownOpen(false);
+                        } else {
+                          setIsContextPickerOpen(false);
+                        }
+                      } else {
+                        // Only close if we are in mention mode (don't close button mode on typing)
+                        if (pickerTriggerMode === 'mention') {
+                          setIsContextPickerOpen(false);
+                        }
+                      }
+                    }}
+                    placeholder={isListening ? 'Listening...' : "Use @ to select the data file to analyze"}
+                    className={`w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60 chat-scrollbar-hide ${inputValue.length > 100 ? 'pr-6' : ''}`}
+                    data-chat-input
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSend();
+                      }
+                    }}
+                  />
                 </div>
-                {/*{subscription?.tier === "pro" ? (*/}
-                <a
-                  href="https://mail.google.com/mail/?view=cm&to=dreamify.dev@gmail.com&su=More%20Credits%20Request"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20 hover:bg-amber-500/25 transition-colors"
-                >
-                  Contact us
-                </a>
-                {/*) : (
+
+                {/* Recording Bar - Positioned between textarea and buttons */}
+                <RecordingBarSidebar
+                  isVisible={isListening}
+                  detectedLanguage={detectedLanguage}
+                  onCancel={handleRecordingCancel}
+                  onConfirm={handleRecordingConfirm}
+                />
+
+                {/* Credit exhausted banner */}
+                {creditUsage?.can_use_credits === false && (
+                  <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-xs text-amber-300/80 truncate">Monthly credits used · Resets next month</span>
+                    </div>
+                    {/*{subscription?.tier === "pro" ? (*/}
+                    <a
+                      href="https://mail.google.com/mail/?view=cm&to=dreamify.dev@gmail.com&su=More%20Credits%20Request"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 inline-flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20 hover:bg-amber-500/25 transition-colors"
+                    >
+                      Contact us
+                    </a>
+                    {/*) : (
                      <button
                       onClick={upgradeToPro}
                       className="shrink-0 inline-flex items-center justify-center gap-1 h-7 px-3 rounded-lg text-xs font-semibold bg-primary text-white hover:opacity-90 transition-opacity"
@@ -2957,144 +2963,144 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                       <Zap className="w-3 h-3" />
                       Upgrade to Pro
                     </button>*/}
-                {/*)}*/}
-              </div>
-            )}
-
-            {/* Buttons Row */}
-            <div className={`chat-composer-actions flex items-center justify-between ${compactComposer ? 'flex-wrap gap-2' : 'gap-2'}`}>
-              {/* Left side - secondary composer actions */}
-              <div className={`flex items-center ${compactComposer ? 'min-w-0 flex-wrap gap-1.5' : 'gap-2'}`}>
-                <ComposerAddMenu
-                  onUpload={handleFileUpload}
-                  onAddProjectContext={handleAddProjectContextClick}
-                  onChooseTheme={handleCloneTemplateClick}
-                  onOpen={() => {
-                    setModelDropdownOpen(false);
-                    setDropdownOpen(false);
-                    setIsContextPickerOpen(false);
-                  }}
-                />
-
-                {/* Data Connector Dropup */}
-                <div className="relative data-source-dropdown">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newState = !dropdownOpen;
-                      setDropdownOpen(newState);
-                      if (newState) {
-                        setModelDropdownOpen(false);
-                        setIsContextPickerOpen(false);
-                      }
-                    }}
-                    className={`flex h-[34px] items-center justify-center gap-1 rounded-md px-2 transition-all duration-200 ${selectedDataSource
-                      ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
-                      : 'border border-border/50 text-muted-foreground hover:text-foreground dark:border-white/30 dark:text-gray-400 dark:hover:text-white'
-                      }`}
-                    aria-expanded={dropdownOpen}
-                    aria-haspopup="true"
-                    aria-label="Connect data source"
-                    title="Connect data source"
-                  >
-                    <Link className="h-4 w-4" />
-                    <ChevronUp className={`h-3 w-3 transition-transform duration-200 ${selectedDataSource ? 'text-white' : 'text-muted-foreground/60 dark:text-white/60'
-                      } ${dropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {dropdownOpen && (
-                    <div className="absolute bottom-full left-0 z-[300] mb-2 w-[min(13rem,calc(100vw_-_2rem))] rounded-xl border border-border/30 bg-background/95 p-2 shadow-2xl backdrop-blur-sm">
-                      <p className="px-2 pb-1.5 pt-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground dark:text-white/25">Popular</p>
-
-                      {CONNECTORS.filter(c => ['GA4', 'Google Ads', 'Firebase', 'Google Sheets'].includes(c.name)).map(con => (
-                        <button
-                          key={con.name}
-                          type="button"
-                          onClick={() => handleIntegrationClick(con)}
-                          className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted dark:hover:bg-white/10"
-                        >
-                          <img src={con.icon} alt={con.name} className="h-4 w-4 flex-shrink-0 object-contain" />
-                          <span className="text-foreground dark:text-white/90">{con.name}</span>
-                        </button>
-                      ))}
-
-                      {([
-                        { name: 'Meta Ads', icon: '/meta.png', category: 'Advertising Platform' as const },
-                        { name: 'TikTok Ads', icon: '/tiktok.png', category: 'Advertising Platform' as const },
-                      ] as const).map(con => (
-                        <button
-                          key={con.name}
-                          type="button"
-                          onClick={() => handleIntegrationClick(con)}
-                          className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted dark:hover:bg-white/10"
-                        >
-                          <img src={con.icon} alt={con.name} className="h-4 w-4 flex-shrink-0 object-contain opacity-50" />
-                          <span className="text-muted-foreground dark:text-white/50">{con.name}</span>
-                          <span className="ml-auto text-[9px] text-muted-foreground/70 dark:text-white/30">SOON</span>
-                        </button>
-                      ))}
-
-                      <div className="mt-1.5 border-t border-border/60 pt-1.5 dark:border-white/10">
-                        <button
-                          type="button"
-                          onClick={() => { setDropdownOpen(false); setAllConnectorsModalOpen(true); }}
-                          className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
-                        >
-                          Browse all connectors
-                          <ChevronRight className="ml-auto h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Right side - Model Selector + Send Button */}
-              <div className={`flex items-center ${compactComposer ? 'ml-auto shrink-0 gap-1.5' : 'gap-2'}`}>
-                {/* Model Dropdown */}
-                {/* Model Selector Component */}
-                <ModelSelector
-                  selectedModel={selectedModel}
-                  onSelect={(model) => {
-                    setSelectedModel(model);
-                    setModelDropdownOpen(false);
-                  }}
-                  creditsRemaining={creditsRemaining}
-                  creditsMonthlyLimit={tierLimit}
-                  isOpen={modelDropdownOpen}
-                  onToggle={() => {
-                    const newState = !modelDropdownOpen;
-                    setModelDropdownOpen(newState);
-                    if (newState) {
-                      setDropdownOpen(false);
-                      setIsContextPickerOpen(false);
-                    }
-                  }}
-                  anchor="right"
-                  placement="top"
-                  variant="compact"
-                  labelMode={compactComposer ? 'adaptive' : 'full'}
-                />
-
-                {/* Send / Stop Button */}
-                {(isProcessing || uploadedFiles.some(f => f.status === 'processing')) ? (
-                  <Button
-                    onClick={() => stopGeneration()}
-                    className={`button-gradient ${compactComposer ? 'p-2.5' : 'p-3'}`}
-                  >
-                    <Square className="w-4 h-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => handleSend()}
-                    disabled={!inputValue.trim() || isTyping || uploadedFiles.some(f => f.status === 'uploading')}
-                    className={`button-gradient ${compactComposer ? 'p-2.5' : 'p-3'} disabled:opacity-50`}
-                  >
-                    <CornerRightUp className="w-4 h-4" />
-                  </Button>
+                    {/*)}*/}
+                  </div>
                 )}
-              </div>
-            </div>
+
+                {/* Buttons Row */}
+                <div className={`chat-composer-actions flex items-center justify-between ${compactComposer ? 'flex-wrap gap-2' : 'gap-2'}`}>
+                  {/* Left side - secondary composer actions */}
+                  <div className={`flex items-center ${compactComposer ? 'min-w-0 flex-wrap gap-1.5' : 'gap-2'}`}>
+                    <ComposerAddMenu
+                      onUpload={handleFileUpload}
+                      onAddProjectContext={handleAddProjectContextClick}
+                      onChooseTheme={handleCloneTemplateClick}
+                      onOpen={() => {
+                        setModelDropdownOpen(false);
+                        setDropdownOpen(false);
+                        setIsContextPickerOpen(false);
+                      }}
+                    />
+
+                    {/* Data Connector Dropup */}
+                    <div className="relative data-source-dropdown">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newState = !dropdownOpen;
+                          setDropdownOpen(newState);
+                          if (newState) {
+                            setModelDropdownOpen(false);
+                            setIsContextPickerOpen(false);
+                          }
+                        }}
+                        className={`flex h-[34px] items-center justify-center gap-1 rounded-md px-2 transition-all duration-200 ${selectedDataSource
+                          ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
+                          : 'border border-border/50 text-muted-foreground hover:text-foreground dark:border-white/30 dark:text-gray-400 dark:hover:text-white'
+                          }`}
+                        aria-expanded={dropdownOpen}
+                        aria-haspopup="true"
+                        aria-label="Connect data source"
+                        title="Connect data source"
+                      >
+                        <Link className="h-4 w-4" />
+                        <ChevronUp className={`h-3 w-3 transition-transform duration-200 ${selectedDataSource ? 'text-white' : 'text-muted-foreground/60 dark:text-white/60'
+                          } ${dropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {dropdownOpen && (
+                        <div className="absolute bottom-full left-0 z-[300] mb-2 w-[min(13rem,calc(100vw_-_2rem))] rounded-xl border border-border/30 bg-background/95 p-2 shadow-2xl backdrop-blur-sm">
+                          <p className="px-2 pb-1.5 pt-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground dark:text-white/25">Popular</p>
+
+                          {CONNECTORS.filter(c => ['GA4', 'Google Ads', 'Firebase', 'Google Sheets'].includes(c.name)).map(con => (
+                            <button
+                              key={con.name}
+                              type="button"
+                              onClick={() => handleIntegrationClick(con)}
+                              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted dark:hover:bg-white/10"
+                            >
+                              <img src={con.icon} alt={con.name} className="h-4 w-4 flex-shrink-0 object-contain" />
+                              <span className="text-foreground dark:text-white/90">{con.name}</span>
+                            </button>
+                          ))}
+
+                          {([
+                            { name: 'Meta Ads', icon: '/meta.png', category: 'Advertising Platform' as const },
+                            { name: 'TikTok Ads', icon: '/tiktok.png', category: 'Advertising Platform' as const },
+                          ] as const).map(con => (
+                            <button
+                              key={con.name}
+                              type="button"
+                              onClick={() => handleIntegrationClick(con)}
+                              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted dark:hover:bg-white/10"
+                            >
+                              <img src={con.icon} alt={con.name} className="h-4 w-4 flex-shrink-0 object-contain opacity-50" />
+                              <span className="text-muted-foreground dark:text-white/50">{con.name}</span>
+                              <span className="ml-auto text-[9px] text-muted-foreground/70 dark:text-white/30">SOON</span>
+                            </button>
+                          ))}
+
+                          <div className="mt-1.5 border-t border-border/60 pt-1.5 dark:border-white/10">
+                            <button
+                              type="button"
+                              onClick={() => { setDropdownOpen(false); setAllConnectorsModalOpen(true); }}
+                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
+                            >
+                              Browse all connectors
+                              <ChevronRight className="ml-auto h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right side - Model Selector + Send Button */}
+                  <div className={`flex items-center ${compactComposer ? 'ml-auto shrink-0 gap-1.5' : 'gap-2'}`}>
+                    {/* Model Dropdown */}
+                    {/* Model Selector Component */}
+                    <ModelSelector
+                      selectedModel={selectedModel}
+                      onSelect={(model) => {
+                        setSelectedModel(model);
+                        setModelDropdownOpen(false);
+                      }}
+                      creditsRemaining={creditsRemaining}
+                      creditsMonthlyLimit={tierLimit}
+                      isOpen={modelDropdownOpen}
+                      onToggle={() => {
+                        const newState = !modelDropdownOpen;
+                        setModelDropdownOpen(newState);
+                        if (newState) {
+                          setDropdownOpen(false);
+                          setIsContextPickerOpen(false);
+                        }
+                      }}
+                      anchor="right"
+                      placement="top"
+                      variant="compact"
+                      labelMode={compactComposer ? 'adaptive' : 'full'}
+                    />
+
+                    {/* Send / Stop Button */}
+                    {(isProcessing || uploadedFiles.some(f => f.status === 'processing')) ? (
+                      <Button
+                        onClick={() => stopGeneration()}
+                        className={`button-gradient ${compactComposer ? 'p-2.5' : 'p-3'}`}
+                      >
+                        <Square className="w-4 h-4" />
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => handleSend()}
+                        disabled={!inputValue.trim() || isTyping || uploadedFiles.some(f => f.status === 'uploading')}
+                        className={`button-gradient ${compactComposer ? 'p-2.5' : 'p-3'} disabled:opacity-50`}
+                      >
+                        <CornerRightUp className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </>
             )}
           </div>

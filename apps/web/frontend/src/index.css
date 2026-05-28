@@ -996,6 +996,68 @@ html::-webkit-scrollbar-thumb:hover {
   animation: shimmer 5s infinite linear;
 }
 
+/* 3 hops going right → 3 hops going back left, desktop ≥1024px
+   local translate × 2 (scale) = effective pixel movement
+   rightmost = 12rem local → 24rem = 384px effective ≈ half of max-w-4xl */
+@keyframes mascot-wave {
+  0%     { transform: scale(2) translate(0,      0);      animation-timing-function: ease-out; }
+  8.33%  { transform: scale(2) translate(2rem,  -1.2rem); animation-timing-function: ease-in;  }
+  16.67% { transform: scale(2) translate(4rem,   0);      animation-timing-function: ease-out; }
+  25%    { transform: scale(2) translate(6rem,  -1.2rem); animation-timing-function: ease-in;  }
+  33.33% { transform: scale(2) translate(8rem,   0);      animation-timing-function: ease-out; }
+  41.67% { transform: scale(2) translate(10rem, -1.2rem); animation-timing-function: ease-in;  }
+  50%    { transform: scale(2) translate(12rem,  0);      animation-timing-function: ease-out; }
+  58.33% { transform: scale(2) translate(10rem, -1.2rem); animation-timing-function: ease-in;  }
+  66.67% { transform: scale(2) translate(8rem,   0);      animation-timing-function: ease-out; }
+  75%    { transform: scale(2) translate(6rem,  -1.2rem); animation-timing-function: ease-in;  }
+  83.33% { transform: scale(2) translate(4rem,   0);      animation-timing-function: ease-out; }
+  91.67% { transform: scale(2) translate(2rem,  -1.2rem); animation-timing-function: ease-in;  }
+  100%   { transform: scale(2) translate(0,      0); }
+}
+
+/* Tablet 768–1023px: rightmost = 9rem local → 18rem effective */
+@media (max-width: 1023px) {
+  @keyframes mascot-wave {
+    0%     { transform: scale(2) translate(0,      0);      animation-timing-function: ease-out; }
+    8.33%  { transform: scale(2) translate(1.5rem, -1.2rem); animation-timing-function: ease-in;  }
+    16.67% { transform: scale(2) translate(3rem,   0);      animation-timing-function: ease-out; }
+    25%    { transform: scale(2) translate(4.5rem, -1.2rem); animation-timing-function: ease-in;  }
+    33.33% { transform: scale(2) translate(6rem,   0);      animation-timing-function: ease-out; }
+    41.67% { transform: scale(2) translate(7.5rem, -1.2rem); animation-timing-function: ease-in;  }
+    50%    { transform: scale(2) translate(9rem,   0);      animation-timing-function: ease-out; }
+    58.33% { transform: scale(2) translate(7.5rem, -1.2rem); animation-timing-function: ease-in;  }
+    66.67% { transform: scale(2) translate(6rem,   0);      animation-timing-function: ease-out; }
+    75%    { transform: scale(2) translate(4.5rem, -1.2rem); animation-timing-function: ease-in;  }
+    83.33% { transform: scale(2) translate(3rem,   0);      animation-timing-function: ease-out; }
+    91.67% { transform: scale(2) translate(1.5rem, -1.2rem); animation-timing-function: ease-in;  }
+    100%   { transform: scale(2) translate(0,      0); }
+  }
+}
+
+/* Mobile <640px: rightmost = 4.5rem local → 9rem effective */
+@media (max-width: 639px) {
+  @keyframes mascot-wave {
+    0%     { transform: scale(2) translate(0,       0);      animation-timing-function: ease-out; }
+    8.33%  { transform: scale(2) translate(0.75rem, -1.2rem); animation-timing-function: ease-in;  }
+    16.67% { transform: scale(2) translate(1.5rem,  0);      animation-timing-function: ease-out; }
+    25%    { transform: scale(2) translate(2.25rem, -1.2rem); animation-timing-function: ease-in;  }
+    33.33% { transform: scale(2) translate(3rem,    0);      animation-timing-function: ease-out; }
+    41.67% { transform: scale(2) translate(3.75rem, -1.2rem); animation-timing-function: ease-in;  }
+    50%    { transform: scale(2) translate(4.5rem,  0);      animation-timing-function: ease-out; }
+    58.33% { transform: scale(2) translate(3.75rem, -1.2rem); animation-timing-function: ease-in;  }
+    66.67% { transform: scale(2) translate(3rem,    0);      animation-timing-function: ease-out; }
+    75%    { transform: scale(2) translate(2.25rem, -1.2rem); animation-timing-function: ease-in;  }
+    83.33% { transform: scale(2) translate(1.5rem,  0);      animation-timing-function: ease-out; }
+    91.67% { transform: scale(2) translate(0.75rem, -1.2rem); animation-timing-function: ease-in;  }
+    100%   { transform: scale(2) translate(0,       0); }
+  }
+}
+
+.animate-mascot-wave {
+  animation: mascot-wave 7s linear infinite;
+  transform-origin: center center;
+}
+
 /* Clerk auth component overrides — force transparent backgrounds so the
    panel background shows through regardless of Clerk's internal dark theme */
 .cl-card,

@@ -34,7 +34,47 @@ describe("conversationNodesToMessages clarification requests", () => {
     });
 
     expect(messages).toHaveLength(1);
-    expect(messages[0].clarificationRequest).toEqual(clarification);
+    expect(messages[0].clarificationRequests).toEqual([clarification]);
+  });
+
+  it("collects every clarification request content from a batched assistant node", () => {
+    const joinClarification = {
+      clarification_id: "clarify_join",
+      reason_code: "join_strategy",
+      question: "How should I combine these files?",
+      options: [
+        { id: "auto", label: "Infer best join", metadata: { join_strategy: "auto" } },
+      ],
+      required: true,
+    };
+    const outputClarification = {
+      clarification_id: "clarify_output",
+      reason_code: "output_mode",
+      question: "What should I produce?",
+      options: [
+        { id: "qa", label: "Text answer", metadata: { route_mode: "qa" } },
+      ],
+      required: true,
+    };
+
+    const messages = conversationNodesToMessages({
+      nodes: [
+        {
+          node_id: "assistant_1",
+          role: "assistant",
+          created_at: "2026-05-16T00:00:00Z",
+          contents: [
+            { type: "text", data: { text: "I need a few quick choices before I continue." } },
+            { type: "clarification_request", data: joinClarification },
+            { type: "clarification_request", data: outputClarification },
+          ],
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].clarificationRequests).toEqual([joinClarification, outputClarification]);
+    expect(messages[0].clarificationResolution).toBeUndefined();
   });
 
   it("folds dismissed clarification responses into the assistant question trace", () => {

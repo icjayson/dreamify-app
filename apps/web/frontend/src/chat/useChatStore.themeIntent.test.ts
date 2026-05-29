@@ -219,7 +219,7 @@ describe("useChatStore theme intent", () => {
 
     await useChatStore
       .getState()
-      .submitClarificationResponse(request, option, undefined, "project_1");
+      .submitClarificationResponse([{ request, option }], "project_1");
 
     const userMessage = useChatStore.getState().messages.find(message => message.role === "user");
     expect(userMessage?.content).toBe("GA4");
@@ -260,6 +260,7 @@ describe("useChatStore theme intent", () => {
       asset_selection: "explicit",
       selected_asset_ids: ["ga4_asset"],
       clarification_id: "clarify_1",
+      clarification_ids: ["clarify_1"],
     });
   });
 
@@ -280,7 +281,7 @@ describe("useChatStore theme intent", () => {
 
     await useChatStore
       .getState()
-      .submitClarificationResponse(request, option, "Keep it compact", "project_1");
+      .submitClarificationResponse([{ request, option, freeText: "Keep it compact" }], "project_1");
 
     const userMessage = useChatStore.getState().messages.find(message => message.role === "user");
     expect(userMessage?.content).toBe("Inline visual answer\nKeep it compact");
@@ -303,6 +304,7 @@ describe("useChatStore theme intent", () => {
     expect(call[5]).toEqual({
       asset_selection: "none",
       clarification_id: "clarify_output",
+      clarification_ids: ["clarify_output"],
     });
   });
 
@@ -357,5 +359,79 @@ describe("useChatStore theme intent", () => {
     });
     expect(useChatStore.getState().isThemePending).toBe(false);
     expect(useChatStore.getState().isTemplatePending).toBe(false);
+  });
+
+  it("submits a batch of clarification answers in a single workflow run", async () => {
+    const dataRequest = {
+      clarification_id: "clarify_data",
+      reason_code: "missing_data_context",
+      question: "Choose the data context",
+      options: [],
+    };
+    const dataOption = {
+      id: "asset:ga4_asset",
+      label: "GA4",
+      metadata: {
+        asset_ids: ["ga4_asset"],
+        asset_selection: "explicit" as const,
+        asset: {
+          asset_id: "ga4_asset",
+          filename: "google_analytics.csv",
+          extension: "csv",
+          asset_type: "integration_ga4",
+          account_name: "GA4",
+          property_name: "Dreamify Web Tracking",
+        },
+      },
+    };
+    const outputRequest = {
+      clarification_id: "clarify_output",
+      reason_code: "output_mode",
+      question: "What should I produce?",
+      options: [],
+    };
+    const outputOption = {
+      id: "qa_visual",
+      label: "Inline visual answer",
+      metadata: { route_mode: "qa_visual" },
+    };
+
+    await useChatStore.getState().submitClarificationResponse(
+      [
+        { request: dataRequest, option: dataOption },
+        { request: outputRequest, option: outputOption, freeText: "Keep it compact" },
+      ],
+      "project_1",
+    );
+
+    expect(mockedProcessingService.runProcessing).toHaveBeenCalledTimes(1);
+
+    const userMessage = useChatStore.getState().messages.find(message => message.role === "user");
+    expect(userMessage?.content).toBe("GA4\nInline visual answer\nKeep it compact");
+
+    const call = mockedProcessingService.runProcessing.mock.calls[0];
+    expect(call[4]).toEqual([
+      expect.objectContaining({
+        type: "clarification_response",
+        data: expect.objectContaining({ clarification_id: "clarify_data" }),
+      }),
+      expect.objectContaining({
+        type: "clarification_response",
+        data: expect.objectContaining({
+          clarification_id: "clarify_output",
+          free_text: "Keep it compact",
+        }),
+      }),
+      expect.objectContaining({
+        type: "asset",
+        data: expect.objectContaining({ asset_id: "ga4_asset" }),
+      }),
+    ]);
+    expect(call[5]).toEqual({
+      asset_selection: "explicit",
+      selected_asset_ids: ["ga4_asset"],
+      clarification_id: "clarify_data",
+      clarification_ids: ["clarify_data", "clarify_output"],
+    });
   });
 });

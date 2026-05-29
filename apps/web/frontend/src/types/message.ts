@@ -5,11 +5,13 @@ export const EXPLICIT_PROMPT_THEME_SOURCE = "explicit_prompt_selection";
 
 export type ClarificationReasonCode =
   | "missing_data_context"
-  | "ambiguous_metric"
-  | "ambiguous_time_range"
   | "multiple_matching_assets"
-  | "chart_direction"
+  | "analysis_context"
+  | "chart_target"
+  | "dashboard_update_scope"
   | "join_strategy"
+  | "time_or_metric_definition"
+  | "output_mode"
   | string;
 
 export interface ClarificationOption {
@@ -39,6 +41,13 @@ export interface ClarificationResolution {
   status: "no_answer";
   question: string;
   resolved_at?: string;
+}
+
+/** One answered clarification, collected client-side before a single submit. */
+export interface ClarificationAnswer {
+  request: ClarificationRequest;
+  option: ClarificationOption;
+  freeText?: string;
 }
 
 export interface ThinkingEvent {
@@ -115,7 +124,7 @@ export interface Message {
     id: string;
     text: string;
   }>;
-  clarificationRequest?: ClarificationRequest;
+  clarificationRequests?: ClarificationRequest[];
   clarificationResolution?: ClarificationResolution;
   thinkingTrace?: ThinkingEvent[];
 }

@@ -134,13 +134,15 @@ export function getLatestPendingClarificationMessage(
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message.role === "user") return null;
-    const clarificationId = message.clarificationRequest?.clarification_id;
+    const requests = message.clarificationRequests ?? [];
+    const firstId = requests[0]?.clarification_id;
     if (
       message.role === "assistant"
-      && message.clarificationRequest
-      && clarificationId
+      && requests.length > 0
+      && firstId
       && !message.clarificationResolution
-      && !dismissedClarificationIds.has(clarificationId)
+      // A batched message stays pending until every question is dismissed.
+      && requests.some((request) => !dismissedClarificationIds.has(request.clarification_id))
     ) {
       return message;
     }

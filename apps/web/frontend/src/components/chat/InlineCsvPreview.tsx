@@ -7,6 +7,9 @@ const INLINE_ROW_LIMIT = 50;
 
 interface InlineCsvPreviewProps {
   assetId: string;
+  variant?: 'attachmentCard' | 'messagePeek';
+  maxHeightClass?: string;
+  showUnavailableState?: boolean;
 }
 
 interface PreviewState {
@@ -17,8 +20,14 @@ interface PreviewState {
   error: string | null;
 }
 
-export default function InlineCsvPreview({ assetId }: InlineCsvPreviewProps) {
+export default function InlineCsvPreview({
+  assetId,
+  variant = 'attachmentCard',
+  maxHeightClass = 'max-h-[168px]',
+  showUnavailableState = false,
+}: InlineCsvPreviewProps) {
   const { getToken } = useAuth();
+  const isMessagePeek = variant === 'messagePeek';
   const [state, setState] = useState<PreviewState>({
     columns: [],
     rows: [],
@@ -69,27 +78,33 @@ export default function InlineCsvPreview({ assetId }: InlineCsvPreviewProps) {
 
   if (state.isLoading) {
     return (
-      <div className="flex items-center justify-center border-t border-border dark:border-white/10 py-3">
+      <div className={`flex items-center justify-center py-3 ${isMessagePeek ? 'bg-background/50 dark:bg-black/10' : 'border-t border-border dark:border-white/10'}`}>
         <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (state.error || state.columns.length === 0) {
-    return null;
+    if (!showUnavailableState) return null;
+
+    return (
+      <div className="px-3 py-3 text-xs text-muted-foreground">
+        Preview unavailable. Open the full preview to inspect this file.
+      </div>
+    );
   }
 
   return (
-    <div className="border-t border-border dark:border-white/10">
-      {/* Scrollable table: max 5 rows (~168px) tall, scrollable horizontally */}
-      <div className="overflow-auto max-h-[168px] max-w-full">
+    <div className={isMessagePeek ? 'bg-background/50 dark:bg-black/10' : 'border-t border-border dark:border-white/10'}>
+      {/* Scrollable table: compact by default, expandable in message peek mode. */}
+      <div className={`overflow-auto ${maxHeightClass} max-w-full`}>
         <table className="min-w-full divide-y divide-border text-xs">
-          <thead className="bg-muted dark:bg-white sticky top-0 z-10">
+          <thead className={`${isMessagePeek ? 'bg-muted/80 dark:bg-white/10' : 'bg-muted dark:bg-white'} sticky top-0 z-10`}>
             <tr>
               {state.columns.map((col, i) => (
                 <th
                   key={i}
-                  className="px-3 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap border-r border-border dark:border-white/10 last:border-r-0"
+                  className={`${isMessagePeek ? 'px-2.5 py-1.5' : 'px-3 py-1.5'} text-left font-medium text-muted-foreground whitespace-nowrap border-r border-border dark:border-white/10 last:border-r-0`}
                 >
                   {col || `Col ${i + 1}`}
                 </th>
@@ -102,7 +117,7 @@ export default function InlineCsvPreview({ assetId }: InlineCsvPreviewProps) {
                 {state.columns.map((_, colIdx) => (
                   <td
                     key={colIdx}
-                    className="px-3 py-1.5 whitespace-nowrap text-foreground dark:text-white/80 border-r border-border dark:border-white/10 last:border-r-0"
+                    className={`${isMessagePeek ? 'px-2.5 py-1.5' : 'px-3 py-1.5'} whitespace-nowrap text-foreground dark:text-white/80 border-r border-border dark:border-white/10 last:border-r-0`}
                   >
                     {row[colIdx] ?? ''}
                   </td>
@@ -112,9 +127,11 @@ export default function InlineCsvPreview({ assetId }: InlineCsvPreviewProps) {
           </tbody>
         </table>
       </div>
-      {state.totalRows > INLINE_ROW_LIMIT && (
-        <div className="px-3 py-1 text-[10px] text-muted-foreground border-t border-border dark:border-white/10 bg-muted/30 dark:bg-white/[0.03]">
-          Showing {INLINE_ROW_LIMIT} of {state.totalRows.toLocaleString()} rows
+      {(isMessagePeek || state.totalRows > INLINE_ROW_LIMIT) && (
+        <div className={`${isMessagePeek ? 'px-2.5' : 'px-3'} py-1 text-[10px] text-muted-foreground border-t border-border dark:border-white/10 bg-muted/30 dark:bg-white/[0.03]`}>
+          {isMessagePeek
+            ? `${state.rows.length.toLocaleString()} of ${state.totalRows.toLocaleString()} rows - ${state.columns.length.toLocaleString()} columns`
+            : `Showing ${INLINE_ROW_LIMIT} of ${state.totalRows.toLocaleString()} rows`}
         </div>
       )}
     </div>

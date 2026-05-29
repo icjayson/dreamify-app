@@ -5,13 +5,18 @@ import {
   compactLayoutVertically,
   compactLayoutsVertically,
   computeStorageKey,
+  GRID_COLS,
   getMinSizeForType,
   getComponentLayoutFrame,
+  layoutHasOverflowOrCollision,
   mergeLayoutIntoComponents,
   sanitizeBreakpoint,
+  sanitizeLayoutItem,
+  sanitizeLayoutItems,
   sanitizeLayouts,
   shouldFillSparse,
   buildMinSizeMap,
+  buildMinSizeMapForCols,
   type ComponentLike,
 } from "./dashboardLayout";
 
@@ -203,6 +208,76 @@ describe("sanitizeBreakpoint — minH/minW clamp (the 'vertical strip' sliver)",
   });
 });
 
+describe("sanitizeLayoutItem / sanitizeLayoutItems — horizontal overflow repair", () => {
+  it("repairs the exact bad Morpheus layout: x=16, w=8, minW=12 cannot overflow a 24-col grid", () => {
+    const out = sanitizeLayoutItem(
+      mkLayout({ i: "chart_002", x: 16, y: 4, w: 8, h: 12, minW: 12, minH: 12 }),
+      { minW: 4, minH: 8 },
+      GRID_COLS.lg,
+    );
+
+    expect(out).toMatchObject({ x: 12, w: 12, minW: 12 });
+    expect(out.x + out.w).toBeLessThanOrEqual(GRID_COLS.lg);
+  });
+
+  it("caps minW and w at the active breakpoint column count", () => {
+    const out = sanitizeLayoutItem(
+      mkLayout({ i: "wide", x: 6, y: 0, w: 12, h: 8, minW: 12 }),
+      { minW: 12, minH: 8 },
+      GRID_COLS.xs,
+    );
+
+    expect(out).toMatchObject({ x: 0, w: GRID_COLS.xs, minW: GRID_COLS.xs });
+    expect(out.x + out.w).toBeLessThanOrEqual(GRID_COLS.xs);
+  });
+
+  it("scales type minimum widths for responsive breakpoints", () => {
+    const minMap = buildMinSizeMapForCols([{ id: "metric_1", type: "metric" }], GRID_COLS.md);
+    const out = sanitizeLayoutItems(
+      [mkLayout({ i: "metric_1", x: 0, y: 0, w: 3, h: 2, minW: 3, minH: 2 })],
+      minMap,
+      GRID_COLS.md,
+    );
+
+    expect(out[0]).toMatchObject({ w: 3, minW: 3 });
+  });
+
+  it("moves later items down when width clamping would create collisions", () => {
+    const minMap = new Map<string, { minW: number; minH: number }>([
+      ["chart_001", { minW: 4, minH: 8 }],
+      ["chart_002", { minW: 12, minH: 12 }],
+      ["chart_003", { minW: 4, minH: 8 }],
+    ]);
+    const out = sanitizeLayoutItems(
+      [
+        mkLayout({ i: "chart_001", x: 0, y: 4, w: 16, h: 12 }),
+        mkLayout({ i: "chart_002", x: 16, y: 4, w: 8, h: 12, minW: 12, minH: 12 }),
+        mkLayout({ i: "chart_003", x: 0, y: 16, w: 24, h: 12 }),
+      ],
+      minMap,
+      GRID_COLS.lg,
+    );
+
+    expect(layoutHasOverflowOrCollision(out, GRID_COLS.lg)).toBe(false);
+    expect(out.find((item) => item.i === "chart_002")).toMatchObject({ x: 12, w: 12, y: 12 });
+    expect(out.find((item) => item.i === "chart_003")!.y).toBeGreaterThanOrEqual(24);
+  });
+
+  it("sanitizes a saved/localStorage layout with x+w beyond the grid", () => {
+    const activeIds = new Set(["chart_1"]);
+    const minMap = buildMinSizeMap([{ id: "chart_1", type: "chart" }]);
+    const out = sanitizeBreakpoint(
+      [mkLayout({ i: "chart_1", x: 22, y: 0, w: 8, h: 8 })],
+      activeIds,
+      minMap,
+      GRID_COLS.lg,
+    );
+
+    expect(out[0].x + out[0].w).toBeLessThanOrEqual(GRID_COLS.lg);
+    expect(layoutHasOverflowOrCollision(out, GRID_COLS.lg)).toBe(false);
+  });
+});
+
 describe("sanitizeLayouts — fullyCovered guards the fallback to backend layout", () => {
   const components: ComponentLike[] = [
     { id: "a", type: "chart" },
@@ -369,6 +444,16 @@ describe("mergeLayoutIntoComponents — the bridge from RGL layout to S3 dashboa
     const components: Comp[] = [{ id: 42 }];
     const out = mergeLayoutIntoComponents(components, [mkLayout({ i: "42", x: 5, y: 5 })]);
     expect(out[0].position).toMatchObject({ x: 5, y: 5 });
+  });
+
+  it("persists sanitized x/y/w/h/minW/minH so S3 cannot re-save overflowing geometry", () => {
+    const components: Comp[] = [{ id: "chart_002" }];
+    const out = mergeLayoutIntoComponents(components, [
+      mkLayout({ i: "chart_002", x: 16, y: 4, w: 8, h: 12, minW: 12, minH: 12 }),
+    ]);
+
+    expect(out[0].position).toMatchObject({ x: 12, y: 4, width: 12, height: 12, minW: 12, minH: 12 });
+    expect(out[0].layout).toMatchObject({ x: 12, y: 4, w: 12, h: 12, minW: 12, minH: 12 });
   });
 });
 

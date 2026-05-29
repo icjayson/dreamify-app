@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { EXPLICIT_PROMPT_THEME_SOURCE, type ClarificationOption, type ClarificationRequest, type Message, type ThinkingEvent } from '@/types/message';
+import { EXPLICIT_PROMPT_THEME_SOURCE, type AssetSelectionMode, type ClarificationAnswer, type ClarificationOption, type Message, type ThinkingEvent } from '@/types/message';
 import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService } from '@/services/processingService';
 import type { ConversationChatRequest } from '@/services/conversationService';
@@ -395,7 +395,7 @@ interface ChatState {
   clearInput: () => void;
   resetChat: (preserveTemplate?: boolean) => void;
   processFileWithMessage: (content: string, onProcessedDataChange?: (data: unknown) => void, projectId?: string, mentionedAssetIds?: string[], activeFileAttachment?: Message['attachment'], mentionedCharts?: Array<{ id: string; componentId: string; title: string; type: string; config?: unknown }>, model?: 'pro' | 'fast', onAccepted?: () => void, onProjectNameAccepted?: (projectName: string) => void) => Promise<void>;
-  submitClarificationResponse: (request: ClarificationRequest, option: ClarificationOption, freeText: string | undefined, projectId: string, onProcessedDataChange?: (data: unknown) => void, model?: 'pro' | 'fast', onAccepted?: () => void, onProjectNameAccepted?: (projectName: string) => void) => Promise<void>;
+  submitClarificationResponse: (answers: ClarificationAnswer[], projectId: string, onProcessedDataChange?: (data: unknown) => void, model?: 'pro' | 'fast', onAccepted?: () => void, onProjectNameAccepted?: (projectName: string) => void) => Promise<void>;
   stopGeneration: () => Promise<void>;
   resumeWorkflowPolling: (projectId: string, conversationId: string, onProcessedDataChange?: (data: unknown) => void) => Promise<void>;
   selectDashboard: (dashboardId: string, projectId: string) => Promise<unknown>;
@@ -549,13 +549,12 @@ function buildClarificationAttachment(option: ClarificationOption): Message['att
 }
 
 function createClarificationResponseContents(
-  request: ClarificationRequest,
-  option: ClarificationOption,
-  freeText?: string,
+  answers: ClarificationAnswer[],
 ): ConversationChatRequest['user_node_contents'] {
-  const selectedAssetIds = getClarificationAssetIds(option);
-  const contents: ConversationChatRequest['user_node_contents'] = [
-    {
+  const contents: ConversationChatRequest['user_node_contents'] = [];
+
+  answers.forEach(({ request, option, freeText }) => {
+    contents.push({
       type: 'clarification_response',
       data: {
         clarification_id: request.clarification_id,
@@ -564,17 +563,43 @@ function createClarificationResponseContents(
         free_text: freeText ?? null,
         metadata: option.metadata ?? {},
       },
-    },
-  ];
+    });
+  });
 
-  selectedAssetIds.forEach((assetId, index) => {
-    contents.push({
-      type: 'asset',
-      data: createClarificationAssetData(option, assetId, index),
+  // Append one asset content per uniquely selected data source across answers.
+  const seenAssetIds = new Set<string>();
+  answers.forEach(({ option }) => {
+    getClarificationAssetIds(option).forEach((assetId) => {
+      if (seenAssetIds.has(assetId)) return;
+      seenAssetIds.add(assetId);
+      contents.push({
+        type: 'asset',
+        data: createClarificationAssetData(option, assetId, seenAssetIds.size - 1),
+      });
     });
   });
 
   return contents;
+}
+
+/** Union of selected asset ids across every answered clarification. */
+function getAnswersAssetIds(answers: ClarificationAnswer[]): string[] {
+  const ids: string[] = [];
+  answers.forEach(({ option }) => {
+    getClarificationAssetIds(option).forEach((assetId) => {
+      if (!ids.includes(assetId)) ids.push(assetId);
+    });
+  });
+  return ids;
+}
+
+/** explicit/all wins over none when answers disagree on data scope. */
+function getAnswersSelectionMode(answers: ClarificationAnswer[], assetIds: string[]): AssetSelectionMode {
+  for (const { option } of answers) {
+    const mode = option.metadata?.asset_selection;
+    if (mode === 'explicit' || mode === 'all') return mode;
+  }
+  return assetIds.length > 0 ? 'explicit' : 'none';
 }
 
 const initialMessages: Message[] = [
@@ -2030,15 +2055,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   submitClarificationResponse: async (
-    request: ClarificationRequest,
-    option: ClarificationOption,
-    freeText: string | undefined,
+    answers: ClarificationAnswer[],
     projectId: string,
     onProcessedDataChange?: (data: unknown) => void,
     model?: 'pro' | 'fast',
     onAccepted?: () => void,
     onProjectNameAccepted?: (projectName: string) => void,
   ) => {
+    if (answers.length === 0) return;
     const state = get();
     const {
       currentConversationId,
@@ -2075,12 +2099,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setCurrentWorkflowStep(null);
     setPriorWorkflowSteps([]);
 
-    const selectedAssetIds = getClarificationAssetIds(option);
-    const selectionMode = option.metadata?.asset_selection || (selectedAssetIds.length > 0 ? 'explicit' : 'none');
-    const clarificationAttachment = buildClarificationAttachment(option);
-    const displayText = freeText
-      ? `${option.label}\n${freeText}`
-      : option.label;
+    const selectedAssetIds = getAnswersAssetIds(answers);
+    const selectionMode = getAnswersSelectionMode(answers, selectedAssetIds);
+    const assetAnswer = answers.find(({ option }) => getClarificationAssetIds(option).length > 0);
+    const clarificationAttachment = assetAnswer
+      ? buildClarificationAttachment(assetAnswer.option)
+      : undefined;
+    const displayText = answers
+      .map(({ option, freeText }) => (freeText ? `${option.label}\n${freeText}` : option.label))
+      .join('\n');
+    const clarificationIds = answers.map(({ request }) => request.clarification_id);
 
     updateMessages((prev) => ([
       ...prev,
@@ -2103,11 +2131,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	        null,
         displayText,
         currentConversationId,
-        createClarificationResponseContents(request, option, freeText),
+        createClarificationResponseContents(answers),
         {
 	          asset_selection: selectionMode,
 	          ...(selectedAssetIds.length > 0 ? { selected_asset_ids: selectedAssetIds } : {}),
-	          clarification_id: request.clarification_id,
+	          clarification_id: clarificationIds[0],
+	          clarification_ids: clarificationIds,
 	          ...promptThemeMetadata,
 	        },
 	        model,

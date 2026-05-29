@@ -294,7 +294,7 @@ export function conversationNodesToMessages(
       const dashboardContent = node.contents?.find((c) => c.type === 'dashboard');
       const todoTasksContent = node.contents?.find((c) => c.type === 'todo_tasks');
       const thinkingTraceContent = node.contents?.find((c) => c.type === 'thinking_trace');
-      const clarificationRequestContent = node.contents?.find((c) => c.type === 'clarification_request');
+      const clarificationRequestContents = node.contents?.filter((c) => c.type === 'clarification_request') ?? [];
       const visualArtifactsContent = node.contents?.find((c) => c.type === 'visual_artifacts');
       const assetContents = node.contents?.filter(
         (c) =>
@@ -345,16 +345,24 @@ export function conversationNodesToMessages(
       if (thinkingTraceContent?.data?.events && Array.isArray(thinkingTraceContent.data.events)) {
         normalized.thinkingTrace = thinkingTraceContent.data.events;
       }
-      if (clarificationRequestContent?.data) {
-        normalized.clarificationRequest = clarificationRequestContent.data;
-        const clarificationId = readString(clarificationRequestContent.data.clarification_id);
-        const noAnswer = clarificationId ? noAnswerClarifications.get(clarificationId) : null;
-        if (clarificationId && noAnswer) {
+      if (clarificationRequestContents.length > 0) {
+        const requests = clarificationRequestContents
+          .map((content) => content.data)
+          .filter(Boolean);
+        normalized.clarificationRequests = requests;
+        // The message is resolved only when every batched question is dismissed.
+        const noAnswers = requests.map((request) => {
+          const clarificationId = readString(request.clarification_id);
+          return clarificationId ? noAnswerClarifications.get(clarificationId) : null;
+        });
+        if (noAnswers.length > 0 && noAnswers.every(Boolean)) {
+          const first = requests[0];
+          const firstNoAnswer = noAnswers[0];
           normalized.clarificationResolution = {
-            clarification_id: clarificationId,
+            clarification_id: readString(first.clarification_id) || '',
             status: 'no_answer',
-            question: readString(clarificationRequestContent.data.question) || 'Clarification question',
-            resolved_at: noAnswer.resolvedAt,
+            question: readString(first.question) || 'Clarification question',
+            resolved_at: firstNoAnswer?.resolvedAt,
           };
         }
       }

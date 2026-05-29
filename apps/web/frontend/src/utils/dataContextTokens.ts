@@ -1,4 +1,5 @@
 import { CONNECTORS } from "@/constants/connectors";
+import type { Message } from "@/types/message";
 
 export type DataContextTokenStatus =
   | "idle"
@@ -144,4 +145,88 @@ export function getDataContextTooltip(source: DataContextTokenSource): string {
     return source.syncVersionName ? `${account} / ${property} - ${source.syncVersionName}` : `${account} / ${property}`;
   }
   return connector ? `${connector.name}: ${context}` : fileName;
+}
+
+export interface SpreadsheetPreviewProjectAsset {
+  id: string;
+  name: string;
+  ext?: string;
+  sourceType?: string;
+}
+
+export interface SpreadsheetPreviewTarget {
+  assetId: string;
+  filename: string;
+  ext: "csv" | "xls" | "xlsx";
+}
+
+const SPREADSHEET_EXTENSIONS = new Set(["csv", "xls", "xlsx"]);
+
+function getFileExtension(name?: string, fallbackExt?: string): string {
+  const fromExt = fallbackExt?.replace(/^\./, "").toLowerCase();
+  if (fromExt) return fromExt;
+  const fromName = name?.split(".").pop()?.toLowerCase();
+  return fromName || "";
+}
+
+function isConnectorAttachment(sourceType?: string): boolean {
+  return sourceType === "Multiple" || Boolean(normalizeConnectorSource(sourceType));
+}
+
+type SpreadsheetAttachmentCandidate = {
+  id?: string;
+  name?: string;
+  ext?: string;
+  sourceType?: string;
+};
+
+function getSpreadsheetAttachmentCandidates(
+  attachment: NonNullable<Message["attachment"]>,
+): SpreadsheetAttachmentCandidate[] {
+  if (attachment.files?.length) {
+    return attachment.files.map((file) => ({
+      id: file.id,
+      name: file.name,
+      ext: file.ext,
+      sourceType: file.sourceType || (attachment.sourceType === "Multiple" ? undefined : attachment.sourceType),
+    }));
+  }
+
+  return [{
+    name: attachment.name,
+    sourceType: attachment.sourceType,
+  }];
+}
+
+export function getSpreadsheetPreviewTarget(
+  attachment?: Message["attachment"],
+  projectAssets: readonly SpreadsheetPreviewProjectAsset[] = [],
+): SpreadsheetPreviewTarget | null {
+  if (!attachment) return null;
+
+  const candidates = getSpreadsheetAttachmentCandidates(attachment);
+  const file = candidates.find((candidate) => {
+    if (isConnectorAttachment(candidate.sourceType)) return false;
+    return SPREADSHEET_EXTENSIONS.has(getFileExtension(candidate.name, candidate.ext));
+  });
+  if (!file) return null;
+
+  const filename = file.name || attachment.name;
+
+  const ext = getFileExtension(filename, file.ext);
+  if (!SPREADSHEET_EXTENSIONS.has(ext)) return null;
+
+  const matchedAsset = file.id
+    ? undefined
+    : projectAssets.find((asset) => asset.name === filename || asset.name === attachment.name);
+  if (matchedAsset && isConnectorAttachment(matchedAsset.sourceType)) return null;
+
+  const assetId = file.id || matchedAsset?.id;
+  if (!assetId) return null;
+
+  return {
+    assetId,
+    filename,
+    ext: ext as SpreadsheetPreviewTarget["ext"],
+  };
 }

@@ -34,12 +34,16 @@ import {
   getMinSizeForType as getMinSizeForTypePure,
   computeStorageKey,
   sanitizeLayouts,
+  sanitizeLayoutItems,
   shouldFillSparse,
   clampLayoutItem,
   getComponentLayoutFrame,
   compactLayoutVertically,
   compactLayoutsVertically,
   mergeLayoutIntoComponents,
+  buildMinSizeMap,
+  buildMinSizeMapForCols,
+  GRID_COLS,
 } from "@/components/project-section/dashboardLayout";
 import {
   extractNumericValue,
@@ -887,7 +891,7 @@ const DashboardPreview = ({
   // Grid layout config
   const ResponsiveGridLayout = useMemo(() => WidthProvider(Responsive), []);
   const breakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 } as const;
-  const cols = { lg: 24, md: 12, sm: 8, xs: 4, xxs: 2 } as const;
+  const cols = GRID_COLS;
   const margin: [number, number] = [6, 6];
   const containerPadding: [number, number] = [6, 6];
   const rowHeight = 30;
@@ -961,7 +965,7 @@ const DashboardPreview = ({
   const getMinSizeForType = getMinSizeForTypePure;
 
   const componentsToBaseLayout = (components: any[]): Layout[] => {
-    return components.map((c: any, index: number) => {
+    const rawLayout = components.map((c: any, index: number) => {
       const typeMin = getMinSizeForType(c.type);
       const src = getComponentLayoutFrame(c, index);
       let x = src.x;
@@ -1001,10 +1005,11 @@ const DashboardPreview = ({
       );
       return { i: String(c.id), x, y, w: clamped.w, h: clamped.h, minW: clamped.minW, minH: clamped.minH, static: false } as Layout;
     });
+    return sanitizeLayoutItems(rawLayout, buildMinSizeMap(components), cols.lg);
   };
 
   const scaleLayoutForCols = (layout: Layout[], fromCols: number, toCols: number): Layout[] => {
-    return layout.map((item) => {
+    const scaled = layout.map((item) => {
       const scaledW = Math.max(1, Math.round((item.w * toCols) / fromCols));
       let scaledX = Math.round((item.x * toCols) / fromCols);
       // clamp to ensure the item fits within the target column count
@@ -1019,6 +1024,16 @@ const DashboardPreview = ({
       const w = scaledMinW && Number.isFinite(scaledMinW) ? Math.max(scaledW, scaledMinW) : scaledW;
       return { ...item, x: scaledX, w, h, minW: scaledMinW } as Layout;
     });
+    const minSizeById = new Map(
+      scaled.map((item) => [
+        item.i,
+        {
+          minW: Number.isFinite(item.minW) ? Number(item.minW) : 1,
+          minH: Number.isFinite(item.minH) ? Number(item.minH) : 1,
+        },
+      ]),
+    );
+    return sanitizeLayoutItems(scaled, minSizeById, toCols);
   };
 
   const reformatLayoutForExport = (layout: Layout[]): { reformatted: Layout[], didSplit: boolean } => {
@@ -1037,7 +1052,7 @@ const DashboardPreview = ({
       didSplit = result.didSplit;
     }
 
-    baseLg = compactLayoutVertically(baseLg);
+    baseLg = sanitizeLayoutItems(compactLayoutVertically(baseLg), buildMinSizeMap((components || []) as any[]), cols.lg);
 
     return {
       layouts: {
@@ -1193,19 +1208,27 @@ const DashboardPreview = ({
 
   const handleLayoutChange = (current: Layout[], all: Layouts) => {
     if (!isLayoutReady) return;
-    const compactedCurrent = compactLayoutVertically(current);
     const activeBreakpoint = currentBreakpointRef.current as keyof typeof cols;
+    const compactedCurrent = sanitizeLayoutItems(
+      compactLayoutVertically(current),
+      buildMinSizeMapForCols(editedDisplayComponents as any[], cols[activeBreakpoint] || cols.lg),
+      cols[activeBreakpoint] || cols.lg,
+    );
     const compactedAll = compactLayoutsVertically({
       ...all,
       [activeBreakpoint]: compactedCurrent,
     });
-    layoutsRef.current = compactedAll;
-    setLayouts(compactedAll);
+    const { layouts: sanitizedAll } = sanitizeLayouts(
+      compactedAll,
+      editedDisplayComponents as any[],
+    );
+    layoutsRef.current = sanitizedAll;
+    setLayouts(sanitizedAll);
     // Persist per dashboard id (skipped for ephemeral previews and for s3 mode,
     // which persists via the debounced S3 push fired from handleDragResizeStop).
     if (LAYOUT_SOURCE === "localstorage" && !disablePersistence) {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(compactedAll));
+        localStorage.setItem(storageKey, JSON.stringify(sanitizedAll));
       } catch (_e) { /* ignore */ }
     }
 
@@ -1226,7 +1249,11 @@ const DashboardPreview = ({
     const activeBreakpoint = currentBreakpointRef.current as keyof typeof cols;
     const currentCols = cols[activeBreakpoint] || 24;
     const scaledAll = { ...layoutsRef.current };
-    const compactedCurrent = compactLayoutVertically(current);
+    const compactedCurrent = sanitizeLayoutItems(
+      compactLayoutVertically(current),
+      buildMinSizeMapForCols(editedDisplayComponents as any[], currentCols),
+      currentCols,
+    );
 
     scaledAll.lg = activeBreakpoint === 'lg' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.lg));
     scaledAll.md = activeBreakpoint === 'md' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.md));
@@ -1234,24 +1261,29 @@ const DashboardPreview = ({
     scaledAll.xs = activeBreakpoint === 'xs' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.xs));
     scaledAll.xxs = activeBreakpoint === 'xxs' ? compactedCurrent : compactLayoutVertically(scaleLayoutForCols(compactedCurrent, currentCols, cols.xxs));
 
-    layoutsRef.current = scaledAll;
+    const { layouts: sanitizedScaledAll } = sanitizeLayouts(
+      scaledAll,
+      editedDisplayComponents as any[],
+    );
+
+    layoutsRef.current = sanitizedScaledAll;
     userLayoutCommitRef.current = {
       storageKey,
       layoutComponentKey,
-      layouts: scaledAll,
+      layouts: sanitizedScaledAll,
       expiresAt: Date.now() + 5000,
     };
-    setLayouts(scaledAll);
+    setLayouts(sanitizedScaledAll);
     if (LAYOUT_SOURCE === "localstorage" && !disablePersistence) {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(scaledAll));
+        localStorage.setItem(storageKey, JSON.stringify(sanitizedScaledAll));
       } catch (_e) { /* ignore */ }
     }
     // R6: debounced S3 persistence runs in the parent. We hand it the
     // edits-applied components merged with the new layout positions so the
     // dashboard JSON on S3 always reflects what the user just did.
     if (LAYOUT_SOURCE === "s3" && !disablePersistence && onLayoutPersist) {
-      const lgLayout = scaledAll.lg || current;
+      const lgLayout = sanitizedScaledAll.lg || current;
       const mergedForS3 = mergeLayoutIntoComponents(editedDisplayComponents as any[], lgLayout);
       onLayoutPersist(mergedForS3);
     }

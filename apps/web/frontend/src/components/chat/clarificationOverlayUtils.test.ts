@@ -132,12 +132,12 @@ describe("clarification overlay keyboard helpers", () => {
 describe("pending clarification detection", () => {
   it("returns the latest unresolved assistant clarification", () => {
     const pendingAssistant = createMessage("assistant_1", "assistant", {
-      clarificationRequest: {
+      clarificationRequests: [{
         clarification_id: "clarify_1",
         reason_code: "missing_data_context",
         question: "Choose the data context",
         options,
-      },
+      }],
     });
 
     expect(getLatestPendingClarificationMessage([createMessage("user_1", "user"), pendingAssistant])).toBe(
@@ -147,12 +147,12 @@ describe("pending clarification detection", () => {
 
   it("does not return an older clarification after a later user message", () => {
     const pendingAssistant = createMessage("assistant_1", "assistant", {
-      clarificationRequest: {
+      clarificationRequests: [{
         clarification_id: "clarify_1",
         reason_code: "missing_data_context",
         question: "Choose the data context",
         options,
-      },
+      }],
     });
 
     expect(
@@ -166,12 +166,12 @@ describe("pending clarification detection", () => {
 
   it("respects locally dismissed clarification ids", () => {
     const pendingAssistant = createMessage("assistant_1", "assistant", {
-      clarificationRequest: {
+      clarificationRequests: [{
         clarification_id: "clarify_1",
         reason_code: "missing_data_context",
         question: "Choose the data context",
         options,
-      },
+      }],
     });
 
     expect(getLatestPendingClarificationMessage([pendingAssistant], new Set(["clarify_1"]))).toBeNull();
@@ -179,12 +179,12 @@ describe("pending clarification detection", () => {
 
   it("does not return a clarification resolved with no answer", () => {
     const resolvedAssistant = createMessage("assistant_1", "assistant", {
-      clarificationRequest: {
+      clarificationRequests: [{
         clarification_id: "clarify_1",
         reason_code: "missing_data_context",
         question: "Choose the data context",
         options,
-      },
+      }],
       clarificationResolution: {
         clarification_id: "clarify_1",
         status: "no_answer",

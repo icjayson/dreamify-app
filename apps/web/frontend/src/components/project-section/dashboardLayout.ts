@@ -22,6 +22,8 @@ export type MinSize = { minW: number; minH: number };
 export type ComponentLayoutFrame = Pick<Layout, "x" | "y" | "w" | "h"> & Partial<Pick<Layout, "minW" | "minH">>;
 
 export const STORAGE_KEY_VERSION = "v6";
+export const GRID_COLS = { lg: 24, md: 12, sm: 8, xs: 4, xxs: 2 } as const;
+export const DEFAULT_GRID_COLS = GRID_COLS.lg;
 
 /**
  * Per-type minimum width/height in grid units. The 24-col grid uses 30px row
@@ -77,11 +79,11 @@ export function sanitizeBreakpoint(
   items: Layout[] | undefined | null,
   activeComponentIds: ReadonlySet<string>,
   minSizeById: ReadonlyMap<string, MinSize>,
+  cols = DEFAULT_GRID_COLS,
 ): Layout[] {
   if (!Array.isArray(items)) return [];
-  return items
-    .filter((item) => activeComponentIds.has(item.i))
-    .map((item) => clampLayoutItem(item, minSizeById.get(item.i) || { minW: 4, minH: 8 }));
+  const activeItems = items.filter((item) => activeComponentIds.has(item.i));
+  return sanitizeLayoutItems(activeItems, minSizeById, cols);
 }
 
 /**
@@ -93,17 +95,17 @@ export function sanitizeBreakpoint(
 export function clampLayoutItem<T extends Pick<Layout, "w" | "h"> & Partial<Pick<Layout, "minW" | "minH">>>(
   item: T,
   typeMin: MinSize,
+  cols = DEFAULT_GRID_COLS,
 ): T & Pick<Layout, "minW" | "minH"> {
-  const minW = Math.max(
-    Number.isFinite(item.minW as number) ? (item.minW as number) : typeMin.minW,
-    typeMin.minW,
+  const safeCols = normalizePositiveInt(cols, DEFAULT_GRID_COLS);
+  const minW = clamp(
+    Math.max(normalizePositiveInt(item.minW, typeMin.minW), normalizePositiveInt(typeMin.minW, 1)),
+    1,
+    safeCols,
   );
-  const minH = Math.max(
-    Number.isFinite(item.minH as number) ? (item.minH as number) : typeMin.minH,
-    typeMin.minH,
-  );
-  const w = Math.max(Number.isFinite(item.w) ? item.w : minW, minW);
-  const h = Math.max(Number.isFinite(item.h) ? item.h : minH, minH);
+  const minH = Math.max(normalizePositiveInt(item.minH, typeMin.minH), normalizePositiveInt(typeMin.minH, 1));
+  const w = clamp(Math.max(normalizePositiveInt(item.w, minW), minW), 1, safeCols);
+  const h = Math.max(normalizePositiveInt(item.h, minH), minH);
   return { ...item, w, h, minW, minH };
 }
 
@@ -111,6 +113,28 @@ export function clampLayoutItem<T extends Pick<Layout, "w" | "h"> & Partial<Pick
 export function buildMinSizeMap(components: ComponentLike[]): Map<string, MinSize> {
   const m = new Map<string, MinSize>();
   components.forEach((c) => m.set(String(c.id), getMinSizeForType(c.type)));
+  return m;
+}
+
+export function scaleMinSizeForCols(
+  minSize: MinSize,
+  cols: number,
+  fromCols = DEFAULT_GRID_COLS,
+): MinSize {
+  const safeCols = normalizePositiveInt(cols, DEFAULT_GRID_COLS);
+  const safeFromCols = normalizePositiveInt(fromCols, DEFAULT_GRID_COLS);
+  return {
+    minW: clamp(Math.max(1, Math.round((minSize.minW * safeCols) / safeFromCols)), 1, safeCols),
+    minH: normalizePositiveInt(minSize.minH, 1),
+  };
+}
+
+export function buildMinSizeMapForCols(
+  components: ComponentLike[],
+  cols = DEFAULT_GRID_COLS,
+): Map<string, MinSize> {
+  const m = new Map<string, MinSize>();
+  components.forEach((c) => m.set(String(c.id), scaleMinSizeForCols(getMinSizeForType(c.type), cols)));
   return m;
 }
 
@@ -129,6 +153,18 @@ export function shouldFillSparse(components: ComponentLike[], type: string): boo
 
 function finiteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function normalizeInt(value: unknown, fallback: number): number {
+  return finiteNumber(value) ? Math.round(value) : fallback;
+}
+
+function normalizePositiveInt(value: unknown, fallback: number): number {
+  return Math.max(1, normalizeInt(value, fallback));
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 /**
@@ -163,6 +199,98 @@ function sortByRowCol(layout: Layout[]): Layout[] {
     if (a.y !== b.y) return a.y - b.y;
     if (a.x !== b.x) return a.x - b.x;
     return a.i.localeCompare(b.i);
+  });
+}
+
+/**
+ * Clamp an item to a finite, in-bounds grid rectangle. This is the horizontal
+ * half of the "stretched chart" fix: if a generated item says
+ * `{x: 16, w: 8, minW: 12}` on a 24-col grid, width must expand to 12 and x
+ * must move back to 12 so the item does not overflow to column 28.
+ */
+export function sanitizeLayoutItem(
+  item: Partial<Layout> & Pick<Layout, "i">,
+  typeMin: MinSize,
+  cols = DEFAULT_GRID_COLS,
+): Layout {
+  const safeCols = normalizePositiveInt(cols, DEFAULT_GRID_COLS);
+  const clamped = clampLayoutItem(
+    {
+      ...item,
+      w: normalizePositiveInt(item.w, typeMin.minW),
+      h: normalizePositiveInt(item.h, typeMin.minH),
+      minW: item.minW,
+      minH: item.minH,
+    },
+    typeMin,
+    safeCols,
+  );
+  const x = clamp(normalizeInt(item.x, 0), 0, safeCols - clamped.w);
+  const y = Math.max(0, normalizeInt(item.y, 0));
+  return {
+    ...item,
+    i: String(item.i),
+    x,
+    y,
+    w: clamped.w,
+    h: clamped.h,
+    minW: clamped.minW,
+    minH: clamped.minH,
+  } as Layout;
+}
+
+function moveCollidingItemsDown(layout: Layout[]): Layout[] {
+  const placed: Layout[] = [];
+  const byId = new Map<string, Layout>();
+
+  sortByRowCol(layout).forEach((item) => {
+    let candidate = { ...item };
+    while (placed.some((other) => collides(candidate, other))) {
+      const nextY = Math.max(
+        candidate.y + 1,
+        ...placed
+          .filter((other) => collides(candidate, other))
+          .map((other) => other.y + other.h),
+      );
+      candidate = { ...candidate, y: nextY };
+    }
+    placed.push(candidate);
+    byId.set(candidate.i, candidate);
+  });
+
+  return layout.map((item) => byId.get(item.i) || item);
+}
+
+/**
+ * Canonical sanitizer for every generated, saved, scaled, or user-edited
+ * dashboard layout before RGL receives it or S3 persists it.
+ */
+export function sanitizeLayoutItems(
+  items: Layout[] | undefined | null,
+  minSizeById: ReadonlyMap<string, MinSize>,
+  cols = DEFAULT_GRID_COLS,
+): Layout[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const sanitized = items.map((item) =>
+    sanitizeLayoutItem(
+      item,
+      minSizeById.get(item.i) || { minW: 4, minH: 8 },
+      cols,
+    ),
+  );
+  return compactLayoutVertically(moveCollidingItemsDown(sanitized)).map((item) =>
+    sanitizeLayoutItem(
+      item,
+      minSizeById.get(item.i) || { minW: item.minW || 4, minH: item.minH || 8 },
+      cols,
+    ),
+  );
+}
+
+export function layoutHasOverflowOrCollision(layout: Layout[], cols = DEFAULT_GRID_COLS): boolean {
+  return layout.some((item, index) => {
+    if (item.x < 0 || item.y < 0 || item.w < 1 || item.h < 1 || item.x + item.w > cols) return true;
+    return layout.slice(index + 1).some((other) => collides(item, other));
   });
 }
 
@@ -217,8 +345,20 @@ export function mergeLayoutIntoComponents<C extends { id: string | number; posit
   layout: Layout[] | undefined | null,
 ): C[] {
   if (!Array.isArray(layout) || layout.length === 0) return components;
+  const minSizeById = new Map(
+    layout.map((l) => [
+      l.i,
+      {
+        minW: normalizePositiveInt(l.minW, 1),
+        minH: normalizePositiveInt(l.minH, 1),
+      },
+    ]),
+  );
+  const sanitizedLayout = layout.map((l) =>
+    sanitizeLayoutItem(l, minSizeById.get(l.i) || { minW: 1, minH: 1 }, DEFAULT_GRID_COLS),
+  );
   const byId = new Map<string, Layout>();
-  layout.forEach((l) => byId.set(l.i, l));
+  sanitizedLayout.forEach((l) => byId.set(l.i, l));
   return components.map((c) => {
     const l = byId.get(String(c.id));
     if (!l) return c;
@@ -256,13 +396,12 @@ export function sanitizeLayouts(
   activeComponents: ComponentLike[],
 ): { layouts: Layouts; fullyCovered: boolean } {
   const activeComponentIds = new Set(activeComponents.map((c) => String(c.id)));
-  const minSizeById = buildMinSizeMap(activeComponents);
   const layouts: Layouts = {
-    lg: sanitizeBreakpoint(parsed.lg, activeComponentIds, minSizeById),
-    md: sanitizeBreakpoint(parsed.md, activeComponentIds, minSizeById),
-    sm: sanitizeBreakpoint(parsed.sm, activeComponentIds, minSizeById),
-    xs: sanitizeBreakpoint(parsed.xs, activeComponentIds, minSizeById),
-    xxs: sanitizeBreakpoint(parsed.xxs, activeComponentIds, minSizeById),
+    lg: sanitizeBreakpoint(parsed.lg, activeComponentIds, buildMinSizeMapForCols(activeComponents, GRID_COLS.lg), GRID_COLS.lg),
+    md: sanitizeBreakpoint(parsed.md, activeComponentIds, buildMinSizeMapForCols(activeComponents, GRID_COLS.md), GRID_COLS.md),
+    sm: sanitizeBreakpoint(parsed.sm, activeComponentIds, buildMinSizeMapForCols(activeComponents, GRID_COLS.sm), GRID_COLS.sm),
+    xs: sanitizeBreakpoint(parsed.xs, activeComponentIds, buildMinSizeMapForCols(activeComponents, GRID_COLS.xs), GRID_COLS.xs),
+    xxs: sanitizeBreakpoint(parsed.xxs, activeComponentIds, buildMinSizeMapForCols(activeComponents, GRID_COLS.xxs), GRID_COLS.xxs),
   };
   const savedLgIds = new Set(layouts.lg.map((item) => item.i));
   const fullyCovered =

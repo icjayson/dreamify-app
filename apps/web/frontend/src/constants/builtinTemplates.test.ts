@@ -111,15 +111,27 @@ describe('theme and focus registry', () => {
       const match = css.match(new RegExp(`\\.chart-theme-${themeId}\\s*\\{([\\s\\S]*?)\\n\\}`));
       expect(match).toBeTruthy();
       return Object.fromEntries(
-        [...(match?.[1] ?? '').matchAll(/--([\\w-]+):\\s*(#[0-9a-fA-F]{6})/g)].map((tokenMatch) => [
+        [...(match?.[1] ?? '').matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6})/g)].map((tokenMatch) => [
           tokenMatch[1],
           tokenMatch[2],
         ])
       );
     };
 
+    const requiredColorTokens = [
+      'title-color',
+      'description-color',
+      'element-color',
+      'highlight-color',
+      'bg-card-color',
+      'bg-dashboard-color',
+    ];
+
     for (const themeId of legacyCssThemeAliases) {
       const colors = extractColors(themeId);
+      for (const token of requiredColorTokens) {
+        expect(colors[token], `${themeId} defines ${token}`).toBeDefined();
+      }
       expect(contrastRatio(colors['title-color'], colors['bg-card-color'])).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(colors['description-color'], colors['bg-card-color'])).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(colors['element-color'], colors['bg-card-color'])).toBeGreaterThanOrEqual(3);

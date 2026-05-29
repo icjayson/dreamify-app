@@ -133,13 +133,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
   // Typewriter rotating words for subheading
   const rotatingWords = [
-    { text: 'marketing', gradient: 'linear-gradient(90deg, #FF4D4D, #FF9A3C)', cursorColor: '#FF4D4D' },
-    { text: 'sales', gradient: 'linear-gradient(90deg, #00C9FF, #92FE9D)', cursorColor: '#00C9FF' },
-    { text: 'finance', gradient: 'linear-gradient(90deg, #FFE259, #FFA751)', cursorColor: '#FFE259' },
-    { text: 'product', gradient: 'linear-gradient(90deg, #DA22FF, #9733EE)', cursorColor: '#DA22FF' },
-    { text: 'e-commerce', gradient: 'linear-gradient(90deg, #11998E, #38EF7D)', cursorColor: '#11998E' },
-    { text: 'logistics', gradient: 'linear-gradient(90deg, #FC5C7D, #6A82FB)', cursorColor: '#FC5C7D' },
-    { text: 'other', gradient: 'linear-gradient(90deg, #FDC830, #F37335)', cursorColor: '#FDC830' },
+    { text: 'businesses', gradient: 'linear-gradient(90deg, #FF4D4D, #FF9A3C)', cursorColor: '#FF4D4D' },
+    { text: 'brands', gradient: 'linear-gradient(90deg, #2563EB, #7C3AED)', cursorColor: '#2563EB' },
+    { text: 'campaigns', gradient: 'linear-gradient(90deg, #DA22FF, #9733EE)', cursorColor: '#DA22FF' },
+    { text: 'products', gradient: 'linear-gradient(90deg, #11998E, #38EF7D)', cursorColor: '#11998E' },
   ];
   const [rotatingIndex, setRotatingIndex] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
@@ -735,17 +732,17 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
           {/* New 2-row heading layout */}
           <div className="text-center mb-8 animate-slide-up">
-            {/* Row 1: The AI Data Analyst with gradient styling */}
+            {/* Row 1: The AI Data Visualization with gradient styling */}
             <h1 className="text-5xl md:text-7xl font-bold mb-6 font-instrument-serif">
               <span className="px-2 py-1 text-transparent bg-clip-text bg-gradient-to-r dark:from-accent dark:via-white dark:to-accent from-primary via-accent to-primary italic">
-                AI-native Data Analyst
+                AI-native Data Visualization
               </span>
             </h1>
 
             {/* Row 2: Logo + Build Fancy Dashboard in minutes */}
             <div className="flex items-center justify-center gap-2 flex-wrap">
               <h2 className="text-xl lg:text-3xl text-foreground dark:text-white font-inter">
-                Centralize and visualize your{' '}
+                Create unified dashboards for your{' '}
                 <span
                   className="inline-flex items-center rounded-lg px-3 py-1 button-outline"
                 >
@@ -767,15 +764,8 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
                     }}
                   />
                 </span>
-                {' '}data in 2 mins with
+                {' '}in 1 min
               </h2>
-              <div className="button-gradient rounded-xl px-4 py-2 flex items-center gap-3">
-                <img
-                  src="/logo-full-horizon-white.png"
-                  alt="Dreamify Logo"
-                  className="w-20 sm:w-24 md:w-28 lg:w-36 h-auto rounded-lg object-contain"
-                />
-              </div>
             </div>
           </div>
 

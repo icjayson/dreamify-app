@@ -44,10 +44,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import { useTheme } from "@/hooks/useTheme";
 import { formatToDisplay } from "@/utils/timestamp";
-import { normalizeConnectorSource, type DataContextTokenSource } from "@/utils/dataContextTokens";
+import {
+  getSpreadsheetPreviewTarget,
+  normalizeConnectorSource,
+  type DataContextTokenSource,
+  type SpreadsheetPreviewTarget,
+} from "@/utils/dataContextTokens";
 import { useUser } from "@clerk/clerk-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { ClarificationOption, Message, ThinkingEvent } from "@/types/message";
+import type { ClarificationAnswer, Message, ThinkingEvent } from "@/types/message";
 import { MetaPixel } from "@/hooks/useMetaPixel";
 
 
@@ -1072,6 +1077,80 @@ function ChartMentionInlineToken({
   );
 }
 
+function SpreadsheetMessagePreview({
+  target,
+  isExpanded,
+  onToggle,
+  onOpen,
+}: {
+  target: SpreadsheetPreviewTarget;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+}) {
+  return (
+    <div className="mt-2 overflow-hidden rounded-lg border border-border/80 bg-background/80 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="flex items-center justify-between gap-2 border-b border-border/70 px-2.5 py-2 dark:border-white/10">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border/70 bg-muted/60 text-muted-foreground dark:border-white/10 dark:bg-black/20 dark:text-white/70">
+            <Table2 className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0 text-xs font-semibold text-foreground dark:text-white">
+                {target.ext.toUpperCase()}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground/45">-</span>
+              <span className="truncate text-xs font-medium text-muted-foreground">
+                {target.filename.replace(/\.[^/.]+$/, "")}
+              </span>
+            </div>
+            <div className="text-[10px] leading-4 text-muted-foreground/70">
+              Table preview
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onToggle}
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-white/10 dark:hover:text-white"
+                aria-label={isExpanded ? "Collapse table preview" : "Expand table preview"}
+              >
+                {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {isExpanded ? "Collapse table" : "Expand table"}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onOpen}
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-white/10 dark:hover:text-white"
+                aria-label="Open full preview"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Open full preview</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+      <InlineCsvPreview
+        assetId={target.assetId}
+        variant="messagePeek"
+        maxHeightClass={isExpanded ? "max-h-[340px]" : "max-h-[168px]"}
+        showUnavailableState
+      />
+    </div>
+  );
+}
+
 const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, onProjectNameAccepted, dashboardComponents, isSidePanelOpen = false }: ChatInterfaceProps) => {
   const { resolvedTheme } = useTheme();
   const logoFavicon = "/logo-favicon.png";
@@ -1086,6 +1165,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
+  const [expandedSpreadsheetPreviewIds, setExpandedSpreadsheetPreviewIds] = useState<Set<string>>(new Set());
   const [dismissedClarificationIds, setDismissedClarificationIds] = useState<Set<string>>(new Set());
   const [isDismissingClarification, setIsDismissingClarification] = useState(false);
 
@@ -1536,14 +1616,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
   const handleClarificationSubmit = async (
     message: Message,
-    option: ClarificationOption,
-    freeText?: string,
+    answers: ClarificationAnswer[],
   ) => {
-    if (!projectId || !message.clarificationRequest) return;
+    if (!projectId || answers.length === 0) return;
     await submitClarificationResponse(
-      message.clarificationRequest,
-      option,
-      freeText,
+      answers,
       projectId,
       onProcessedDataChange,
       selectedModel,
@@ -1554,8 +1631,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   };
 
   const handleClarificationDismiss = async (message: Message) => {
-    const request = message.clarificationRequest;
-    if (!projectId || !currentConversationId || !request) {
+    const requests = message.clarificationRequests ?? [];
+    if (!projectId || !currentConversationId || requests.length === 0) {
       toast({
         title: "Unable to dismiss",
         description: "Conversation context is missing. Please refresh and try again.",
@@ -1566,24 +1643,29 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
     setIsDismissingClarification(true);
     try {
-      await conversationService.dismissClarification(
-        currentConversationId,
-        projectId,
-        request.clarification_id,
-      );
+      // Each batched question is dismissed individually; the first call also
+      // stops the pending workflow, the rest just persist no-answer responses.
+      for (const request of requests) {
+        await conversationService.dismissClarification(
+          currentConversationId,
+          projectId,
+          request.clarification_id,
+        );
+      }
       setDismissedClarificationIds((current) => {
         const next = new Set(current);
-        next.add(request.clarification_id);
+        requests.forEach((request) => next.add(request.clarification_id));
         return next;
       });
+      const firstRequest = requests[0];
       setMessages(messages.map((currentMessage) => (
         currentMessage.id === message.id
           ? {
             ...currentMessage,
             clarificationResolution: {
-              clarification_id: request.clarification_id,
+              clarification_id: firstRequest.clarification_id,
               status: "no_answer",
-              question: request.question,
+              question: firstRequest.question,
               resolved_at: new Date().toISOString(),
             },
           }
@@ -2131,7 +2213,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     () => getLatestPendingClarificationMessage(messages, dismissedClarificationIds),
     [messages, dismissedClarificationIds],
   );
-  const pendingClarificationId = pendingClarificationMessage?.clarificationRequest?.clarification_id ?? null;
+  const pendingClarificationId = pendingClarificationMessage?.clarificationRequests?.[0]?.clarification_id ?? null;
   const pendingClarificationUserIndex = useMemo(() => {
     if (!pendingClarificationMessage) return -1;
     const clarificationIndex = messages.findIndex((message) => message.id === pendingClarificationMessage.id);
@@ -2253,6 +2335,28 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
             messageTokenDescriptors,
             MESSAGE_VISIBLE_TOKEN_COUNT,
           );
+          const spreadsheetPreviewTarget = isUser
+            ? getSpreadsheetPreviewTarget(message.attachment, projectAssets)
+            : null;
+          const isSpreadsheetPreviewExpanded = spreadsheetPreviewTarget
+            ? expandedSpreadsheetPreviewIds.has(message.id)
+            : false;
+          const toggleSpreadsheetPreview = () => {
+            setExpandedSpreadsheetPreviewIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(message.id)) next.delete(message.id);
+              else next.add(message.id);
+              return next;
+            });
+          };
+          const openSpreadsheetPreview = () => {
+            if (!spreadsheetPreviewTarget) return;
+            if (onShowCsvPreview) {
+              onShowCsvPreview(spreadsheetPreviewTarget.assetId, spreadsheetPreviewTarget.filename);
+            } else {
+              window.open(`/preview/${spreadsheetPreviewTarget.assetId}`, "_blank");
+            }
+          };
           return (
             <div key={message.id} className="space-y-1">
               <div
@@ -2636,6 +2740,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         </div>
                       );
                     })()}
+                    {spreadsheetPreviewTarget && (
+                      <SpreadsheetMessagePreview
+                        target={spreadsheetPreviewTarget}
+                        isExpanded={isSpreadsheetPreviewExpanded}
+                        onToggle={toggleSpreadsheetPreview}
+                        onOpen={openSpreadsheetPreview}
+                      />
+                    )}
                     {message.isError && (
                       message.isInsufficientCredits ? (
                         <CreditExhaustedCard
@@ -2788,12 +2900,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               </div>
             )}
 
-            {pendingClarificationMessage?.clarificationRequest ? (
+            {pendingClarificationMessage?.clarificationRequests?.length ? (
               <ClarificationInputOverlay
-                request={pendingClarificationMessage.clarificationRequest}
+                requests={pendingClarificationMessage.clarificationRequests}
                 disabled={isProcessing || isDismissingClarification}
                 onDismiss={() => handleClarificationDismiss(pendingClarificationMessage)}
-                onSubmit={(option, freeText) => handleClarificationSubmit(pendingClarificationMessage, option, freeText)}
+                onSubmit={(answers) => handleClarificationSubmit(pendingClarificationMessage, answers)}
               />
             ) : (
               <>

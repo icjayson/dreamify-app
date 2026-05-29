@@ -45,6 +45,7 @@ from utils.s3.client import (
     get_s3_client,
 )
 from utils.s3.paths import build_asset_key
+from utils.email_service import send_dashboard_share_email
 from clerk_backend_api import Clerk
 
 router = APIRouter(tags=["user"])
@@ -81,7 +82,8 @@ async def lookup_user_by_email(
         user_list = list(users)
 
         if not user_list:
-            raise HTTPException(status_code=404, detail="User not found")
+            # Not a Clerk user yet — return email-only so they can still be invited
+            return UserLookupResponse(success=True, user_id=None, email=email)
 
         user = user_list[0]
         name_parts = filter(None, [user.first_name, user.last_name])
@@ -109,7 +111,7 @@ async def lookup_user_by_email(
 class AllowedUser(BaseModel):
     """A user granted access to a private project."""
 
-    user_id: str
+    user_id: Optional[str] = None  # None for email-only (pending) invites
     email: Optional[str] = None
     name: Optional[str] = None
     image_url: Optional[str] = None
@@ -345,7 +347,7 @@ async def update_project_endpoint(
     request: ProjectUpdateRequest,
     user_id: str = Depends(require_user),
 ):
-    _get_project_or_404(user_id, project_id)
+    existing = _get_project_or_404(user_id, project_id)
     updated_project = projects_repo.update_project(
         user_id=user_id,
         project_id=project_id,
@@ -366,6 +368,56 @@ async def update_project_endpoint(
     )
     if not updated_project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # Send invite emails to newly added allowed users
+    logger.info("[share] update_project allowed=%s resend_configured=%s", request.allowed is not None, bool(config.resend))
+    if request.allowed is not None and config.resend:
+        old_entries = existing.get("allowed") or []
+        old_keys = {
+            u.get("user_id") or u.get("email")
+            for u in old_entries
+            if isinstance(u, dict)
+        }
+        logger.info("[share] old_keys=%s incoming_count=%d", old_keys, len(request.allowed))
+
+        def _is_new(u: AllowedUser) -> bool:
+            key = u.user_id or u.email
+            return key is not None and key not in old_keys
+
+        newly_added = [u for u in request.allowed if _is_new(u)]
+        logger.info("[share] newly_added=%s", [(u.user_id, u.email) for u in newly_added])
+
+        if newly_added:
+            try:
+                clerk_user = await asyncio.to_thread(
+                    _clerk_client.users.get, user_id=user_id
+                )
+                name_parts = filter(None, [clerk_user.first_name, clerk_user.last_name])
+                sharer_name = " ".join(name_parts) or clerk_user.username or "Someone"
+            except Exception:
+                sharer_name = "Someone"
+
+            app_url = (
+                config.chat_platform.dreamify_app_url
+                if config.chat_platform
+                else "https://app.dreamify.dev"
+            )
+            for invited in newly_added:
+                if invited.email:
+                    logger.info("[share] Sending invite email to %s", invited.email)
+                    await asyncio.to_thread(
+                        send_dashboard_share_email,
+                        to_email=invited.email,
+                        to_name=invited.name,
+                        sharer_name=sharer_name,
+                        project_id=project_id,
+                        app_url=app_url,
+                        from_email=config.resend.from_email,
+                        api_key=config.resend.api_key,
+                    )
+                else:
+                    logger.warning("[share] Skipped invite — no email for user_id=%s", invited.user_id)
+
     return _map_project(updated_project)
 
 

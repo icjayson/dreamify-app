@@ -306,6 +306,70 @@ def test_chat_request_rejects_invalid_clarification_option():
     assert exc.value.status_code == 400
 
 
+def test_chat_request_rejects_invalid_option_in_batched_clarifications():
+    """One assistant node may carry multiple clarification_request contents;
+    each clarification_response in the payload must validate against its own id."""
+    from fastapi import HTTPException
+    from app.api.route_modules import conversation
+
+    project = {"project_id": "project_1", "user_id": "user_1"}
+    existing = {
+        "nodes": [
+            {
+                "role": "assistant",
+                "contents": [
+                    {"type": "text", "data": {"text": "I need a few quick choices"}},
+                    {
+                        "type": "clarification_request",
+                        "data": {
+                            "clarification_id": "clarify_join",
+                            "reason_code": "join_strategy",
+                            "options": [{"id": "auto_join", "label": "Infer"}],
+                        },
+                    },
+                    {
+                        "type": "clarification_request",
+                        "data": {
+                            "clarification_id": "clarify_output",
+                            "reason_code": "output_mode",
+                            "options": [{"id": "text_answer", "label": "Text"}],
+                        },
+                    },
+                ],
+            }
+        ]
+    }
+    request = conversation.ConversationChatRequest(
+        conversation_id="conversation_1",
+        project_id="project_1",
+        user_node_contents=[
+            {"type": "text", "data": {"text": "Infer\nWrong output"}},
+            {
+                "type": "clarification_response",
+                "data": {
+                    "clarification_id": "clarify_join",
+                    "selected_option_id": "auto_join",
+                },
+            },
+            {
+                "type": "clarification_response",
+                "data": {
+                    "clarification_id": "clarify_output",
+                    "selected_option_id": "missing",
+                },
+            },
+        ],
+    )
+
+    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
+        conversation, "_load_existing_conversation", return_value=existing
+    ):
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(conversation.conversation_chat(request, user_id="user_1"))
+
+    assert exc.value.status_code == 400
+
+
 def test_chat_request_accepts_non_asset_clarification_metadata():
     from app.api.route_modules import conversation
 

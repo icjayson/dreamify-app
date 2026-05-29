@@ -74,6 +74,15 @@ LAYOUT RULES (MANDATORY)
 ========================
 - You MUST apply minimum height (minH) floors when creating layout objects.
 - For every component, set h = max(h, minH) to ensure it is at least the floor.
+- The dashboard grid is exactly 24 columns wide.
+- x, y, w, h, minW, and minH MUST be finite integers.
+- x >= 0, y >= 0, 1 <= w <= 24, 1 <= minW <= 24.
+- w MUST be >= minW and x + w MUST be <= 24.
+- Components MUST NOT overlap. If a component cannot fit after applying minW,
+  place it on the next row at x=0.
+- For charts/tables with minW=12, place at most two on the same row.
+- Metrics should usually use four cards at 6 columns each, or three cards at
+  8 columns each.
 - Use knowledge/charts/chart_types.py layout defaults when available:
   - Charts default minH = 10
   - The following chart types require minH = 12: line, area, pie, donut, radial_bar, treemap, sankey

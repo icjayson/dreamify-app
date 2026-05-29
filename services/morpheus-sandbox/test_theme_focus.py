@@ -142,6 +142,69 @@ def test_extract_assets_respects_none_selection():
     assert _extract_assets_from_nodes(conversation) == []
 
 
+def test_dashboard_validation_rejects_width_below_min_width():
+    dashboard = {
+        "dashboard": {"title": "Bad Layout"},
+        "charts": [
+            {
+                "id": "chart_001",
+                "chart_type": "area",
+                "layout": {"x": 16, "y": 4, "w": 8, "h": 12, "minW": 12, "minH": 12},
+                "datasets": [{"label": "Series", "data": [{"label": "A", "value": 1}]}],
+            }
+        ],
+    }
+
+    result = nodes._validate_dashboard_json(dashboard)
+
+    assert result["valid"] is False
+    assert "w=8 < minW=12" in result["error"]
+
+
+def test_dashboard_validation_rejects_right_edge_overflow():
+    dashboard = {
+        "dashboard": {"title": "Bad Layout"},
+        "charts": [
+            {
+                "id": "chart_001",
+                "chart_type": "area",
+                "layout": {"x": 16, "y": 4, "w": 12, "h": 12, "minW": 12, "minH": 12},
+                "datasets": [{"label": "Series", "data": [{"label": "A", "value": 1}]}],
+            }
+        ],
+    }
+
+    result = nodes._validate_dashboard_json(dashboard)
+
+    assert result["valid"] is False
+    assert "x+w=28 exceeds 24" in result["error"]
+
+
+def test_dashboard_validation_rejects_overlapping_components():
+    dashboard = {
+        "dashboard": {"title": "Bad Layout"},
+        "charts": [
+            {
+                "id": "chart_001",
+                "chart_type": "line",
+                "layout": {"x": 0, "y": 4, "w": 16, "h": 12, "minW": 12, "minH": 12},
+                "datasets": [{"label": "Series", "data": [{"label": "A", "value": 1}]}],
+            },
+            {
+                "id": "chart_002",
+                "chart_type": "area",
+                "layout": {"x": 12, "y": 4, "w": 12, "h": 12, "minW": 12, "minH": 12},
+                "datasets": [{"label": "Series", "data": [{"label": "A", "value": 1}]}],
+            },
+        ],
+    }
+
+    result = nodes._validate_dashboard_json(dashboard)
+
+    assert result["valid"] is False
+    assert "overlaps" in result["error"]
+
+
 def test_extract_assets_respects_explicit_selection():
     from server import _extract_assets_from_nodes
 
@@ -170,7 +233,10 @@ def test_extract_assets_respects_explicit_selection():
             },
             {
                 "role": "user",
-                "metadata": {"asset_selection": "explicit", "selected_asset_ids": ["asset_2"]},
+                "metadata": {
+                    "asset_selection": "explicit",
+                    "selected_asset_ids": ["asset_2"],
+                },
                 "contents": [{"type": "text", "data": {"text": "Use asset 2"}}],
             },
         ]
@@ -178,6 +244,191 @@ def test_extract_assets_respects_explicit_selection():
 
     assets = _extract_assets_from_nodes(conversation)
     assert [asset["asset_id"] for asset in assets] == ["asset_2"]
+
+
+def test_extract_assets_dedupes_rementioned_asset_by_asset_id():
+    from server import _extract_assets_from_nodes
+
+    conversation = {
+        "nodes": [
+            {
+                "role": "user",
+                "created_at": "2026-05-27T01:00:00",
+                "contents": [
+                    {
+                        "type": "asset",
+                        "data": {
+                            "asset_id": "asset_1",
+                            "file_id": "file_1",
+                            "s3_bucket": "bucket",
+                            "s3_key": "original.csv",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "created_at": "2026-05-27T02:00:00",
+                "metadata": {
+                    "asset_selection": "explicit",
+                    "selected_asset_ids": ["asset_1"],
+                },
+                "contents": [
+                    {"type": "text", "data": {"text": "làm chart show trend đi"}},
+                    {
+                        "type": "asset",
+                        "data": {
+                            "asset_id": "asset_1",
+                            "file_id": "file_1",
+                            "s3_bucket": "bucket",
+                            "s3_key": "mentioned.csv",
+                        },
+                    },
+                ],
+            },
+        ]
+    }
+
+    assets = _extract_assets_from_nodes(conversation)
+
+    assert len(assets) == 1
+    assert assets[0]["asset_id"] == "asset_1"
+    assert assets[0]["s3_key"] == "mentioned.csv"
+
+
+def test_resolve_selected_assets_hydrates_missing_explicit_assets(monkeypatch):
+    import server
+    from server import (
+        _extract_assets_from_nodes,
+        _is_data_context_needed,
+        _resolve_selected_assets,
+    )
+
+    prompt = "Visualize key trends over time in an interactive dashboard."
+
+    conversation = {
+        "nodes": [
+            {
+                "role": "user",
+                "metadata": {
+                    "asset_selection": "explicit",
+                    "selected_asset_ids": ["asset_1", "asset_2"],
+                },
+                "contents": [
+                    {
+                        "type": "text",
+                        "data": {"text": prompt},
+                    }
+                ],
+            }
+        ]
+    }
+    backend_assets = {
+        "asset_1": {
+            "asset_id": "asset_1",
+            "file_id": "file_1",
+            "s3_bucket": "bucket",
+            "s3_key": "one.csv",
+            "extension": "csv",
+            "filename": "Raw",
+        },
+        "asset_2": {
+            "asset_id": "asset_2",
+            "file_id": "file_2",
+            "s3_bucket": "bucket",
+            "s3_key": "two.csv",
+            "extension": "csv",
+            "filename": "Raw",
+        },
+    }
+    monkeypatch.setattr(
+        server, "_fetch_asset_from_backend", lambda asset_id: backend_assets[asset_id]
+    )
+
+    assets = _extract_assets_from_nodes(conversation)
+    resolved_assets, error = _resolve_selected_assets(conversation, assets, [])
+
+    assert assets == []
+    assert error is None
+    assert _is_data_context_needed(prompt)
+    assert [asset["asset_id"] for asset in resolved_assets] == ["asset_1", "asset_2"]
+    assert [asset["s3_key"] for asset in resolved_assets] == ["one.csv", "two.csv"]
+
+
+def test_resolve_selected_assets_errors_when_explicit_asset_cannot_be_loaded(
+    monkeypatch,
+):
+    import server
+    from server import _resolve_selected_assets
+
+    conversation = {
+        "nodes": [
+            {
+                "role": "user",
+                "metadata": {
+                    "asset_selection": "explicit",
+                    "selected_asset_ids": ["asset_missing"],
+                },
+                "contents": [{"type": "text", "data": {"text": "Build dashboard"}}],
+            }
+        ]
+    }
+    monkeypatch.setattr(server, "_fetch_asset_from_backend", lambda asset_id: None)
+
+    resolved_assets, error = _resolve_selected_assets(conversation, [], [])
+
+    assert resolved_assets == []
+    assert "asset_missing" in error
+
+
+def test_stateful_workflow_asset_fallback_dedupes_rementioned_asset():
+    from morpheus.workflows.analyze_csv.state_graph import StatefulAnalyzeCSVWorkflow
+
+    workflow = object.__new__(StatefulAnalyzeCSVWorkflow)
+    conversation = {
+        "nodes": [
+            {
+                "role": "user",
+                "created_at": "2026-05-27T01:00:00",
+                "contents": [
+                    {
+                        "type": "asset",
+                        "data": {
+                            "asset_id": "asset_1",
+                            "file_id": "file_1",
+                            "s3_bucket": "bucket",
+                            "s3_key": "original.csv",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "created_at": "2026-05-27T02:00:00",
+                "metadata": {
+                    "asset_selection": "explicit",
+                    "selected_asset_ids": ["asset_1"],
+                },
+                "contents": [
+                    {
+                        "type": "asset",
+                        "data": {
+                            "asset_id": "asset_1",
+                            "file_id": "file_1",
+                            "s3_bucket": "bucket",
+                            "s3_key": "mentioned.csv",
+                        },
+                    }
+                ],
+            },
+        ]
+    }
+
+    assets = workflow._extract_assets_from_conversation(conversation)
+
+    assert len(assets) == 1
+    assert assets[0]["asset_id"] == "asset_1"
+    assert assets[0]["s3_key"] == "mentioned.csv"
 
 
 def test_build_data_context_clarification_recommends_matching_asset():
@@ -201,4 +452,6 @@ def test_build_data_context_clarification_recommends_matching_asset():
 
     assert clarification["reason_code"] == "missing_data_context"
     assert clarification["options"][0]["metadata"]["asset_ids"] == ["ga4_1"]
-    assert any(option["id"] == "all_project_data" for option in clarification["options"])
+    assert any(
+        option["id"] == "all_project_data" for option in clarification["options"]
+    )

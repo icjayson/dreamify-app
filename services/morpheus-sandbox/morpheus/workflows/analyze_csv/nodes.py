@@ -11,6 +11,7 @@ import csv
 import time
 import json
 import re
+import math
 import concurrent.futures as _futures
 from datetime import datetime
 from typing import Callable, Any, Dict, Optional
@@ -23,7 +24,7 @@ from morpheus.workflows.analyze_csv.state_models import (
     WorkflowHistoryEntry,
 )
 from morpheus.workflows.analyze_csv.ask_first import (
-    build_workflow_clarification,
+    build_workflow_clarifications,
     extract_dashboard_targets,
     latest_clarification_metadata,
 )
@@ -412,6 +413,19 @@ LAYOUT RULES (MANDATORY):
 =========================
 Every component MUST have layout: {x, y, w, h, minW, minH}
 
+Dashboard grid geometry:
+- The dashboard grid is exactly 24 columns wide.
+- x, y, w, h, minW, and minH MUST be finite integers.
+- x >= 0 and y >= 0.
+- 1 <= w <= 24 and 1 <= minW <= 24.
+- w MUST be >= minW.
+- x + w MUST be <= 24. Never place a component past the right edge.
+- Components MUST NOT overlap. If a component cannot fit beside another
+  component after applying minW, place it on the next row at x=0.
+- For charts/tables with minW=12, place at most two on the same row.
+- Metrics should usually use four cards at 6 columns each, or three cards at
+  8 columns each.
+
 Apply minimum height floors:
 - Charts requiring minH=12: line, area, pie, donut, radial_bar, treemap, sankey
 - Other charts minH=10: bar, scatter, composed, radar, funnel, geographic
@@ -620,6 +634,9 @@ VALIDATION CHECKLIST (Before Output):
 ✓ ALL table columns use human-readable names
 ✓ ALL styling objects include "theme" field with SAME value
 ✓ Layout h >= minH for all components
+✓ Layout w >= minW for all components
+✓ Layout x + w <= 24 for all components
+✓ No dashboard components overlap
 ✓ time_comparison.period is one of: dod, wow, mom, qoq, yoy
 ✓ metric value and time_comparison current_value/previous_value use same aggregation level
 
@@ -748,28 +765,20 @@ def node_start(state: AgentState, **kwargs) -> AgentState:
     return state
 
 
-def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
+def _deterministic_profile(assets_dict: dict) -> str:
     """
-    EXPLORE_FILES Node: Data Profiler & Merge Strategist.
+    Profile every file with pandas only — no LLM, no merge-strategy planning.
 
-    This node profiles all available datasets and, when multiple files exist,
-    analyzes their relationships to propose a concrete merge/join strategy.
-    The merge strategy is stored in state.data_profile so the downstream
-    reasoning node can act on it immediately.
+    Produces accurate column/dtype/stats context per file so the REASONING node
+    receives real data instead of hallucinating. Used for single-file inputs and
+    for the pure-text Q&A route, where the upfront LLM merge loop adds no value
+    (REASONING still has Python_REPL for any cross-file math a text answer needs).
     """
-    logger.info("Running EXPLORE_FILES node")
+    import pandas as pd
 
-    if not state.assets_dict:
-        logger.info("No assets to explore. Proceeding to ROUTING.")
-        return state
-
-    if len(state.assets_dict) == 1:
-        # Single file: run a deterministic pandas profiler so the REASONING node
-        # receives accurate column/dtype/stats context instead of hallucinating.
-        filename, filepath = next(iter(state.assets_dict.items()))
+    sections = []
+    for filename, filepath in assets_dict.items():
         try:
-            import pandas as pd, os, math
-
             df = pd.read_csv(filepath)
             rows, cols = df.shape
             lines = [
@@ -799,11 +808,43 @@ def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
             lines.append("Sample rows (first 3):")
             lines.append(df.head(3).to_string(index=False))
 
-            state.data_profile = "\n".join(lines)
-            logger.info("Single-file profile generated for %s", filename)
+            sections.append("\n".join(lines))
         except Exception as exc:
-            logger.warning("Single-file profiler failed for %s: %s", filename, exc)
-            state.data_profile = f"File: {filename} (profiling failed: {exc})"
+            logger.warning("Profiler failed for %s: %s", filename, exc)
+            sections.append(f"File: {filename} (profiling failed: {exc})")
+
+    return "\n\n".join(sections)
+
+
+def node_explore_files(state: AgentState, model=None, **kwargs) -> AgentState:
+    """
+    EXPLORE_FILES Node: Data Profiler & Merge Strategist.
+
+    This node profiles all available datasets and, when multiple files exist
+    AND the route benefits from it, analyzes their relationships to propose a
+    concrete merge/join strategy. The merge strategy is stored in
+    state.data_profile so the downstream reasoning node can act on it.
+    """
+    logger.info("Running EXPLORE_FILES node")
+
+    if not state.assets_dict:
+        logger.info("No assets to explore. Proceeding to REASONING.")
+        return state
+
+    route = (state.working_memory.tool_outputs.get("route_decision") or {}).get(
+        "next_step"
+    )
+
+    # Deterministic-only path: single file, or a pure-text Q&A answer. Both skip
+    # the expensive multi-file LLM merge loop that only the visual/dashboard
+    # routes benefit from.
+    if len(state.assets_dict) == 1 or route == "qa":
+        state.data_profile = _deterministic_profile(state.assets_dict)
+        logger.info(
+            "Deterministic profile generated (%d file(s), route=%s)",
+            len(state.assets_dict),
+            route,
+        )
         return state
 
     try:
@@ -1010,7 +1051,7 @@ def node_ask_first(state: AgentState, **kwargs) -> AgentState:
     the next workflow step would otherwise require a risky guess.
     """
     logger.info("Running ASK_FIRST node")
-    clarification = build_workflow_clarification(
+    clarifications = build_workflow_clarifications(
         conversation={
             "nodes": state.user_state.conversation_history,
             "dashboards": state.user_state.dashboards,
@@ -1023,22 +1064,22 @@ def node_ask_first(state: AgentState, **kwargs) -> AgentState:
         data_profile=state.data_profile,
         chart_mentions=state.chart_mentions,
     )
-    if not clarification:
+    if not clarifications:
         logger.info("ASK_FIRST found no clarification need")
         return state
 
     state.output = {
         "type": "clarification_request",
-        "clarification": clarification,
+        "clarifications": clarifications,
     }
     state.working_memory.tool_outputs["ask_first"] = {
-        "reason_code": clarification.get("reason_code"),
-        "clarification_id": clarification.get("clarification_id"),
+        "reason_codes": [c.get("reason_code") for c in clarifications],
+        "clarification_ids": [c.get("clarification_id") for c in clarifications],
     }
     logger.info(
-        "ASK_FIRST produced clarification: %s (%s)",
-        clarification.get("reason_code"),
-        clarification.get("clarification_id"),
+        "ASK_FIRST produced %d clarification(s): %s",
+        len(clarifications),
+        [c.get("reason_code") for c in clarifications],
     )
     return state
 
@@ -2592,19 +2633,46 @@ def node_validation(state: AgentState, **kwargs) -> AgentState:
 
     output_type = state.output.get("type")
 
-    # Chart modification mode: skip strict validation since SYNTHESIS already merged into existing dashboard
+    # Chart modification mode: skip data authenticity checks on the merged
+    # dashboard, but still enforce structural/layout validity so impossible grid
+    # geometry cannot be saved.
     route_decision = state.working_memory.tool_outputs.get("route_decision", {})
     if (
         route_decision.get("is_chart_modification")
         and output_type == "dashboard_config"
     ):
-        logger.info(
-            "Chart modification mode — skipping strict validation (merged dashboard)"
-        )
-        state.working_memory.tool_outputs["validation"] = {
-            "valid": True,
-            "note": "chart_modification_skip",
-        }
+        validation_result = _validate_dashboard_json(state.output.get("data"))
+        if validation_result.get("valid"):
+            logger.info(
+                "Chart modification mode — structural validation passed; skipping data authenticity check"
+            )
+            validation_result["note"] = "chart_modification_layout_only"
+        state.working_memory.tool_outputs["validation"] = validation_result
+        if not validation_result.get("valid"):
+            error_msg = validation_result.get("error", "Validation failed")
+            if (
+                "layout" in str(error_msg).lower()
+                or "overlap" in str(error_msg).lower()
+            ):
+                state.working_memory.tool_outputs[
+                    "force_more_tools"
+                ] = f"""⚠️ YOUR DASHBOARD WAS REJECTED DUE TO LAYOUT GEOMETRY ⚠️
+
+The dashboard layout is invalid: {error_msg}
+
+Regenerate the dashboard JSON with a 24-column grid where every component has
+finite integer x/y/w/h/minW/minH, w >= minW, x + w <= 24, h >= minH, and no
+overlapping components. If a chart or table cannot fit beside another after
+applying minW, move it to the next row at x=0."""
+            logger.error(f"Validation failed: {error_msg}")
+            state.working_memory.errors.append(
+                {
+                    "node": "VALIDATION",
+                    "error": error_msg,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
+            state.working_memory.retry_count += 1
         return state
 
     if output_type == "dashboard_config":
@@ -2745,6 +2813,20 @@ It's better to have fewer charts with REAL data than more charts with FAKE data.
                         "retry_suggested": True,
                     }
                 )
+
+    if output_type == "dashboard_config" and not validation_result.get("valid"):
+        error_msg = validation_result.get("error", "Dashboard validation failed")
+        if "layout" in str(error_msg).lower() or "overlap" in str(error_msg).lower():
+            state.working_memory.tool_outputs[
+                "force_more_tools"
+            ] = f"""⚠️ YOUR DASHBOARD WAS REJECTED DUE TO LAYOUT GEOMETRY ⚠️
+
+The dashboard layout is invalid: {error_msg}
+
+Regenerate the dashboard JSON with a 24-column grid where every component has
+finite integer x/y/w/h/minW/minH, w >= minW, x + w <= 24, h >= minH, and no
+overlapping components. If a chart or table cannot fit beside another after
+applying minW, move it to the next row at x=0."""
 
     state.working_memory.tool_outputs["validation"] = validation_result
 
@@ -3023,6 +3105,167 @@ def _extract_qa_visual_from_content(content: str) -> Dict[str, Any]:
     return {"answer": answer.strip(), "artifacts": normalized}
 
 
+_DASHBOARD_GRID_COLS = 24
+_CHART_MIN_H_FLOORS = {
+    "line": 12,
+    "area": 12,
+    "pie": 12,
+    "donut": 12,
+    "radial_bar": 12,
+    "treemap": 12,
+    "sankey": 12,
+    "bar": 10,
+    "stacked_bar": 10,
+    "stacked_column": 10,
+    "scatter": 10,
+    "composed": 10,
+    "radar": 10,
+    "funnel": 10,
+    "geographic": 10,
+}
+
+
+def _layout_number(layout: Dict[str, Any], key: str) -> Optional[int]:
+    value = layout.get(key)
+    if isinstance(value, bool):
+        return None
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    if int(value) != value:
+        return None
+    return int(value)
+
+
+def _rects_overlap(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+    if a["x"] + a["w"] <= b["x"]:
+        return False
+    if a["x"] >= b["x"] + b["w"]:
+        return False
+    if a["y"] + a["h"] <= b["y"]:
+        return False
+    if a["y"] >= b["y"] + b["h"]:
+        return False
+    return True
+
+
+def _component_min_h_floor(kind: str, component: Dict[str, Any]) -> int:
+    if kind == "metric":
+        return 4
+    if kind == "table":
+        return 10
+    chart_type = str(component.get("chart_type") or "").lower()
+    return _CHART_MIN_H_FLOORS.get(chart_type, 10)
+
+
+def _validate_dashboard_layout_geometry(data: Dict[str, Any]) -> Dict[str, Any]:
+    occupied: list[Dict[str, Any]] = []
+    component_groups = (
+        ("metric", data.get("metrics", []) or []),
+        ("chart", data.get("charts", []) or []),
+        ("table", data.get("tables", []) or []),
+    )
+
+    for kind, components in component_groups:
+        if not isinstance(components, list):
+            return {"valid": False, "error": f"{kind}s is not a list"}
+
+        for index, component in enumerate(components):
+            if not isinstance(component, dict):
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] is not an object",
+                }
+
+            layout = component.get("layout")
+            if not isinstance(layout, dict):
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] missing layout object",
+                }
+
+            values = {
+                key: _layout_number(layout, key)
+                for key in ("x", "y", "w", "h", "minW", "minH")
+            }
+            missing_or_invalid = [key for key, value in values.items() if value is None]
+            if missing_or_invalid:
+                return {
+                    "valid": False,
+                    "error": (
+                        f"{kind}[{index}] layout has non-integer or missing values: "
+                        f"{missing_or_invalid}"
+                    ),
+                }
+
+            x = values["x"]
+            y = values["y"]
+            w = values["w"]
+            h = values["h"]
+            min_w = values["minW"]
+            min_h = values["minH"]
+            assert x is not None and y is not None and w is not None and h is not None
+            assert min_w is not None and min_h is not None
+
+            if x < 0 or y < 0:
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] layout x/y must be non-negative",
+                }
+            if min_w < 1 or min_w > _DASHBOARD_GRID_COLS:
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] layout minW={min_w} outside 1..24",
+                }
+            if w < 1 or w > _DASHBOARD_GRID_COLS:
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] layout w={w} outside 1..24",
+                }
+            if w < min_w:
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] layout w={w} < minW={min_w}",
+                }
+            if x + w > _DASHBOARD_GRID_COLS:
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] layout x+w={x + w} exceeds 24",
+                }
+            floor = _component_min_h_floor(kind, component)
+            if min_h < floor:
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] layout minH={min_h} < required floor {floor}",
+                }
+            if h < min_h:
+                return {
+                    "valid": False,
+                    "error": f"{kind}[{index}] layout h={h} < minH={min_h}",
+                }
+
+            rect = {
+                "id": str(component.get("id") or f"{kind}_{index}"),
+                "kind": kind,
+                "index": index,
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+            }
+            for other in occupied:
+                if _rects_overlap(rect, other):
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"{kind}[{index}] layout overlaps "
+                            f"{other['kind']}[{other['index']}]"
+                        ),
+                    }
+            occupied.append(rect)
+
+    return {"valid": True}
+
+
 def _validate_dashboard_json(data: Dict[str, Any]) -> Dict[str, Any]:
     """Validate dashboard JSON structure."""
     if not data:
@@ -3056,6 +3299,10 @@ def _validate_dashboard_json(data: Dict[str, Any]) -> Dict[str, Any]:
 
     if not (has_charts or has_metrics or has_tables):
         return {"valid": False, "error": "Dashboard has no visualization components"}
+
+    layout_validation = _validate_dashboard_layout_geometry(data)
+    if not layout_validation.get("valid"):
+        return layout_validation
 
     return {"valid": True}
 

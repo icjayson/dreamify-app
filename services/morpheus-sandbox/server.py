@@ -30,7 +30,9 @@ from morpheus.workflows.analyze_csv.ask_first import (
     build_clarification_message,
     build_data_context_clarification as _policy_build_data_context_clarification,
     choose_data_context_reason_code,
+    dedupe_assets_by_identity,
     is_data_context_needed as _policy_is_data_context_needed,
+    latest_data_selection,
     latest_effective_user_prompt,
     latest_user_has_clarification_response as _policy_latest_user_has_clarification_response,
 )
@@ -753,66 +755,9 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
     """
     nodes = conversation.get("nodes", [])
 
-    # Find latest user node to check for selection metadata
-    latest_user_node = None
-    for node in reversed(nodes):
-        if node.get("role") == "user":
-            latest_user_node = node
-            break
-
-    def clarification_response_metadata(
-        node: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        if not node:
-            return {}
-        for content in node.get("contents", []):
-            if content.get("type") != "clarification_response":
-                continue
-            data = content.get("data") or {}
-            metadata = data.get("metadata")
-            return metadata if isinstance(metadata, dict) else {}
-        return {}
-
-    def previous_asset_selection(
-        before_node: Optional[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
-        before_index = nodes.index(before_node) if before_node in nodes else len(nodes)
-        for node in reversed(nodes[:before_index]):
-            if node.get("role") != "user":
-                continue
-            node_metadata = node.get("metadata", {}) or {}
-            response_metadata = clarification_response_metadata(node)
-            selection_mode = response_metadata.get(
-                "asset_selection", node_metadata.get("asset_selection")
-            )
-            selected_asset_ids = (
-                response_metadata.get("asset_ids")
-                or node_metadata.get("selected_asset_ids")
-                or []
-            )
-            if selection_mode in {"explicit", "all", "none"}:
-                return {
-                    "asset_selection": selection_mode,
-                    "selected_asset_ids": selected_asset_ids,
-                }
-        return None
-
-    # Check metadata for selection mode. A non-asset clarification such as
-    # output_mode should inherit the previous data choice instead of clearing it.
-    metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
-    response_metadata = clarification_response_metadata(latest_user_node)
-    selection_mode = metadata.get("asset_selection", "none")
-    selected_ids = set(metadata.get("selected_asset_ids", []))
-    response_has_asset_decision = "asset_selection" in response_metadata
-    if (
-        selection_mode == "none"
-        and response_metadata
-        and not response_has_asset_decision
-    ):
-        prior_selection = previous_asset_selection(latest_user_node)
-        if prior_selection:
-            selection_mode = prior_selection.get("asset_selection", selection_mode)
-            selected_ids = set(prior_selection.get("selected_asset_ids", []))
+    selection = latest_data_selection(conversation)
+    selection_mode = selection.get("asset_selection", "none")
+    selected_ids = set(selection.get("selected_asset_ids", []))
 
     logger.info(f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}")
 
@@ -850,15 +795,102 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
     # Filter based on selection mode
     if selection_mode == "explicit" and selected_ids:
         filtered_assets = [a for a in assets if a.get("asset_id") in selected_ids]
+        deduped_assets = dedupe_assets_by_identity(filtered_assets)
         logger.info(
-            f"Filtered assets from {len(assets)} to {len(filtered_assets)} based on explicit selection"
+            f"Filtered assets from {len(assets)} to {len(deduped_assets)} based on explicit selection"
         )
-        return filtered_assets
+        return deduped_assets
 
     if selection_mode == "all":
-        return assets
+        return dedupe_assets_by_identity(assets)
 
     return []
+
+
+def _asset_is_downloadable(asset: Dict[str, Any]) -> bool:
+    return bool(
+        asset.get("asset_id") and asset.get("s3_bucket") and asset.get("s3_key")
+    )
+
+
+def _normalize_downloadable_asset(asset: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "asset_id": asset.get("asset_id"),
+        "file_id": asset.get("file_id"),
+        "s3_bucket": asset.get("s3_bucket"),
+        "s3_key": asset.get("s3_key"),
+        "extension": asset.get("extension", "csv"),
+        "filename": asset.get("filename", ""),
+    }
+
+
+def _selected_asset_ids_for_resolution(
+    selection: Dict[str, Any], project_assets: Optional[List[Dict[str, Any]]]
+) -> List[str]:
+    asset_selection = selection.get("asset_selection")
+    selected_ids = [
+        str(asset_id).strip()
+        for asset_id in selection.get("selected_asset_ids", [])
+        if str(asset_id).strip()
+    ]
+    if asset_selection == "all" and not selected_ids:
+        selected_ids = [
+            str(asset.get("asset_id")).strip()
+            for asset in project_assets or []
+            if str(asset.get("asset_id") or "").strip()
+        ]
+    return list(dict.fromkeys(selected_ids))
+
+
+def _resolve_selected_assets(
+    conversation: Dict[str, Any],
+    assets: List[Dict[str, Any]],
+    project_assets: Optional[List[Dict[str, Any]]],
+) -> tuple[List[Dict[str, Any]], Optional[str]]:
+    selection = latest_data_selection(conversation)
+    asset_selection = selection.get("asset_selection")
+    if asset_selection not in {"explicit", "all"}:
+        return assets, None
+
+    selected_ids = _selected_asset_ids_for_resolution(selection, project_assets)
+    if not selected_ids:
+        return assets, None
+
+    project_asset_by_id = {
+        str(asset.get("asset_id")): asset
+        for asset in project_assets or []
+        if str(asset.get("asset_id") or "").strip()
+    }
+    resolved_by_id = {
+        str(asset.get("asset_id")): _normalize_downloadable_asset(asset)
+        for asset in assets
+        if str(asset.get("asset_id") or "").strip() and _asset_is_downloadable(asset)
+    }
+
+    missing_ids = [
+        asset_id for asset_id in selected_ids if asset_id not in resolved_by_id
+    ]
+    for asset_id in missing_ids:
+        project_asset = project_asset_by_id.get(asset_id)
+        if project_asset and _asset_is_downloadable(project_asset):
+            resolved_by_id[asset_id] = _normalize_downloadable_asset(project_asset)
+            continue
+
+        backend_asset = _fetch_asset_from_backend(asset_id)
+        if backend_asset and _asset_is_downloadable(backend_asset):
+            resolved_by_id[asset_id] = _normalize_downloadable_asset(backend_asset)
+
+    unresolved_ids = [
+        asset_id for asset_id in selected_ids if asset_id not in resolved_by_id
+    ]
+    if unresolved_ids:
+        return (
+            dedupe_assets_by_identity(list(resolved_by_id.values())),
+            f"Could not resolve selected data source(s): {', '.join(unresolved_ids)}",
+        )
+
+    ordered_assets = [resolved_by_id[asset_id] for asset_id in selected_ids]
+    return dedupe_assets_by_identity(ordered_assets), None
 
 
 def _latest_user_prompt(conversation: Dict[str, Any]) -> Optional[str]:
@@ -899,19 +931,25 @@ def _build_data_context_clarification_for_prompt(
 
 
 def _append_clarification_request_node(
-    conversation: Dict[str, Any], clarification: Dict[str, Any]
+    conversation: Dict[str, Any], clarifications: List[Dict[str, Any]]
 ) -> None:
-    text = build_clarification_message(clarification)
+    if len(clarifications) == 1:
+        text = build_clarification_message(clarifications[0])
+    else:
+        text = (
+            f"I need a few quick choices before I continue "
+            f"({len(clarifications)} questions). I will not guess."
+        )
+    contents: List[Dict[str, Any]] = [{"type": "text", "data": {"text": text}}]
+    for clarification in clarifications:
+        contents.append({"type": "clarification_request", "data": clarification})
     conversation.setdefault("nodes", []).append(
         {
             "node_id": f"node_{uuid.uuid4().hex[:8]}",
             "role": "assistant",
             "status": "awaiting_user_input",
             "created_at": datetime.now().isoformat(),
-            "contents": [
-                {"type": "text", "data": {"text": text}},
-                {"type": "clarification_request", "data": clarification},
-            ],
+            "contents": contents,
         }
     )
     conversation["updated_at"] = datetime.now().isoformat()
@@ -1093,6 +1131,17 @@ def _process_conversation_background(
 
         # Extract all assets from conversation nodes
         assets = _extract_assets_from_nodes(conversation)
+        assets, asset_resolution_error = _resolve_selected_assets(
+            conversation, assets, project_assets or []
+        )
+        if asset_resolution_error:
+            logger.error(asset_resolution_error)
+            _collecting_post_status(
+                conversation_id,
+                "error",
+                {"step": "download_asset", "error": asset_resolution_error},
+            )
+            return
         logger.info(f"Found {len(assets)} asset(s) in conversation {conversation_id}")
 
         if (
@@ -1110,7 +1159,7 @@ def _process_conversation_background(
             clarification = _build_data_context_clarification_for_prompt(
                 user_prompt, project_assets or []
             )
-            _append_clarification_request_node(conversation, clarification)
+            _append_clarification_request_node(conversation, [clarification])
             thinking_tracer.emit(
                 "final",
                 "Need data context",
@@ -1289,8 +1338,12 @@ def _process_conversation_background(
         )  # Default to dashboard for backward compatibility
 
         if response_type == "clarification_request":
-            clarification = result.get("clarification") or result.get("data")
-            if not isinstance(clarification, dict):
+            clarifications = result.get("clarifications")
+            if not clarifications:
+                single = result.get("clarification") or result.get("data")
+                clarifications = [single] if isinstance(single, dict) else []
+            clarifications = [c for c in clarifications if isinstance(c, dict)]
+            if not clarifications:
                 error_msg = "Workflow requested clarification without a valid payload"
                 logger.error(error_msg)
                 _collecting_post_status(
@@ -1300,11 +1353,11 @@ def _process_conversation_background(
                 )
                 return
 
-            _append_clarification_request_node(conversation, clarification)
+            _append_clarification_request_node(conversation, clarifications)
             thinking_tracer.emit(
                 "final",
                 "Need your choice",
-                build_clarification_message(clarification),
+                build_clarification_message(clarifications[0]),
             )
             _attach_thinking_trace(
                 conversation, thinking_tracer.snapshot(finalize=True)
@@ -1318,8 +1371,12 @@ def _process_conversation_background(
                 {
                     "step": "clarification",
                     "response_type": "clarification_request",
-                    "clarification_id": clarification["clarification_id"],
-                    "reason_code": clarification["reason_code"],
+                    "clarification_id": clarifications[0]["clarification_id"],
+                    "reason_code": clarifications[0]["reason_code"],
+                    "clarification_ids": [
+                        c["clarification_id"] for c in clarifications
+                    ],
+                    "reason_codes": [c["reason_code"] for c in clarifications],
                 },
             )
             return

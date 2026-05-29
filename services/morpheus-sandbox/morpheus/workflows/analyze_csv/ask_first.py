@@ -17,6 +17,9 @@ from typing import Any, Dict, List, Optional, Sequence
 
 Clarification = Dict[str, Any]
 
+# Upper bound on questions presented in one batched ask-first sitting.
+MAX_BATCHED_CLARIFICATIONS = 3
+
 DATA_CONTEXT_PROMPT_RE = re.compile(
     r"\b("
     r"analy[sz]e|analysis|insights?|performance|kpis?|"
@@ -76,6 +79,40 @@ NUMERIC_COLUMN_HINT_RE = re.compile(
 )
 
 
+def canonical_asset_identity(asset: Dict[str, Any]) -> Optional[str]:
+    """Return the stable dataset identity used to avoid duplicate downloads."""
+    asset_id = str(asset.get("asset_id") or "").strip()
+    if asset_id:
+        return f"asset:{asset_id}"
+
+    file_id = str(asset.get("file_id") or "").strip()
+    if file_id:
+        return f"file:{file_id}"
+
+    bucket = str(asset.get("s3_bucket") or "").strip()
+    key = str(asset.get("s3_key") or "").strip()
+    if bucket and key:
+        return f"s3:{bucket}/{key}"
+
+    return None
+
+
+def dedupe_assets_by_identity(
+    assets: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Keep the latest occurrence of each logical data source."""
+    seen: set[str] = set()
+    deduped_reversed: List[Dict[str, Any]] = []
+    for asset in reversed(list(assets)):
+        identity = canonical_asset_identity(asset)
+        if identity:
+            if identity in seen:
+                continue
+            seen.add(identity)
+        deduped_reversed.append(asset)
+    return list(reversed(deduped_reversed))
+
+
 def latest_user_node(conversation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     for node in reversed(conversation.get("nodes", [])):
         if node.get("role") == "user":
@@ -100,6 +137,32 @@ def latest_clarification_metadata(conversation: Dict[str, Any]) -> Dict[str, Any
     response = _clarification_response_from_node(node)
     metadata = response.get("metadata") if isinstance(response, dict) else None
     return metadata if isinstance(metadata, dict) else {}
+
+
+def latest_data_selection(conversation: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the latest resolved data-source selection intent."""
+    nodes = conversation.get("nodes", [])
+    latest = latest_user_node(conversation)
+    if not latest:
+        return {"asset_selection": "none", "selected_asset_ids": []}
+
+    selection = _data_selection_from_node(latest)
+    response = _clarification_response_from_node(latest)
+    response_metadata = response.get("metadata") if isinstance(response, dict) else None
+    if (
+        selection.get("asset_selection") == "none"
+        and isinstance(response_metadata, dict)
+        and "asset_selection" not in response_metadata
+    ):
+        before_index = nodes.index(latest) if latest in nodes else len(nodes)
+        for node in reversed(nodes[:before_index]):
+            if node.get("role") != "user":
+                continue
+            previous = _data_selection_from_node(node)
+            if previous.get("asset_selection") in {"explicit", "all"}:
+                return previous
+
+    return selection
 
 
 def answered_clarification_reason_codes(conversation: Dict[str, Any]) -> set[str]:
@@ -330,6 +393,76 @@ def choose_data_context_reason_code(
     return "missing_data_context"
 
 
+def build_workflow_clarifications(
+    *,
+    conversation: Dict[str, Any],
+    user_prompt: str,
+    user_assets: Sequence[Dict[str, Any]],
+    dashboards: Dict[str, Any],
+    file_paths: Sequence[str],
+    assets_dict: Dict[str, str],
+    data_profile: Optional[str],
+    chart_mentions: Sequence[Dict[str, Any]],
+) -> List[Clarification]:
+    """Collect every high-impact clarification this turn needs, in ask order.
+
+    Edit/branching flows (chart_target, dashboard_update_scope) are mutually
+    exclusive: answering one reshapes the whole downstream path, so we never
+    batch analysis questions on top of them. The analysis cluster
+    (join_strategy, time_or_metric_definition, output_mode) is independent and
+    can be answered in one sitting, capped at MAX_BATCHED_CLARIFICATIONS.
+    """
+    answered_reasons = answered_clarification_reason_codes(conversation)
+    latest_metadata = latest_clarification_metadata(conversation)
+    if latest_metadata.get("target_chart_id") or latest_metadata.get("route_mode"):
+        return []
+    if chart_mentions:
+        return []
+
+    charts = extract_dashboard_targets(dashboards)
+    if (
+        "chart_target" not in answered_reasons
+        and len(charts) > 1
+        and CHART_TARGET_PROMPT_RE.search(user_prompt or "")
+    ):
+        return [build_chart_target_clarification(charts)]
+
+    if (
+        "dashboard_update_scope" not in answered_reasons
+        and dashboards
+        and DASHBOARD_UPDATE_PROMPT_RE.search(user_prompt or "")
+        and not NEW_DASHBOARD_PROMPT_RE.search(user_prompt or "")
+    ):
+        return [build_dashboard_update_scope_clarification(dashboards)]
+
+    clarifications: List[Clarification] = []
+
+    if (
+        "join_strategy" not in answered_reasons
+        and unique_data_source_count(user_assets, file_paths, assets_dict) > 1
+        and not JOIN_PROMPT_RE.search(user_prompt or "")
+    ):
+        clarifications.append(build_join_strategy_clarification(assets_dict))
+
+    if (
+        "time_or_metric_definition" not in answered_reasons
+        and TREND_PROMPT_RE.search(user_prompt or "")
+        and file_paths
+    ):
+        time_clarification = build_time_or_metric_clarification(
+            user_prompt, file_paths, data_profile
+        )
+        if time_clarification:
+            clarifications.append(time_clarification)
+
+    if "output_mode" not in answered_reasons and _needs_output_mode_clarification(
+        user_prompt, bool(user_assets or file_paths), bool(dashboards)
+    ):
+        clarifications.append(build_output_mode_clarification())
+
+    return clarifications[:MAX_BATCHED_CLARIFICATIONS]
+
+
 def build_workflow_clarification(
     *,
     conversation: Dict[str, Any],
@@ -341,53 +474,17 @@ def build_workflow_clarification(
     data_profile: Optional[str],
     chart_mentions: Sequence[Dict[str, Any]],
 ) -> Optional[Clarification]:
-    answered_reasons = answered_clarification_reason_codes(conversation)
-    latest_metadata = latest_clarification_metadata(conversation)
-    if latest_metadata.get("target_chart_id") or latest_metadata.get("route_mode"):
-        return None
-    if chart_mentions:
-        return None
-
-    charts = extract_dashboard_targets(dashboards)
-    if (
-        "chart_target" not in answered_reasons
-        and len(charts) > 1
-        and CHART_TARGET_PROMPT_RE.search(user_prompt or "")
-    ):
-        return build_chart_target_clarification(charts)
-
-    if (
-        "dashboard_update_scope" not in answered_reasons
-        and dashboards
-        and DASHBOARD_UPDATE_PROMPT_RE.search(user_prompt or "")
-        and not NEW_DASHBOARD_PROMPT_RE.search(user_prompt or "")
-    ):
-        return build_dashboard_update_scope_clarification(dashboards)
-
-    if (
-        "join_strategy" not in answered_reasons
-        and len(file_paths) > 1
-        and not JOIN_PROMPT_RE.search(user_prompt or "")
-    ):
-        return build_join_strategy_clarification(assets_dict)
-
-    if (
-        "time_or_metric_definition" not in answered_reasons
-        and TREND_PROMPT_RE.search(user_prompt or "")
-        and file_paths
-    ):
-        time_clarification = build_time_or_metric_clarification(
-            user_prompt, file_paths, data_profile
-        )
-        if time_clarification:
-            return time_clarification
-
-    if "output_mode" not in answered_reasons and _needs_output_mode_clarification(
-        user_prompt, bool(user_assets or file_paths), bool(dashboards)
-    ):
-        return build_output_mode_clarification()
-
-    return None
+    clarifications = build_workflow_clarifications(
+        conversation=conversation,
+        user_prompt=user_prompt,
+        user_assets=user_assets,
+        dashboards=dashboards,
+        file_paths=file_paths,
+        assets_dict=assets_dict,
+        data_profile=data_profile,
+        chart_mentions=chart_mentions,
+    )
+    return clarifications[0] if clarifications else None
 
 
 def build_clarification_message(clarification: Clarification) -> str:
@@ -529,6 +626,24 @@ def build_join_strategy_clarification(assets_dict: Dict[str, str]) -> Clarificat
         ],
         allow_free_text=True,
     )
+
+
+def unique_data_source_count(
+    user_assets: Sequence[Dict[str, Any]],
+    file_paths: Sequence[str],
+    assets_dict: Dict[str, str],
+) -> int:
+    deduped_assets = dedupe_assets_by_identity(user_assets)
+    if deduped_assets:
+        return len(deduped_assets)
+
+    raw_paths = list(assets_dict.values()) if assets_dict else list(file_paths)
+    normalized_paths = {
+        os.path.abspath(os.path.expanduser(str(path)))
+        for path in raw_paths
+        if str(path).strip()
+    }
+    return len(normalized_paths)
 
 
 def build_time_or_metric_clarification(
@@ -782,6 +897,38 @@ def _clarification_response_from_node(node: Dict[str, Any]) -> Optional[Dict[str
             data = content.get("data") or {}
             return data if isinstance(data, dict) else {}
     return None
+
+
+def _data_selection_from_node(node: Dict[str, Any]) -> Dict[str, Any]:
+    node_metadata = node.get("metadata", {}) or {}
+    response = _clarification_response_from_node(node)
+    response_metadata = response.get("metadata") if isinstance(response, dict) else None
+    metadata = response_metadata if isinstance(response_metadata, dict) else {}
+
+    asset_selection = (
+        metadata.get("asset_selection")
+        or node_metadata.get("asset_selection")
+        or "none"
+    )
+    selected_ids = (
+        metadata.get("asset_ids")
+        or metadata.get("selected_asset_ids")
+        or node_metadata.get("selected_asset_ids")
+        or []
+    )
+    if isinstance(selected_ids, str):
+        selected_ids = [selected_ids]
+    normalized_ids = [
+        str(asset_id).strip() for asset_id in selected_ids if str(asset_id).strip()
+    ]
+    if asset_selection not in {"explicit", "all", "none"}:
+        asset_selection = "explicit" if normalized_ids else "none"
+    if asset_selection == "explicit" and not normalized_ids:
+        asset_selection = "none"
+    return {
+        "asset_selection": asset_selection,
+        "selected_asset_ids": list(dict.fromkeys(normalized_ids)),
+    }
 
 
 def _find_clarification_request_index(

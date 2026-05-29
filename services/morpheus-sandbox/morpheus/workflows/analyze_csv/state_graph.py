@@ -10,6 +10,7 @@ import time
 import uuid
 import sys
 import importlib.util
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
@@ -19,6 +20,10 @@ from morpheus.workflows.analyze_csv.state_models import (
     WorkingMemory,
     WorkflowHistory,
     WorkflowHistoryEntry,
+)
+from morpheus.workflows.analyze_csv.ask_first import (
+    dedupe_assets_by_identity,
+    latest_data_selection,
 )
 from morpheus.workflows.analyze_csv import nodes
 from morpheus.workflows.analyze_csv.edges import decide_next_node
@@ -100,6 +105,8 @@ class StatefulAnalyzeCSVWorkflow:
         self._last_synced_index = 0
         self._post_status_fn = None
         self._thinking_event_fn = None
+        # Single-worker executor for off-thread S3 persistence (created per run).
+        self._sync_executor: Optional[ThreadPoolExecutor] = None
 
         logger.info("StatefulAnalyzeCSVWorkflow initialized")
 
@@ -418,21 +425,78 @@ class StatefulAnalyzeCSVWorkflow:
             )
             return None
 
+    def _submit_sync(self, fn) -> None:
+        """
+        Enqueue an I/O task onto the single-worker sync executor (FIFO).
+
+        Falls back to running inline if no executor is active (e.g. sync called
+        outside the workflow loop). Never raises — sync failures must not crash
+        the workflow.
+        """
+        executor = self._sync_executor
+        if executor is None:
+            try:
+                fn()
+            except Exception as e:
+                logger.warning(f"Inline sync task failed (non-fatal): {str(e)}")
+            return
+        try:
+            executor.submit(fn)
+        except Exception as e:
+            logger.warning(f"Failed to enqueue sync task (non-fatal): {str(e)}")
+
+    @staticmethod
+    def _persist_nodes(
+        conversation_uri,
+        conversation_backup_uri,
+        new_nodes,
+        persist_fn,
+        load_fn,
+        iteration,
+    ) -> None:
+        """
+        Worker-thread S3 I/O: load latest conversation, append nodes, persist.
+
+        Runs on the single sync worker so each task observes the previous task's
+        write (no clobbering). Each phase keeps its own try/except so a failure
+        never propagates back to the workflow loop.
+        """
+        try:
+            conversation = load_fn(conversation_uri)
+        except Exception as e:
+            logger.warning(f"Failed to load conversation from S3: {str(e)}")
+            return
+
+        try:
+            conversation.setdefault("nodes", []).extend(new_nodes)
+            conversation["updated_at"] = datetime.now().isoformat()
+            persist_fn(conversation_uri, conversation_backup_uri, conversation)
+            logger.info(
+                f"✅ Synced {len(new_nodes)} intermediate node(s) to S3 (iteration {iteration})"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to persist conversation to S3: {str(e)}")
+
     def _sync_intermediate_state(
         self, state: AgentState, persist_fn, load_fn, post_status_fn
     ) -> None:
         """
-        Sync intermediate state to S3 for live frontend updates.
+        Compute the node delta on the main thread, enqueue heavy S3 I/O off-thread.
 
-        Fault-tolerant method that converts new workflow history entries to legacy nodes
-        and persists them to S3 for real-time frontend visibility. All operations are
-        wrapped in try-except blocks to ensure workflow never crashes due to sync failures.
+        The delta (new legacy nodes since the last sync) is built synchronously so
+        it snapshots the correct state *before* the loop mutates it further. The
+        actual S3 load → append → persist is submitted to the single-worker sync
+        executor so node transitions never block on network I/O. One worker means
+        tasks run FIFO, so writes stay ordered and never clobber each other.
+
+        Fully fault-tolerant: the workflow never crashes due to sync failures.
 
         Args:
             state: Current agent state
             persist_fn: Function to persist conversation to S3
             load_fn: Function to load conversation from S3
-            post_status_fn: Function to post workflow status
+            post_status_fn: Function to post workflow status (unused here; status
+                posting is enqueued by the loop after this sync to preserve order)
         """
         try:
             # Check prerequisites
@@ -449,7 +513,7 @@ class StatefulAnalyzeCSVWorkflow:
             if not new_entries:
                 return
 
-            # Convert entries to legacy nodes
+            # Convert entries to legacy nodes on the main thread (snapshots state now).
             new_nodes = []
             for entry in new_entries:
                 try:
@@ -462,36 +526,29 @@ class StatefulAnalyzeCSVWorkflow:
                     )
                     continue
 
-            if not new_nodes:
-                # Update tracker even if no nodes created (to avoid re-processing)
-                self._last_synced_index = len(state.workflow_history.entries)
-                return
-
-            # Load current conversation from S3
-            try:
-                conversation = load_fn(state.conversation_uri)
-            except Exception as e:
-                logger.warning(f"Failed to load conversation from S3: {str(e)}")
-                return
-
-            # Append new nodes
-            conversation.setdefault("nodes", []).extend(new_nodes)
-            conversation["updated_at"] = datetime.now().isoformat()
-
-            # Save back to S3
-            try:
-                persist_fn(
-                    state.conversation_uri, state.conversation_backup_uri, conversation
-                )
-                logger.info(
-                    f"✅ Synced {len(new_nodes)} intermediate node(s) to S3 (iteration {state.iteration})"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to persist conversation to S3: {str(e)}")
-                return
-
-            # Update sync tracker
+            # Advance the tracker now that the delta is captured, even if it is
+            # empty, so we never re-process these entries.
             self._last_synced_index = len(state.workflow_history.entries)
+
+            if not new_nodes:
+                return
+
+            # Snapshot the values the worker needs (loop locals are reassigned each
+            # iteration; copying here avoids late-binding aliasing).
+            conversation_uri = state.conversation_uri
+            conversation_backup_uri = state.conversation_backup_uri
+            iteration = state.iteration
+
+            self._submit_sync(
+                lambda: self._persist_nodes(
+                    conversation_uri,
+                    conversation_backup_uri,
+                    new_nodes,
+                    persist_fn,
+                    load_fn,
+                    iteration,
+                )
+            )
 
         except Exception as e:
             # Catch-all for any unexpected errors - never crash the workflow
@@ -541,6 +598,31 @@ class StatefulAnalyzeCSVWorkflow:
         else:
             logger.debug("Live sync disabled (missing prerequisites)")
 
+        # Single-worker executor keeps S3 persistence + status posting off the
+        # critical path while preserving FIFO ordering. Created per run, flushed
+        # with shutdown(wait=True) after the loop so nothing is lost.
+        self._sync_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="morpheus-sync"
+        )
+
+        try:
+            self._run_node_loop(state, persist_fn, load_fn, post_status_fn, should_sync)
+        finally:
+            # Flush all queued intermediate persistence + status before returning.
+            try:
+                self._sync_executor.shutdown(wait=True)
+            except Exception as e:
+                logger.warning(f"Sync executor shutdown failed (non-fatal): {str(e)}")
+            self._sync_executor = None
+
+        logger.info(f"Workflow loop complete: final status={state.status}")
+
+        return state
+
+    def _run_node_loop(
+        self, state, persist_fn, load_fn, post_status_fn, should_sync
+    ) -> AgentState:
+        """Inner node-execution loop (runs while the sync executor is active)."""
         while state.status == "RUNNING":
             # Log current state
             logger.info(
@@ -603,7 +685,11 @@ class StatefulAnalyzeCSVWorkflow:
                             f"Failed to sync intermediate state (non-fatal): {str(e)}"
                         )
 
-                # Post workflow status for frontend polling (fault-tolerant)
+                # Post workflow status for frontend polling (fault-tolerant).
+                # Build the metadata on the main thread (cheap), then enqueue the
+                # actual post onto the same single-worker executor *after* this
+                # node's sync task so "node persisted → status posted" ordering
+                # is preserved.
                 if post_status_fn and state.conversation_id:
                     try:
                         # Build descriptive log message for this step
@@ -615,7 +701,14 @@ class StatefulAnalyzeCSVWorkflow:
                             "node": state.current_node,
                             "log": log_message,
                         }
-                        post_status_fn(state.conversation_id, "processing", metadata)
+                        conversation_id = state.conversation_id
+                        # Default-arg binding snapshots the per-iteration values so
+                        # the deferred call doesn't see a later iteration's data.
+                        self._submit_sync(
+                            lambda cid=conversation_id, md=metadata: post_status_fn(
+                                cid, "processing", md
+                            )
+                        )
                     except Exception as e:
                         # Never let status posting crash the workflow
                         logger.warning(
@@ -913,8 +1006,11 @@ class StatefulAnalyzeCSVWorkflow:
                     "artifacts": state.output.get("artifacts", []),
                 }
             elif state.output.get("type") == "clarification_request":
+                clarifications = state.output.get("clarifications")
+                if clarifications is None and state.output.get("clarification"):
+                    clarifications = [state.output.get("clarification")]
                 workflow_output.output_data = {
-                    "clarification": state.output.get("clarification"),
+                    "clarifications": clarifications or [],
                 }
 
         # Add error if failed
@@ -970,17 +1066,10 @@ class StatefulAnalyzeCSVWorkflow:
         """
         nodes = conversation.get("nodes", [])
 
-        # Find latest user node to check for selection metadata
-        latest_user_node = None
-        for node in reversed(nodes):
-            if node.get("role") == "user":
-                latest_user_node = node
-                break
-
         # Check metadata for selection mode
-        metadata = latest_user_node.get("metadata", {}) if latest_user_node else {}
-        selection_mode = metadata.get("asset_selection", "none")
-        selected_ids = set(metadata.get("selected_asset_ids", []))
+        selection = latest_data_selection(conversation)
+        selection_mode = selection.get("asset_selection", "none")
+        selected_ids = set(selection.get("selected_asset_ids", []))
 
         logger.info(
             f"Asset selection mode: {selection_mode}, selected_ids: {selected_ids}"
@@ -1018,19 +1107,24 @@ class StatefulAnalyzeCSVWorkflow:
                             }
                         )
 
-        # Sort assets by created_at (newest first)
-        assets.sort(key=lambda x: x.get("node_created_at", ""), reverse=True)
-
         # Filter based on selection mode
         if selection_mode == "explicit" and selected_ids:
             filtered_assets = [a for a in assets if a.get("asset_id") in selected_ids]
-            logger.info(
-                f"Filtered assets from {len(assets)} to {len(filtered_assets)} based on explicit selection"
+            deduped_assets = dedupe_assets_by_identity(filtered_assets)
+            deduped_assets.sort(
+                key=lambda x: x.get("node_created_at", ""), reverse=True
             )
-            return filtered_assets
+            logger.info(
+                f"Filtered assets from {len(assets)} to {len(deduped_assets)} based on explicit selection"
+            )
+            return deduped_assets
 
         if selection_mode == "all":
-            return assets
+            deduped_assets = dedupe_assets_by_identity(assets)
+            deduped_assets.sort(
+                key=lambda x: x.get("node_created_at", ""), reverse=True
+            )
+            return deduped_assets
 
         return []
 

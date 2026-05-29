@@ -96,9 +96,6 @@ def decide_next_node(state: AgentState) -> str:
         if state.working_memory.tool_outputs.get("early_exit_empty_data"):
             logger.info("START → FINISH (empty CSV / header-only inputs)")
             return "FINISH"
-        return "EXPLORE_FILES"
-
-    elif current == "EXPLORE_FILES":
         return "ASK_FIRST"
 
     elif current == "ASK_FIRST":
@@ -108,7 +105,12 @@ def decide_next_node(state: AgentState) -> str:
         return "ROUTING"
 
     elif current == "ROUTING":
-        # After routing, choose reasoning strategy
+        # Profile files only after the route is known, so pure-text Q&A and
+        # clarification halts skip the expensive multi-file merge loop.
+        return "EXPLORE_FILES"
+
+    elif current == "EXPLORE_FILES":
+        # Files are profiled; choose reasoning strategy.
         if state.use_internal_reasoning:
             return "REASONING_INTERNAL"
         return "REASONING"

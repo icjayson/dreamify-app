@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { X, Check, Copy, Mail, Globe, Shield, Loader2, Download, SquareArrowOutUpRight, UserPlus, Trash2 } from 'lucide-react';
+import { X, Check, Copy, Mail, Globe, Shield, Loader2, Download, SquareArrowOutUpRight, UserPlus, Trash2, Eye, Info } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { exportDashboardAsPdf, exportDashboardAsPng, downloadBlob } from '@/utils/exportUtils';
@@ -30,6 +30,7 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
 
   // State to track if the dashboard split into two columns for export
   const [exportDidSplit, setExportDidSplit] = useState(false);
+  const [showFullPreview, setShowFullPreview] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingPng, setIsExportingPng] = useState(false);
   const [isPreviewPublic, setIsPreviewPublic] = useState(false);
@@ -173,8 +174,11 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
 
         if (abortController.signal.aborted) return;
 
-        if (result.success && result.user_id) {
-          const alreadyInList = currentAllowed.some(u => u.user_id === result.user_id);
+        if (result.success) {
+          // Duplicate check: by user_id (registered) or by email (pending invite)
+          const alreadyInList = currentAllowed.some(
+            u => (result.user_id && u.user_id === result.user_id) || (result.email && u.email === result.email)
+          );
           if (alreadyInList) {
             setLookupError('This user already has access');
             setLookupResult(null);
@@ -182,12 +186,12 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
             setLookupResult(result);
           }
         } else {
-          setLookupError('User not found');
+          setLookupError('Could not process this email');
           setLookupResult(null);
         }
       } catch (err) {
         if (abortController.signal.aborted) return;
-        setLookupError('User not found');
+        setLookupError('Could not process this email');
         setLookupResult(null);
       } finally {
         if (!abortController.signal.aborted) {
@@ -204,12 +208,12 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
 
   // Add user to allowed list
   const handleAddAllowedUser = async (user: UserLookupResult) => {
-    if (!projectId || !user.user_id || isUpdatingAllowed) return;
+    if (!projectId || (!user.user_id && !user.email) || isUpdatingAllowed) return;
 
     setIsUpdatingAllowed(true);
     try {
       const newAllowedUser: AllowedUser = {
-        user_id: user.user_id,
+        user_id: user.user_id || undefined,
         name: user.name || undefined,
         email: user.email || undefined,
         image_url: user.image_url || undefined,
@@ -233,13 +237,13 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
     }
   };
 
-  // Remove user from allowed list
-  const handleRemoveAllowedUser = async (userId: string) => {
+  // Remove user from allowed list — key is user_id when available, else email
+  const handleRemoveAllowedUser = async (key: string) => {
     if (!projectId || isUpdatingAllowed) return;
 
     setIsUpdatingAllowed(true);
     try {
-      const updatedAllowed = allowedUsers.filter(u => u.user_id !== userId);
+      const updatedAllowed = allowedUsers.filter(u => (u.user_id || u.email) !== key);
 
       const response = await projectService.updateProject(projectId, undefined, undefined, undefined, updatedAllowed);
       if (response.success) {
@@ -365,11 +369,11 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
   const InnerContent = (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <span className="text-base font-semibold">Publish Dashboard</span>
         </div>
-        <button onClick={close} className="p-2 hover:bg-white/5 rounded-md"><X className="w-4 h-4" /></button>
+        <button onClick={close} className="p-2 hover:bg-muted-foreground/10 rounded-md"><X className="w-4 h-4" /></button>
       </div>
 
       {/* Body */}
@@ -394,16 +398,28 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
                     <SquareArrowOutUpRight className="w-4 h-4" />
                   </button>
                 </div>
-                <button
-                  onClick={handleCopy}
-                  className="button-outline h-9 px-3 flex items-center justify-center gap-2 text-sm flex-shrink-0"
-                >
-                  {copied ? (
-                    <Check className="w-4 h-4" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
+                <div className="relative group/copy flex-shrink-0">
+                  <button
+                    onClick={handleCopy}
+                    className="button-outline h-9 px-3 flex items-center justify-center gap-2 text-sm"
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap rounded-md bg-popover border border-border px-2 py-1 text-xs text-popover-foreground shadow-md opacity-0 group-hover/copy:opacity-100 transition-opacity duration-150">
+                    {copied ? 'Copied!' : 'Copy link'}
+                  </span>
+                </div>
+                <div className="relative group/eye flex-shrink-0">
+                  <button
+                    onClick={() => setShowFullPreview(true)}
+                    className="button-outline h-9 px-3 flex items-center justify-center"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap rounded-md bg-popover border border-border px-2 py-1 text-xs text-popover-foreground shadow-md opacity-0 group-hover/eye:opacity-100 transition-opacity duration-150">
+                    Preview
+                  </span>
+                </div>
               </div>
               <div className="flex items-center justify-between gap-2 sm:mt-2">
                 <div className="h-5 text-xs">
@@ -475,13 +491,13 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
 
                       {/* Lookup result popup */}
                       {showLookupPopup && (lookupResult || lookupError || isLookingUp) && (
-                        <div className="absolute z-50 left-0 right-0 mt-1.5 rounded-lg bg-[#1a1a2e] border border-white/10 shadow-xl shadow-black/40 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="absolute z-50 left-0 right-0 mt-1.5 rounded-lg bg-popover border border-border shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
                           {isLookingUp ? (
                             <div className="flex items-center gap-3 px-3 py-3">
-                              <div className="w-8 h-8 rounded-full bg-white/10 animate-pulse flex-shrink-0" />
+                              <div className="w-8 h-8 rounded-full bg-muted-foreground/15 animate-pulse flex-shrink-0" />
                               <div className="flex-1 space-y-1.5">
-                                <div className="h-3 w-24 rounded bg-white/10 animate-pulse" />
-                                <div className="h-2.5 w-36 rounded bg-white/5 animate-pulse" />
+                                <div className="h-3 w-24 rounded bg-muted-foreground/15 animate-pulse" />
+                                <div className="h-2.5 w-36 rounded bg-muted-foreground/10 animate-pulse" />
                               </div>
                             </div>
                           ) : lookupError ? (
@@ -495,25 +511,33 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
                             <button
                               onClick={() => handleAddAllowedUser(lookupResult)}
                               disabled={isUpdatingAllowed}
-                              className="w-full flex items-center gap-3 px-3 py-3 hover:bg-white/5 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                              className="w-full flex items-center gap-3 px-3 py-3 hover:bg-muted transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-left"
                             >
-                              {lookupResult.image_url ? (
-                                <img
-                                  src={lookupResult.image_url}
-                                  alt={lookupResult.name || 'User'}
-                                  className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10"
-                                />
+                              {lookupResult.user_id ? (
+                                // Registered Clerk user
+                                lookupResult.image_url ? (
+                                  <img
+                                    src={lookupResult.image_url}
+                                    alt={lookupResult.name || 'User'}
+                                    className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold">
+                                    {(lookupResult.name || lookupResult.email || '?').charAt(0).toUpperCase()}
+                                  </div>
+                                )
                               ) : (
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold">
-                                  {(lookupResult.name || lookupResult.email || '?').charAt(0).toUpperCase()}
+                                // Email-only (not yet signed up)
+                                <div className="w-8 h-8 rounded-full bg-amber-600/15 border border-amber-600/30 flex items-center justify-center flex-shrink-0">
+                                  <Mail className="w-4 h-4 text-amber-600" />
                                 </div>
                               )}
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-white truncate">
-                                  {lookupResult.name || 'Unknown'}
+                                <div className="text-sm font-medium text-foreground truncate">
+                                  {lookupResult.user_id ? (lookupResult.name || lookupResult.email) : lookupResult.email}
                                 </div>
                                 <div className="text-xs text-muted-foreground truncate">
-                                  {lookupResult.email}
+                                  {lookupResult.user_id ? 'Dreamify user' : 'Will receive an email invite'}
                                 </div>
                               </div>
                               <div className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
@@ -522,7 +546,7 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
                                 ) : (
                                   <>
                                     <UserPlus className="w-3.5 h-3.5" />
-                                    Add
+                                    {lookupResult.user_id ? 'Add' : 'Invite'}
                                   </>
                                 )}
                               </div>
@@ -539,42 +563,58 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
                           {allowedUsers.length} {allowedUsers.length === 1 ? 'person' : 'people'} with access
                         </div>
                         <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {allowedUsers.map((user) => (
-                            <div
-                              key={user.user_id}
-                              className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md bg-white/5 group hover:bg-white/8 transition-colors duration-150"
-                            >
-                              {user.image_url ? (
-                                <img
-                                  src={user.image_url}
-                                  alt={user.name || 'User'}
-                                  className="w-6 h-6 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10"
-                                />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-white text-[10px] font-semibold">
-                                  {(user.name || user.email || user.user_id || '?').charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs font-medium text-white truncate">
-                                  {user.name || user.email || user.user_id}
-                                </div>
-                                {user.name && user.email && (
-                                  <div className="text-[10px] text-muted-foreground truncate">
-                                    {user.email}
+                          {allowedUsers.map((user) => {
+                            const key = user.user_id || user.email || '';
+                            const isPending = !user.user_id;
+                            return (
+                              <div
+                                key={key}
+                                className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md bg-muted-foreground/5 group hover:bg-muted-foreground/10 transition-colors duration-150"
+                              >
+                                {isPending ? (
+                                  <div className="w-6 h-6 rounded-full bg-amber-600/15 border border-amber-600/30 flex items-center justify-center flex-shrink-0">
+                                    <Mail className="w-3 h-3 text-amber-600" />
+                                  </div>
+                                ) : user.image_url ? (
+                                  <img
+                                    src={user.image_url}
+                                    alt={user.name || 'User'}
+                                    className="w-6 h-6 rounded-full object-cover flex-shrink-0 ring-1 ring-border"
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-white text-[10px] font-semibold">
+                                    {(user.name || user.email || '?').charAt(0).toUpperCase()}
                                   </div>
                                 )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-medium text-foreground truncate">
+                                    {user.name || user.email}
+                                  </div>
+                                  {isPending ? (
+                                    <div className="text-[10px] text-amber-600 flex items-center gap-1">
+                                      <span>Invite pending</span>
+                                      <div className="relative group/info">
+                                        <Info className="w-3 h-3 text-amber-600/70 cursor-help" />
+                                        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-48 rounded-md bg-popover border border-border px-2.5 py-1.5 text-[10px] leading-tight text-popover-foreground shadow-md opacity-0 group-hover/info:opacity-100 transition-opacity duration-150 z-50">
+                                          This email hasn't signed up for a Dreamify account yet. They'll get access once they create an account.
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : user.name && user.email ? (
+                                    <div className="text-[10px] text-muted-foreground truncate">{user.email}</div>
+                                  ) : null}
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveAllowedUser(key)}
+                                  disabled={isUpdatingAllowed}
+                                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all duration-150 disabled:opacity-50 cursor-pointer"
+                                  title="Remove access"
+                                >
+                                  <Trash2 className="w-3 h-3 text-red-400" />
+                                </button>
                               </div>
-                              <button
-                                onClick={() => handleRemoveAllowedUser(user.user_id)}
-                                disabled={isUpdatingAllowed}
-                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all duration-150 disabled:opacity-50 cursor-pointer"
-                                title="Remove access"
-                              >
-                                <Trash2 className="w-3 h-3 text-red-400" />
-                              </button>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -583,14 +623,14 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
               </div>
             )}
 
-            <div className="space-y-3 pt-4 border-t border-white/10">
+            <div className="space-y-3 pt-4 border-t border-border">
               <div className="text-sm font-medium">Export Options</div>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={handleExportPdf}
                   disabled={isExportingPdf}
                   aria-busy={isExportingPdf}
-                  className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-muted-foreground/20 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isExportingPdf ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -603,7 +643,7 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
                   onClick={handleExportPng}
                   disabled={isExportingPng}
                   aria-busy={isExportingPng}
-                  className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-black transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="p-3 glass-panel rounded-xl text-sm font-medium hover:bg-muted-foreground/20 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isExportingPng ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -626,14 +666,14 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
       {/* Mobile: bottom sheet - ONLY mounted on screens < sm */}
       {open && !isDesktop && (
         <Sheet open={open} onOpenChange={onOpenChange}>
-          <SheetContent side="bottom" className="h-[80vh] w-full bg-muted border-t border-white/10 rounded-t-2xl overflow-hidden p-0">
+          <SheetContent side="bottom" className="h-[80vh] w-full bg-muted border-t border-border rounded-t-2xl overflow-hidden p-0">
             <VisuallyHidden>
               <SheetTitle>Publish Dashboard</SheetTitle>
               <SheetDescription>Publish and share your dashboard.</SheetDescription>
             </VisuallyHidden>
             {/* Drag handle */}
             <div className="w-full flex justify-center pt-2 pb-1 select-none">
-              <div className="h-1.5 w-12 rounded-full bg-white/20" />
+              <div className="h-1.5 w-12 rounded-full bg-muted-foreground/30" />
             </div>
             {/* Panel content */}
             <div className="relative z-10 w-full h-[calc(80vh-20px)] overflow-hidden">
@@ -649,8 +689,27 @@ export default function PublishModal({ open, onOpenChange, projectId, processedD
       {open && isDesktop && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/60" onClick={close} />
-          <div className="relative w-full max-w-lg mx-4 md:mx-0 bg-muted rounded-2xl border border-white/10 shadow-xl overflow-hidden">
+          <div className="relative w-full max-w-lg mx-4 md:mx-0 bg-muted rounded-2xl border border-border shadow-xl overflow-hidden">
             {InnerContent}
+          </div>
+        </div>
+      )}
+
+      {/* Full-screen preview modal */}
+      {showFullPreview && (
+        <div className="fixed inset-0 z-[300] flex flex-col bg-muted">
+          <button
+            onClick={() => setShowFullPreview(false)}
+            className="absolute top-4 right-4 z-10 p-2 rounded-md bg-black/50 hover:bg-black/70 text-white transition-colors duration-200"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="flex-1 overflow-auto">
+            <DashboardPreview
+              dashboardId={projectId}
+              processedData={processedData || uploadedFiles.find(f => f.processedData)?.processedData}
+              staticConfig={processedData || dashboardState.configuration}
+            />
           </div>
         </div>
       )}

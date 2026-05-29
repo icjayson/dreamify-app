@@ -1001,10 +1001,11 @@ function splitMetadataTokens(tokens: MetadataTokenDescriptor[], visibleCount: nu
 }
 
 function MetadataOverflowToken({ tokens }: { tokens: MetadataTokenDescriptor[] }) {
+  const [open, setOpen] = useState(false);
   if (tokens.length === 0) return null;
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -1023,7 +1024,8 @@ function MetadataOverflowToken({ tokens }: { tokens: MetadataTokenDescriptor[] }
         <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Context
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+        <div className="flex flex-wrap gap-1.5" onClick={() => setOpen(false)}>
           {tokens.map((token) => (
             <Fragment key={token.id}>{token.renderOverflow()}</Fragment>
           ))}

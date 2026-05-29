@@ -81,7 +81,7 @@ import { exportChartAsPng } from "@/utils/exportUtils";
 
 const SELECT_CHART_CONTEXT_EVENT = "dreamify:select-chart-context";
 const DASHBOARD_CARD_MENU_ITEM_CLASS =
-  "cursor-pointer gap-2 py-2 hover:bg-[var(--dashboard-menu-hover)] hover:text-[var(--dashboard-title)] focus:bg-[var(--dashboard-menu-hover)] focus:text-[var(--dashboard-title)] data-[highlighted]:bg-[var(--dashboard-menu-hover)] data-[highlighted]:text-[var(--dashboard-title)]";
+  "cursor-pointer gap-2 py-2 text-[var(--dashboard-title)] hover:bg-[var(--dashboard-menu-hover)] hover:text-[var(--dashboard-title)] focus:bg-[var(--dashboard-menu-hover)] focus:text-[var(--dashboard-title)] data-[highlighted]:bg-[var(--dashboard-menu-hover)] data-[highlighted]:text-[var(--dashboard-title)]";
 
 const DATE_PRESETS = [
   { value: "full_range", label: "Full range" },
@@ -105,6 +105,25 @@ function hexToRgba(hex: string | undefined, alpha: number): string {
   const g = parseInt(normalized.slice(2, 4), 16);
   const b = parseInt(normalized.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function hexToHslValues(hex: string | undefined): string {
+  if (!hex) return "0 0% 0%";
+  const normalized = hex.replace("#", "");
+  if (!/^[\da-f]{6}$/i.test(normalized)) return "0 0% 0%";
+  const r = parseInt(normalized.slice(0, 2), 16) / 255;
+  const g = parseInt(normalized.slice(2, 4), 16) / 255;
+  const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return `0 0% ${Math.round(l * 100)}%`;
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
 function buildPremiumDashboardVars(theme: ChartPresetTheme): PremiumDashboardStyleVars {
@@ -215,6 +234,8 @@ interface DashboardPreviewProps {
    * being the source of truth for layout; S3 is.
    */
   onLayoutPersist?: (components: any[]) => void;
+  /** When true, grid drag and resize are disabled (read-only view). */
+  readOnly?: boolean;
 }
 
 const DashboardPreview = ({
@@ -231,6 +252,7 @@ const DashboardPreview = ({
   onEditedComponentsChange,
   disablePersistence = false,
   onLayoutPersist,
+  readOnly = false,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -1409,9 +1431,21 @@ const DashboardPreview = ({
                         <span>Date Range</span>
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[280px] z-[201] p-3 space-y-3" align="end">
+                    <PopoverContent
+                      className="w-[280px] z-[201] p-3 space-y-3"
+                      align="end"
+                      style={{
+                        "--dashboard-title": premiumDashboardVars["--dashboard-title"],
+                        "--dashboard-muted": premiumDashboardVars["--dashboard-muted"],
+                        "--dashboard-card-border": premiumDashboardVars["--dashboard-card-border"],
+                        "--dashboard-popover-bg": premiumDashboardVars["--dashboard-popover-bg"],
+                        backgroundColor: premiumDashboardVars["--dashboard-popover-bg"],
+                        color: premiumDashboardVars["--dashboard-title"],
+                        borderColor: premiumDashboardVars["--dashboard-card-border"],
+                      } as React.CSSProperties}
+                    >
                       <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">Range preset</label>
+                        <label className="text-xs font-medium" style={{ color: premiumDashboardVars["--dashboard-muted"] }}>Range preset</label>
                         <Select
                           value={datePreset}
                           onValueChange={(value) => {
@@ -1421,10 +1455,26 @@ const DashboardPreview = ({
                             }
                           }}
                         >
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger
+                            className="h-9"
+                            style={{
+                              color: premiumDashboardVars["--dashboard-title"],
+                              backgroundColor: premiumDashboardVars["--dashboard-popover-bg"],
+                              borderColor: premiumDashboardVars["--dashboard-card-border"],
+                            }}
+                          >
                             <SelectValue placeholder="Select date range" />
                           </SelectTrigger>
-                          <SelectContent className="z-[202]">
+                          <SelectContent
+                            className="z-[202]"
+                            style={{
+                              "--accent": hexToHslValues(CHART_THEME_COLORS[effectiveTheme]?.["highlight-color"]),
+                              "--accent-foreground": hexToHslValues(CHART_THEME_COLORS[effectiveTheme]?.["bg-card-color"]),
+                              backgroundColor: premiumDashboardVars["--dashboard-popover-bg"],
+                              color: premiumDashboardVars["--dashboard-title"],
+                              borderColor: premiumDashboardVars["--dashboard-card-border"],
+                            } as React.CSSProperties}
+                          >
                             {DATE_PRESETS.map((preset) => (
                               <SelectItem key={preset.value} value={preset.value}>
                                 {preset.label}
@@ -1437,7 +1487,7 @@ const DashboardPreview = ({
                       {datePreset === "custom" && (
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Start</label>
+                            <label className="text-xs font-medium" style={{ color: premiumDashboardVars["--dashboard-muted"] }}>Start</label>
                             <div className="relative">
                               <input
                                 type="date"
@@ -1446,13 +1496,18 @@ const DashboardPreview = ({
                                   const nextFrom = e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined;
                                   setDateRange((prev) => ({ from: nextFrom, to: prev?.to }));
                                 }}
-                                className="date-input-themed w-full h-9 px-2 pr-9 rounded-md border border-border/60 bg-background text-sm"
+                                className="date-input-themed w-full h-9 px-2 pr-9 rounded-md border text-sm"
+                                style={{
+                                  color: premiumDashboardVars["--dashboard-title"],
+                                  backgroundColor: premiumDashboardVars["--dashboard-popover-bg"],
+                                  borderColor: premiumDashboardVars["--dashboard-card-border"],
+                                }}
                               />
-                              <CalendarDays className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <CalendarDays className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: premiumDashboardVars["--dashboard-muted"] }} />
                             </div>
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">End</label>
+                            <label className="text-xs font-medium" style={{ color: premiumDashboardVars["--dashboard-muted"] }}>End</label>
                             <div className="relative">
                               <input
                                 type="date"
@@ -1461,9 +1516,14 @@ const DashboardPreview = ({
                                   const nextTo = e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined;
                                   setDateRange((prev) => ({ from: prev?.from, to: nextTo }));
                                 }}
-                                className="date-input-themed w-full h-9 px-2 pr-9 rounded-md border border-border/60 bg-background text-sm"
+                                className="date-input-themed w-full h-9 px-2 pr-9 rounded-md border text-sm"
+                                style={{
+                                  color: premiumDashboardVars["--dashboard-title"],
+                                  backgroundColor: premiumDashboardVars["--dashboard-popover-bg"],
+                                  borderColor: premiumDashboardVars["--dashboard-card-border"],
+                                }}
                               />
-                              <CalendarDays className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <CalendarDays className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: premiumDashboardVars["--dashboard-muted"] }} />
                             </div>
                           </div>
                         </div>
@@ -1686,8 +1746,8 @@ const DashboardPreview = ({
                 margin={margin}
                 containerPadding={containerPadding}
                 rowHeight={rowHeight}
-                isDraggable
-                isResizable
+                isDraggable={!readOnly}
+                isResizable={!readOnly}
                 compactType="vertical"
                 resizeHandles={['se', 'e', 's', 'w', 'n']}
                 draggableCancel="button, input, select, textarea, a, [contenteditable], .dashboard-card-menu-trigger, .react-resizable-handle"
@@ -1794,12 +1854,21 @@ const DashboardPreview = ({
                               <DropdownMenuContent
                                 align="end"
                                 sideOffset={6}
-                                className="min-w-[11rem] rounded-lg border backdrop-blur-md shadow-xl"
+                                className="min-w-[11rem] rounded-lg border-0 backdrop-blur-xl shadow-xl"
                                 style={{
-                                  backgroundColor: "var(--dashboard-popover-bg)",
-                                  borderColor: "var(--dashboard-card-border)",
-                                  color: "var(--dashboard-title)",
-                                }}
+                                  "--dashboard-title": premiumDashboardVars["--dashboard-title"],
+                                  "--dashboard-accent": premiumDashboardVars["--dashboard-accent"],
+                                  "--dashboard-menu-hover": premiumDashboardVars["--dashboard-menu-hover"],
+                                  "--dashboard-card-border": premiumDashboardVars["--dashboard-card-border"],
+                                  backgroundColor: hexToRgba(
+                                    CHART_THEME_COLORS[effectiveTheme]?.["bg-card-color"],
+                                    isLightDashboardTheme ? 0.85 : 0.78
+                                  ),
+                                  color: premiumDashboardVars["--dashboard-title"],
+                                  boxShadow: isLightDashboardTheme
+                                    ? "0 8px 32px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)"
+                                    : "0 8px 32px rgba(0,0,0,0.32), 0 0 0 1px rgba(255,255,255,0.06)",
+                                } as React.CSSProperties}
                               >
                                 {/* In edit mode, only the destructive Remove
                                     action is available. Edit / Fix in chat
@@ -1862,7 +1931,7 @@ const DashboardPreview = ({
                                         : <ImageDown className="h-4 w-4 shrink-0" style={{ color: "var(--dashboard-accent)" }} />}
                                       Export to PNG
                                     </DropdownMenuItem>
-                                    <DropdownMenuSeparator style={{ backgroundColor: "var(--dashboard-card-border)" }} />
+                                    <DropdownMenuSeparator style={{ backgroundColor: premiumDashboardVars["--dashboard-card-border"] }} />
                                   </>
                                 )}
                                 <DropdownMenuItem

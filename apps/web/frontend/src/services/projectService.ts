@@ -1,7 +1,7 @@
 import { api } from './api';
 
 export interface AllowedUser {
-  user_id: string;
+  user_id?: string;  // undefined for email-only (pending) invites
   email?: string;
   name?: string;
   image_url?: string;

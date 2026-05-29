@@ -229,12 +229,14 @@ const Header = () => {
               >
                 Pricing
               </button>
-              <button
-                onClick={() => navigate("/docs")}
+              <a
+                href="/docs"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-sm font-medium text-foreground dark:text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
               >
                 Docs
-              </button>
+              </a>
             </nav>
           </div>
 
@@ -403,12 +405,15 @@ const Header = () => {
               >
                 Pricing
               </button>
-              <button
-                onClick={() => { setMobileNavOpen(false); navigate("/docs"); }}
-                className="w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
+              <a
+                href="/docs"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMobileNavOpen(false)}
+                className="w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm block"
               >
                 Docs
-              </button>
+              </a>
             </div>
           </SheetContent>
         </Sheet>

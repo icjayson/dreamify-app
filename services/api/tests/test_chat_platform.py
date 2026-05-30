@@ -11,14 +11,15 @@ Covers:
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
 # ── chat_platform_repo ────────────────────────────────────────────────────────
+
 
 class TestChatPlatformRepo:
     """Unit tests for DynamoDB repo functions using mocked tables."""
@@ -41,24 +42,33 @@ class TestChatPlatformRepo:
             "workspace_name": "Acme",
             "language": "en",
         }
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table") as mock_get_table:
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table"
+        ) as mock_get_table:
             mock_get_table.return_value = self._make_table_mock(workspace)
             from utils.dynamodb.repos import chat_platform_repo
+
             result = chat_platform_repo.get_workspace("slack:T123")
         assert result["user_id"] == "user_abc"
         assert result["project_id"] == "proj_xyz"
 
     def test_get_workspace_not_found(self):
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table") as mock_get_table:
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table"
+        ) as mock_get_table:
             mock_get_table.return_value = self._make_table_mock(None)
             from utils.dynamodb.repos import chat_platform_repo
+
             result = chat_platform_repo.get_workspace("slack:UNKNOWN")
         assert result is None
 
     def test_save_workspace(self):
         mock_table = self._make_table_mock()
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table
+        ):
             from utils.dynamodb.repos import chat_platform_repo
+
             result = chat_platform_repo.save_workspace(
                 platform_workspace_id="slack:T999",
                 user_id="user_1",
@@ -79,23 +89,34 @@ class TestChatPlatformRepo:
             "project_id": "proj-uuid",
             "user_id": "user-uuid",
         }
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table") as mock_get_table:
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table"
+        ) as mock_get_table:
             mock_get_table.return_value = self._make_table_mock(session)
             from utils.dynamodb.repos import chat_platform_repo
-            result = chat_platform_repo.get_session("slack:T123", "C001#1700000000.000001")
+
+            result = chat_platform_repo.get_session(
+                "slack:T123", "C001#1700000000.000001"
+            )
         assert result["conversation_id"] == "conv-uuid"
 
     def test_get_session_not_found(self):
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table") as mock_get_table:
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table"
+        ) as mock_get_table:
             mock_get_table.return_value = self._make_table_mock(None)
             from utils.dynamodb.repos import chat_platform_repo
+
             result = chat_platform_repo.get_session("slack:T123", "C999#ts")
         assert result is None
 
     def test_create_session(self):
         mock_table = self._make_table_mock()
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table
+        ):
             from utils.dynamodb.repos import chat_platform_repo
+
             result = chat_platform_repo.create_session(
                 platform_workspace_id="slack:T123",
                 thread_key="C001#ts",
@@ -109,24 +130,34 @@ class TestChatPlatformRepo:
 
     def test_update_session_conversation(self):
         mock_table = self._make_table_mock()
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table
+        ):
             from utils.dynamodb.repos import chat_platform_repo
-            chat_platform_repo.update_session_conversation("slack:T123", "C001#ts", "conv-new")
+
+            chat_platform_repo.update_session_conversation(
+                "slack:T123", "C001#ts", "conv-new"
+            )
         mock_table.update_item.assert_called_once()
 
 
 # ── slack_service formatters ──────────────────────────────────────────────────
 
+
 class TestSlackServiceFormatters:
     def test_build_analyzing_blocks_contains_query(self):
         from app.services.slack_service import build_analyzing_blocks
+
         blocks = build_analyzing_blocks("why did signups drop?")
         text = blocks[0]["text"]["text"]
         assert "why did signups drop?" in text
 
     def test_build_response_blocks_with_dashboard(self):
         from app.services.slack_service import build_response_blocks
-        blocks = build_response_blocks("Signups dropped 23%.", "https://app.dreamify.dev/projects/p?dashboard=d", 5)
+
+        blocks = build_response_blocks(
+            "Signups dropped 23%.", "https://app.dreamify.dev/projects/p?dashboard=d", 5
+        )
         # section with narrative
         assert any("Signups dropped 23%" in str(b) for b in blocks)
         # actions block with dashboard button
@@ -139,12 +170,14 @@ class TestSlackServiceFormatters:
 
     def test_build_response_blocks_without_dashboard(self):
         from app.services.slack_service import build_response_blocks
+
         blocks = build_response_blocks("No data found.", None, 5)
         action_blocks = [b for b in blocks if b.get("type") == "actions"]
         assert len(action_blocks) == 0
 
     def test_build_response_blocks_with_metrics(self):
         from app.services.slack_service import build_response_blocks
+
         metrics = [
             {"title": "Revenue", "value": "$142k", "change": "+12%", "trend": "up"},
             {"title": "Users", "value": "8,420", "change": "+3%", "trend": "up"},
@@ -163,8 +196,11 @@ class TestSlackServiceFormatters:
 
     def test_build_response_blocks_metrics_capped_at_four(self):
         from app.services.slack_service import build_response_blocks
+
         metrics = [{"title": f"M{i}", "value": i} for i in range(6)]
-        blocks = build_response_blocks("Narrative.", "https://example.com", 5, metrics=metrics)
+        blocks = build_response_blocks(
+            "Narrative.", "https://example.com", 5, metrics=metrics
+        )
         section_blocks = [b for b in blocks if b.get("type") == "section"]
         metrics_text = section_blocks[1]["text"]["text"]
         # M0–M3 should appear; M4/M5 should not
@@ -173,6 +209,7 @@ class TestSlackServiceFormatters:
 
     def test_build_response_blocks_no_metrics_section_when_empty(self):
         from app.services.slack_service import build_response_blocks
+
         blocks = build_response_blocks("Narrative.", None, 5, metrics=[])
         section_blocks = [b for b in blocks if b.get("type") == "section"]
         # Only narrative section — no metrics section
@@ -180,20 +217,24 @@ class TestSlackServiceFormatters:
 
     def test_build_error_blocks(self):
         from app.services.slack_service import build_error_blocks
+
         blocks = build_error_blocks("Something went wrong.")
         assert "Something went wrong." in blocks[0]["text"]["text"]
 
     def test_step_label_known(self):
         from app.services.slack_service import step_label
+
         assert "Reasoning" in step_label("reasoning")
 
     def test_step_label_unknown(self):
         from app.services.slack_service import step_label
+
         label = step_label("some_custom_step")
         assert "Some Custom Step" in label
 
 
 # ── chat_platform_service helpers ────────────────────────────────────────────
+
 
 class TestChatPlatformServiceHelpers:
     def _make_conversation(self, nodes: list) -> Dict[str, Any]:
@@ -206,52 +247,64 @@ class TestChatPlatformServiceHelpers:
 
     def test_extract_narrative_returns_last_assistant_text(self):
         from app.services.chat_platform_service import _extract_narrative
-        conversation = self._make_conversation([
-            {
-                "role": "user",
-                "status": "completed",
-                "contents": [{"type": "text", "data": {"text": "Why did signups drop?"}}],
-            },
-            {
-                "role": "assistant",
-                "status": "completed",
-                "contents": [{"type": "text", "data": {"text": "Signups dropped 23%."}}],
-            },
-        ])
+
+        conversation = self._make_conversation(
+            [
+                {
+                    "role": "user",
+                    "status": "completed",
+                    "contents": [
+                        {"type": "text", "data": {"text": "Why did signups drop?"}}
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "status": "completed",
+                    "contents": [
+                        {"type": "text", "data": {"text": "Signups dropped 23%."}}
+                    ],
+                },
+            ]
+        )
         assert _extract_narrative(conversation) == "Signups dropped 23%."
 
     def test_extract_narrative_skips_incomplete(self):
         from app.services.chat_platform_service import _extract_narrative
-        conversation = self._make_conversation([
-            {
-                "role": "assistant",
-                "status": "processing",
-                "contents": [{"type": "text", "data": {"text": "In progress..."}}],
-            },
-            {
-                "role": "assistant",
-                "status": "completed",
-                "contents": [{"type": "text", "data": {"text": "Done."}}],
-            },
-        ])
+
+        conversation = self._make_conversation(
+            [
+                {
+                    "role": "assistant",
+                    "status": "processing",
+                    "contents": [{"type": "text", "data": {"text": "In progress..."}}],
+                },
+                {
+                    "role": "assistant",
+                    "status": "completed",
+                    "contents": [{"type": "text", "data": {"text": "Done."}}],
+                },
+            ]
+        )
         assert _extract_narrative(conversation) == "Done."
 
     def test_extract_narrative_none_when_no_assistant(self):
         from app.services.chat_platform_service import _extract_narrative
-        conversation = self._make_conversation([
-            {
-                "role": "user",
-                "status": "completed",
-                "contents": [{"type": "text", "data": {"text": "Hello"}}],
-            },
-        ])
+
+        conversation = self._make_conversation(
+            [
+                {
+                    "role": "user",
+                    "status": "completed",
+                    "contents": [{"type": "text", "data": {"text": "Hello"}}],
+                },
+            ]
+        )
         assert _extract_narrative(conversation) is None
 
     def test_build_dashboard_url_with_dashboard(self):
         from app.services.chat_platform_service import _build_dashboard_url
-        conversation = {
-            "dashboards": [{"dashboard_id": "dash-1"}]
-        }
+
+        conversation = {"dashboards": [{"dashboard_id": "dash-1"}]}
         url = _build_dashboard_url("proj-1", conversation)
         assert url is not None
         assert "proj-1" in url
@@ -259,11 +312,13 @@ class TestChatPlatformServiceHelpers:
 
     def test_build_dashboard_url_no_dashboard(self):
         from app.services.chat_platform_service import _build_dashboard_url
+
         conversation = {"dashboards": []}
         assert _build_dashboard_url("proj-1", conversation) is None
 
     def test_extract_top_metrics_returns_up_to_max(self):
         from app.services.chat_platform_service import _extract_top_metrics
+
         dashboard = {
             "metrics": [
                 {"title": "Revenue", "value": 142000, "change": "+12%", "trend": "up"},
@@ -280,17 +335,20 @@ class TestChatPlatformServiceHelpers:
 
     def test_extract_top_metrics_empty_dashboard(self):
         from app.services.chat_platform_service import _extract_top_metrics
+
         assert _extract_top_metrics({}) == []
         assert _extract_top_metrics({"metrics": []}) == []
 
     def test_extract_top_metrics_fewer_than_max(self):
         from app.services.chat_platform_service import _extract_top_metrics
+
         dashboard = {"metrics": [{"title": "Revenue", "value": 100}]}
         result = _extract_top_metrics(dashboard, max_n=4)
         assert len(result) == 1
 
     def test_make_user_node_structure(self):
         from app.services.chat_platform_service import _make_user_node
+
         node = _make_user_node("show me revenue trends")
         assert node["role"] == "user"
         assert node["status"] == "completed"
@@ -303,19 +361,23 @@ class TestChatPlatformServiceHelpers:
 # FastAPI Depends() defaults are skipped when calling async handlers directly;
 # pass the resolved dependency values as keyword arguments.
 
+
 class TestChatPlatformRoutes:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def _mock_request(self, body_json: dict) -> MagicMock:
         from unittest.mock import AsyncMock
+
         req = MagicMock()
         req.body = AsyncMock(return_value=json.dumps(body_json).encode())
         return req
 
     def test_slack_url_verification(self):
         from app.api.route_modules.chat_platform import slack_events
+
         challenge = "3eZbrw1aBm2rZgRNFdxV2595E9CY3QKc4ZhdAgX"
         payload = {"type": "url_verification", "challenge": challenge}
         result = self._run(slack_events(self._mock_request(payload), MagicMock()))
@@ -323,6 +385,7 @@ class TestChatPlatformRoutes:
 
     def test_slack_mention_unknown_workspace_returns_ok(self):
         from app.api.route_modules.chat_platform import slack_events
+
         payload = {
             "team_id": "T_UNKNOWN",
             "type": "event_callback",
@@ -333,31 +396,42 @@ class TestChatPlatformRoutes:
                 "ts": "1700000000.000001",
             },
         }
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=None,
+        ):
             result = self._run(slack_events(self._mock_request(payload), MagicMock()))
         assert result["ok"] is True
 
     def test_get_workspace_not_found(self):
         from fastapi import HTTPException
         from app.api.route_modules.chat_platform import get_workspace
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=None,
+        ):
             with pytest.raises(HTTPException) as exc:
                 self._run(get_workspace("slack:NOTEXIST"))
         assert exc.value.status_code == 404
 
     def test_get_workspace_found(self):
         from app.api.route_modules.chat_platform import get_workspace
+
         workspace = {
             "platform_workspace_id": "slack:T123",
             "platform": "slack",
             "workspace_name": "Acme",
             "project_id": "proj-1",
             "language": "en",
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "bot_token_encrypted": "enc",
             "user_id": "user-1",
         }
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=workspace):
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=workspace,
+        ):
             result = self._run(get_workspace("slack:T123"))
         assert result.platform == "slack"
         assert result.workspace_name == "Acme"
@@ -366,15 +440,24 @@ class TestChatPlatformRoutes:
 
 # ── State token helpers ───────────────────────────────────────────────────────
 
+
 class TestStateToken:
     def test_round_trip(self):
-        from app.api.route_modules.chat_platform import _create_state_token, _verify_state_token
+        from app.api.route_modules.chat_platform import (
+            _create_state_token,
+            _verify_state_token,
+        )
+
         token = _create_state_token("user_abc")
         assert _verify_state_token(token) == "user_abc"
 
     def test_tampered_token_raises(self):
         import base64
-        from app.api.route_modules.chat_platform import _create_state_token, _verify_state_token
+        from app.api.route_modules.chat_platform import (
+            _create_state_token,
+            _verify_state_token,
+        )
+
         token = _create_state_token("user_abc")
         # Flip a character in the signature portion
         raw = base64.urlsafe_b64decode(token.encode()).decode()
@@ -388,16 +471,21 @@ class TestStateToken:
     def test_expired_token_raises(self):
         import json, time, hmac, hashlib, base64
         from utils.config import config
+
         payload = json.dumps({"user_id": "user_abc", "exp": int(time.time()) - 1})
-        sig = hmac.new(config.app.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        sig = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
         raw = f"{payload}||{sig}"
         token = base64.urlsafe_b64encode(raw.encode()).decode()
         from app.api.route_modules.chat_platform import _verify_state_token
+
         with pytest.raises(ValueError, match="expired"):
             _verify_state_token(token)
 
 
 # ── get_workspace_by_user ─────────────────────────────────────────────────────
+
 
 class TestGetWorkspaceByUser:
     def test_returns_matching_workspace(self):
@@ -408,35 +496,48 @@ class TestGetWorkspaceByUser:
         }
         mock_table = MagicMock()
         mock_table.scan.return_value = {"Items": [workspace]}
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table
+        ):
             from utils.dynamodb.repos import chat_platform_repo
+
             result = chat_platform_repo.get_workspace_by_user("user-1", "slack")
         assert result["platform_workspace_id"] == "slack:T123"
 
     def test_returns_none_when_no_match(self):
         mock_table = MagicMock()
         mock_table.scan.return_value = {"Items": []}
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table
+        ):
             from utils.dynamodb.repos import chat_platform_repo
+
             result = chat_platform_repo.get_workspace_by_user("user-999", "slack")
         assert result is None
 
 
 # ── GET /chat/slack/me ────────────────────────────────────────────────────────
 
+
 class TestGetSlackMe:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def test_not_connected(self):
         from app.api.route_modules.chat_platform import get_slack_status
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=None):
+
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user",
+            return_value=None,
+        ):
             result = self._run(get_slack_status(user_id="user-1"))
         assert result.connected is False
 
     def test_connected(self):
         from app.api.route_modules.chat_platform import get_slack_status
+
         workspace = {
             "platform_workspace_id": "slack:T123",
             "workspace_name": "Acme",
@@ -444,7 +545,10 @@ class TestGetSlackMe:
             "user_id": "user-1",
             "platform": "slack",
         }
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=workspace):
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user",
+            return_value=workspace,
+        ):
             result = self._run(get_slack_status(user_id="user-1"))
         assert result.connected is True
         assert result.workspace_name == "Acme"
@@ -452,9 +556,11 @@ class TestGetSlackMe:
 
 # ── DELETE /chat/workspaces/{id} ──────────────────────────────────────────────
 
+
 class TestDisconnectWorkspace:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def _workspace(self, user_id: str) -> dict:
@@ -465,13 +571,18 @@ class TestDisconnectWorkspace:
             "workspace_name": "Acme",
             "project_id": "proj-1",
             "language": "en",
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def test_owner_can_disconnect(self):
         from app.api.route_modules.chat_platform import disconnect_workspace
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=self._workspace("user-1")), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace") as mock_delete:
+
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=self._workspace("user-1"),
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace"
+        ) as mock_delete:
             result = self._run(disconnect_workspace("slack:T123", user_id="user-1"))
         assert result["ok"] is True
         mock_delete.assert_called_once_with("slack:T123")
@@ -479,7 +590,11 @@ class TestDisconnectWorkspace:
     def test_other_user_gets_403(self):
         from fastapi import HTTPException
         from app.api.route_modules.chat_platform import disconnect_workspace
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=self._workspace("user-owner")):
+
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=self._workspace("user-owner"),
+        ):
             with pytest.raises(HTTPException) as exc:
                 self._run(disconnect_workspace("slack:T123", user_id="user-other"))
         assert exc.value.status_code == 403
@@ -487,7 +602,11 @@ class TestDisconnectWorkspace:
     def test_nonexistent_workspace_gets_404(self):
         from fastapi import HTTPException
         from app.api.route_modules.chat_platform import disconnect_workspace
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=None,
+        ):
             with pytest.raises(HTTPException) as exc:
                 self._run(disconnect_workspace("slack:GONE", user_id="user-1"))
         assert exc.value.status_code == 404
@@ -495,41 +614,49 @@ class TestDisconnectWorkspace:
 
 # ── Telegram service — formatters ─────────────────────────────────────────────
 
+
 class TestTelegramFormatters:
     def test_escape_markdown_special_chars(self):
         from app.services.telegram_service import escape_markdown
+
         assert escape_markdown("1+1=2 (ok)") == r"1\+1\=2 \(ok\)"
 
     def test_escape_markdown_plain_text_unchanged(self):
         from app.services.telegram_service import escape_markdown
+
         assert escape_markdown("hello world") == "hello world"
 
     def test_format_analyzing_message(self):
         from app.services.telegram_service import format_analyzing_message
+
         msg = format_analyzing_message("why did revenue drop?")
         assert "Analyzing" in msg
         assert "revenue drop" in msg
 
     def test_format_analyzing_message_truncates_long_query(self):
         from app.services.telegram_service import format_analyzing_message
+
         long_query = "x" * 100
         msg = format_analyzing_message(long_query)
         assert "…" in msg
 
     def test_format_status_message(self):
         from app.services.telegram_service import format_status_message
+
         msg = format_status_message("Loading data...")
         assert "Loading data" in msg
         assert "⏳" in msg
 
     def test_format_error_message(self):
         from app.services.telegram_service import format_error_message
+
         msg = format_error_message("Something went wrong.")
         assert "⚠️" in msg
         assert "Something went wrong" in msg
 
     def test_format_response_message_no_dashboard(self):
         from app.services.telegram_service import format_response_message
+
         msg = format_response_message("Revenue grew 12%.", None, 5)
         assert "Dreamify" in msg
         assert "Revenue grew" in msg
@@ -538,11 +665,14 @@ class TestTelegramFormatters:
 
     def test_format_response_message_with_metrics(self):
         from app.services.telegram_service import format_response_message
+
         metrics = [
             {"title": "Revenue", "value": "$142k", "change": "+12%", "trend": "up"},
             {"title": "Users", "value": "8420", "change": "-3%", "trend": "down"},
         ]
-        msg = format_response_message("Analysis done.", "https://app.dreamify.dev/x", 5, metrics)
+        msg = format_response_message(
+            "Analysis done.", "https://app.dreamify.dev/x", 5, metrics
+        )
         assert "Revenue" in msg
         assert "📈" in msg
         assert "Users" in msg
@@ -550,6 +680,7 @@ class TestTelegramFormatters:
 
     def test_format_response_message_metrics_capped_at_four(self):
         from app.services.telegram_service import format_response_message
+
         metrics = [{"title": f"M{i}", "value": i} for i in range(6)]
         msg = format_response_message("ok", None, 5, metrics)
         # Only first 4 metric titles should appear
@@ -559,6 +690,7 @@ class TestTelegramFormatters:
 
 # ── Telegram repo — get_workspace_by_telegram_user_id ─────────────────────────
 
+
 class TestGetWorkspaceByTelegramUserId:
     def _make_scan_mock(self, items: list) -> MagicMock:
         mock = MagicMock()
@@ -566,33 +698,49 @@ class TestGetWorkspaceByTelegramUserId:
         return mock
 
     def test_found(self):
-        from utils.dynamodb.repos.chat_platform_repo import get_workspace_by_telegram_user_id
+        from utils.dynamodb.repos.chat_platform_repo import (
+            get_workspace_by_telegram_user_id,
+        )
+
         workspace = {
             "platform_workspace_id": "telegram:123",
             "platform": "telegram",
             "telegram_user_id": "123",
             "user_id": "u1",
         }
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=self._make_scan_mock([workspace])):
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table",
+            return_value=self._make_scan_mock([workspace]),
+        ):
             result = get_workspace_by_telegram_user_id("123")
         assert result is not None
         assert result["telegram_user_id"] == "123"
 
     def test_not_found(self):
-        from utils.dynamodb.repos.chat_platform_repo import get_workspace_by_telegram_user_id
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=self._make_scan_mock([])):
+        from utils.dynamodb.repos.chat_platform_repo import (
+            get_workspace_by_telegram_user_id,
+        )
+
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table",
+            return_value=self._make_scan_mock([]),
+        ):
             result = get_workspace_by_telegram_user_id("999")
         assert result is None
 
 
 # ── Telegram repo — save_workspace with telegram_user_id ─────────────────────
 
+
 class TestSaveWorkspaceWithTelegramUserId:
     def test_telegram_user_id_stored(self):
         from utils.dynamodb.repos.chat_platform_repo import save_workspace
+
         mock_table = MagicMock()
         mock_table.put_item.return_value = {}
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table
+        ):
             result = save_workspace(
                 platform_workspace_id="telegram:123",
                 user_id="u1",
@@ -607,9 +755,12 @@ class TestSaveWorkspaceWithTelegramUserId:
 
     def test_telegram_user_id_omitted_when_none(self):
         from utils.dynamodb.repos.chat_platform_repo import save_workspace
+
         mock_table = MagicMock()
         mock_table.put_item.return_value = {}
-        with patch("utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table):
+        with patch(
+            "utils.dynamodb.repos.chat_platform_repo.get_table", return_value=mock_table
+        ):
             result = save_workspace(
                 platform_workspace_id="slack:T123",
                 user_id="u1",
@@ -624,16 +775,25 @@ class TestSaveWorkspaceWithTelegramUserId:
 
 # ── POST /chat/telegram/generate-code ────────────────────────────────────────
 
+
 class TestTelegramGenerateCode:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def test_returns_deeplink_and_stores_pending(self):
         from app.api.route_modules.chat_platform import telegram_generate_code
-        with patch("app.api.route_modules.chat_platform._telegram_bot_token", return_value="tok"), \
-             patch("app.api.route_modules.chat_platform._telegram_bot_username", return_value="TestBot"), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.save_workspace") as mock_save:
+
+        with patch(
+            "app.api.route_modules.chat_platform._telegram_bot_token",
+            return_value="tok",
+        ), patch(
+            "app.api.route_modules.chat_platform._telegram_bot_username",
+            return_value="TestBot",
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.save_workspace"
+        ) as mock_save:
             result = self._run(telegram_generate_code(user_id="u1"))
         assert result.bot_username == "TestBot"
         assert result.deeplink.startswith("https://t.me/TestBot?start=")
@@ -649,7 +809,10 @@ class TestTelegramGenerateCode:
     def test_503_when_not_configured(self):
         from fastapi import HTTPException
         from app.api.route_modules.chat_platform import telegram_generate_code
-        with patch("app.api.route_modules.chat_platform._telegram_bot_token", return_value=""):
+
+        with patch(
+            "app.api.route_modules.chat_platform._telegram_bot_token", return_value=""
+        ):
             with pytest.raises(HTTPException) as exc:
                 self._run(telegram_generate_code(user_id="u1"))
         assert exc.value.status_code == 503
@@ -657,25 +820,35 @@ class TestTelegramGenerateCode:
 
 # ── GET /chat/telegram/me ────────────────────────────────────────────────────
 
+
 class TestGetTelegramStatus:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def test_not_connected(self):
         from app.api.route_modules.chat_platform import get_telegram_status
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=None):
+
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user",
+            return_value=None,
+        ):
             result = self._run(get_telegram_status(user_id="u1"))
         assert result.connected is False
 
     def test_connected(self):
         from app.api.route_modules.chat_platform import get_telegram_status
+
         workspace = {
             "platform_workspace_id": "telegram:999",
             "workspace_name": "MyDM",
             "project_id": "proj-tg",
         }
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=workspace):
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user",
+            return_value=workspace,
+        ):
             result = self._run(get_telegram_status(user_id="u1"))
         assert result.connected is True
         assert result.workspace_name == "MyDM"
@@ -684,12 +857,16 @@ class TestGetTelegramStatus:
 
 # ── POST /chat/telegram/webhook — /start code handling ───────────────────────
 
+
 class TestTelegramWebhookStart:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
-    def _make_request(self, text: str, chat_type: str = "private", from_id: int = 42) -> MagicMock:
+    def _make_request(
+        self, text: str, chat_type: str = "private", from_id: int = 42
+    ) -> MagicMock:
         payload = {
             "message": {
                 "text": text,
@@ -703,15 +880,20 @@ class TestTelegramWebhookStart:
 
         async def _json():
             return payload
+
         req.json = _json
         return req
 
     def test_valid_code_dispatches_start_task(self):
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import telegram_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         req = self._make_request("/start ABCD1234")
-        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value=""):
+        with patch(
+            "app.api.route_modules.chat_platform._telegram_webhook_secret",
+            return_value="",
+        ):
             result = self._run(telegram_webhook(req, bg))
         assert result == {"ok": True}
         bg.add_task.assert_called_once()
@@ -722,9 +904,13 @@ class TestTelegramWebhookStart:
     def test_no_code_dispatches_hint_task(self):
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import telegram_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         req = self._make_request("/start")
-        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value=""):
+        with patch(
+            "app.api.route_modules.chat_platform._telegram_webhook_secret",
+            return_value="",
+        ):
             result = self._run(telegram_webhook(req, bg))
         assert result == {"ok": True}
         task_fn = bg.add_task.call_args[0][0]
@@ -733,10 +919,14 @@ class TestTelegramWebhookStart:
     def test_invalid_secret_returns_403(self):
         from fastapi import BackgroundTasks, HTTPException
         from app.api.route_modules.chat_platform import telegram_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         req = self._make_request("hello")
         req.headers = {"X-Telegram-Bot-Api-Secret-Token": "wrong"}
-        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value="correctsecret"):
+        with patch(
+            "app.api.route_modules.chat_platform._telegram_webhook_secret",
+            return_value="correctsecret",
+        ):
             with pytest.raises(HTTPException) as exc:
                 self._run(telegram_webhook(req, bg))
         assert exc.value.status_code == 403
@@ -744,12 +934,18 @@ class TestTelegramWebhookStart:
     def test_valid_secret_passes(self):
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import telegram_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         req = self._make_request("hello")
         req.headers = {"X-Telegram-Bot-Api-Secret-Token": "mysecret"}
         # No workspace registered → silently returns ok (not a start command, not a known workspace)
-        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value="mysecret"), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+        with patch(
+            "app.api.route_modules.chat_platform._telegram_webhook_secret",
+            return_value="mysecret",
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=None,
+        ):
             result = self._run(telegram_webhook(req, bg))
         assert result == {"ok": True}
 
@@ -758,6 +954,7 @@ class TestTelegramWebhookStart:
         `text`. Make sure file uploads with prompts aren't silently dropped."""
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import telegram_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
 
         payload = {
@@ -774,8 +971,10 @@ class TestTelegramWebhookStart:
         }
         req = MagicMock()
         req.headers = {}
+
         async def _json():
             return payload
+
         req.json = _json
 
         ws = {
@@ -784,23 +983,41 @@ class TestTelegramWebhookStart:
             "project_id": "p1",
             "platform": "telegram",
         }
-        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value=""), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+        telegram_files = [
+            {
+                "filename": "DATA.csv",
+                "size": 0,
+                "ext": "csv",
+                "download_url": "https://telegram.example/file/DATA.csv",
+            }
+        ]
+        with patch(
+            "app.api.route_modules.chat_platform._telegram_webhook_secret",
+            return_value="",
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=ws,
+        ), patch(
+            "app.api.route_modules.chat_platform._fetch_telegram_document_metadata",
+            new_callable=AsyncMock,
+        ) as mock_fetch:
+            mock_fetch.return_value = telegram_files
             result = self._run(telegram_webhook(req, bg))
         assert result == {"ok": True}
+        mock_fetch.assert_awaited_once()
         bg.add_task.assert_called_once()
         task_fn = bg.add_task.call_args[0][0]
         assert task_fn.__name__ == "handle_telegram_query"
-        # Caption is the query, file_id is in telegram_file_ids
         kwargs = bg.add_task.call_args[1]
         assert kwargs["query"] == "đây là data NRU tháng đầu"
-        assert kwargs["telegram_file_ids"] == ["BQACAgUAAxkBAAMe"]
+        assert kwargs["telegram_files"] == telegram_files
 
     def test_document_with_no_caption_dispatches_query(self):
         """A bare file (no caption) is still actionable — DM handler should
         run a query with placeholder text."""
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import telegram_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
 
         payload = {
@@ -813,8 +1030,10 @@ class TestTelegramWebhookStart:
         }
         req = MagicMock()
         req.headers = {}
+
         async def _json():
             return payload
+
         req.json = _json
 
         ws = {
@@ -823,26 +1042,47 @@ class TestTelegramWebhookStart:
             "project_id": "p1",
             "platform": "telegram",
         }
-        with patch("app.api.route_modules.chat_platform._telegram_webhook_secret", return_value=""), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+        telegram_files = [
+            {
+                "filename": "x.csv",
+                "size": 0,
+                "ext": "csv",
+                "download_url": "https://telegram.example/file/x.csv",
+            }
+        ]
+        with patch(
+            "app.api.route_modules.chat_platform._telegram_webhook_secret",
+            return_value="",
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=ws,
+        ), patch(
+            "app.api.route_modules.chat_platform._fetch_telegram_document_metadata",
+            new_callable=AsyncMock,
+        ) as mock_fetch:
+            mock_fetch.return_value = telegram_files
             result = self._run(telegram_webhook(req, bg))
         assert result == {"ok": True}
+        mock_fetch.assert_awaited_once()
         bg.add_task.assert_called_once()
         kwargs = bg.add_task.call_args[1]
         assert "(file attached)" in kwargs["query"]
-        assert kwargs["telegram_file_ids"] == ["FILE123"]
+        assert kwargs["telegram_files"] == telegram_files
 
 
 # ── _handle_telegram_start integration ───────────────────────────────────────
 
+
 class TestHandleTelegramStart:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def _pending(self, code: str, user_id: str, age_seconds: int = 0) -> dict:
-        from datetime import datetime, timedelta
-        created = datetime.now() - timedelta(seconds=age_seconds)
+        from datetime import timedelta
+
+        created = datetime.now(timezone.utc) - timedelta(seconds=age_seconds)
         return {
             "platform_workspace_id": f"pending:{code}",
             "platform": "telegram_pending",
@@ -853,22 +1093,36 @@ class TestHandleTelegramStart:
 
     def test_valid_code_creates_workspace(self):
         from app.api.route_modules.chat_platform import _handle_telegram_start
+
         mock_bot = MagicMock()
         mock_bot.send_message = MagicMock(return_value=MagicMock())
 
         async def _send(**kwargs):
             return MagicMock()
+
         mock_bot.send_message = _send
 
         pending = self._pending("VALID123", "dreamify-user-1")
         new_project = {"project_id": "proj-new"}
 
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", side_effect=[pending, None]), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.save_workspace") as mock_save, \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace") as mock_del, \
-             patch("app.api.route_modules.chat_platform.projects_repo.create_project", return_value=new_project), \
-             patch("app.services.telegram_service.get_telegram_bot", return_value=mock_bot):
-            self._run(_handle_telegram_start("VALID123", 100, "42", {"id": 42, "first_name": "Alice"}))
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            side_effect=[pending, None],
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.save_workspace"
+        ) as mock_save, patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace"
+        ) as mock_del, patch(
+            "app.api.route_modules.chat_platform.projects_repo.create_project",
+            return_value=new_project,
+        ), patch(
+            "app.services.telegram_service.get_telegram_bot", return_value=mock_bot
+        ):
+            self._run(
+                _handle_telegram_start(
+                    "VALID123", 100, "42", {"id": 42, "first_name": "Alice"}
+                )
+            )
 
         mock_save.assert_called_once()
         saved = mock_save.call_args[1]
@@ -879,6 +1133,7 @@ class TestHandleTelegramStart:
 
     def test_expired_code_sends_error(self):
         from app.api.route_modules.chat_platform import _handle_telegram_start
+
         sent_texts = []
 
         async def _send(**kwargs):
@@ -890,15 +1145,21 @@ class TestHandleTelegramStart:
 
         expired = self._pending("EXP123", "u1", age_seconds=1000)
 
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=expired), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace"), \
-             patch("app.services.telegram_service.get_telegram_bot", return_value=mock_bot):
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=expired,
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace"
+        ), patch(
+            "app.services.telegram_service.get_telegram_bot", return_value=mock_bot
+        ):
             self._run(_handle_telegram_start("EXP123", 100, "42", {}))
 
         assert any("expired" in t.lower() for t in sent_texts)
 
     def test_unknown_code_sends_error(self):
         from app.api.route_modules.chat_platform import _handle_telegram_start
+
         sent_texts = []
 
         async def _send(**kwargs):
@@ -908,8 +1169,12 @@ class TestHandleTelegramStart:
         mock_bot = MagicMock()
         mock_bot.send_message = _send
 
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None), \
-             patch("app.services.telegram_service.get_telegram_bot", return_value=mock_bot):
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=None,
+        ), patch(
+            "app.services.telegram_service.get_telegram_bot", return_value=mock_bot
+        ):
             self._run(_handle_telegram_start("UNKNOWN", 100, "42", {}))
 
         assert any("not found" in t.lower() for t in sent_texts)
@@ -921,18 +1186,21 @@ class TestHandleTelegramStart:
 class TestZaloService:
     def test_chunk_short_text_returns_single_chunk(self):
         from app.services.zalo_service import _chunk_text
+
         out = _chunk_text("hello world")
         assert out == ["hello world"]
 
     def test_chunk_long_text_splits_on_paragraph(self):
         from app.services.zalo_service import _chunk_text
-        text = ("para1\n\n" + "x" * 1500 + "\n\n" + "y" * 1500)
+
+        text = "para1\n\n" + "x" * 1500 + "\n\n" + "y" * 1500
         chunks = _chunk_text(text, limit=1800)
         assert len(chunks) >= 2
         assert all(len(c) <= 1800 for c in chunks)
 
     def test_format_response_appends_dashboard_url_as_text(self):
         from app.services.zalo_service import format_response_message
+
         out = format_response_message(
             "Sales are up.", "https://example.com/dash/123", credits_used=5, metrics=[]
         )
@@ -941,25 +1209,36 @@ class TestZaloService:
 
     def test_format_response_no_dashboard(self):
         from app.services.zalo_service import format_response_message
+
         out = format_response_message("ok", None, credits_used=5)
         assert "View dashboard" not in out
 
     def test_format_error_message(self):
         from app.services.zalo_service import format_error_message
+
         assert format_error_message("nope").startswith("⚠️")
 
 
 class TestZaloGenerateCode:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def test_returns_qr_url_and_stores_pending(self):
         from app.api.route_modules.chat_platform import zalo_generate_code
-        with patch("app.api.route_modules.chat_platform._zalo_bot_token", return_value="123:abc"), \
-             patch("app.api.route_modules.chat_platform._zalo_bot_username", return_value="DreamifyBot"), \
-             patch("app.api.route_modules.chat_platform._zalo_bot_id", return_value="123"), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.save_workspace") as mock_save:
+
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_bot_token",
+            return_value="123:abc",
+        ), patch(
+            "app.api.route_modules.chat_platform._zalo_bot_username",
+            return_value="DreamifyBot",
+        ), patch(
+            "app.api.route_modules.chat_platform._zalo_bot_id", return_value="123"
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.save_workspace"
+        ) as mock_save:
             result = self._run(zalo_generate_code(user_id="u1"))
         assert result.bot_username == "DreamifyBot"
         assert result.bot_id == "123"
@@ -976,7 +1255,10 @@ class TestZaloGenerateCode:
     def test_503_when_not_configured(self):
         from fastapi import HTTPException
         from app.api.route_modules.chat_platform import zalo_generate_code
-        with patch("app.api.route_modules.chat_platform._zalo_bot_token", return_value=""):
+
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_bot_token", return_value=""
+        ):
             with pytest.raises(HTTPException) as exc:
                 self._run(zalo_generate_code(user_id="u1"))
         assert exc.value.status_code == 503
@@ -985,22 +1267,31 @@ class TestZaloGenerateCode:
 class TestGetZaloStatus:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def test_not_connected(self):
         from app.api.route_modules.chat_platform import get_zalo_status
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=None):
+
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user",
+            return_value=None,
+        ):
             result = self._run(get_zalo_status(user_id="u1"))
         assert result.connected is False
 
     def test_connected(self):
         from app.api.route_modules.chat_platform import get_zalo_status
+
         workspace = {
             "platform_workspace_id": "zalo:777",
             "workspace_name": "Hung",
             "project_id": "proj-zalo",
         }
-        with patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user", return_value=workspace):
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace_by_user",
+            return_value=workspace,
+        ):
             result = self._run(get_zalo_status(user_id="u1"))
         assert result.connected is True
         assert result.workspace_name == "Hung"
@@ -1010,6 +1301,7 @@ class TestGetZaloStatus:
 class TestZaloWebhook:
     def _run(self, coro):
         import asyncio
+
         return asyncio.run(coro)
 
     def _make_request(self, message: dict, headers: dict = None) -> MagicMock:
@@ -1019,6 +1311,7 @@ class TestZaloWebhook:
 
         async def _json():
             return payload
+
         req.json = _json
         return req
 
@@ -1034,9 +1327,15 @@ class TestZaloWebhook:
     def test_invalid_secret_returns_403(self):
         from fastapi import BackgroundTasks, HTTPException
         from app.api.route_modules.chat_platform import zalo_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
-        req = self._make_request(self._msg("hi"), headers={"X-Bot-Api-Secret-Token": "wrong"})
-        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value="correct"):
+        req = self._make_request(
+            self._msg("hi"), headers={"X-Bot-Api-Secret-Token": "wrong"}
+        )
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_webhook_secret",
+            return_value="correct",
+        ):
             with pytest.raises(HTTPException) as exc:
                 self._run(zalo_webhook(req, bg))
         assert exc.value.status_code == 403
@@ -1044,19 +1343,30 @@ class TestZaloWebhook:
     def test_valid_secret_passes(self):
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import zalo_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
-        req = self._make_request(self._msg("hi"), headers={"X-Bot-Api-Secret-Token": "mysecret"})
-        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value="mysecret"), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+        req = self._make_request(
+            self._msg("hi"), headers={"X-Bot-Api-Secret-Token": "mysecret"}
+        )
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_webhook_secret",
+            return_value="mysecret",
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=None,
+        ):
             result = self._run(zalo_webhook(req, bg))
         assert result == {"ok": True}
 
     def test_start_with_code_dispatches_handler(self):
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import zalo_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         req = self._make_request(self._msg("start ABCD1234"))
-        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""):
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""
+        ):
             result = self._run(zalo_webhook(req, bg))
         assert result == {"ok": True}
         bg.add_task.assert_called_once()
@@ -1066,9 +1376,12 @@ class TestZaloWebhook:
     def test_start_no_code_dispatches_hint(self):
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import zalo_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         req = self._make_request(self._msg("start"))
-        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""):
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""
+        ):
             result = self._run(zalo_webhook(req, bg))
         assert result == {"ok": True}
         task_fn = bg.add_task.call_args[0][0]
@@ -1077,9 +1390,12 @@ class TestZaloWebhook:
     def test_group_chat_ignored_phase1(self):
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import zalo_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         req = self._make_request(self._msg("hello", chat_type="GROUP"))
-        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""):
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""
+        ):
             result = self._run(zalo_webhook(req, bg))
         assert result == {"ok": True}
         bg.add_task.assert_not_called()
@@ -1087,11 +1403,21 @@ class TestZaloWebhook:
     def test_known_workspace_dispatches_query(self):
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import zalo_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         req = self._make_request(self._msg("show campaigns"))
-        ws = {"platform_workspace_id": "zalo:100", "user_id": "u1", "project_id": "p1", "platform": "zalo"}
-        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+        ws = {
+            "platform_workspace_id": "zalo:100",
+            "user_id": "u1",
+            "project_id": "p1",
+            "platform": "zalo",
+        }
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=ws,
+        ):
             result = self._run(zalo_webhook(req, bg))
         assert result == {"ok": True}
         bg.add_task.assert_called_once()
@@ -1104,6 +1430,7 @@ class TestZaloWebhook:
         gatekeep on the string and silently drop real user messages."""
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import zalo_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         # Top-level event_name (where Zalo actually puts it) using the
         # production naming.
@@ -1118,13 +1445,24 @@ class TestZaloWebhook:
         }
         req = MagicMock()
         req.headers = {}
+
         async def _json():
             return payload
+
         req.json = _json
 
-        ws = {"platform_workspace_id": "zalo:100", "user_id": "u1", "project_id": "p1", "platform": "zalo"}
-        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+        ws = {
+            "platform_workspace_id": "zalo:100",
+            "user_id": "u1",
+            "project_id": "p1",
+            "platform": "zalo",
+        }
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=ws,
+        ):
             result = self._run(zalo_webhook(req, bg))
         assert result == {"ok": True}
         bg.add_task.assert_called_once()
@@ -1136,6 +1474,7 @@ class TestZaloWebhook:
         text is present, we still process the message."""
         from fastapi import BackgroundTasks
         from app.api.route_modules.chat_platform import zalo_webhook
+
         bg = MagicMock(spec=BackgroundTasks)
         payload = {
             "event_name": "some.future.naming",
@@ -1148,13 +1487,24 @@ class TestZaloWebhook:
         }
         req = MagicMock()
         req.headers = {}
+
         async def _json():
             return payload
+
         req.json = _json
 
-        ws = {"platform_workspace_id": "zalo:100", "user_id": "u1", "project_id": "p1", "platform": "zalo"}
-        with patch("app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=ws):
+        ws = {
+            "platform_workspace_id": "zalo:100",
+            "user_id": "u1",
+            "project_id": "p1",
+            "platform": "zalo",
+        }
+        with patch(
+            "app.api.route_modules.chat_platform._zalo_webhook_secret", return_value=""
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=ws,
+        ):
             result = self._run(zalo_webhook(req, bg))
         assert result == {"ok": True}
         bg.add_task.assert_called_once()
@@ -1163,8 +1513,9 @@ class TestZaloWebhook:
 
 class TestHandleZaloStart:
     def _pending(self, code: str, user_id: str, age_seconds: int = 0) -> dict:
-        from datetime import datetime, timedelta
-        created = datetime.now() - timedelta(seconds=age_seconds)
+        from datetime import timedelta
+
+        created = datetime.now(timezone.utc) - timedelta(seconds=age_seconds)
         return {
             "platform_workspace_id": f"pending:{code}",
             "platform": "zalo_pending",
@@ -1175,16 +1526,28 @@ class TestHandleZaloStart:
 
     def test_valid_code_creates_workspace(self):
         from app.api.route_modules.chat_platform import _handle_zalo_start
+
         pending = self._pending("ZAL12345", "user-1")
         new_project = {"project_id": "proj-new"}
 
-        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
-             patch("app.services.zalo_service.send_message", return_value={"ok": True}), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", side_effect=[pending, None]), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.save_workspace") as mock_save, \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace") as mock_del, \
-             patch("app.api.route_modules.chat_platform.projects_repo.create_project", return_value=new_project):
-            _handle_zalo_start("ZAL12345", "100", "42", {"id": "42", "display_name": "Alice"})
+        with patch(
+            "app.services.zalo_service._bot_token", return_value="123:abc"
+        ), patch(
+            "app.services.zalo_service.send_message", return_value={"ok": True}
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            side_effect=[pending, None],
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.save_workspace"
+        ) as mock_save, patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace"
+        ) as mock_del, patch(
+            "app.api.route_modules.chat_platform.projects_repo.create_project",
+            return_value=new_project,
+        ):
+            _handle_zalo_start(
+                "ZAL12345", "100", "42", {"id": "42", "display_name": "Alice"}
+            )
 
         mock_save.assert_called_once()
         saved = mock_save.call_args[1]
@@ -1195,6 +1558,7 @@ class TestHandleZaloStart:
 
     def test_expired_code_deletes_pending(self):
         from app.api.route_modules.chat_platform import _handle_zalo_start
+
         sent = []
 
         def _send(chat_id, text):
@@ -1203,10 +1567,14 @@ class TestHandleZaloStart:
 
         expired = self._pending("EXP123", "u1", age_seconds=2000)
 
-        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
-             patch("app.services.zalo_service.send_message", side_effect=_send), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=expired), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace") as mock_del:
+        with patch(
+            "app.services.zalo_service._bot_token", return_value="123:abc"
+        ), patch("app.services.zalo_service.send_message", side_effect=_send), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=expired,
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.delete_workspace"
+        ) as mock_del:
             _handle_zalo_start("EXP123", "100", "42", {})
 
         assert any("expired" in t.lower() for t in sent)
@@ -1214,23 +1582,29 @@ class TestHandleZaloStart:
 
     def test_unknown_code_sends_error(self):
         from app.api.route_modules.chat_platform import _handle_zalo_start
+
         sent = []
 
         def _send(chat_id, text):
             sent.append(text)
             return {"ok": True}
 
-        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
-             patch("app.services.zalo_service.send_message", side_effect=_send), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace", return_value=None):
+        with patch(
+            "app.services.zalo_service._bot_token", return_value="123:abc"
+        ), patch("app.services.zalo_service.send_message", side_effect=_send), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=None,
+        ):
             _handle_zalo_start("MISSING", "100", "42", {})
 
         assert any("not found" in t.lower() for t in sent)
 
     def test_bot_not_configured_returns_silently(self):
         from app.api.route_modules.chat_platform import _handle_zalo_start
-        with patch("app.services.zalo_service._bot_token", return_value=""), \
-             patch("app.api.route_modules.chat_platform.chat_platform_repo.get_workspace") as mock_get:
+
+        with patch("app.services.zalo_service._bot_token", return_value=""), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace"
+        ) as mock_get:
             _handle_zalo_start("X", "100", "42", {})
         mock_get.assert_not_called()
 
@@ -1243,10 +1617,12 @@ class TestZaloSendPhoto:
 
     def test_send_photo_posts_multipart_with_caption(self):
         from app.services import zalo_service
+
         captured = {}
 
         class _FakeResp:
             content = b'{"ok": true, "result": {"message_id": "m1"}}'
+
             def json(self):
                 return {"ok": True, "result": {"message_id": "m1"}}
 
@@ -1256,10 +1632,14 @@ class TestZaloSendPhoto:
             captured["files"] = files
             return _FakeResp()
 
-        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
-             patch("app.services.zalo_service.requests.post", side_effect=_fake_post):
+        with patch(
+            "app.services.zalo_service._bot_token", return_value="123:abc"
+        ), patch("app.services.zalo_service.requests.post", side_effect=_fake_post):
             result = zalo_service.send_photo(
-                chat_id=999, photo_bytes=b"\x89PNG\x00fake", caption="Revenue", filename="rev.png"
+                chat_id=999,
+                photo_bytes=b"\x89PNG\x00fake",
+                caption="Revenue",
+                filename="rev.png",
             )
 
         assert result == {"ok": True, "result": {"message_id": "m1"}}
@@ -1274,10 +1654,12 @@ class TestZaloSendPhoto:
 
     def test_send_photo_truncates_long_caption(self):
         from app.services import zalo_service
+
         captured = {}
 
         class _FakeResp:
             content = b'{"ok": true}'
+
             def json(self):
                 return {"ok": True}
 
@@ -1286,16 +1668,21 @@ class TestZaloSendPhoto:
             return _FakeResp()
 
         long_caption = "x" * 2000
-        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
-             patch("app.services.zalo_service.requests.post", side_effect=_fake_post):
+        with patch(
+            "app.services.zalo_service._bot_token", return_value="123:abc"
+        ), patch("app.services.zalo_service.requests.post", side_effect=_fake_post):
             zalo_service.send_photo(chat_id=1, photo_bytes=b"png", caption=long_caption)
 
         assert len(captured["data"]["caption"]) == 1024
 
     def test_send_photo_swallows_request_errors(self):
         from app.services import zalo_service
-        with patch("app.services.zalo_service._bot_token", return_value="123:abc"), \
-             patch("app.services.zalo_service.requests.post", side_effect=RuntimeError("boom")):
+
+        with patch(
+            "app.services.zalo_service._bot_token", return_value="123:abc"
+        ), patch(
+            "app.services.zalo_service.requests.post", side_effect=RuntimeError("boom")
+        ):
             result = zalo_service.send_photo(chat_id=1, photo_bytes=b"png")
         assert result is None
 
@@ -1307,11 +1694,13 @@ class TestChartRenderingBranches:
 
     def test_renderer_returns_empty_for_dashboard_with_no_charts(self):
         from app.services.chart_renderer import render_dashboard_previews
+
         out = render_dashboard_previews({"charts": []}, max_charts=4)
         assert out == []
 
     def test_renderer_skips_unsupported_chart_types(self):
         from app.services.chart_renderer import render_dashboard_previews
+
         out = render_dashboard_previews(
             {"charts": [{"chart_type": "fancy_3d_holograph", "title": "x"}]},
             max_charts=4,
@@ -1320,6 +1709,7 @@ class TestChartRenderingBranches:
 
     def test_chart_rendering_disabled_by_default(self):
         from app.services.chart_renderer import is_chart_rendering_enabled
+
         # Whatever the env says, the function should return a bool — and when
         # explicitly disabled it must be False.
         with patch.dict(os.environ, {"ENABLE_CHART_RENDERING": "false"}):

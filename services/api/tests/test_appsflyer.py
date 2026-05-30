@@ -9,7 +9,7 @@ USER_ID = "test_user_123"
 
 def run(coro):
     """Run an async coroutine in a synchronous test."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def test_validate_valid_token():
@@ -21,17 +21,23 @@ def test_validate_valid_token():
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
-        "apps": [{"app_id": "com.example.app", "app_name": "Test App", "platform": "android"}]
+        "apps": [
+            {"app_id": "com.example.app", "app_name": "Test App", "platform": "android"}
+        ]
     }
 
-    with patch("app.services.integration_service.connected_accounts_repo") as mock_repo, patch(
-        "httpx.AsyncClient"
-    ) as mock_client:
-        mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
+    with patch(
+        "app.services.integration_service.connected_accounts_repo"
+    ) as mock_repo, patch("httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__ = AsyncMock(
+            return_value=mock_client.return_value
+        )
         mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
         mock_client.return_value.get = AsyncMock(return_value=mock_response)
 
-        result = run(service.validate_and_save_appsflyer_token(USER_ID, "valid_token_123"))
+        result = run(
+            service.validate_and_save_appsflyer_token(USER_ID, "valid_token_123")
+        )
 
         assert result is True
         mock_repo.save_connection.assert_called_once()
@@ -49,7 +55,9 @@ def test_validate_invalid_token():
     mock_response.status_code = 401
 
     with patch("httpx.AsyncClient") as mock_client:
-        mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
+        mock_client.return_value.__aenter__ = AsyncMock(
+            return_value=mock_client.return_value
+        )
         mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
         mock_client.return_value.get = AsyncMock(return_value=mock_response)
 

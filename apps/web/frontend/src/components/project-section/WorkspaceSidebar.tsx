@@ -29,6 +29,11 @@ import { useToast } from "@/hooks/use-toast";
 
 type Tab = "new-chat" | "connectors" | "dashboards" | "files" | "schedules";
 
+interface WorkspaceSidebarProject {
+  id: string;
+  title: string;
+}
+
 const NAV_ITEMS: { tab: Tab; label: string; Icon: React.ElementType }[] = [
   { tab: "new-chat", label: "New Project", Icon: MessageSquarePlus },
   { tab: "connectors", label: "Connectors", Icon: Plug },
@@ -66,7 +71,7 @@ interface WorkspaceSidebarProps {
   collapsed: boolean;
   onCollapsedChange: (val: boolean) => void;
   activeTab: string;
-  projects?: any[]; // Replaced by Recents
+  projects?: WorkspaceSidebarProject[];
   projectsLoading?: boolean;
   onOpenProject?: (id: string) => void;
   onRenameProject?: (id: string, newTitle: string) => void;
@@ -162,21 +167,21 @@ export default function WorkspaceSidebar({
   return (
     <aside
       className={cn(
-        "flex flex-col sticky top-0 z-50 transition-all duration-300 ease-out flex-shrink-0 rounded-xl m-3",
+        "workspace-sidebar flex flex-col sticky top-0 z-50 transition-all duration-300 ease-out flex-shrink-0 rounded-xl m-3",
         aesthetic
-          ? "glass-panel-strong dark:bg-black/30"
-          : "border border-border bg-muted/80"
+          ? "glass-panel-strong workspace-sidebar--aesthetic"
+          : "workspace-sidebar--standard border border-border bg-muted/80"
       )}
       style={{ width: collapsed ? "3.5rem" : "280px", height: "calc(100dvh - 1.5rem)" }}
     >
       {/* Sidebar header */}
       <div className="flex items-center justify-between p-4 flex-shrink-0">
         {!collapsed && (
-          <span className="text-foreground/90 font-medium truncate">My workspace</span>
+          <span className="workspace-sidebar__title text-foreground/90 font-medium truncate">My workspace</span>
         )}
         <button
           onClick={() => onCollapsedChange(!collapsed)}
-          className={`text-foreground/70 hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted flex-shrink-0 ${collapsed ? "mx-auto" : ""}`}
+          className={`workspace-sidebar__collapse-button text-foreground/70 hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted flex-shrink-0 ${collapsed ? "mx-auto" : ""}`}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
@@ -188,21 +193,24 @@ export default function WorkspaceSidebar({
       </div>
 
       {/* Nav buttons */}
-      <div className="flex flex-col gap-2 px-2 py-2 border-b border-border/30">
+      <div className="workspace-sidebar__nav-section flex flex-col gap-2 px-2 py-2 border-b border-border/30">
         {NAV_ITEMS.map(({ tab, label, Icon }) => (
           <button
             key={tab}
             onClick={() => navigate(`/workspace?tab=${tab}`)}
             className={cn(
-              "flex items-center gap-2 rounded-md py-2 px-2 text-sm transition-colors w-full text-left",
+              "workspace-sidebar__nav-item flex items-center gap-2 rounded-md border border-transparent py-2 px-2 text-sm transition-colors w-full text-left",
               activeTab === tab
-                ? "bg-primary/10 text-primary"
-                : "text-foreground/70 hover:bg-foreground/5 hover:text-foreground",
+                ? "workspace-sidebar__nav-item--active bg-primary/10 text-primary"
+                : "workspace-sidebar__nav-item--inactive text-foreground/70 hover:bg-foreground/5 hover:text-foreground",
               collapsed ? "justify-center px-0" : ""
             )}
             title={collapsed ? label : undefined}
           >
-            <Icon className={cn("w-4 h-4 flex-shrink-0", activeTab === tab ? "text-primary" : "text-muted-foreground")} />
+            <Icon className={cn(
+              "workspace-sidebar__nav-icon w-4 h-4 flex-shrink-0",
+              activeTab === tab ? "text-primary" : "text-muted-foreground"
+            )} />
             {!collapsed && <span>{label}</span>}
           </button>
         ))}
@@ -211,19 +219,19 @@ export default function WorkspaceSidebar({
       {/* Recents list — only when expanded */}
       {!collapsed && (
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2">
-          <div className="text-muted-foreground text-xs mt-4 mb-4 px-2">Recent projects</div>
+          <div className="workspace-sidebar__section-label text-muted-foreground text-xs mt-4 mb-4 px-2">Recent projects</div>
           {projectsLoading ? (
-            <div className="text-muted-foreground text-xs mt-4 text-center flex items-center justify-center gap-2">
-              <div className="w-3 h-3 border-2 border-border border-t-foreground/80 rounded-full animate-spin"></div>
+            <div className="workspace-sidebar__muted-text text-muted-foreground text-xs mt-4 text-center flex items-center justify-center gap-2">
+              <div className="workspace-sidebar__loading-spinner w-3 h-3 border-2 border-border border-t-foreground/80 rounded-full animate-spin"></div>
               Loading your projects
             </div>
           ) : projects.length === 0 ? (
-            <div className="text-muted-foreground text-xs px-2">No projects yet</div>
+            <div className="workspace-sidebar__muted-text text-muted-foreground text-xs px-2">No projects yet</div>
           ) : (
             projects.slice(0, 10).map((item) => (
               <div
                 key={item.id}
-                className="group relative w-full rounded-md hover:bg-foreground/5 transition-colors"
+                className="workspace-sidebar__recent-item group relative w-full rounded-md hover:bg-foreground/5 transition-colors"
                 onClick={() => onOpenProject(item.id)}
                 role="button"
                 tabIndex={0}
@@ -236,7 +244,7 @@ export default function WorkspaceSidebar({
               >
                 {/* Left open icon (desktop hover) */}
                 <button
-                  className="hidden md:flex items-center justify-center w-6 h-6 rounded hover:bg-foreground/10 absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="workspace-sidebar__project-action hidden md:flex items-center justify-center w-6 h-6 rounded hover:bg-foreground/10 absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label="Open project"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -247,7 +255,7 @@ export default function WorkspaceSidebar({
                 </button>
 
                 {/* Title row with single-line truncation */}
-                <div className="w-full text-left px-3 py-2 text-foreground/90 text-sm md:transition-all md:duration-200 md:group-hover:pl-9 md:group-hover:pr-10 truncate whitespace-nowrap overflow-hidden">
+                <div className="workspace-sidebar__recent-title w-full text-left px-3 py-2 text-foreground/90 text-sm md:transition-all md:duration-200 md:group-hover:pl-9 md:group-hover:pr-10 truncate whitespace-nowrap overflow-hidden">
                   {item.title}
                 </div>
 
@@ -261,7 +269,7 @@ export default function WorkspaceSidebar({
 
                 {/* Right kebab button */}
                 <button
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded hover:bg-foreground/10 ${openMenuId === item.id ? '' : 'md:opacity-0 md:group-hover:opacity-100'} transition-opacity`}
+                  className={`workspace-sidebar__project-action absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded hover:bg-foreground/10 ${openMenuId === item.id ? '' : 'md:opacity-0 md:group-hover:opacity-100'} transition-opacity`}
                   aria-label="More actions"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -307,11 +315,11 @@ export default function WorkspaceSidebar({
       {collapsed && <div className="flex-1" />}
 
       {/* Footer / User Account */}
-      <div className="p-4 border-t border-border/30 relative" ref={userMenuRef}>
+      <div className="workspace-sidebar__footer p-4 border-t border-border/30 relative" ref={userMenuRef}>
         <button
           onClick={toggleUserMenu}
           className={cn(
-            "flex items-center gap-2 rounded-lg transition-colors hover:bg-foreground/5 w-full text-left",
+            "workspace-sidebar__user-trigger flex items-center gap-2 rounded-lg transition-colors hover:bg-foreground/5 w-full text-left",
             collapsed ? "justify-center py-2 px-0" : "px-2 py-1.5"
           )}
           aria-label="Toggle user menu"
@@ -326,12 +334,12 @@ export default function WorkspaceSidebar({
           {!collapsed && (
             <>
               <div className="min-w-0 pr-2">
-                <span className="block text-sm font-medium text-foreground truncate" title={displayName}>
+                <span className="workspace-sidebar__user-name block text-sm font-medium text-foreground truncate" title={displayName}>
                   {displayName}
                 </span>
-                <span className="block text-xs text-muted-foreground truncate">Pro Plan</span>
+                <span className="workspace-sidebar__user-plan block text-xs text-muted-foreground truncate">Pro Plan</span>
               </div>
-              <ChevronsUpDown className="w-4 h-4 text-foreground/70 ml-auto flex-shrink-0" />
+              <ChevronsUpDown className="workspace-sidebar__user-chevron w-4 h-4 text-foreground/70 ml-auto flex-shrink-0" />
             </>
           )}
         </button>

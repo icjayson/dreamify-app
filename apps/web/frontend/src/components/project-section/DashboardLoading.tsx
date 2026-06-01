@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Database, Github, Globe, MessageCircle } from "lucide-react";
+import { DreamifyMascot } from "@/components/ui/dreamify-mascot";
 
 interface DashboardLoadingProps {
   className?: string;
@@ -41,18 +42,11 @@ export default function DashboardLoading({ className = "", style = {} as React.C
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative flex items-center justify-center w-40 h-40"
+          className="relative flex items-center justify-center w-24 h-24"
         >
           {/* Spinning ring */}
-          <div className="absolute w-40 h-40 rounded-full border-2 border-white/10 border-t-primary animate-spin" />
-          <video
-            src="/dreamify-mascot-1.webm"
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-32 h-32 object-contain p-4"
-          />
+          <div className="absolute w-24 h-24 rounded-full border-2 border-white/10 border-t-primary animate-spin motion-reduce:animate-none" />
+          <DreamifyMascot size="loading" />
         </motion.div>
 
         {/* Title (no animation) */}

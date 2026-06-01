@@ -1,6 +1,5 @@
 import React from 'react';
 import DashboardPreview from './DashboardPreview';
-import { useDashboardPDF } from '@/utils/exportUtils';
 
 interface DashboardWithPDFProps {
   dataSource?: string;
@@ -11,7 +10,7 @@ interface DashboardWithPDFProps {
 }
 
 const DashboardWithPDF: React.FC<DashboardWithPDFProps> = (props) => {
-  const { targetRef } = useDashboardPDF();
+  const targetRef = React.useRef<HTMLDivElement | null>(null);
 
   return (
     <div ref={targetRef}>

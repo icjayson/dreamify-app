@@ -67,8 +67,11 @@ describe('timestamp utils', () => {
 
   it('getUserTimezone returns a supported IANA timezone', () => {
     const tz = getUserTimezone();
-    const supported = typeof Intl.supportedValuesOf === 'function'
-      ? Intl.supportedValuesOf('timeZone')
+    const supportedValuesOf = (Intl as typeof Intl & {
+      supportedValuesOf?: (key: 'timeZone') => string[];
+    }).supportedValuesOf;
+    const supported = typeof supportedValuesOf === 'function'
+      ? supportedValuesOf('timeZone')
       : [tz];
     expect(supported.includes(tz)).toBe(true);
   });
@@ -90,4 +93,3 @@ describe('timestamp utils', () => {
     },
   );
 });
-

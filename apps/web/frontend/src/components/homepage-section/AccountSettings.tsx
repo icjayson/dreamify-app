@@ -516,7 +516,7 @@ const AccountSettings: React.FC = () => {
                       <span className="text-foreground dark:text-white">Device</span>
                     </div>
                     {s.lastActiveAt && (
-                      <div className="text-xs text-muted-foreground dark:text-white/60 mt-1">{formatToDisplay(s.lastActiveAt, { format: "full" })}</div>
+                      <div className="text-xs text-muted-foreground dark:text-white/60 mt-1">{formatToDisplay(s.lastActiveAt.toISOString(), { format: "full" })}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -567,5 +567,4 @@ const AccountSettings: React.FC = () => {
 };
 
 export default AccountSettings;
-
 

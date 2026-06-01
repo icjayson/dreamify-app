@@ -286,12 +286,12 @@ interface EditableTableCellProps {
 const EditableTableCell: React.FC<EditableTableCellProps> = ({ value, column, rowIdx, data }) => {
   const ctx = useEditContext();
   // Coerce to the narrow display-value union EditableText accepts.
-  const displayValue: string | number | null | undefined =
-    value === null || value === undefined
-      ? value
-      : typeof value === 'number' || typeof value === 'string'
-        ? value
-        : String(value);
+  let displayValue: string | number | null | undefined;
+  if (value === null || value === undefined) {
+    displayValue = value === null ? null : undefined;
+  } else {
+    displayValue = typeof value === 'number' || typeof value === 'string' ? value : String(value);
+  }
   return (
     <EditableText
       value={displayValue}
@@ -341,4 +341,3 @@ const EditableTableHeaderLabel: React.FC<EditableTableHeaderLabelProps> = ({ val
 };
 
 export default Table;
-

@@ -1,4 +1,4 @@
-import type { Message } from '@/types/message';
+import type { ClarificationOption, ClarificationRequest, Message } from '@/types/message';
 import { EXPLICIT_PROMPT_THEME_SOURCE } from '@/types/message';
 import { ChartType, type DashboardComponent } from '@/types/dashboard';
 import { createThemeSelection } from '@/constants/builtinTemplates';
@@ -79,6 +79,64 @@ function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeComponentPosition(
+  raw: unknown,
+  fallback: DashboardComponent['position'],
+): DashboardComponent['position'] {
+  const payload = asPayload(raw) || {};
+  return {
+    x: readNumber(payload.x) ?? fallback.x,
+    y: readNumber(payload.y) ?? fallback.y,
+    width: readNumber(payload.width) ?? readNumber(payload.w) ?? fallback.width,
+    height: readNumber(payload.height) ?? readNumber(payload.h) ?? fallback.height,
+  };
+}
+
+function normalizeClarificationOption(raw: unknown): ClarificationOption | null {
+  const payload = asPayload(raw);
+  if (!payload) return null;
+  const id = readString(payload.id);
+  const label = readString(payload.label);
+  if (!id || !label) return null;
+  const metadata = asPayload(payload.metadata);
+  return {
+    id,
+    label,
+    description: readString(payload.description),
+    recommended: readBoolean(payload.recommended),
+    impact: readString(payload.impact),
+    metadata: metadata || undefined,
+  };
+}
+
+function normalizeClarificationRequest(raw: unknown): ClarificationRequest | null {
+  const payload = asPayload(raw);
+  if (!payload) return null;
+  const clarificationId = readString(payload.clarification_id);
+  const reasonCode = readString(payload.reason_code);
+  const question = readString(payload.question);
+  const options = Array.isArray(payload.options)
+    ? compact(payload.options.map(normalizeClarificationOption))
+    : [];
+  if (!clarificationId || !reasonCode || !question || options.length === 0) return null;
+  return {
+    clarification_id: clarificationId,
+    reason_code: reasonCode,
+    question,
+    options,
+    allow_free_text: readBoolean(payload.allow_free_text),
+    required: readBoolean(payload.required),
+  };
+}
+
 function normalizeNodeContent(raw: unknown): ConversationNodeContent | null {
   const payload = asPayload(raw);
   if (!payload) return null;
@@ -155,12 +213,12 @@ function normalizeVisualArtifact(raw: unknown, index: number): MessageVisualArti
     };
   }
 
-  const position = artifact.position || artifact.layout || {
+  const position = normalizeComponentPosition(artifact.position || artifact.layout, {
     x: 0,
     y: 0,
     width: normalizedKind === 'table' ? 24 : 18,
     height: normalizedKind === 'table' ? 10 : 12,
-  };
+  });
 
   if (normalizedKind === 'table') {
     const columns = Array.isArray(artifact.columns) ? artifact.columns : [];
@@ -306,16 +364,18 @@ export function conversationNodesToMessages(
       ) ?? [];
 
       // Update the current asset name/account info if this node brings a new asset
-      if (assetContent?.data?.filename) {
-        currentAssetName = assetContent.data.filename;
+      const assetFilename = readString(assetContent?.data?.filename);
+      const assetAccountName = readString(assetContent?.data?.accountName);
+      if (assetFilename) {
+        currentAssetName = assetFilename;
       }
-      if (assetContent?.data?.accountName) {
-        currentAccountName = assetContent.data.accountName;
+      if (assetAccountName) {
+        currentAccountName = assetAccountName;
       }
       const normalized: Message = {
         id: node?.node_id || crypto.randomUUID(),
         role: node?.role === 'user' ? 'user' : 'assistant',
-        content: textContent?.data?.text || '',
+        content: readString(textContent?.data?.text) || '',
         timestamp: new Date(node?.created_at || Date.now()),
       };
       if (normalized.role === 'user' && hasExplicitPromptTheme(metadata)) {
@@ -327,7 +387,7 @@ export function conversationNodesToMessages(
         }
       }
       if (dashboardContent) {
-        const dashboardId = dashboardContent.data?.dashboard_id || '';
+        const dashboardId = readString(dashboardContent.data?.dashboard_id) || '';
         const dashboardMetadata = dashboards.find(
           (d) => d.dashboard_id === dashboardId
         );
@@ -348,7 +408,8 @@ export function conversationNodesToMessages(
       if (clarificationRequestContents.length > 0) {
         const requests = clarificationRequestContents
           .map((content) => content.data)
-          .filter(Boolean);
+          .map(normalizeClarificationRequest)
+          .filter((request): request is ClarificationRequest => request !== null);
         normalized.clarificationRequests = requests;
         // The message is resolved only when every batched question is dismissed.
         const noAnswers = requests.map((request) => {
@@ -379,15 +440,14 @@ export function conversationNodesToMessages(
       // FALLBACK: If assetContent is missing but this is the last user node and we have a fallback, use it.
       if (assetContent?.data) {
         const firstName =
-          assetContent?.data?.filename ||
-          assetContent?.data?.name ||
+          readString(assetContent?.data?.filename) ||
+          readString(assetContent?.data?.name) ||
           currentAssetName;
 
         const getSourceTypeFromRaw = (raw?: string): string | undefined => normalizeConnectorSource(raw)?.name;
 
         // Derive sourceType from asset_type stored in the conversation node
-        const assetType: string = assetContent?.data?.sourceType || '';
-        const fileName: string = firstName || '';
+        const assetType = readString(assetContent?.data?.sourceType) || '';
         const filesFromNodeContents = assetContents
           .map((content) => normalizeAttachmentFile(asPayload(content?.data) || {}))
           .filter(Boolean) as NonNullable<Message['attachment']>['files'];
@@ -414,11 +474,11 @@ export function conversationNodesToMessages(
         normalized.attachment = {
           kind: assetContent?.data?.kind === 'file' ? 'file' : 'csv',
           name: assetContents.length > 1 ? `${assetContents.length} files` : firstName,
-          mime: assetContent?.data?.mime,
+          mime: readString(assetContent?.data?.mime),
           sourceType,
-          accountName: assetContent?.data?.accountName,
-          propertyName: assetContent?.data?.propertyName,
-          syncVersionName: assetContent?.data?.syncVersionName || assetContent?.data?.sync_version_name,
+          accountName: readString(assetContent?.data?.accountName),
+          propertyName: readString(assetContent?.data?.propertyName),
+          syncVersionName: readString(assetContent?.data?.syncVersionName) || readString(assetContent?.data?.sync_version_name),
           files: attachmentFiles,
         };
       } else if (
@@ -432,9 +492,9 @@ export function conversationNodesToMessages(
       // Restore chart mentions from conversation nodes
       if (chartMentionContents.length > 0) {
         normalized.chartMentions = chartMentionContents.map((c) => ({
-          title: c.data?.title || '',
-          type: c.data?.chart_type || 'bar',
-          componentId: c.data?.component_id || c.data?.chart_id || '',
+          title: readString(c.data?.title) || '',
+          type: readString(c.data?.chart_type) || 'bar',
+          componentId: readString(c.data?.component_id) || readString(c.data?.chart_id) || '',
         }));
       }
 
@@ -451,7 +511,7 @@ export function conversationNodesToMessages(
           (c) => c?.type === 'chart_mention'
         ) ?? [];
         if (prevChartMentions.length > 0) {
-          const chartNames = prevChartMentions.map((c) => c.data?.title || 'chart').join(', ');
+          const chartNames = prevChartMentions.map((c) => readString(c.data?.title) || 'chart').join(', ');
           normalized.content = `Done! I've updated ${chartNames}. The dashboard has been refreshed with the changes.`;
         }
       }

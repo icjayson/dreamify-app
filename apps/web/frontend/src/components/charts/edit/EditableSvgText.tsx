@@ -13,7 +13,7 @@ interface CommonProps {
   x?: number;
   y?: number;
   payload?: { value: any };
-  textAnchor?: string;
+  textAnchor?: React.SVGProps<SVGTextElement>['textAnchor'];
   fill?: string;
   className?: string;
   width?: number;

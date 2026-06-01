@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import FilePreviewChip from "@/components/chat/FilePreviewChip";
 import { ThemeInlineToken } from "@/components/chat/ThemeInlineToken";
+import { DreamifyMascot } from "@/components/ui/dreamify-mascot";
 import ModelSelector from "@/chat/ModelSelector";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
 import type { ThemeSelection } from "@/constants/builtinTemplates";
@@ -407,35 +408,26 @@ export default function WorkspaceNewChat() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col items-center justify-center min-h-full w-full py-12 px-4">
+    <div className="workspace-new-chat flex flex-col items-center justify-center min-h-full w-full py-12 px-4">
       {/* Shared max-width container — heading + chat input share the same bounds */}
       <div className="w-full max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-4xl mx-auto">
 
         {/* Heading */}
-        <div className="mb-8 pt-20 overflow-visible animate-slide-up">
-          {/* Logo watermark */}
-          <div className="flex justify-start mb-4 overflow-visible">
-            <div className="w-16 h-16 overflow-visible flex items-center justify-center">
-              <video
-                src="/dreamify-mascot-1.webm"
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="w-16 h-16 object-contain animate-mascot-wave"
-              />
-            </div>
+        <div className="mb-8 animate-slide-up">
+          {/* Mascot brand accent */}
+          <div className="flex justify-start mb-4">
+            <DreamifyMascot size="md" />
           </div>
 
           {/* Heading text — static prefix + rolling suffix */}
           <h1 className="text-3xl md:text-5xl font-bold font-instrument-serif flex flex-wrap items-baseline justify-start gap-x-0">
             {/* Static part */}
-            <span className="px-2 py-1 text-transparent bg-clip-text bg-gradient-to-r dark:from-accent dark:via-white dark:to-accent from-primary via-accent to-primary italic whitespace-nowrap">
+            <span className="workspace-hero-gradient-text px-2 py-1 italic whitespace-nowrap">
               Hi {userName},
             </span>
             {/* Rolling part */}
             <span
-              className="px-2 py-1 text-transparent bg-clip-text bg-gradient-to-r dark:from-accent dark:via-white dark:to-accent from-primary via-accent to-primary italic inline-block"
+              className="workspace-hero-gradient-text px-2 py-1 italic inline-block"
               style={{
                 opacity: suffixVisible ? 1 : 0,
                 transform: suffixVisible ? "translateY(0)" : "translateY(8px)",
@@ -546,7 +538,8 @@ export default function WorkspaceNewChat() {
                     setDropdownOpen(newState);
                     if (newState) setModelDropdownOpen(false);
                   }}
-                  className={`rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto ${
+                  data-selected-source={selectedDataSource ? "true" : "false"}
+                  className={`workspace-connect-source-button rounded-md transition-all duration-200 px-4 py-1.5 text-sm flex items-center gap-2 h-auto ${
                     selectedDataSource
                       ? `${getDataSourceColors(selectedDataSource).bg} ${getDataSourceColors(selectedDataSource).border} ${getDataSourceColors(selectedDataSource).text} ${getDataSourceColors(selectedDataSource).hover} border`
                       : "button-gradient"
@@ -649,12 +642,12 @@ export default function WorkspaceNewChat() {
               <button
                 key={index}
                 onClick={() => setInputValue(item.text)}
-                className="flex items-center gap-3 p-3 rounded-xl bg-background/80 dark:bg-white/5 border border-border/60 dark:border-white/10 hover:bg-background dark:hover:bg-white/10 hover:border-border dark:hover:border-white/20 transition-all cursor-pointer group text-left"
+                className="workspace-suggestion-card flex items-center gap-3 p-3 rounded-xl bg-background/80 dark:bg-white/5 border border-border/60 dark:border-white/10 hover:bg-background dark:hover:bg-white/10 hover:border-border dark:hover:border-white/20 transition-all cursor-pointer group text-left"
               >
-                <div className="p-2 rounded-lg bg-primary/10 dark:bg-primary/20 text-primary group-hover:bg-primary/20 dark:group-hover:bg-primary/30 transition-colors">
+                <div className="workspace-suggestion-icon p-2 rounded-lg bg-primary/10 dark:bg-primary/20 text-primary group-hover:bg-primary/20 dark:group-hover:bg-primary/30 transition-colors">
                   <item.icon className="w-4 h-4" />
                 </div>
-                <span className="text-xs sm:text-sm text-foreground/80 dark:text-white/70 group-hover:text-foreground dark:group-hover:text-white transition-colors line-clamp-2">
+                <span className="workspace-suggestion-text text-xs sm:text-sm text-foreground/80 dark:text-white/70 group-hover:text-foreground dark:group-hover:text-white transition-colors line-clamp-2">
                   {item.text}
                 </span>
               </button>

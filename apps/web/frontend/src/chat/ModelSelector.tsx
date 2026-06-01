@@ -63,6 +63,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
               onToggle();
             }}
             aria-label={`Select intelligence model (${selectedModelLabel})`}
+            data-selected-model={selectedModel}
             className={`model-selector-button ${adaptiveLabel ? 'model-selector-adaptive-button w-[68px] justify-center gap-1.5 px-2' : 'gap-2'} flex items-center transition-all duration-300 group h-[34px] ${variant === 'compact'
               ? `${adaptiveLabel ? '' : 'px-2.5 py-1.5'} rounded-md border text-sm ${selectedModel === 'pro'
                 ? 'border-primary bg-primary text-white shadow-lg shadow-primary/20'

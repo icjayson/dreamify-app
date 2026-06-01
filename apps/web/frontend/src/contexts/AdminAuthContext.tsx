@@ -1,4 +1,4 @@
-import { useAuth, useUser, useClerk } from '@clerk/clerk-react';
+import { useAuth, useUser, useClerk, useSignIn } from '@clerk/clerk-react';
 
 interface AdminAuthInfo {
   isSignedIn: boolean;
@@ -7,6 +7,7 @@ interface AdminAuthInfo {
   userId: string | null;
   /** Returns a fresh Clerk JWT (Clerk caches internally, auto-refreshes on expiry) */
   getToken: () => Promise<string | null>;
+  login: (identifier: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
 }
 
@@ -22,6 +23,7 @@ export function useAdminAuth(): AdminAuthInfo {
   const { isSignedIn, getToken } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { signIn, setActive } = useSignIn();
 
   const isAdmin = !!(
     isSignedIn &&
@@ -38,6 +40,13 @@ export function useAdminAuth(): AdminAuthInfo {
     userEmail,
     userId: user?.id ?? null,
     getToken,
+    login: async (identifier: string, password: string) => {
+      if (!signIn || !setActive) return false;
+      const result = await signIn.create({ identifier, password });
+      if (result.status !== 'complete' || !result.createdSessionId) return false;
+      await setActive({ session: result.createdSessionId });
+      return true;
+    },
     signOut: () => signOut(),
   };
 }

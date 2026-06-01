@@ -843,7 +843,7 @@ export default function MetaAdsIntegrationModal() {
                   onClick={() => void handleEmptyTryAnotherRange()}
                   disabled={discardingEmpty}
                 >
-                  {discardingEmpty ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarIcon className="w-4 h-4 mr-2" />}
+                  {discardingEmpty ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarDays className="w-4 h-4 mr-2" />}
                   Try another date range
                 </Button>
 

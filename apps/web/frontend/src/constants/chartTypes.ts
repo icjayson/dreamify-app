@@ -8,11 +8,18 @@ import { ChartType } from '@/types/dashboard';
 export const AVAILABLE_CHART_TYPES: ChartType[] = [
   ChartType.LINE,
   ChartType.BAR,
+  ChartType.STACKED_BAR,
+  ChartType.STACKED_COLUMN,
   ChartType.PIE,
   ChartType.AREA,
   ChartType.SCATTER,
   ChartType.DONUT,
   ChartType.COMPOSED,
+  ChartType.RADAR,
+  ChartType.RADIAL_BAR,
+  ChartType.FUNNEL,
+  ChartType.TREEMAP,
+  ChartType.SANKEY,
   ChartType.METRIC,
   ChartType.TABLE,
   ChartType.GEOGRAPHIC,
@@ -23,11 +30,18 @@ export const AVAILABLE_CHART_TYPES: ChartType[] = [
 export const CHART_TYPE_DISPLAY_NAMES: Record<ChartType, string> = {
   [ChartType.LINE]: 'Line Chart',
   [ChartType.BAR]: 'Bar Chart',
+  [ChartType.STACKED_BAR]: 'Stacked Bar Chart',
+  [ChartType.STACKED_COLUMN]: 'Stacked Column Chart',
   [ChartType.PIE]: 'Pie Chart',
   [ChartType.AREA]: 'Area Chart',
   [ChartType.SCATTER]: 'Scatter Plot',
   [ChartType.DONUT]: 'Donut Chart',
   [ChartType.COMPOSED]: 'Composed Chart',
+  [ChartType.RADAR]: 'Radar Chart',
+  [ChartType.RADIAL_BAR]: 'Radial Bar Chart',
+  [ChartType.FUNNEL]: 'Funnel Chart',
+  [ChartType.TREEMAP]: 'Treemap Chart',
+  [ChartType.SANKEY]: 'Sankey Diagram',
   [ChartType.METRIC]: 'Metric Card',
   [ChartType.TABLE]: 'Data Table',
   [ChartType.GEOGRAPHIC]: 'Geographic Chart',
@@ -38,11 +52,18 @@ export const CHART_TYPE_DISPLAY_NAMES: Record<ChartType, string> = {
 export const CHART_TYPE_DESCRIPTIONS: Record<ChartType, string> = {
   [ChartType.LINE]: 'Display trends over time with connected data points',
   [ChartType.BAR]: 'Compare values across different categories',
+  [ChartType.STACKED_BAR]: 'Compare category totals and subcategory composition',
+  [ChartType.STACKED_COLUMN]: 'Compare stacked category totals vertically',
   [ChartType.PIE]: 'Show proportional data as slices of a circle',
   [ChartType.AREA]: 'Display trends with filled areas under the line',
   [ChartType.SCATTER]: 'Show relationships between two variables',
   [ChartType.DONUT]: 'Show proportional data with a hollow center',
   [ChartType.COMPOSED]: 'Combine multiple chart types in a single visualization',
+  [ChartType.RADAR]: 'Compare multiple measures across shared dimensions',
+  [ChartType.RADIAL_BAR]: 'Show radial progress or ranked values',
+  [ChartType.FUNNEL]: 'Show conversion or drop-off through ordered stages',
+  [ChartType.TREEMAP]: 'Show hierarchical proportions with nested rectangles',
+  [ChartType.SANKEY]: 'Show flow volumes between stages or categories',
   [ChartType.METRIC]: 'Display key performance indicators with trends',
   [ChartType.TABLE]: 'Present structured data in rows and columns',
   [ChartType.GEOGRAPHIC]: 'Visualize location-based data and distributions',
@@ -52,8 +73,9 @@ export const CHART_TYPE_DESCRIPTIONS: Record<ChartType, string> = {
 // Chart type categories
 export const CHART_TYPE_CATEGORIES: Record<string, ChartType[]> = {
   'Time Series': [ChartType.LINE, ChartType.AREA],
-  'Comparison': [ChartType.BAR, ChartType.PIE, ChartType.DONUT],
+  'Comparison': [ChartType.BAR, ChartType.STACKED_BAR, ChartType.STACKED_COLUMN, ChartType.PIE, ChartType.DONUT, ChartType.RADAR, ChartType.RADIAL_BAR],
   'Distribution': [ChartType.SCATTER, ChartType.GEOGRAPHIC],
+  'Flow': [ChartType.FUNNEL, ChartType.TREEMAP, ChartType.SANKEY],
   'Metrics': [ChartType.METRIC],
   'Data Display': [ChartType.TABLE, ChartType.ACTIVITY_FEED]
 };
@@ -76,6 +98,18 @@ export const CHART_TYPE_VALIDATION_RULES: Record<ChartType, {
     maxDataPoints: 100,
     requiredFields: ['label', 'value'],
     optionalFields: ['metadata']
+  },
+  [ChartType.STACKED_BAR]: {
+    minDataPoints: 1,
+    maxDataPoints: 250,
+    requiredFields: ['label', 'value'],
+    optionalFields: ['series', 'metadata']
+  },
+  [ChartType.STACKED_COLUMN]: {
+    minDataPoints: 1,
+    maxDataPoints: 250,
+    requiredFields: ['label', 'value'],
+    optionalFields: ['series', 'metadata']
   },
   [ChartType.PIE]: {
     minDataPoints: 1,
@@ -107,6 +141,36 @@ export const CHART_TYPE_VALIDATION_RULES: Record<ChartType, {
     requiredFields: ['label', 'value'],
     optionalFields: ['metadata', 'chartType']
   },
+  [ChartType.RADAR]: {
+    minDataPoints: 3,
+    maxDataPoints: 100,
+    requiredFields: ['label', 'value'],
+    optionalFields: ['metadata']
+  },
+  [ChartType.RADIAL_BAR]: {
+    minDataPoints: 1,
+    maxDataPoints: 20,
+    requiredFields: ['label', 'value'],
+    optionalFields: ['metadata']
+  },
+  [ChartType.FUNNEL]: {
+    minDataPoints: 2,
+    maxDataPoints: 20,
+    requiredFields: ['label', 'value'],
+    optionalFields: ['metadata']
+  },
+  [ChartType.TREEMAP]: {
+    minDataPoints: 1,
+    maxDataPoints: 250,
+    requiredFields: ['label', 'value'],
+    optionalFields: ['parent', 'metadata']
+  },
+  [ChartType.SANKEY]: {
+    minDataPoints: 2,
+    maxDataPoints: 250,
+    requiredFields: ['source', 'target', 'value'],
+    optionalFields: ['metadata']
+  },
   [ChartType.METRIC]: {
     minDataPoints: 1,
     maxDataPoints: 1,
@@ -137,11 +201,18 @@ export const CHART_TYPE_VALIDATION_RULES: Record<ChartType, {
 export const CHART_TYPE_ICONS: Record<ChartType, string> = {
   [ChartType.LINE]: 'TrendingUp',
   [ChartType.BAR]: 'BarChart3',
+  [ChartType.STACKED_BAR]: 'ChartBarStacked',
+  [ChartType.STACKED_COLUMN]: 'BarChart3',
   [ChartType.PIE]: 'PieChart',
   [ChartType.AREA]: 'AreaChart',
   [ChartType.SCATTER]: 'Scatter',
   [ChartType.DONUT]: 'Circle',
   [ChartType.COMPOSED]: 'Layers',
+  [ChartType.RADAR]: 'Radar',
+  [ChartType.RADIAL_BAR]: 'ChartNoAxesColumnIncreasing',
+  [ChartType.FUNNEL]: 'Funnel',
+  [ChartType.TREEMAP]: 'PanelTop',
+  [ChartType.SANKEY]: 'Route',
   [ChartType.METRIC]: 'Gauge',
   [ChartType.TABLE]: 'Table',
   [ChartType.GEOGRAPHIC]: 'Map',
@@ -152,11 +223,18 @@ export const CHART_TYPE_ICONS: Record<ChartType, string> = {
 export const CHART_TYPE_COLORS: Record<ChartType, string> = {
   [ChartType.LINE]: 'hsl(var(--primary))',
   [ChartType.BAR]: 'hsl(var(--secondary))',
+  [ChartType.STACKED_BAR]: 'hsl(var(--secondary))',
+  [ChartType.STACKED_COLUMN]: 'hsl(var(--secondary))',
   [ChartType.PIE]: 'hsl(var(--accent))',
   [ChartType.AREA]: 'hsl(var(--primary))',
   [ChartType.SCATTER]: 'hsl(var(--secondary))',
   [ChartType.DONUT]: 'hsl(var(--accent))',
   [ChartType.COMPOSED]: 'hsl(var(--primary))',
+  [ChartType.RADAR]: 'hsl(var(--primary))',
+  [ChartType.RADIAL_BAR]: 'hsl(var(--accent))',
+  [ChartType.FUNNEL]: 'hsl(var(--secondary))',
+  [ChartType.TREEMAP]: 'hsl(var(--primary))',
+  [ChartType.SANKEY]: 'hsl(var(--accent))',
   [ChartType.METRIC]: 'hsl(var(--success))',
   [ChartType.TABLE]: 'hsl(var(--muted-foreground))',
   [ChartType.GEOGRAPHIC]: 'hsl(var(--primary))',
@@ -181,6 +259,24 @@ export const DEFAULT_CHART_CONFIGS: Record<ChartType, Record<string, any>> = {
     responsive: true,
     maintainAspectRatio: false,
     borderRadius: 4
+  },
+  [ChartType.STACKED_BAR]: {
+    animation: true,
+    showLegend: true,
+    showTooltip: true,
+    responsive: true,
+    maintainAspectRatio: false,
+    stacked: true,
+    layout: 'horizontal'
+  },
+  [ChartType.STACKED_COLUMN]: {
+    animation: true,
+    showLegend: true,
+    showTooltip: true,
+    responsive: true,
+    maintainAspectRatio: false,
+    stacked: true,
+    layout: 'vertical'
   },
   [ChartType.PIE]: {
     animation: true,
@@ -224,6 +320,38 @@ export const DEFAULT_CHART_CONFIGS: Record<ChartType, Record<string, any>> = {
     responsive: true,
     maintainAspectRatio: false,
     combineCharts: true
+  },
+  [ChartType.RADAR]: {
+    animation: true,
+    showLegend: true,
+    showTooltip: true,
+    responsive: true,
+    maintainAspectRatio: false
+  },
+  [ChartType.RADIAL_BAR]: {
+    animation: true,
+    showLegend: true,
+    showTooltip: true,
+    responsive: true,
+    maintainAspectRatio: true
+  },
+  [ChartType.FUNNEL]: {
+    animation: true,
+    showTooltip: true,
+    responsive: true,
+    maintainAspectRatio: false
+  },
+  [ChartType.TREEMAP]: {
+    animation: true,
+    showTooltip: true,
+    responsive: true,
+    maintainAspectRatio: false
+  },
+  [ChartType.SANKEY]: {
+    animation: true,
+    showTooltip: true,
+    responsive: true,
+    maintainAspectRatio: false
   },
   [ChartType.METRIC]: {
     animation: true,

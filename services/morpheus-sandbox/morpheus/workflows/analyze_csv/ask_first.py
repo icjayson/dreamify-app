@@ -78,6 +78,43 @@ NUMERIC_COLUMN_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# An edit needs the source data when it recomputes rows/values rather than just
+# restyling. Top/bottom N, filters, sorting, grouping, aggregation, trend, and
+# add/remove column/row all change the underlying data.
+EDIT_NEEDS_DATA_RE = re.compile(
+    r"\b("
+    r"top|bottom|last|first|highest|lowest|"
+    r"filter|filtered|where|only|exclude|include|"
+    r"rank|ranking|sort|sorted|order\s+by|"
+    r"recompute|recalculate|recalc|refresh\s+data|"
+    r"add|remove|drop|"
+    r"trend|over\s+time|"
+    r"group|grouped|aggregate|aggregated|sum|average|avg|count|median|"
+    r"more\s+rows|fewer\s+rows|expand|extend"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Edits that only restyle/relabel never need the source data reloaded.
+EDIT_PURE_RESTYLE_RE = re.compile(
+    r"\b("
+    r"line\s+chart|bar\s+chart|pie\s+chart|area\s+chart|donut|"
+    r"color|colour|theme|palette|"
+    r"rename|relabel|"
+    r"axis\s+label|legend|title|font|style|styling|restyle"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Top/bottom/last N or "add/remove a column/row" data-shaping phrases. These
+# always need source data even though a bare "add" might be styling elsewhere.
+EDIT_NEEDS_DATA_STRONG_RE = re.compile(
+    r"\b(top|bottom|last|first)\s+\d+\b"
+    r"|\b(add|remove|drop)\b.{0,20}\b(column|row|columns|rows)\b"
+    r"|\b(column|row|columns|rows)\b.{0,20}\b(add|remove|drop)\b",
+    re.IGNORECASE,
+)
+
 
 def canonical_asset_identity(asset: Dict[str, Any]) -> Optional[str]:
     """Return the stable dataset identity used to avoid duplicate downloads."""
@@ -111,6 +148,53 @@ def dedupe_assets_by_identity(
             seen.add(identity)
         deduped_reversed.append(asset)
     return list(reversed(deduped_reversed))
+
+
+def _asset_is_downloadable(asset: Dict[str, Any]) -> bool:
+    """Return True when the asset has the fields needed to fetch its bytes."""
+    return bool(
+        asset.get("asset_id") and asset.get("s3_bucket") and asset.get("s3_key")
+    )
+
+
+def resolve_single_data_source(
+    project_assets: Sequence[Dict[str, Any]],
+) -> Optional[str]:
+    """Return the lone downloadable asset_id when there is exactly one source.
+
+    Dedupes by logical identity first (same dataset uploaded twice counts once),
+    then requires exactly one downloadable asset. Returns None for 0 or >=2
+    distinct sources so the caller falls back to asking the user.
+    """
+    downloadable = [
+        asset
+        for asset in dedupe_assets_by_identity(list(project_assets))
+        if _asset_is_downloadable(asset)
+    ]
+    if len(downloadable) != 1:
+        return None
+    asset_id = str(downloadable[0].get("asset_id") or "").strip()
+    return asset_id or None
+
+
+def edit_needs_data(prompt: Optional[str]) -> bool:
+    """Return True when an edit recomputes data rather than only restyling.
+
+    Top/bottom/last N, filters, ranking, sorting, grouping, aggregation, trend,
+    and add/remove column/row all change the underlying rows and therefore need
+    the source dataset reloaded. Pure restyles (line chart, color, rename axis)
+    return False.
+    """
+    text = prompt or ""
+    if not text.strip():
+        return False
+    if EDIT_NEEDS_DATA_STRONG_RE.search(text):
+        return True
+    if EDIT_NEEDS_DATA_RE.search(text):
+        return True
+    if EDIT_PURE_RESTYLE_RE.search(text):
+        return False
+    return False
 
 
 def latest_user_node(conversation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -238,6 +322,7 @@ def latest_effective_user_prompt(conversation: Dict[str, Any]) -> Optional[str]:
                 "route_mode",
                 "target_chart_id",
                 "target_dashboard_id",
+                "is_chart_modification",
                 "date_column",
                 "time_grain",
                 "metric_column",

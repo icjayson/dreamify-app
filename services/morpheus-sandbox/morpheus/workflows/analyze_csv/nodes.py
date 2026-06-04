@@ -28,11 +28,32 @@ from morpheus.workflows.analyze_csv.ask_first import (
     extract_dashboard_targets,
     latest_clarification_metadata,
 )
+from morpheus.workflows.analyze_csv.schemas.chart_spec import (
+    ChartModificationResult,
+    ChartSpec,
+    TableModificationResult,
+    TableSpec,
+)
 from morpheus.tools.python_repl.tool import PythonREPLTool
 from morpheus.tools.charts_knowledge.tool import get_available_chart_types
 from morpheus.models.base import get_model_for_agent, get_model_for_quick_agent
 from utils.logger import logger
 from utils.postprocess import clean_json
+
+# ---------------------------------------------------------------------------
+# Chart-modification data-authenticity policy
+# ---------------------------------------------------------------------------
+# A chart edit is hard-rejected (forcing a retry) only when MORE THAN this
+# fraction of its emitted datapoints cannot be traced back to a printed Python
+# REPL value. Kept high (0.5) so legitimate restyle edits that reuse a couple
+# of pre-existing values are not false-flagged. See
+# ``_validate_chart_modification_data`` for the full severity policy.
+CHART_MOD_AUTHENTICITY_FAIL_RATIO = 0.5
+
+# Chart edits are smaller and more latency-sensitive than full-dashboard
+# generations, so we retry at most once (vs. 2 for the full dashboard) before
+# accepting with a warning.
+CHART_MOD_AUTHENTICITY_MAX_RETRIES = 1
 
 # ---------------------------------------------------------------------------
 # Thread-safe LLM timeout helper
@@ -1119,10 +1140,14 @@ def node_routing(state: AgentState, model=None, **kwargs) -> AgentState:
             None,
         )
         if target:
+            target_dashboard_id = clarification_metadata.get(
+                "target_dashboard_id"
+            ) or target.get("dashboard_id")
             state.chart_mentions = [
                 {
                     "component_id": target.get("component_id") or target_chart_id,
                     "chart_id": target.get("id") or target_chart_id,
+                    "dashboard_id": target_dashboard_id,
                     "title": target.get("title"),
                     "chart_type": target.get("type"),
                     "config": target.get("config"),
@@ -1273,6 +1298,7 @@ def node_reasoning(
         Updated agent state with pending action in working_memory
     """
     logger.info(f"Running REASONING node (iteration {state.iteration})")
+    thinking_event_fn = kwargs.get("thinking_event_fn")
 
     # Get or create model
     if model is None:
@@ -1285,6 +1311,25 @@ def node_reasoning(
     # Get route decision
     route_decision = state.working_memory.tool_outputs.get("route_decision", {})
     mode = route_decision.get("next_step", "dashboard")
+
+    # Coarse chart-edit progress: announce that we're analyzing the target chart
+    # before any REPL runs. Only for chart-modification runs.
+    if thinking_event_fn and route_decision.get("is_chart_modification"):
+        chart_id = None
+        if state.chart_mentions:
+            chart_id = state.chart_mentions[0].get("chart_id")
+        try:
+            thinking_event_fn(
+                phase="analyzing",
+                title="Analyzing the chart you mentioned",
+                metadata={
+                    "step": "analyzing",
+                    "is_chart_modification": True,
+                    "chart_id": chart_id,
+                },
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to emit analyzing thinking event: {exc}")
 
     # Select system prompt based on mode
     if mode == "dashboard":
@@ -1342,7 +1387,16 @@ Load ALL files and combine/analyze as needed for the user's request. You can use
             # Check if this is a chart modification request
             is_chart_mod = route_decision.get("is_chart_modification", False)
 
-            if is_chart_mod and state.chart_mentions:
+            if (
+                is_chart_mod
+                and state.chart_mentions
+                and _mention_is_table(state.chart_mentions[0])
+            ):
+                # Table modification mode — recompute rows and emit a table.
+                instruction = _build_table_mod_instruction(
+                    state.chart_mentions[0], state.input_prompt, file_info
+                )
+            elif is_chart_mod and state.chart_mentions:
                 # Chart modification mode — inject target chart context
                 chart_info = state.chart_mentions[0]
                 existing_config = chart_info.get("config", {})
@@ -1434,6 +1488,11 @@ You MUST output a valid JSON code block in this EXACT format:
 CRITICAL RULES:
 - Keep chart ID as "{chart_id}"
 - Populate datasets with REAL computed data from Python analysis (never empty arrays)
+- EVERY series/dataset MUST have a non-empty `data` array. If the edit ADDS series
+  (e.g. daily/weekly/monthly variants, or any new breakdown), you MUST load the source
+  file and COMPUTE each one in the Python REPL — e.g. parse the date column and
+  `df.set_index(<date>).resample('D'|'W'|'M').sum()` — then fill each dataset's `data`
+  with the resulting {{"label": ..., "value": ...}} points. A chart with empty data will be REJECTED.
 - Output ONLY the modified chart in "charts" array. Other dashboard components will be preserved automatically.
 - You MUST output the JSON code block — do NOT just describe the changes in text."""
             elif mode == "dashboard":
@@ -1559,39 +1618,20 @@ REMINDER: When you generate your JSON:
 
             # Store output in working memory
             if mode == "dashboard":
-                # Extract JSON from content
-                json_data = _extract_json_from_content(response.content)
-
-                # Fallback for chart modification: if LLM returned a chart object
-                # without the "dashboard" wrapper, wrap it into a valid dashboard JSON
                 is_chart_mod = route_decision.get("is_chart_modification", False)
-                if json_data and is_chart_mod and "dashboard" not in json_data:
-                    # LLM returned chart object directly — wrap it
-                    if "chart_type" in json_data or "datasets" in json_data:
-                        logger.info(
-                            "Chart modification: wrapping raw chart object into dashboard JSON"
-                        )
-                        json_data = {
-                            "dashboard": {
-                                "title": "Chart Modification",
-                                "description": "Modified chart",
-                            },
-                            "metrics": [],
-                            "charts": [json_data],
-                            "tables": [],
-                            "insights": [],
-                        }
-                    elif "charts" in json_data and "dashboard" not in json_data:
-                        logger.info(
-                            "Chart modification: adding missing dashboard wrapper"
-                        )
-                        json_data["dashboard"] = {
-                            "title": "Chart Modification",
-                            "description": "Modified chart",
-                        }
-                        json_data.setdefault("metrics", [])
-                        json_data.setdefault("tables", [])
-                        json_data.setdefault("insights", [])
+
+                if is_chart_mod:
+                    # Chart-mod path: force the FINAL emission through provider
+                    # structured output on the base (un-tool-bound) model, with
+                    # regex + targeted repair as fallbacks. Returns None to
+                    # defer to the existing retry loop.
+                    quick_model = kwargs.get("quick_model")
+                    json_data = _finalize_chart_mod_emission(
+                        state, model, quick_model, messages, response.content
+                    )
+                else:
+                    # Full-dashboard path — unchanged regex extraction.
+                    json_data = _extract_json_from_content(response.content)
 
                 if json_data:
                     # Store JSON for validation in node_validation
@@ -1744,6 +1784,13 @@ def node_execution(state: AgentState, python_tool=None, **kwargs) -> AgentState:
         Updated agent state with execution results in working_memory
     """
     logger.info("Running EXECUTION node")
+    thinking_event_fn = kwargs.get("thinking_event_fn")
+
+    # Activity transparency: stream the code+output of every successful Python
+    # REPL run as a per-step "execution" thinking event (generation + edits
+    # alike). Cheap — no LLM here; explanations are added later in SYNTHESIS.
+    def _emit_execution_step(code: Any, output: Any) -> None:
+        emit_execution_step(state, thinking_event_fn, code, output)
 
     # Get or create python tool
     if python_tool is None:
@@ -1799,6 +1846,8 @@ def node_execution(state: AgentState, python_tool=None, **kwargs) -> AgentState:
                         tool_result = python_tool.run(tool_args["query"])
                         success = True
                         error = None
+                        # Stream this successful run as a live activity step.
+                        _emit_execution_step(tool_args.get("query"), tool_result)
                     elif tool_name.lower() == "get_available_chart_types":
                         tool_result = get_available_chart_types.invoke({})
                         success = True
@@ -2047,7 +2096,15 @@ Load ALL files and combine/analyze as needed for the user's request. You can use
 
             file_info += "\n\nCRITICAL: When writing Python code, load the files using the paths pre-loaded in the `file_paths` dictionary object in your environment (e.g. `file_paths['users.csv']`)."
 
-            if is_chart_mod and state.chart_mentions:
+            if (
+                is_chart_mod
+                and state.chart_mentions
+                and _mention_is_table(state.chart_mentions[0])
+            ):
+                instruction = _build_table_mod_instruction(
+                    state.chart_mentions[0], state.input_prompt, file_info
+                )
+            elif is_chart_mod and state.chart_mentions:
                 chart_info = state.chart_mentions[0]
                 existing_config = chart_info.get("config", {})
                 existing_config_json = json.dumps(
@@ -2100,6 +2157,10 @@ WORKFLOW:
 
 You MUST output a valid JSON code block. Keep chart ID as "{chart_id}".
 Populate datasets with REAL computed data from Python analysis (never empty arrays).
+EVERY series/dataset MUST have a non-empty `data` array. If the edit ADDS series (e.g.
+daily/weekly/monthly variants), LOAD the source file and COMPUTE each one in the REPL
+(e.g. df.set_index(<date>).resample('D'|'W'|'M').sum()), then fill each dataset's `data`.
+A chart with empty data will be REJECTED.
 Output ONLY the modified chart in "charts" array."""
             elif mode == "dashboard":
                 instruction = f"User wants to: {state.input_prompt}\n\n{file_info}"
@@ -2249,6 +2310,16 @@ Output ONLY the modified chart in "charts" array."""
 
                     if success:
                         tool_execution_count += 1
+                        # Stream the code+output as a fine-grained Activity step so
+                        # the sidebar shows code LIVE on the default OpenAI path too
+                        # (not just the Gemini split path).
+                        if "python" in str(tool_name).lower():
+                            emit_execution_step(
+                                state,
+                                thinking_event_fn,
+                                tool_args.get("query"),
+                                result_str,
+                            )
                         emit_thinking_event(
                             "tool",
                             "Tool result received",
@@ -2309,29 +2380,16 @@ Output ONLY the modified chart in "charts" array."""
 
                 # --- Extract output → store in working_memory for SYNTHESIS ---
                 if mode == "dashboard":
-                    json_data = _extract_json_from_content(content)
-
-                    # Chart modification wrapping
-                    if json_data and is_chart_mod and "dashboard" not in json_data:
-                        if "chart_type" in json_data or "datasets" in json_data:
-                            json_data = {
-                                "dashboard": {
-                                    "title": "Chart Modification",
-                                    "description": "Modified chart",
-                                },
-                                "metrics": [],
-                                "charts": [json_data],
-                                "tables": [],
-                                "insights": [],
-                            }
-                        elif "charts" in json_data:
-                            json_data["dashboard"] = {
-                                "title": "Chart Modification",
-                                "description": "Modified chart",
-                            }
-                            json_data.setdefault("metrics", [])
-                            json_data.setdefault("tables", [])
-                            json_data.setdefault("insights", [])
+                    if is_chart_mod:
+                        # Chart-mod path: structured output on the base
+                        # (un-tool-bound) model with regex + repair fallbacks.
+                        quick_model = kwargs.get("quick_model")
+                        json_data = _finalize_chart_mod_emission(
+                            state, model, quick_model, messages, content
+                        )
+                    else:
+                        # Full-dashboard path — unchanged regex extraction.
+                        json_data = _extract_json_from_content(content)
 
                     if json_data:
                         state.working_memory.dashboard_json = json_data
@@ -2460,6 +2518,344 @@ Output ONLY the modified chart in "charts" array."""
     return state
 
 
+def _build_edit_provenance(state: AgentState) -> dict:
+    """Build AUTHORITATIVE edit provenance from actually-executed REPL runs.
+
+    Source of truth is ``python_execution_results`` (what the agent really ran),
+    NOT the model's self-reported provenance — so the "data behind this edit"
+    the user sees cannot be fabricated.
+    """
+    python_code: list = []
+    computed_values: dict = {}
+    try:
+        results = state.working_memory.python_execution_results or []
+    except Exception:
+        results = []
+
+    run_index = 0
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        if not result.get("success"):
+            continue
+        tool_name = str(result.get("tool_name") or "")
+        if "python" not in tool_name.lower():
+            continue
+        args = result.get("tool_args") or {}
+        query = args.get("query") if isinstance(args, dict) else None
+        if query:
+            python_code.append(str(query))
+        output = result.get("output")
+        if output is not None:
+            # Truncate to keep payloads small; the FE shows this as a disclosure.
+            computed_values[f"run_{run_index}"] = str(output)[:2000]
+            run_index += 1
+
+    return {
+        "python_code": python_code,
+        "computed_values": computed_values,
+        "notes": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Activity transparency — analysis steps (generation + edits)
+# ---------------------------------------------------------------------------
+# A "step" is one successful Python REPL run, sanitized for display. The shared
+# contract (backend + frontend consume it) is:
+#   {index:int, title:str, python:str, output:str, explanation:str}
+# python/output are truncated to <= ANALYSIS_STEP_MAX_CHARS each; we keep at most
+# the last ANALYSIS_STEPS_MAX meaningful steps.
+ANALYSIS_STEP_MAX_CHARS = 1500
+ANALYSIS_STEPS_MAX = 8
+
+# Absolute temp paths leak machine-specific noise into the displayed code; strip
+# them so the activity panel shows portable, readable analysis.
+_TEMP_PATH_RE = re.compile(r"(/var/folders/\S+|/mnt/\S+|/tmp/\S+)")
+# ``file_paths['something.csv']`` / ``file_paths["x"]`` plumbing is noise to a
+# non-technical reader — collapse the subscript to a generic placeholder.
+_FILE_PATHS_ACCESS_RE = re.compile(r"file_paths\[\s*['\"][^'\"]*['\"]\s*\]")
+# A step whose code is essentially just listing/printing file_paths does no
+# computation worth showing.
+_TRIVIAL_STEP_RE = re.compile(r"^\s*(print\s*\(\s*file_paths.*\)|file_paths\s*)\s*$")
+
+
+def _sanitize_analysis_text(text: Any) -> str:
+    """Strip temp paths + file_paths subscript noise from displayed code/output."""
+    if text is None:
+        return ""
+    cleaned = str(text)
+    cleaned = _TEMP_PATH_RE.sub("<path>", cleaned)
+    cleaned = _FILE_PATHS_ACCESS_RE.sub("file_paths[...]", cleaned)
+    return cleaned
+
+
+def _is_trivial_step_code(code: str) -> bool:
+    """True for debug-only steps (e.g. just ``print(file_paths)``) with no real work."""
+    stripped = (code or "").strip()
+    if not stripped:
+        return True
+    non_empty_lines = [line for line in stripped.splitlines() if line.strip()]
+    if len(non_empty_lines) == 1 and _TRIVIAL_STEP_RE.match(non_empty_lines[0]):
+        return True
+    return False
+
+
+def _step_title_from_code(code: str, fallback_index: int) -> str:
+    """Short heuristic title — first comment line, else a generic label."""
+    for line in (code or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            comment = stripped.lstrip("#").strip()
+            if comment:
+                return comment[:80]
+    return f"Step {fallback_index + 1}: analysis"
+
+
+def _fallback_analysis_step_explanation(_step: dict) -> str:
+    """Non-technical fallback when the quick model cannot explain a step."""
+    raw_title = str(_step.get("title") or "").strip()
+    title = re.sub(r"[._-]+", " ", raw_title)
+    title = re.sub(r"\s+", " ", title).strip()
+    lower_title = title.lower()
+    if not title or re.match(r"^step \d+: analysis$", title, flags=re.IGNORECASE):
+        return "Ran a calculation and saved the result used in the dashboard."
+    if "robust read" in lower_title:
+        return "Loaded the data carefully and retried with safer read settings."
+    if "bom" in lower_title and "column" in lower_title:
+        return "Cleaned hidden characters from column names so the data matches correctly."
+    if "computed values" in lower_title:
+        return "Pulled the exact computed values into the dashboard."
+    if "join" in lower_title:
+        return "Matched related records so the data can be compared correctly."
+    if re.search(r"(total|sum|aggregate|daily|weekly|monthly)", lower_title):
+        return f"{title[:1].upper()}{title[1:].rstrip('.')} for the dashboard."
+    return f"{title[:1].upper()}{title[1:].rstrip('.')} for this calculation."
+
+
+def _fill_missing_analysis_step_explanations(steps: list) -> list:
+    """Ensure every activity step has a user-readable explanation."""
+    for step in steps:
+        if not str(step.get("explanation", "")).strip():
+            step["explanation"] = _fallback_analysis_step_explanation(step)
+    return steps
+
+
+def emit_execution_step(
+    state: AgentState, thinking_event_fn, code: Any, output: Any
+) -> None:
+    """Stream one successful Python REPL run as a per-step ``execution`` thinking
+    event (code + output), so the Activity sidebar can show code LIVE.
+
+    Shared by both reasoning loops (split `node_execution` and OpenAI internal
+    `node_reasoning_internal`) so the live experience is identical on every model.
+    Uses a monotonic per-run counter in ``tool_outputs["_analysis_step_emitted"]``
+    so step indexes never collide/duplicate. Cheap — no LLM; the plain-language
+    explanations are added later in SYNTHESIS.
+    """
+    if not thinking_event_fn:
+        return
+    step_index = int(state.working_memory.tool_outputs.get("_analysis_step_emitted", 0))
+    state.working_memory.tool_outputs["_analysis_step_emitted"] = step_index + 1
+    sanitized_code = _sanitize_analysis_text(code)[:ANALYSIS_STEP_MAX_CHARS]
+    sanitized_output = _sanitize_analysis_text(output)[:ANALYSIS_STEP_MAX_CHARS]
+    try:
+        thinking_event_fn(
+            phase="execution",
+            title=_step_title_from_code(sanitized_code, step_index),
+            metadata={
+                "python": sanitized_code,
+                "output": sanitized_output,
+                "step_index": step_index,
+            },
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to emit execution step thinking event: {exc}")
+
+
+def _collect_analysis_steps(state: AgentState) -> list:
+    """Generalize edit provenance into structured analysis steps for BOTH paths.
+
+    Iterates successful Python REPL runs in ``python_execution_results`` (works for
+    generation runs as well as edits), sanitizes the code/output, drops trivial
+    debug-only steps, truncates, and caps to the last ANALYSIS_STEPS_MAX steps.
+    """
+    try:
+        results = state.working_memory.python_execution_results or []
+    except Exception:
+        results = []
+
+    steps: list = []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        if not result.get("success"):
+            continue
+        tool_name = str(result.get("tool_name") or "")
+        if "python" not in tool_name.lower():
+            continue
+        args = result.get("tool_args") or {}
+        query = args.get("query") if isinstance(args, dict) else None
+        if not query:
+            continue
+
+        raw_code = str(query)
+        if _is_trivial_step_code(raw_code):
+            continue
+
+        sanitized_code = _sanitize_analysis_text(raw_code)[:ANALYSIS_STEP_MAX_CHARS]
+        sanitized_output = _sanitize_analysis_text(result.get("output"))[
+            :ANALYSIS_STEP_MAX_CHARS
+        ]
+        steps.append(
+            {
+                "index": 0,  # reassigned after capping so indexes stay contiguous
+                "title": _step_title_from_code(raw_code, len(steps)),
+                "python": sanitized_code,
+                "output": sanitized_output,
+            }
+        )
+
+    # Cap to the last N meaningful steps and renumber contiguously.
+    steps = steps[-ANALYSIS_STEPS_MAX:]
+    for index, step in enumerate(steps):
+        step["index"] = index
+    return steps
+
+
+def _explain_analysis_steps(quick_model, steps: list) -> list:
+    """Attach a 1-sentence plain-language explanation to each step.
+
+    ONE batched LLM call via the cheap quick model. On ANY failure (no model,
+    bad/short response, exception) steps receive a deterministic plain-language
+    fallback explanation — this never raises.
+    """
+    if not steps:
+        return steps
+
+    # Default every step to an empty explanation so callers always get the key.
+    for step in steps:
+        step.setdefault("explanation", "")
+
+    if quick_model is None:
+        return _fill_missing_analysis_step_explanations(steps)
+
+    try:
+        step_blocks = []
+        for step in steps:
+            # Bound per-step input so a batch stays cheap.
+            code_excerpt = str(step.get("python", ""))[:800]
+            output_excerpt = str(step.get("output", ""))[:400]
+            step_blocks.append(
+                f"Step {step['index']}:\nCODE:\n{code_excerpt}\nOUTPUT:\n{output_excerpt}"
+            )
+        prompt = (
+            "For each analysis step below, write ONE short, plain-language, "
+            "non-technical sentence explaining what it computed (e.g. 'Computed "
+            "weekly totals by resampling the date column'). Do not mention code, "
+            "libraries, or variable names.\n\n"
+            "Return ONLY a JSON array of objects like "
+            '[{"index": 0, "explanation": "..."}], one per step, matching the '
+            "step indexes.\n\n" + "\n\n".join(step_blocks)
+        )
+        response = _llm_invoke(
+            quick_model.invoke,
+            [HumanMessage(content=prompt)],
+            label="Analysis-step explanations",
+        )
+        content = getattr(response, "content", response)
+        parsed = json.loads(clean_json(str(content)))
+        if not isinstance(parsed, list):
+            return _fill_missing_analysis_step_explanations(steps)
+        by_index = {}
+        for item in parsed:
+            if isinstance(item, dict) and "index" in item:
+                by_index[item["index"]] = str(item.get("explanation", ""))
+        for step in steps:
+            if step["index"] in by_index:
+                step["explanation"] = by_index[step["index"]][:300]
+    except Exception as exc:
+        logger.warning(f"Analysis-step explanations failed: {exc}")
+        return _fill_missing_analysis_step_explanations(steps)
+
+    return _fill_missing_analysis_step_explanations(steps)
+
+
+def _attach_analysis_steps(state: AgentState) -> None:
+    """Collect + explain analysis steps, persist to working memory and surface in output.
+
+    Called from SYNTHESIS for both the generation and edit paths once the output
+    dict has been finalized. Bounded/cheap; never raises.
+    """
+    try:
+        steps = _collect_analysis_steps(state)
+        if not steps:
+            return
+        steps = _explain_analysis_steps(get_model_for_quick_agent(), steps)
+        state.working_memory.analysis_steps = steps
+        if isinstance(state.output, dict):
+            state.output["analysis_steps"] = steps
+    except Exception as exc:
+        logger.warning(f"Failed to attach analysis steps: {exc}")
+
+
+def _derive_change_summary(old_config: dict, new_chart: dict) -> dict:
+    """Fallback ChangeSummary when the structured summary is unavailable.
+
+    Compares the previous chart config with the newly emitted chart to describe
+    type changes and series additions/removals in the ChangeSummary shape.
+    """
+    old_config = old_config or {}
+    new_chart = new_chart or {}
+
+    def _chart_type(cfg: dict):
+        return cfg.get("chart_type") or cfg.get("type")
+
+    old_type = _chart_type(old_config)
+    new_type = _chart_type(new_chart)
+
+    def _labels(cfg: dict) -> list:
+        datasets = cfg.get("datasets") or []
+        labels = []
+        for ds in datasets:
+            if isinstance(ds, dict) and ds.get("label"):
+                labels.append(str(ds["label"]))
+        return labels
+
+    old_labels = _labels(old_config)
+    new_labels = _labels(new_chart)
+    series_added = [lbl for lbl in new_labels if lbl not in old_labels]
+    series_removed = [lbl for lbl in old_labels if lbl not in new_labels]
+
+    change_type: list = []
+    parts: list = []
+    if old_type and new_type and old_type != new_type:
+        change_type.append("chart_type")
+        parts.append(f"changed from {old_type} to {new_type}")
+    if series_added:
+        change_type.append("series_added")
+        parts.append(f"added {', '.join(series_added)}")
+    if series_removed:
+        change_type.append("series_removed")
+        parts.append(f"removed {', '.join(series_removed)}")
+    if not change_type:
+        change_type.append("other")
+        parts.append("updated the chart")
+
+    title = new_chart.get("title") or old_config.get("title") or "the chart"
+    human_summary = f"Updated {title}: " + "; ".join(parts) + "."
+
+    return {
+        "change_type": change_type,
+        "chart_type_from": old_type,
+        "chart_type_to": new_type,
+        "series_added": series_added,
+        "series_removed": series_removed,
+        "filters_applied": [],
+        "human_summary": human_summary,
+    }
+
+
 def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
     """
     SYNTHESIS Node: Synthesize final output from working memory.
@@ -2476,6 +2872,7 @@ def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
         Updated agent state with output populated
     """
     logger.info("Running SYNTHESIS node")
+    thinking_event_fn = kwargs.get("thinking_event_fn")
 
     route_decision = state.working_memory.tool_outputs.get("route_decision", {})
     mode = route_decision.get("next_step", "dashboard")
@@ -2492,6 +2889,47 @@ def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
         )
 
         if dashboard_json:
+            # Coarse chart-edit progress: announce rendering of the updated chart
+            # right before we set the merge-ready output.
+            if thinking_event_fn:
+                try:
+                    thinking_event_fn(
+                        phase="rendering",
+                        title="Rendering the updated chart",
+                        metadata={
+                            "step": "rendering",
+                            "is_chart_modification": True,
+                            "chart_id": chart_mention.get("chart_id"),
+                        },
+                    )
+                except Exception as exc:
+                    logger.warning(f"Failed to emit rendering thinking event: {exc}")
+            # Extract the modified chart object from the dashboard wrapper for
+            # change-summary derivation (output data is {... "charts":[chart]}).
+            modified_chart = {}
+            try:
+                charts = (dashboard_json or {}).get("charts") or []
+                if charts:
+                    modified_chart = charts[0] or {}
+            except Exception:
+                modified_chart = {}
+
+            # "What changed" summary: prefer the structured summary the model
+            # produced; otherwise derive one by diffing old vs new.
+            change_summary = state.working_memory.chart_change_summary
+            if not change_summary:
+                change_summary = _derive_change_summary(
+                    chart_mention.get("config") or {}, modified_chart
+                )
+
+            # "Data behind this edit": always compute authoritative provenance
+            # from the executed REPL runs; backfill python_code if the model's
+            # self-reported provenance lacks it.
+            authoritative = _build_edit_provenance(state)
+            data_provenance = state.working_memory.edit_provenance or {}
+            if not data_provenance.get("python_code"):
+                data_provenance = {**data_provenance, **authoritative}
+
             # Tag output so frontend knows to merge instead of replace
             state.output = {
                 "type": "chart_modification",
@@ -2499,8 +2937,14 @@ def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
                 "chart_modification_context": {
                     "component_id": chart_mention.get("component_id"),
                     "chart_id": chart_mention.get("chart_id"),
+                    # Dashboard the edited component belongs to (None for old
+                    # clients); the server merge uses it to target the correct
+                    # dashboard and persist in place.
+                    "dashboard_id": chart_mention.get("dashboard_id"),
                     "title": chart_mention.get("title"),
                     "chart_type": chart_mention.get("chart_type"),
+                    "change_summary": change_summary,
+                    "data_provenance": data_provenance,
                 },
             }
             logger.info("Chart modification synthesis complete — frontend will merge")
@@ -2597,6 +3041,10 @@ def node_synthesis(state: AgentState, model=None, **kwargs) -> AgentState:
             )
             logger.error("Failed to synthesize Q&A output")
 
+    # Activity transparency: once the output dict is finalized (generation OR
+    # edit), attach the structured analysis steps so the server can persist them.
+    _attach_analysis_steps(state)
+
     return state
 
 
@@ -2637,16 +3085,91 @@ def node_validation(state: AgentState, **kwargs) -> AgentState:
     # dashboard, but still enforce structural/layout validity so impossible grid
     # geometry cannot be saved.
     route_decision = state.working_memory.tool_outputs.get("route_decision", {})
-    if (
-        route_decision.get("is_chart_modification")
-        and output_type == "dashboard_config"
+    if route_decision.get("is_chart_modification") and output_type in (
+        "dashboard_config",
+        "chart_modification",
     ):
         validation_result = _validate_dashboard_json(state.output.get("data"))
         if validation_result.get("valid"):
             logger.info(
-                "Chart modification mode — structural validation passed; skipping data authenticity check"
+                "Chart modification mode — structural validation passed; "
+                "running scoped data-authenticity check"
             )
             validation_result["note"] = "chart_modification_layout_only"
+
+            # Scoped anti-hallucination: ensure the modified chart's datapoints
+            # trace back to the Python analysis. Restyle-only edits (no REPL
+            # runs) are intentionally skipped inside the helper.
+            modified_chart = _extract_modified_chart(state.output.get("data"))
+            if modified_chart is not None:
+                data_validation = _validate_chart_modification_data(
+                    modified_chart, state
+                )
+
+                for warning in data_validation.get("warnings", []):
+                    logger.warning(f"Chart-mod data validation: {warning}")
+
+                if data_validation.get("empty_chart"):
+                    # EMPTY chart is unambiguously broken — force ONE recompute so
+                    # the model actually computes data (never re-reasoned for soft
+                    # issues, but an empty chart must not ship).
+                    empty_retries = state.working_memory.tool_outputs.get(
+                        "chart_mod_empty_retries", 0
+                    )
+                    if empty_retries < 1:
+                        grounding = _build_data_grounding_context(state)
+                        state.working_memory.tool_outputs["force_more_tools"] = (
+                            "⚠️ THE MODIFIED CHART HAS NO DATAPOINTS — IT WOULD RENDER BLANK ⚠️\n\n"
+                            "LOAD the source file and COMPUTE real values via the Python REPL for "
+                            "EVERY series. If you added time-variant series (daily/weekly/monthly), "
+                            "resample the date column (e.g. "
+                            "df.set_index(<date>).resample('D'/'W'/'M').sum()) and populate each "
+                            "dataset's `data` with the resulting {label, value} points. "
+                            "NEVER emit empty data arrays.\n\n"
+                            f"{grounding}"
+                        )
+                        state.working_memory.tool_outputs["chart_mod_empty_retries"] = (
+                            empty_retries + 1
+                        )
+                        # Mark invalid → the shared block below increments retry_count
+                        # and the workflow re-runs reasoning/execution.
+                        validation_result = {
+                            "valid": False,
+                            "error": "Chart modification produced an empty chart — recomputing.",
+                            "data_errors": data_validation.get("errors", []),
+                            "empty_chart": True,
+                        }
+                    else:
+                        # Recompute still empty — never ship a blank chart. Flag so
+                        # the server keeps the ORIGINAL chart unchanged (no overwrite).
+                        logger.warning(
+                            "Chart-mod still empty after recompute retry; flagging "
+                            "empty_chart so the original chart is kept."
+                        )
+                        validation_result["empty_chart"] = True
+                        validation_result["data_warnings"] = data_validation.get(
+                            "errors", []
+                        )
+                else:
+                    # Accept-with-warning: a chart edit is never re-reasoned for soft
+                    # data-authenticity issues (that doubled latency). Unmatched
+                    # datapoints are surfaced as warnings only; the structural/layout
+                    # check above still gates un-renderable output, and restyle-only
+                    # edits are skipped inside the helper. validation_result stays valid.
+                    validation_result["unmatched_ratio"] = data_validation.get(
+                        "unmatched_ratio", 0.0
+                    )
+                    issues = data_validation.get("errors", []) + data_validation.get(
+                        "warnings", []
+                    )
+                    if issues:
+                        validation_result["data_warnings"] = issues
+                        if not data_validation.get("valid"):
+                            logger.warning(
+                                "Chart-mod data authenticity flagged %d issue(s); "
+                                "accepting with warning (no re-reasoning)",
+                                len(issues),
+                            )
         state.working_memory.tool_outputs["validation"] = validation_result
         if not validation_result.get("valid"):
             error_msg = validation_result.get("error", "Validation failed")
@@ -3016,6 +3539,532 @@ Write a conversational summary explaining what the dashboard shows and key insig
         return str(response.content).strip()
     # Fallback
     return f"I've created a dashboard with {len(charts)} chart(s) and {len(metrics)} metric(s) based on your request."
+
+
+class StructuredEmissionError(Exception):
+    """Raised when provider structured-output for chart-mod fails.
+
+    Signals the caller to fall back to regex extraction + repair.
+    """
+
+
+# Required ChartSpec fields the wrapper/downstream code depends on. A regex
+# extraction missing any of these triggers the targeted repair step.
+_CHART_SPEC_REQUIRED_KEYS = ("id", "chart_type", "title", "datasets")
+
+
+def _wrap_chart_into_dashboard(chart: Dict[str, Any]) -> Dict[str, Any]:
+    """Wrap a single chart object into the dashboard JSON envelope.
+
+    Downstream code (validation, persistence) expects the full
+    ``{dashboard, metrics, charts:[chart], tables, insights}`` shape, so both
+    the structured-output path and the regex fallback funnel through here.
+    """
+    return {
+        "dashboard": {
+            "title": "Chart Modification",
+            "description": "Modified chart",
+        },
+        "metrics": [],
+        "charts": [chart],
+        "tables": [],
+        "insights": [],
+    }
+
+
+def _wrap_table_into_dashboard(table: Dict[str, Any]) -> Dict[str, Any]:
+    """Wrap a single table object into the dashboard JSON envelope.
+
+    Mirror of ``_wrap_chart_into_dashboard`` for the table-modification path:
+    the modified table lands in ``tables`` (not ``charts``) so the server merge
+    replaces it in-place by id.
+    """
+    return {
+        "dashboard": {
+            "title": "Table Modification",
+            "description": "Modified table",
+        },
+        "metrics": [],
+        "charts": [],
+        "tables": [table],
+        "insights": [],
+    }
+
+
+# Required TableSpec fields the wrapper/downstream code depends on. Mirrors the
+# chart required-key check used for regex-fallback repair gating.
+_TABLE_SPEC_REQUIRED_KEYS = ("id", "title", "columns", "data")
+
+
+def _mention_target_id(chart_mention: Dict[str, Any]) -> Optional[str]:
+    """Return the id of the component the mention targets.
+
+    Prefer the structured chart/table ``chart_id`` (the stable component id the
+    frontend stores), falling back to ``component_id``. Used to force-preserve
+    the emitted component's id so the server merge replaces (not appends).
+    """
+    if not isinstance(chart_mention, dict):
+        return None
+    return chart_mention.get("chart_id") or chart_mention.get("component_id")
+
+
+def _mention_is_table(chart_mention: Dict[str, Any]) -> bool:
+    """Detect whether the @-mention targets a table component.
+
+    Mentions encode the component kind in ``chart_type`` (it mirrors the
+    component ``type``). A value of ``table`` means the user is editing a table.
+    """
+    if not isinstance(chart_mention, dict):
+        return False
+    kind = str(chart_mention.get("chart_type") or "").strip().lower()
+    return kind == "table"
+
+
+def _build_table_mod_instruction(
+    chart_mention: Dict[str, Any], input_prompt: str, file_info: str
+) -> str:
+    """Build the reasoning instruction for a TABLE edit.
+
+    Mirrors the chart-modification instruction's structure but injects the table
+    definition (columns + current rows + ranking/description) and instructs the
+    model to recompute via Python REPL and emit a ``tables`` array (never a
+    chart). The original table id is preserved so the server merge replaces it.
+    """
+    existing_config = chart_mention.get("config", {}) or {}
+    existing_config_json = json.dumps(existing_config, ensure_ascii=False, indent=2)
+    table_id = (
+        chart_mention.get("chart_id")
+        or chart_mention.get("component_id")
+        or "table_modified"
+    )
+
+    columns = existing_config.get("columns") or []
+    column_labels = [
+        str(col.get("label") or col.get("id") or "")
+        for col in columns
+        if isinstance(col, dict)
+    ]
+    columns_hint = (
+        f"\nThis table has columns: {', '.join(label for label in column_labels if label)}"
+        if column_labels
+        else ""
+    )
+
+    return f"""User wants to MODIFY an existing TABLE in their dashboard.
+
+TARGET TABLE TO MODIFY:
+- Table ID: {table_id}
+- Title: {chart_mention.get('title', 'Untitled')}{columns_hint}
+- Current Definition (columns, rows, and ranking/description logic):
+```json
+{existing_config_json}
+```
+
+User's modification request: {input_prompt}
+
+{file_info}
+
+IMPORTANT SCOPE RULE: You are modifying ONLY this one table. If multiple files are
+available, use ONLY the file that contains the data relevant to this table (check
+the column ids/labels from the definition above). Do NOT combine unrelated files.
+
+WORKFLOW:
+1. First, use the Python REPL to load the relevant source file and recompute the
+   table rows (apply the requested ranking/filter/aggregation against real data).
+2. Then output a dashboard JSON with ONLY the modified table.
+
+You MUST output a valid JSON code block in this EXACT format:
+
+```json
+{{
+  "dashboard": {{
+    "title": "Table Modification",
+    "description": "Modified table per user request"
+  }},
+  "metrics": [],
+  "charts": [],
+  "tables": [
+    {{
+      "id": "{table_id}",
+      "title": "<table_title>",
+      "description": "<table_description>",
+      "layout": {{"x": 0, "y": 0, "w": 24, "h": 12, "minW": 12, "minH": 10}},
+      "columns": [
+        {{"id": "<column_id>", "label": "<column_header>", "type": "<text|number|currency|percent>"}}
+      ],
+      "data": [
+        {{"<column_id>": "<computed_cell_value>"}}
+      ]
+    }}
+  ],
+  "insights": ["<insight about the modification>"]
+}}
+```
+
+CRITICAL RULES:
+- Keep the table ID as "{table_id}".
+- Populate "data" rows with REAL computed values from Python analysis (never empty arrays).
+- Output ONLY the modified table in the "tables" array; "charts" MUST be empty.
+- You MUST output the JSON code block — do NOT just describe the changes in text."""
+
+
+def _is_gemini_model(model: Any) -> bool:
+    """Detect Gemini provider using the same model_name check used elsewhere."""
+    model_name = getattr(model, "model_name", "") or getattr(model, "model", "")
+    return str(model_name).startswith("gemini")
+
+
+def _emit_chart_spec_structured(
+    model, messages, state: AgentState
+) -> ChartModificationResult:
+    """Force the chart-mod final emission through provider structured output.
+
+    Takes the UN-tool-bound base model. For OpenAI, prefers strict JSON-schema
+    and retries via function-calling on failure. For Gemini, uses the default
+    structured-output method (maps to ``response_schema``).
+
+    Records the successful method into
+    ``state.working_memory.tool_outputs["structured_output_method"]``.
+
+    Returns the validated ``ChartModificationResult``. Any failure is wrapped in
+    ``StructuredEmissionError`` so the caller can fall back.
+    """
+    if _is_gemini_model(model):
+        try:
+            structured = model.with_structured_output(ChartModificationResult)
+            result = _llm_invoke(
+                structured.invoke, messages, label="Chart-mod structured (gemini)"
+            )
+            state.working_memory.tool_outputs["structured_output_method"] = (
+                "gemini_response_schema"
+            )
+            return result
+        except Exception as exc:
+            raise StructuredEmissionError(
+                f"Gemini structured output failed: {exc}"
+            ) from exc
+
+    # OpenAI: prefer strict json_schema, fall back to function_calling.
+    try:
+        structured = model.with_structured_output(
+            ChartModificationResult, method="json_schema"
+        )
+        result = _llm_invoke(
+            structured.invoke, messages, label="Chart-mod structured (json_schema)"
+        )
+        state.working_memory.tool_outputs["structured_output_method"] = "json_schema"
+        return result
+    except Exception as schema_exc:
+        logger.warning(
+            f"json_schema structured output failed, retrying function_calling: {schema_exc}"
+        )
+        try:
+            structured = model.with_structured_output(
+                ChartModificationResult, method="function_calling"
+            )
+            result = _llm_invoke(
+                structured.invoke,
+                messages,
+                label="Chart-mod structured (function_calling)",
+            )
+            state.working_memory.tool_outputs["structured_output_method"] = (
+                "function_calling"
+            )
+            return result
+        except Exception as fc_exc:
+            raise StructuredEmissionError(
+                f"OpenAI structured output failed (json_schema + function_calling): {fc_exc}"
+            ) from fc_exc
+
+
+def _emit_table_spec_structured(
+    model, messages, state: AgentState
+) -> TableModificationResult:
+    """Force the table-mod final emission through provider structured output.
+
+    Direct analog of ``_emit_chart_spec_structured`` but bound to
+    ``TableModificationResult`` so a table edit stays a table (never coerced
+    into a ChartSpec). Records the successful method and wraps any failure in
+    ``StructuredEmissionError`` so the caller can fall back to regex extraction.
+    """
+    if _is_gemini_model(model):
+        try:
+            structured = model.with_structured_output(TableModificationResult)
+            result = _llm_invoke(
+                structured.invoke, messages, label="Table-mod structured (gemini)"
+            )
+            state.working_memory.tool_outputs["structured_output_method"] = (
+                "gemini_response_schema"
+            )
+            return result
+        except Exception as exc:
+            raise StructuredEmissionError(
+                f"Gemini structured output failed: {exc}"
+            ) from exc
+
+    try:
+        structured = model.with_structured_output(
+            TableModificationResult, method="json_schema"
+        )
+        result = _llm_invoke(
+            structured.invoke, messages, label="Table-mod structured (json_schema)"
+        )
+        state.working_memory.tool_outputs["structured_output_method"] = "json_schema"
+        return result
+    except Exception as schema_exc:
+        logger.warning(
+            f"json_schema structured output failed, retrying function_calling: {schema_exc}"
+        )
+        try:
+            structured = model.with_structured_output(
+                TableModificationResult, method="function_calling"
+            )
+            result = _llm_invoke(
+                structured.invoke,
+                messages,
+                label="Table-mod structured (function_calling)",
+            )
+            state.working_memory.tool_outputs["structured_output_method"] = (
+                "function_calling"
+            )
+            return result
+        except Exception as fc_exc:
+            raise StructuredEmissionError(
+                f"OpenAI structured output failed (json_schema + function_calling): {fc_exc}"
+            ) from fc_exc
+
+
+def _chart_spec_missing_keys(parsed: Dict[str, Any]) -> list:
+    """Return the required ChartSpec keys missing/invalid in ``parsed``.
+
+    Validates against ``ChartSpec``; on validation failure, reports the subset
+    of required keys flagged by pydantic (plus any absent outright).
+    """
+    if not isinstance(parsed, dict):
+        return list(_CHART_SPEC_REQUIRED_KEYS)
+
+    try:
+        ChartSpec.model_validate(parsed)
+        return []
+    except Exception as exc:
+        from pydantic import ValidationError
+
+        invalid = set()
+        if isinstance(exc, ValidationError):
+            for err in exc.errors():
+                if err.get("loc"):
+                    top = err["loc"][0]
+                    if top in _CHART_SPEC_REQUIRED_KEYS:
+                        invalid.add(top)
+        # Also flag keys absent from the dict entirely.
+        for key in _CHART_SPEC_REQUIRED_KEYS:
+            if key not in parsed:
+                invalid.add(key)
+        return [key for key in _CHART_SPEC_REQUIRED_KEYS if key in invalid]
+
+
+def _repair_chart_json(
+    quick_model, parsed: Dict[str, Any], missing: list, state: AgentState
+) -> Optional[Dict[str, Any]]:
+    """Cheap, single-shot targeted repair of a chart dict missing keys.
+
+    Uses the quick/cheap model with ``with_structured_output(ChartSpec)`` to
+    coerce ``parsed`` into a valid ChartSpec, supplying a grounding excerpt of
+    allowed computed values. Guarded by a ``repair_attempted`` flag in
+    tool_outputs so it never runs twice. Returns the repaired chart dict on
+    success, otherwise ``None``.
+    """
+    if state.working_memory.tool_outputs.get("repair_attempted"):
+        logger.info("Chart repair already attempted, skipping second repair")
+        return None
+    state.working_memory.tool_outputs["repair_attempted"] = True
+
+    if quick_model is None:
+        quick_model = get_model_for_quick_agent()
+
+    grounding_excerpt = _build_data_grounding_context(state)[:4000]
+    repair_prompt = f"""This chart JSON is missing or has invalid required keys: {missing}.
+
+Here are the allowed computed values you may use (do NOT fabricate values):
+{grounding_excerpt}
+
+Here is the broken chart JSON:
+```json
+{json.dumps(parsed, ensure_ascii=False, indent=2)}
+```
+
+Return ONLY a corrected chart object matching the schema, filling the missing keys
+using real values from the allowed values above. Preserve the existing id."""
+
+    try:
+        structured = quick_model.with_structured_output(ChartSpec)
+        repaired = _llm_invoke(
+            structured.invoke,
+            [HumanMessage(content=repair_prompt)],
+            label="Chart-mod repair",
+        )
+        repaired_dict = (
+            repaired.model_dump() if hasattr(repaired, "model_dump") else repaired
+        )
+        if _chart_spec_missing_keys(repaired_dict):
+            logger.warning("Chart repair still missing required keys")
+            return None
+        return repaired_dict
+    except Exception as exc:
+        logger.warning(f"Chart repair failed: {exc}")
+        return None
+
+
+def _chart_has_no_datapoints(chart_obj: Any) -> bool:
+    """True when a chart has no datasets, or every dataset's ``data`` is empty.
+
+    A chart modification that yields zero datapoints is unambiguously broken (a
+    blank chart) — distinct from a restyle that legitimately reuses non-empty
+    data. Used to reject empty emissions and force a recompute.
+    """
+    if not isinstance(chart_obj, dict):
+        return True
+    datasets = chart_obj.get("datasets")
+    if not isinstance(datasets, list) or len(datasets) == 0:
+        return True
+    for dataset in datasets:
+        if isinstance(dataset, dict):
+            data = dataset.get("data")
+            if isinstance(data, list) and len(data) > 0:
+                return False
+    return True
+
+
+def _finalize_table_mod_emission(
+    state: AgentState, model, messages, content: str, target_id: Optional[str]
+) -> Optional[Dict[str, Any]]:
+    """Produce the table-mod dashboard JSON, keeping a table a table.
+
+    Fallback ordering mirrors the chart path:
+      a. structured output bound to ``TableModificationResult`` → wrap + return.
+      b. on failure → regex extraction; extract the modified table object.
+      c. on no usable table → return None so the existing retry loop runs.
+
+    The emitted table's ``id`` is force-preserved to ``target_id`` so the server
+    merge replaces (not appends) the table.
+
+    Regex-first: the reasoning loop usually already produced a valid table, so we
+    accept that (zero extra LLM cost) and only fall back to a structured emission
+    when the regex output isn't a usable table.
+    """
+
+    def _table_obj_ok(obj: Any) -> bool:
+        return (
+            isinstance(obj, dict)
+            and isinstance(obj.get("columns"), list)
+            and len(obj.get("columns") or []) > 0
+            and isinstance(obj.get("data"), list)
+        )
+
+    # a. FAST PATH: regex-extract the table the reasoning loop already produced.
+    parsed = _extract_json_from_content(content)
+    if parsed and "dashboard" not in parsed:
+        if "tables" in parsed and isinstance(parsed.get("tables"), list):
+            tables = parsed.get("tables") or []
+            table_obj = tables[0] if tables else None
+        else:
+            table_obj = parsed
+        if _table_obj_ok(table_obj):
+            if target_id:
+                table_obj["id"] = target_id
+            logger.info("Table modification: emitted via regex fast-path")
+            return _wrap_table_into_dashboard(table_obj)
+    elif parsed and "dashboard" in parsed:
+        # Already a full dashboard envelope (rare) — pass through.
+        return parsed
+
+    # b. FALLBACK: provider structured output bound to TableModificationResult.
+    try:
+        result = _emit_table_spec_structured(model, messages, state)
+        table_dict = result.table.model_dump()
+        if target_id:
+            table_dict["id"] = target_id
+        state.working_memory.chart_change_summary = result.change_summary.model_dump()
+        state.working_memory.edit_provenance = result.data_provenance.model_dump()
+        logger.info("Table modification: emitted via structured output (fallback)")
+        return _wrap_table_into_dashboard(table_dict)
+    except StructuredEmissionError as exc:
+        logger.warning(f"Table structured emission failed: {exc}")
+
+    # c. defer to the existing retry loop
+    return None
+
+
+def _finalize_chart_mod_emission(
+    state: AgentState, model, quick_model, messages, content: str
+) -> Optional[Dict[str, Any]]:
+    """Produce the chart-mod dashboard JSON via the structured-output pipeline.
+
+    Fast-path ordering (regex-first — the reasoning loop usually already emitted
+    a valid chart, so we accept it with zero extra LLM cost):
+      a. regex extraction → if a valid ChartSpec → wrap + return.
+      b. full dashboard envelope (rare) → pass through.
+      c. else provider structured output (base model) as a safety net.
+      d. else single targeted repair of the regex chart.
+      e. on continued failure → return None so the existing retry loop runs.
+
+    The emitted component's ``id`` is force-preserved to the @-mention target id
+    so the server merge replaces (not appends). Table edits are routed to
+    ``_finalize_table_mod_emission`` so they stay tables.
+    """
+    chart_mention = state.chart_mentions[0] if state.chart_mentions else {}
+    target_id = _mention_target_id(chart_mention)
+
+    # Table edits must not be coerced into a ChartSpec.
+    if _mention_is_table(chart_mention):
+        return _finalize_table_mod_emission(state, model, messages, content, target_id)
+
+    # a. FAST PATH: regex-extract the chart the reasoning loop already produced.
+    parsed = _extract_json_from_content(content)
+    chart_obj = None
+    if parsed and "dashboard" not in parsed:
+        if "charts" in parsed and isinstance(parsed.get("charts"), list):
+            charts = parsed.get("charts") or []
+            chart_obj = charts[0] if charts else None
+        else:
+            chart_obj = parsed
+        if (
+            isinstance(chart_obj, dict)
+            and not _chart_spec_missing_keys(chart_obj)
+            and not _chart_has_no_datapoints(chart_obj)
+        ):
+            if target_id:
+                chart_obj["id"] = target_id
+            logger.info("Chart modification: emitted via regex fast-path")
+            return _wrap_chart_into_dashboard(chart_obj)
+    elif parsed and "dashboard" in parsed:
+        # b. Already a full dashboard envelope (rare for chart-mod) — pass through.
+        return parsed
+
+    # c. SAFETY NET: provider structured output on the un-tool-bound base model.
+    try:
+        result = _emit_chart_spec_structured(model, messages, state)
+        chart_dict = result.chart.model_dump()
+        if target_id:
+            chart_dict["id"] = target_id
+        state.working_memory.chart_change_summary = result.change_summary.model_dump()
+        state.working_memory.edit_provenance = result.data_provenance.model_dump()
+        logger.info("Chart modification: emitted via structured output (fallback)")
+        return _wrap_chart_into_dashboard(chart_dict)
+    except StructuredEmissionError as exc:
+        logger.warning(f"Structured emission failed, attempting repair: {exc}")
+
+    # d. REPAIR: single targeted repair of the regex chart, if we have one.
+    if isinstance(chart_obj, dict):
+        missing = _chart_spec_missing_keys(chart_obj)
+        repaired = _repair_chart_json(quick_model, chart_obj, missing, state)
+        if repaired is not None:
+            if target_id:
+                repaired["id"] = target_id
+            return _wrap_chart_into_dashboard(repaired)
+
+    # e. defer to the existing retry loop
+    return None
 
 
 def _extract_json_from_content(content: str) -> Dict[str, Any]:
@@ -3866,4 +4915,250 @@ def _validate_dashboard_data(dashboard_json: dict, state: AgentState) -> dict:
         "warnings": warnings,
         "metric_warnings": metric_warnings,
         "errors": errors,
+    }
+
+
+def _successful_repl_outputs(state: AgentState) -> list:
+    """Return the output text of every successful Python REPL execution."""
+    outputs = []
+    for result in state.working_memory.python_execution_results:
+        if result.get("success") and result.get("output"):
+            outputs.append(str(result.get("output", "")))
+    return outputs
+
+
+def _count_successful_repl_runs(state: AgentState) -> int:
+    """Count REPL executions that completed successfully with output."""
+    return len(_successful_repl_outputs(state))
+
+
+def _collect_repl_numeric_values(state: AgentState) -> set:
+    """Extract every numeric token printed by successful REPL runs.
+
+    Tokens match ``-?\\d[\\d,]*\\.?\\d*`` and are comma-normalized to float.
+    Returns the set of floats (best-effort; unparseable tokens are skipped).
+    """
+    numeric_values: set = set()
+    token_pattern = re.compile(r"-?\d[\d,]*\.?\d*")
+    for output in _successful_repl_outputs(state):
+        for token in token_pattern.findall(output):
+            cleaned = token.replace(",", "").rstrip(".")
+            if not cleaned or cleaned in ("-", "."):
+                continue
+            try:
+                numeric_values.add(float(cleaned))
+            except ValueError:
+                continue
+    return numeric_values
+
+
+def _collect_repl_string_values(state: AgentState) -> set:
+    """Extract quoted/label-like strings from successful REPL outputs.
+
+    Optionally unions in cached CSV column uniques from working_memory if such
+    a cheap source already exists. All values are lowercased and stripped.
+    """
+    string_values: set = set()
+    quoted_pattern = re.compile(r"['\"]([^'\"]{1,80})['\"]")
+    for output in _successful_repl_outputs(state):
+        for match in quoted_pattern.findall(output):
+            cleaned = match.strip().lower()
+            if cleaned:
+                string_values.add(cleaned)
+
+    # Optional cheap union: reuse cached CSV uniques if a prior node stashed them.
+    cached_uniques = state.working_memory.tool_outputs.get("csv_unique_values")
+    if isinstance(cached_uniques, (list, set, tuple)):
+        for value in cached_uniques:
+            if isinstance(value, str) and value.strip():
+                string_values.add(value.strip().lower())
+
+    return string_values
+
+
+def _value_traces_to_repl(
+    value: float, repl_numeric: set, repl_outputs_text: str
+) -> bool:
+    """Decide whether a single chart datapoint traces to REPL output.
+
+    MATCHED if any of:
+      * exact match (after comma-normalization) to a printed numeric value,
+      * the value rounds to a printed value at 0, 1, or 2 decimals,
+      * a reasonably-formatted string form of the value appears as a substring
+        of the concatenated REPL output text.
+    """
+    # Exact match against printed numerics.
+    if value in repl_numeric:
+        return True
+
+    # Rounded match: chart value (or printed value) rounds to the other at
+    # 0/1/2 decimals. Handles "120.0" emitted from a printed "120" and vice versa.
+    for decimals in (0, 1, 2):
+        rounded_value = round(value, decimals)
+        if rounded_value in repl_numeric:
+            return True
+        for printed in repl_numeric:
+            if round(printed, decimals) == rounded_value:
+                return True
+
+    # Substring match against raw output text using compact string forms.
+    candidates = set()
+    candidates.add(repr(value))
+    if value == int(value):
+        candidates.add(str(int(value)))
+    candidates.add(str(value))
+    for decimals in (1, 2):
+        candidates.add(f"{value:.{decimals}f}")
+    for candidate in candidates:
+        if candidate and candidate in repl_outputs_text:
+            return True
+
+    return False
+
+
+def _extract_chart_values(chart_spec_dict: dict) -> list:
+    """Collect all numeric ``dataset.data[].value`` datapoints from a chart."""
+    values: list = []
+    for dataset in chart_spec_dict.get("datasets", []) or []:
+        if not isinstance(dataset, dict):
+            continue
+        for item in dataset.get("data", []) or []:
+            raw_value = item.get("value") if isinstance(item, dict) else item
+            if isinstance(raw_value, bool):
+                continue
+            if isinstance(raw_value, (int, float)):
+                values.append(float(raw_value))
+    return values
+
+
+def _extract_chart_labels(chart_spec_dict: dict) -> list:
+    """Collect string labels from a chart's datasets for soft validation."""
+    labels: list = []
+    for dataset in chart_spec_dict.get("datasets", []) or []:
+        if not isinstance(dataset, dict):
+            continue
+        for item in dataset.get("data", []) or []:
+            if isinstance(item, dict):
+                label = item.get("label") or item.get("name") or item.get("category")
+                if isinstance(label, str) and label.strip():
+                    labels.append(label.strip())
+    return labels
+
+
+def _extract_modified_chart(output_data) -> Optional[dict]:
+    """Pull the single modified chart out of a chart-modification output.
+
+    The chart-mod output's ``data`` is the dashboard wrapper, i.e.
+    ``{... "charts": [chart]}``. Returns the first chart dict, or ``None`` if
+    the shape differs (handled gracefully by the caller).
+    """
+    if isinstance(output_data, dict):
+        charts = output_data.get("charts")
+        if isinstance(charts, list) and charts and isinstance(charts[0], dict):
+            return charts[0]
+        # Tolerate a bare chart object that already has datasets.
+        if isinstance(output_data.get("datasets"), list):
+            return output_data
+    return None
+
+
+def _validate_chart_modification_data(chart_spec_dict: dict, state: AgentState) -> dict:
+    """Scoped anti-hallucination check for a single modified chart.
+
+    Verifies that the chart's numeric datapoints trace back to printed Python
+    REPL values. Unlike the full-dashboard authenticity path, this is tuned to
+    avoid false-positives on legitimate restyle-only edits (e.g. "make it a line
+    chart") that reuse pre-existing values without re-running analysis.
+
+    Returns ``{valid, errors, warnings, unmatched_ratio}``.
+    """
+    errors: list = []
+    warnings: list = []
+
+    # Empty data is unambiguously broken (a blank chart) — hard-fail regardless
+    # of whether the REPL ran, so it can never be excused as a "restyle".
+    if _chart_has_no_datapoints(chart_spec_dict):
+        errors.append(
+            "The modified chart has NO datapoints (every dataset is empty) — "
+            "it would render blank. Re-run the Python analysis and populate "
+            "every series with REAL computed values."
+        )
+        return {
+            "valid": False,
+            "errors": errors,
+            "warnings": warnings,
+            "unmatched_ratio": 1.0,
+            "empty_chart": True,
+        }
+
+    successful_runs = _count_successful_repl_runs(state)
+    chart_values = _extract_chart_values(chart_spec_dict)
+    total_values = len(chart_values)
+
+    # No analysis was re-run: this is almost certainly a restyle that reuses the
+    # existing chart's values. Skip the hard-fail to avoid false positives.
+    if successful_runs == 0:
+        warnings.append(
+            "No successful Python REPL runs for this edit — treating it as a "
+            "restyle and skipping data-authenticity hard checks."
+        )
+        return {
+            "valid": True,
+            "errors": errors,
+            "warnings": warnings,
+            "unmatched_ratio": 0.0,
+        }
+
+    repl_numeric = _collect_repl_numeric_values(state)
+    repl_outputs_text = "\n".join(_successful_repl_outputs(state))
+
+    unmatched = [
+        value
+        for value in chart_values
+        if not _value_traces_to_repl(value, repl_numeric, repl_outputs_text)
+    ]
+    unmatched_ratio = (len(unmatched) / total_values) if total_values else 0.0
+
+    # Labels are validated softly — mismatches are warnings only, never failures.
+    repl_strings = _collect_repl_string_values(state)
+    if repl_strings:
+        unmatched_labels = [
+            label
+            for label in _extract_chart_labels(chart_spec_dict)
+            if label.lower() not in repl_strings
+            and label.lower() not in repl_outputs_text.lower()
+        ]
+        if unmatched_labels:
+            warnings.append(
+                "Chart labels not found in Python analysis output: "
+                + ", ".join(unmatched_labels[:5])
+                + ("..." if len(unmatched_labels) > 5 else "")
+            )
+
+    if unmatched_ratio > CHART_MOD_AUTHENTICITY_FAIL_RATIO:
+        errors.append(
+            f"{len(unmatched)}/{total_values} chart datapoints "
+            f"({unmatched_ratio:.0%}) do not trace to any Python analysis "
+            f"output — values appear fabricated. Examples: "
+            + ", ".join(str(value) for value in unmatched[:5])
+        )
+        return {
+            "valid": False,
+            "errors": errors,
+            "warnings": warnings,
+            "unmatched_ratio": unmatched_ratio,
+        }
+
+    if unmatched_ratio > 0:
+        warnings.append(
+            f"{len(unmatched)}/{total_values} chart datapoints "
+            f"({unmatched_ratio:.0%}) could not be traced to Python analysis "
+            f"output, but this is within the accepted tolerance."
+        )
+
+    return {
+        "valid": True,
+        "errors": errors,
+        "warnings": warnings,
+        "unmatched_ratio": unmatched_ratio,
     }

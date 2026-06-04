@@ -664,6 +664,7 @@ class StatefulAnalyzeCSVWorkflow:
                     state,
                     model=node_model,
                     model_with_tools=self.model_with_tools,
+                    quick_model=self.quick_model,
                     python_tool=self.python_tool,
                     thinking_event_fn=self._thinking_event_fn,
                 )

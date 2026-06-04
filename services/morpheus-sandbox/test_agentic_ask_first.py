@@ -4,9 +4,11 @@ from morpheus.workflows.analyze_csv.ask_first import (
     build_workflow_clarification,
     build_workflow_clarifications,
     choose_data_context_reason_code,
+    edit_needs_data,
     is_data_context_needed,
     latest_data_selection,
     latest_effective_user_prompt,
+    resolve_single_data_source,
 )
 from morpheus.workflows.analyze_csv.edges import decide_next_node
 from morpheus.workflows.analyze_csv.state_models import (
@@ -477,3 +479,134 @@ def test_ask_first_output_transitions_to_finish():
     }
 
     assert decide_next_node(state) == "FINISH"
+
+
+def _downloadable_asset(asset_id, filename="data.csv", **overrides):
+    asset = {
+        "asset_id": asset_id,
+        "s3_bucket": "bucket",
+        "s3_key": f"in/{filename}",
+        "filename": filename,
+    }
+    asset.update(overrides)
+    return asset
+
+
+def test_resolve_single_data_source_returns_lone_downloadable_id():
+    assert resolve_single_data_source([_downloadable_asset("asset_a")]) == "asset_a"
+
+
+def test_resolve_single_data_source_none_for_zero_sources():
+    assert resolve_single_data_source([]) is None
+    # A non-downloadable asset (no s3 location) does not count.
+    assert resolve_single_data_source([{"asset_id": "asset_a"}]) is None
+
+
+def test_resolve_single_data_source_none_for_two_distinct_sources():
+    assets = [
+        _downloadable_asset("asset_a", "sales.csv"),
+        _downloadable_asset("asset_b", "ads.csv"),
+    ]
+    assert resolve_single_data_source(assets) is None
+
+
+def test_resolve_single_data_source_dedupes_same_identity():
+    # Same asset_id twice is one logical source.
+    duplicate = _downloadable_asset("asset_a")
+    assert resolve_single_data_source([duplicate, dict(duplicate)]) == "asset_a"
+
+
+def test_edit_needs_data_true_for_recomputing_edits():
+    assert edit_needs_data("make it a top 10 table") is True
+    assert edit_needs_data("filter to last 30 days") is True
+    assert edit_needs_data("sort by revenue descending") is True
+    assert edit_needs_data("add a conversion rate column") is True
+
+
+def test_edit_needs_data_false_for_pure_restyle():
+    assert edit_needs_data("make it a line chart") is False
+    assert edit_needs_data("change color to blue") is False
+    assert edit_needs_data("rename the axis label") is False
+    assert edit_needs_data("") is False
+
+
+def test_node_routing_rebuilds_chart_mention_from_clarification_target():
+    from morpheus.workflows.analyze_csv.nodes import node_routing
+
+    dashboards = {
+        "dashboard_42": {
+            "tables": [
+                {
+                    "id": "table_top_days",
+                    "title": "Top 5 Peak Days",
+                    "type": "table",
+                    "columns": [{"id": "day", "label": "Day", "type": "text"}],
+                }
+            ]
+        }
+    }
+    conversation_history = [
+        {
+            "role": "user",
+            "contents": [{"type": "text", "data": {"text": "make it top 10"}}],
+        },
+        {
+            "role": "assistant",
+            "contents": [
+                {
+                    "type": "clarification_request",
+                    "data": {
+                        "clarification_id": "clarify_data",
+                        "reason_code": "multiple_matching_assets",
+                    },
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "contents": [
+                {
+                    "type": "clarification_response",
+                    "data": {
+                        "clarification_id": "clarify_data",
+                        "selected_option_id": "asset:asset_a",
+                        "metadata": {
+                            "asset_selection": "explicit",
+                            "asset_ids": ["asset_a"],
+                            "target_chart_id": "table_top_days",
+                            "target_dashboard_id": "dashboard_42",
+                            "is_chart_modification": True,
+                        },
+                    },
+                }
+            ],
+        },
+    ]
+    state = AgentState(
+        user_state=UserState(
+            user_id="user_1",
+            project_id="project_1",
+            conversation_id="conversation_1",
+            conversation_history=conversation_history,
+            user_assets=[],
+            dashboards=dashboards,
+        ),
+        working_memory=WorkingMemory(),
+        workflow_history=WorkflowHistory(),
+        current_node="ROUTING",
+        input_prompt="make it top 10",
+        file_paths=[],
+        assets_dict={},
+        conversation_id="conversation_1",
+        project_id="project_1",
+    )
+
+    result = node_routing(state, model=object())
+
+    assert len(result.chart_mentions) == 1
+    mention = result.chart_mentions[0]
+    assert mention["chart_id"] == "table_top_days"
+    assert mention["dashboard_id"] == "dashboard_42"
+    route_decision = result.working_memory.tool_outputs["route_decision"]
+    assert route_decision["is_chart_modification"] is True
+    assert route_decision["from_clarification"] is True

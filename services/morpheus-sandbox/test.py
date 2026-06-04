@@ -24,6 +24,9 @@ PYTEST_TARGETS = [
     "test_theme_focus.py",
     "test_premium_thinking.py",
     "test_server_agentic_workflow_contract.py",
+    "test_chart_modification_fixes.py",
+    "test_rate_limit_state.py",
+    "test_analysis_steps.py",
 ]
 LIVE_SAMPLE = ROOT / "storage" / "in" / "sales_amazon.csv"
 

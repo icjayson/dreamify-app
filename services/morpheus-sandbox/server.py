@@ -31,9 +31,11 @@ from morpheus.workflows.analyze_csv.ask_first import (
     build_data_context_clarification as _policy_build_data_context_clarification,
     choose_data_context_reason_code,
     dedupe_assets_by_identity,
+    edit_needs_data,
     is_data_context_needed as _policy_is_data_context_needed,
     latest_data_selection,
     latest_effective_user_prompt,
+    resolve_single_data_source,
     latest_user_has_clarification_response as _policy_latest_user_has_clarification_response,
 )
 from utils.config import config
@@ -159,6 +161,9 @@ STEP_FRIENDLY_MAP: Dict[str, str] = {
     "execution": "Crunching the numbers...",
     "synthesis": "Designing your dashboard...",
     "validation": "Double-checking results...",
+    "analyzing": "Analyzing the chart you mentioned...",
+    "recomputing": "Recomputing values from your data...",
+    "rendering": "Rendering the updated chart...",
     "finish": "Finalizing...",
     "error": "I ran into a hiccup.",
 }
@@ -186,6 +191,9 @@ STEP_PHASE_MAP: Dict[str, str] = {
     "execution": "tool",
     "synthesis": "synthesis",
     "validation": "validation",
+    "analyzing": "analyzing",
+    "recomputing": "recomputing",
+    "rendering": "rendering",
     "finish": "final",
     "error": "error",
 }
@@ -202,6 +210,9 @@ STEP_TITLE_MAP: Dict[str, str] = {
     "execution": "Running analysis tool",
     "synthesis": "Drafting answer with visual",
     "validation": "Validating numbers",
+    "analyzing": "Analyzing the chart you mentioned",
+    "recomputing": "Recomputing values from your data",
+    "rendering": "Rendering the updated chart",
     "finish": "Finishing response",
     "error": "Handling issue",
 }
@@ -504,6 +515,7 @@ def _save_dashboard_artifact(
     bucket: str,
     conversation: Dict[str, Any],
     dashboard_data: Dict[str, Any],
+    existing_dashboard_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     user_id = conversation.get("user_id")
     project_id = conversation.get("project_id")
@@ -512,7 +524,11 @@ def _save_dashboard_artifact(
         raise ValueError(
             "Conversation missing identifiers required for dashboard persistence"
         )
-    dashboard_id = str(uuid.uuid4())
+    # In-place edit: reuse the existing dashboard_id / S3 key so the frontend,
+    # which re-fetches the edited dashboard_id, sees the change. Otherwise mint
+    # a brand-new dashboard (full-generation behavior, unchanged).
+    in_place = bool(existing_dashboard_id)
+    dashboard_id = existing_dashboard_id if in_place else str(uuid.uuid4())
     key = _build_dashboard_key(user_id, project_id, dashboard_id)
     payload = json.dumps(dashboard_data, ensure_ascii=False, indent=2).encode("utf-8")
     _upload_bytes_to_s3(bucket, key, payload)
@@ -529,6 +545,7 @@ def _save_dashboard_artifact(
         "s3_bucket": bucket,
         "s3_key": key,
         "s3_uri": f"s3://{bucket}/{key}",
+        "in_place": in_place,
     }
 
 
@@ -807,6 +824,39 @@ def _extract_assets_from_nodes(conversation: Dict[str, Any]) -> List[Dict[str, A
     return []
 
 
+def _extract_chart_mentions_from_latest_user(
+    conversation: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """Return chart_mention payloads from the latest user node (edit targets)."""
+    for node in reversed(conversation.get("nodes", [])):
+        if node.get("role") != "user":
+            continue
+        return [
+            content.get("data", {})
+            for content in node.get("contents", [])
+            if content.get("type") == "chart_mention"
+        ]
+    return []
+
+
+def _synthesize_explicit_selection_node(
+    conversation: Dict[str, Any], asset_id: str
+) -> None:
+    """Stamp an explicit single-asset selection onto the latest user node.
+
+    Lets ``_extract_assets_from_nodes`` / ``_resolve_selected_assets`` download
+    the auto-resolved source without asking, while leaving any chart_mention
+    contents on the node untouched so the edit target survives.
+    """
+    for node in reversed(conversation.get("nodes", [])):
+        if node.get("role") != "user":
+            continue
+        metadata = node.setdefault("metadata", {})
+        metadata["asset_selection"] = "explicit"
+        metadata["selected_asset_ids"] = [asset_id]
+        return
+
+
 def _asset_is_downloadable(asset: Dict[str, Any]) -> bool:
     return bool(
         asset.get("asset_id") and asset.get("s3_bucket") and asset.get("s3_key")
@@ -928,6 +978,30 @@ def _build_data_context_clarification_for_prompt(
         project_assets,
         reason_code=reason_code,
     )
+
+
+def _inject_edit_target_into_clarification(
+    clarification: Dict[str, Any],
+    target_chart_id: Optional[str],
+    target_dashboard_id: Optional[str],
+) -> Dict[str, Any]:
+    """Stamp the edit target onto every option's metadata.
+
+    The user's answer to a data-context clarification carries the chosen dataset.
+    For an edit we also need it to carry WHICH component to edit, so node_routing
+    can rebuild the chart_mention and force chart-modification mode. We skip the
+    "answer_without_data" option, which intentionally drops the edit.
+    """
+    for option in clarification.get("options", []):
+        metadata = option.setdefault("metadata", {})
+        if metadata.get("asset_selection") == "none":
+            continue
+        if target_chart_id:
+            metadata["target_chart_id"] = target_chart_id
+        if target_dashboard_id:
+            metadata["target_dashboard_id"] = target_dashboard_id
+        metadata["is_chart_modification"] = True
+    return clarification
 
 
 def _append_clarification_request_node(
@@ -1129,6 +1203,57 @@ def _process_conversation_background(
         dashboards_cache = _load_existing_dashboards(conversation)
         user_prompt = _latest_user_prompt(conversation)
 
+        # Edit targets (@-mentioned chart/table) drive the data-context gate below,
+        # so extract them before resolving assets.
+        chart_mentions = _extract_chart_mentions_from_latest_user(conversation)
+
+        # When this turn edits a component whose edit recomputes data but no source
+        # is selected yet, auto-resolve a lone source or ask which one to use.
+        selection_mode = latest_data_selection(conversation).get(
+            "asset_selection", "none"
+        )
+        if chart_mentions and selection_mode == "none" and edit_needs_data(user_prompt):
+            single_source_id = resolve_single_data_source(project_assets or [])
+            if single_source_id:
+                _synthesize_explicit_selection_node(conversation, single_source_id)
+                logger.info(
+                    f"Edit auto-resolved single data source {single_source_id} "
+                    f"for conversation {conversation_id}; skipping clarification"
+                )
+            elif not (
+                answered_clarification_reason_codes(conversation)
+                & {
+                    "missing_data_context",
+                    "multiple_matching_assets",
+                    "analysis_context",
+                }
+            ):
+                mention = chart_mentions[0]
+                clarification = _build_data_context_clarification_for_prompt(
+                    user_prompt, project_assets or []
+                )
+                _inject_edit_target_into_clarification(
+                    clarification,
+                    str(mention.get("chart_id") or mention.get("component_id") or "")
+                    or None,
+                    mention.get("dashboard_id"),
+                )
+                _append_clarification_request_node(conversation, [clarification])
+                _persist_conversation(
+                    conversation_uri, conversation_backup_uri, conversation
+                )
+                _post_node_status_sync(
+                    conversation_id,
+                    "awaiting_user_input",
+                    {
+                        "step": "clarification",
+                        "response_type": "clarification_request",
+                        "clarification_id": clarification["clarification_id"],
+                        "reason_code": clarification["reason_code"],
+                    },
+                )
+                return
+
         # Extract all assets from conversation nodes
         assets = _extract_assets_from_nodes(conversation)
         assets, asset_resolution_error = _resolve_selected_assets(
@@ -1146,6 +1271,7 @@ def _process_conversation_background(
 
         if (
             not assets
+            and not chart_mentions
             and _is_data_context_needed(user_prompt)
             and not (
                 answered_clarification_reason_codes(conversation)
@@ -1276,18 +1402,13 @@ def _process_conversation_background(
         )
         _collecting_post_status(conversation_id, "processing", {"step": "run_workflow"})
 
-        # Extract user prompt and chart_mention context from latest user node
-        chart_mentions = []
-        nodes = conversation.get("nodes", [])
-        for node in reversed(nodes):
+        # chart_mentions were extracted before the data-context gate above; only
+        # backfill user_prompt from the latest user text here.
+        for node in reversed(conversation.get("nodes", [])):
             if node.get("role") == "user":
-                contents = node.get("contents", [])
-                for content in contents:
-                    if content.get("type") == "text":
-                        if not user_prompt:
-                            user_prompt = content.get("data", {}).get("text")
-                    elif content.get("type") == "chart_mention":
-                        chart_mentions.append(content.get("data", {}))
+                for content in node.get("contents", []):
+                    if content.get("type") == "text" and not user_prompt:
+                        user_prompt = content.get("data", {}).get("text")
                 break  # only from latest user node
 
         if chart_mentions:
@@ -1336,6 +1457,14 @@ def _process_conversation_background(
         response_type = result.get(
             "type", "dashboard_config"
         )  # Default to dashboard for backward compatibility
+
+        # Phase 6: chart-edit explainer carried to the backend completion status
+        # (and onward to the frontend via SSE / GET dashboard). None for non-edits.
+        chart_edit_change_summary = None
+        chart_edit_data_provenance = None
+        # Set to the targeted dashboard_id when an @-mention edit merged into a
+        # known dashboard, so persistence updates that artifact in place.
+        chart_edit_target_dashboard_id = None
 
         if response_type == "clarification_request":
             clarifications = result.get("clarifications")
@@ -1422,13 +1551,71 @@ def _process_conversation_background(
             )
             chart_mod_context = result.get("chart_modification_context", {})
             target_chart_id = chart_mod_context.get("chart_id")
+            target_dashboard_id = chart_mod_context.get("dashboard_id")
             modified_data = result.get("data", {})
 
-            # Load the existing dashboard to merge into
+            # Preserve the explainer so the completion status can carry it back.
+            chart_edit_change_summary = chart_mod_context.get("change_summary")
+            chart_edit_data_provenance = chart_mod_context.get("data_provenance")
+
+            # Resolve the dashboard the edited component belongs to with an
+            # ordered cascade that ALWAYS records chart_edit_target_dashboard_id
+            # (unless the cache is empty) so the edit persists IN PLACE and never
+            # mints a duplicate dashboard.
+            def _dashboard_contains_component(
+                dash: Dict[str, Any], comp_id: Any
+            ) -> bool:
+                if not comp_id:
+                    return False
+                for key in ("charts", "tables", "metrics"):
+                    for item in dash.get(key, []) or []:
+                        if isinstance(item, dict) and item.get("id") == comp_id:
+                            return True
+                return False
+
             existing_dashboard = None
-            for _dash_id, dash_data in dashboards_cache.items():
-                existing_dashboard = dash_data
-                # Use the last one (most recent)
+            if target_dashboard_id and target_dashboard_id in dashboards_cache:
+                # 1. Exact id match (preferred — avoids cross-dashboard id collisions).
+                existing_dashboard = dashboards_cache[target_dashboard_id]
+                chart_edit_target_dashboard_id = target_dashboard_id
+                logger.info(
+                    f"Chart modification targeting dashboard '{target_dashboard_id}'"
+                )
+            else:
+                if target_dashboard_id:
+                    logger.warning(
+                        f"Chart modification target dashboard '{target_dashboard_id}' "
+                        f"not in cache; resolving by chart id"
+                    )
+                # 2. Search for the dashboard that actually contains the target chart.
+                for _dash_id, dash_data in dashboards_cache.items():
+                    if _dashboard_contains_component(dash_data, target_chart_id):
+                        existing_dashboard = dash_data
+                        chart_edit_target_dashboard_id = _dash_id
+                        logger.info(
+                            f"Chart modification resolved to dashboard '{_dash_id}' "
+                            f"by chart id '{target_chart_id}'"
+                        )
+                        break
+                # 3. Single-dashboard conversation → use it.
+                if existing_dashboard is None and len(dashboards_cache) == 1:
+                    only_id, only_dash = next(iter(dashboards_cache.items()))
+                    existing_dashboard = only_dash
+                    chart_edit_target_dashboard_id = only_id
+                    logger.info(
+                        f"Chart modification resolved to sole dashboard '{only_id}'"
+                    )
+                # 4. Last-resort: last cached dashboard — but still record its id so
+                #    the edit is in-place rather than minting a new dashboard.
+                if existing_dashboard is None:
+                    for _dash_id, dash_data in dashboards_cache.items():
+                        existing_dashboard = dash_data
+                        chart_edit_target_dashboard_id = _dash_id  # keep last
+                    if chart_edit_target_dashboard_id:
+                        logger.warning(
+                            f"Chart modification fell back to last dashboard "
+                            f"'{chart_edit_target_dashboard_id}' (in-place)"
+                        )
 
             if existing_dashboard and modified_data:
                 import copy
@@ -1438,20 +1625,43 @@ def _process_conversation_background(
                 # Replace the target chart
                 modified_charts = modified_data.get("charts", [])
                 if modified_charts:
-                    existing_charts = merged.get("charts", [])
-                    replaced = False
-                    for i, chart in enumerate(existing_charts):
-                        if chart.get("id") == target_chart_id:
-                            existing_charts[i] = modified_charts[0]
-                            replaced = True
-                            logger.info(f"Merged: replaced chart '{target_chart_id}'")
-                            break
-                    if not replaced:
-                        existing_charts.append(modified_charts[0])
-                        logger.info(
-                            f"Merged: appended chart (target '{target_chart_id}' not found)"
+                    new_chart = modified_charts[0]
+                    # Safety net: never overwrite a good chart with an empty one.
+                    # If the edit produced no datapoints, keep the ORIGINAL chart
+                    # unchanged and surface a note for the user.
+                    new_chart_has_data = any(
+                        isinstance(ds, dict)
+                        and isinstance(ds.get("data"), list)
+                        and len(ds.get("data")) > 0
+                        for ds in (new_chart.get("datasets") or [])
+                    )
+                    if not new_chart_has_data:
+                        logger.warning(
+                            "Chart modification produced an empty chart (no datapoints) "
+                            "— keeping the ORIGINAL chart '%s' unchanged.",
+                            target_chart_id,
                         )
-                    merged["charts"] = existing_charts
+                        result["edit_note"] = (
+                            "I couldn't compute data for the requested change, so I "
+                            "kept the original chart unchanged."
+                        )
+                    else:
+                        existing_charts = merged.get("charts", [])
+                        replaced = False
+                        for i, chart in enumerate(existing_charts):
+                            if chart.get("id") == target_chart_id:
+                                existing_charts[i] = new_chart
+                                replaced = True
+                                logger.info(
+                                    f"Merged: replaced chart '{target_chart_id}'"
+                                )
+                                break
+                        if not replaced:
+                            existing_charts.append(new_chart)
+                            logger.info(
+                                f"Merged: appended chart (target '{target_chart_id}' not found)"
+                            )
+                        merged["charts"] = existing_charts
 
                 # Replace metrics/tables if LLM converted types
                 for key in ("metrics", "tables"):
@@ -1718,6 +1928,7 @@ def _process_conversation_background(
                     bucket=conversation_bucket,
                     conversation=conversation,
                     dashboard_data=result_data,
+                    existing_dashboard_id=chart_edit_target_dashboard_id,
                 )
                 logger.info(
                     f"Successfully saved dashboard {new_dashboard_record.get('dashboard_id')} "
@@ -1734,7 +1945,26 @@ def _process_conversation_background(
             )
 
         # If we have a saved dashboard record, attach it to the conversation structure
-        if new_dashboard_record:
+        is_in_place_edit = bool(new_dashboard_record) and new_dashboard_record.get(
+            "in_place"
+        )
+
+        if new_dashboard_record and is_in_place_edit:
+            # In-place edit: reuse the same dashboard_id / S3 key. Do NOT mint a
+            # new dashboard reference or append a new conversation entry; just
+            # refresh the existing entry's timestamp so the frontend re-fetch of
+            # the edited dashboard_id sees the change.
+            for entry in conversation.get("dashboards", []):
+                if entry.get("dashboard_id") == new_dashboard_record["dashboard_id"]:
+                    entry["updated_at"] = datetime.now().isoformat()
+                    if dashboard_title:
+                        entry["title"] = dashboard_title
+                    break
+            logger.info(
+                f"Chart modification persisted in place to dashboard "
+                f"{new_dashboard_record['dashboard_id']}"
+            )
+        elif new_dashboard_record:
             # Determine todo tasks to persist alongside the dashboard
             todo_tasks_to_save: List[Dict[str, str]] = []
             if user_prompt and user_prompt.strip().startswith("/run"):
@@ -1857,18 +2087,31 @@ def _process_conversation_background(
             if primary_asset
             else conversation_id
         )
+        completion_metadata = {
+            "fileID": completion_file_identifier,
+            "response_type": "dashboard_config",
+            "dashboard_id": (
+                new_dashboard_record["dashboard_id"] if new_dashboard_record else None
+            ),
+        }
+        # Phase 6: attach the chart-edit explainer when this was a modification.
+        if chart_edit_change_summary is not None:
+            completion_metadata["change_summary"] = chart_edit_change_summary
+        if chart_edit_data_provenance is not None:
+            completion_metadata["data_provenance"] = chart_edit_data_provenance
+        if result.get("edit_note") is not None:
+            completion_metadata["edit_note"] = result["edit_note"]
+        # Activity transparency: persist the analysis steps (generation + edits)
+        # so the workflow-status completion carries them. Already truncated/capped
+        # in Morpheus, so the metadata stays bounded.
+        analysis_steps = result.get("analysis_steps")
+        if analysis_steps:
+            completion_metadata["analysis_steps"] = analysis_steps
+
         _post_node_status_sync(
             conversation_id,
             "completed",
-            {
-                "fileID": completion_file_identifier,
-                "response_type": "dashboard_config",
-                "dashboard_id": (
-                    new_dashboard_record["dashboard_id"]
-                    if new_dashboard_record
-                    else None
-                ),
-            },
+            completion_metadata,
         )
 
         logger.info(f"Workflow completed for conversation {conversation_id}")

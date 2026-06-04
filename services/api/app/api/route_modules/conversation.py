@@ -11,12 +11,15 @@ import re
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import json
-import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_user
 from app.services.credit_service import CreditService
+from app.services.event_bus import event_bus
+from app.services import morpheus_client
+from app.services import dashboard_version_service
 from utils.config import config
 from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import conversations as conversations_repo
@@ -31,9 +34,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["conversation"])
 
-MORPHEUS_SERVICE_URL = "http://localhost:8000"
-
 credit_service_instance = CreditService()
+
+# Workflow statuses that mean Morpheus did no billable work. Kept generous
+# (default: bill) so normal "started"/"running" responses still charge.
+_NON_BILLABLE_WORKFLOW_STATUSES = {"failed", "error", "rejected"}
+
+
+def _is_billable_workflow_result(workflow_status: Optional[Dict[str, Any]]) -> bool:
+    """Return False only when Morpheus reported an outright failure."""
+    if not isinstance(workflow_status, dict):
+        return True
+    status = str(workflow_status.get("status", "")).lower()
+    return status not in _NON_BILLABLE_WORKFLOW_STATUSES
+
 
 # Map frontend model aliases to actual Google Generative AI model IDs.
 # Verify valid IDs at: https://ai.google.dev/gemini-api/docs/models
@@ -86,8 +100,12 @@ LEGACY_TEMPLATE_THEME_MAP = {
 }
 
 
-def _resolve_theme_id(theme_id: Optional[str], template_id: Optional[str] = None) -> Optional[str]:
-    resolved = theme_id or (LEGACY_TEMPLATE_THEME_MAP.get(template_id or "") if template_id else None)
+def _resolve_theme_id(
+    theme_id: Optional[str], template_id: Optional[str] = None
+) -> Optional[str]:
+    resolved = theme_id or (
+        LEGACY_TEMPLATE_THEME_MAP.get(template_id or "") if template_id else None
+    )
     if resolved and resolved not in VALID_THEME_IDS:
         raise HTTPException(status_code=400, detail=f"Invalid theme_id: {resolved}")
     return resolved
@@ -138,6 +156,7 @@ def _apply_theme_fields_to_dashboard(
             dashboard_data["template_id"] = legacy_template_id
         else:
             dashboard_data.pop("template_id", None)
+
 
 PLACEHOLDER_PROJECT_NAMES = {"", "untitled project", "new project"}
 TITLE_STOPWORDS = {
@@ -371,7 +390,9 @@ def _validate_asset_ids(user_id: str, project_id: str, asset_ids: List[str]) -> 
         if not asset:
             raise HTTPException(status_code=400, detail=f"Invalid asset_id: {asset_id}")
         if asset.get("project_id") != project_id:
-            raise HTTPException(status_code=403, detail=f"Asset is not in this project: {asset_id}")
+            raise HTTPException(
+                status_code=403, detail=f"Asset is not in this project: {asset_id}"
+            )
 
 
 def _validate_clarification_responses(
@@ -388,8 +409,12 @@ def _validate_clarification_responses(
             raise HTTPException(status_code=400, detail="clarification_id is required")
         request = _find_clarification_request(existing_conversation, clarification_id)
         if not request:
-            raise HTTPException(status_code=400, detail="Clarification request not found")
-        valid_option_ids = {str(option.get("id")) for option in request.get("options", [])}
+            raise HTTPException(
+                status_code=400, detail="Clarification request not found"
+            )
+        valid_option_ids = {
+            str(option.get("id")) for option in request.get("options", [])
+        }
         if selected_option_id and selected_option_id not in valid_option_ids:
             raise HTTPException(status_code=400, detail="Invalid clarification option")
 
@@ -656,9 +681,7 @@ async def conversation_chat(
             user_id, request.project_id, request.conversation_id
         )
 
-    _validate_clarification_responses(
-        request.user_node_contents, existing_conversation
-    )
+    _validate_clarification_responses(request.user_node_contents, existing_conversation)
     user_node_metadata = _normalize_user_node_metadata(
         request.user_node_contents,
         request.user_node_metadata,
@@ -833,28 +856,28 @@ async def conversation_chat(
     }
 
     try:
-        # Run synchronous request in thread pool to avoid blocking event loop
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: requests.post(
-                f"{MORPHEUS_SERVICE_URL}/run",
-                json=morpheus_payload,
-                timeout=30,
-            ),
-        )
-        response.raise_for_status()
-        # Deduct credits only after Morpheus responds successfully so failures
-        # don't silently drain the user's monthly allowance.
+        workflow_status = await morpheus_client.run_workflow(morpheus_payload)
+    except morpheus_client.MorpheusUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc.detail)) from exc
+    except morpheus_client.MorpheusTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc.detail)) from exc
+    except morpheus_client.MorpheusError as exc:
+        raise HTTPException(status_code=502, detail=str(exc.detail)) from exc
+
+    # Deduct credits only after Morpheus accepted the run AND did not report an
+    # outright failure, so timeouts/errors don't silently drain the allowance.
+    if _is_billable_workflow_result(workflow_status):
         credit_cost = credit_service_instance.get_model_cost(model_alias)
         credit_service_instance.consume_credits(user_id, credit_cost)
-        workflow_status = response.json()
-    except requests.exceptions.ConnectionError:
-        raise HTTPException(status_code=503, detail="Morpheus service unavailable")
-    except requests.exceptions.Timeout:
-        raise HTTPException(status_code=504, detail="Morpheus service timeout")
-    except requests.exceptions.RequestException as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+    else:
+        logger.info(
+            "Skipping credit deduction: non-billable workflow status %s",
+            (
+                workflow_status.get("status")
+                if isinstance(workflow_status, dict)
+                else None
+            ),
+        )
 
     return ConversationChatResponse(
         conversation_id=conversation_id,
@@ -979,6 +1002,126 @@ async def get_conversation_workflow_events(
     )
 
 
+_TERMINAL_STATUSES = {
+    "completed",
+    "finished",
+    "failed",
+    "error",
+    "stopped",
+    "awaiting_user_input",
+}
+_SSE_POLL_INTERVAL_SECONDS = 2.0
+
+
+def _sse_frame(event_type: str, payload: Dict[str, Any]) -> str:
+    return f"event: {event_type}\ndata: {json.dumps(payload)}\n\n"
+
+
+def _event_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+    return _map_thinking_event(item).model_dump()
+
+
+def _status_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+    return _map_workflow_node(item).model_dump()
+
+
+@router.get("/conversation/{conversation_id}/stream")
+async def stream_conversation_workflow(
+    conversation_id: str,
+    project_id: str,
+    user_id: str = Depends(require_user),
+):
+    """Stream workflow status + thinking events to the client over SSE.
+
+    Additive alternative to the polling endpoints. On connect we replay the
+    current workflow node + existing events (so a late subscriber is caught up
+    and the callback-before-subscribe race is avoided), then live-tail via the
+    in-process event bus. A short DynamoDB poll also runs so correctness does
+    not depend on the in-process bus (Gunicorn workers each have their own).
+    """
+    conversation = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    async def generator():
+        queue = await event_bus.subscribe(conversation_id)
+        seen_event_node_ids: set = set()
+        last_status_updated_at: Optional[str] = None
+        terminal = False
+        try:
+            # (a) Replay current state so a late subscriber is caught up.
+            status_item = workflow_nodes_repo.get_node(conversation_id, "workflow")
+            if status_item:
+                last_status_updated_at = status_item.get("updated_at")
+                yield _sse_frame("status", _status_payload(status_item))
+                if str(status_item.get("status", "")).lower() in _TERMINAL_STATUSES:
+                    terminal = True
+            for event_item in workflow_nodes_repo.list_workflow_events(conversation_id):
+                seen_event_node_ids.add(event_item.get("node_id"))
+                yield _sse_frame("event", _event_payload(event_item))
+
+            # (b)+(c) Live-tail the bus, falling back to DynamoDB polling.
+            while not terminal:
+                try:
+                    item = await asyncio.wait_for(
+                        queue.get(), timeout=_SSE_POLL_INTERVAL_SECONDS
+                    )
+                except asyncio.TimeoutError:
+                    item = None
+
+                if item is not None:
+                    item_type = item.get("type", "event")
+                    if item_type == "status":
+                        last_status_updated_at = item.get("updated_at")
+                        yield _sse_frame("status", _status_payload(item))
+                        if str(item.get("status", "")).lower() in _TERMINAL_STATUSES:
+                            terminal = True
+                    else:
+                        node_id = item.get("node_id")
+                        if node_id not in seen_event_node_ids:
+                            seen_event_node_ids.add(node_id)
+                            yield _sse_frame("event", _event_payload(item))
+                    continue
+
+                # Poll tick (also doubles as ~keep-alive interval). Emit any
+                # rows newer than what we've already streamed.
+                yield ": keep-alive\n\n"
+                for event_item in workflow_nodes_repo.list_workflow_events(
+                    conversation_id
+                ):
+                    node_id = event_item.get("node_id")
+                    if node_id not in seen_event_node_ids:
+                        seen_event_node_ids.add(node_id)
+                        yield _sse_frame("event", _event_payload(event_item))
+
+                polled_status = workflow_nodes_repo.get_node(
+                    conversation_id, "workflow"
+                )
+                if polled_status:
+                    polled_updated_at = polled_status.get("updated_at")
+                    if polled_updated_at != last_status_updated_at:
+                        last_status_updated_at = polled_updated_at
+                        yield _sse_frame("status", _status_payload(polled_status))
+                    if (
+                        str(polled_status.get("status", "")).lower()
+                        in _TERMINAL_STATUSES
+                    ):
+                        terminal = True
+        finally:
+            await event_bus.unsubscribe(conversation_id, queue)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/conversation/{conversation_id}", response_model=ConversationResponse)
 async def load_conversation_endpoint(
     conversation_id: str,
@@ -1002,6 +1145,33 @@ async def load_conversation_endpoint(
 class DashboardDataResponse(BaseModel):
     dashboard_id: Optional[str] = None
     dashboard_data: Optional[Dict[str, Any]] = None
+    # Phase 6: chart-edit explainer surfaced alongside the dashboard. All
+    # optional so older clients are unaffected.
+    change_summary: Optional[Dict[str, Any]] = None
+    computed_values: Optional[Dict[str, Any]] = None
+    version: Optional[int] = None
+    # Phase: activity transparency — per-step analysis trail surfaced on reload.
+    analysis_steps: Optional[List[Dict[str, Any]]] = None
+
+
+def _latest_edit_explainer(conversation_id: str) -> Dict[str, Optional[Any]]:
+    """Pull the most recent chart-edit explainer from the workflow status node.
+
+    Morpheus attaches ``change_summary`` and ``data_provenance`` to the terminal
+    workflow-status metadata for chart modifications. Returns empty values when
+    none are present (e.g. a full dashboard generation).
+    """
+    try:
+        node = workflow_nodes_repo.get_node(conversation_id, "workflow")
+    except Exception:
+        node = None
+    metadata = (node or {}).get("metadata") or {}
+    return {
+        "change_summary": metadata.get("change_summary"),
+        "computed_values": metadata.get("data_provenance")
+        or metadata.get("computed_values"),
+        "analysis_steps": metadata.get("analysis_steps"),
+    }
 
 
 class StopWorkflowResponse(BaseModel):
@@ -1140,9 +1310,13 @@ async def get_conversation_dashboard(
             dashboard_id,
         )
 
+        explainer = _latest_edit_explainer(conversation_id)
         return DashboardDataResponse(
             dashboard_id=dashboard_id,
             dashboard_data=dashboard_data,
+            change_summary=explainer.get("change_summary"),
+            computed_values=explainer.get("computed_values"),
+            analysis_steps=explainer.get("analysis_steps"),
         )
     except FileNotFoundError:
         logger.warning(
@@ -1284,6 +1458,63 @@ async def update_dashboard_template(
 class SaveDashboardDataRequest(BaseModel):
     project_id: str
     dashboard_data: Dict[str, Any]
+    # Phase 7: optional version-history controls. Both optional so older clients
+    # keep working unchanged.
+    edit_summary: Optional[str] = None
+    expected_version: Optional[int] = None
+
+
+class DashboardVersionInfo(BaseModel):
+    version: int
+    created_at: str
+    edit_summary: Optional[str] = None
+    source: str
+
+
+class DashboardVersionListResponse(BaseModel):
+    dashboard_id: str
+    current_version: int
+    versions: List[DashboardVersionInfo]
+
+
+class RevertRequest(BaseModel):
+    project_id: str
+    target_version: int
+
+
+class RevertResponse(BaseModel):
+    success: bool
+    dashboard_id: str
+    new_version: int
+    reverted_to: int
+
+
+def _locate_dashboard_entry(
+    conversation: Dict[str, Any], dashboard_id: str
+) -> Dict[str, Any]:
+    """Find a dashboard manifest entry by id, raising 404 if absent."""
+    target = next(
+        (
+            d
+            for d in conversation.get("dashboards", [])
+            if d.get("dashboard_id") == dashboard_id
+        ),
+        None,
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    return target
+
+
+def _parse_dashboard_s3_uri(target_dashboard_entry: Dict[str, Any]) -> tuple[str, str]:
+    """Split a dashboard entry's ``s3_uri`` into (bucket, key)."""
+    s3_uri = target_dashboard_entry.get("s3_uri", "")
+    if not s3_uri.startswith("s3://"):
+        raise HTTPException(status_code=500, detail="Invalid dashboard S3 URI")
+    uri_parts = s3_uri[5:].split("/", 1)
+    if len(uri_parts) != 2:
+        raise HTTPException(status_code=500, detail="Invalid dashboard S3 URI")
+    return uri_parts[0], uri_parts[1].lstrip("/")
 
 
 @router.put("/conversation/{conversation_id}/dashboard/{dashboard_id}/data")
@@ -1293,7 +1524,12 @@ async def save_dashboard_data(
     request: SaveDashboardDataRequest,
     user_id: str = Depends(require_user),
 ):
-    """Overwrite a saved dashboard JSON in S3 with new data (manual edits)."""
+    """Overwrite a saved dashboard JSON in S3 with new data (manual edits).
+
+    Phase 7: snapshots the current dashboard state to an immutable version key
+    BEFORE overwriting, and supports optimistic-concurrency via
+    ``expected_version``.
+    """
     conversation_meta = conversations_repo.get_conversation(
         request.project_id, conversation_id
     )
@@ -1306,23 +1542,34 @@ async def save_dashboard_data(
     s3_key = conversation_meta["s3_key"]
     conversation = load_conversation(s3_bucket, s3_key)
 
-    dashboards = conversation.get("dashboards", [])
-    target = next(
-        (d for d in dashboards if d.get("dashboard_id") == dashboard_id), None
+    target = _locate_dashboard_entry(conversation, dashboard_id)
+    bucket, key = _parse_dashboard_s3_uri(target)
+
+    if request.expected_version is not None:
+        head = dashboard_version_service.current_version(target)
+        if request.expected_version != head:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Dashboard was modified: expected version "
+                    f"{request.expected_version}, current is {head}"
+                ),
+            )
+
+    # Snapshot the current state before we overwrite it (manual edit).
+    dashboard_version_service.snapshot_current(
+        bucket,
+        key,
+        user_id,
+        request.project_id,
+        dashboard_id,
+        conversation,
+        target,
+        source="manual",
+        edit_summary=request.edit_summary,
+        conversation_bucket=s3_bucket,
+        conversation_key=s3_key,
     )
-    if not target:
-        raise HTTPException(status_code=404, detail="Dashboard not found")
-
-    s3_uri = target.get("s3_uri", "")
-    if not s3_uri.startswith("s3://"):
-        raise HTTPException(status_code=500, detail="Invalid dashboard S3 URI")
-
-    uri_parts = s3_uri[5:].split("/", 1)
-    if len(uri_parts) != 2:
-        raise HTTPException(status_code=500, detail="Invalid dashboard S3 URI")
-
-    bucket = uri_parts[0]
-    key = uri_parts[1].lstrip("/")
 
     try:
         updated_bytes = json.dumps(
@@ -1345,6 +1592,136 @@ async def save_dashboard_data(
         dashboard_id,
     )
     return {"success": True}
+
+
+@router.get(
+    "/conversation/{conversation_id}/dashboard/{dashboard_id}/versions",
+    response_model=DashboardVersionListResponse,
+)
+async def list_dashboard_versions(
+    conversation_id: str,
+    dashboard_id: str,
+    project_id: str = Query(..., description="Project ID"),
+    user_id: str = Depends(require_user),
+):
+    """List the version-history manifest for a dashboard."""
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation_meta:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_meta.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    conversation = load_conversation(
+        conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+    )
+    target = _locate_dashboard_entry(conversation, dashboard_id)
+
+    manifest = dashboard_version_service.list_versions(conversation, dashboard_id)
+    return DashboardVersionListResponse(
+        dashboard_id=dashboard_id,
+        current_version=dashboard_version_service.current_version(target),
+        versions=[
+            DashboardVersionInfo(
+                version=entry["version"],
+                created_at=entry["created_at"],
+                edit_summary=entry.get("edit_summary"),
+                source=entry.get("source", "manual"),
+            )
+            for entry in manifest
+        ],
+    )
+
+
+@router.get(
+    "/conversation/{conversation_id}/dashboard/{dashboard_id}/versions/{version}",
+    response_model=DashboardDataResponse,
+)
+async def get_dashboard_version(
+    conversation_id: str,
+    dashboard_id: str,
+    version: int,
+    project_id: str = Query(..., description="Project ID"),
+    user_id: str = Depends(require_user),
+):
+    """Return the dashboard data captured in a specific version snapshot."""
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation_meta:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_meta.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    conversation = load_conversation(
+        conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+    )
+    target = _locate_dashboard_entry(conversation, dashboard_id)
+    bucket, _ = _parse_dashboard_s3_uri(target)
+
+    try:
+        dashboard_data = dashboard_version_service.get_version_data(
+            bucket, user_id, project_id, dashboard_id, version
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard version {version} not found"
+        )
+
+    return DashboardDataResponse(
+        dashboard_id=dashboard_id,
+        dashboard_data=dashboard_data,
+        version=version,
+    )
+
+
+@router.post(
+    "/conversation/{conversation_id}/dashboard/{dashboard_id}/revert",
+    response_model=RevertResponse,
+)
+async def revert_dashboard_version(
+    conversation_id: str,
+    dashboard_id: str,
+    request: RevertRequest,
+    user_id: str = Depends(require_user),
+):
+    """Restore a prior dashboard version (non-destructive: revert is a new head)."""
+    conversation_meta = conversations_repo.get_conversation(
+        request.project_id, conversation_id
+    )
+    if not conversation_meta:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_meta.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    s3_bucket = conversation_meta["s3_bucket"]
+    s3_key = conversation_meta["s3_key"]
+    conversation = load_conversation(s3_bucket, s3_key)
+    target = _locate_dashboard_entry(conversation, dashboard_id)
+    bucket, key = _parse_dashboard_s3_uri(target)
+
+    try:
+        new_version = dashboard_version_service.revert(
+            bucket,
+            key,
+            user_id,
+            request.project_id,
+            dashboard_id,
+            conversation,
+            target,
+            request.target_version,
+            conversation_bucket=s3_bucket,
+            conversation_key=s3_key,
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dashboard version {request.target_version} not found",
+        )
+
+    return RevertResponse(
+        success=True,
+        dashboard_id=dashboard_id,
+        new_version=new_version,
+        reverted_to=request.target_version,
+    )
 
 
 @router.post(

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from app.dependencies.auth import require_user
+from app.services.event_bus import event_bus
 from utils.config import config
 from utils.dynamodb.repos import conversations as conversations_repo
 from utils.dynamodb.repos import projects as projects_repo
@@ -133,6 +134,12 @@ async def upsert_workflow_status(
         status=request.status,
         metadata=request.metadata,
     )
+    # Best-effort live fan-out to SSE subscribers on this worker; a publish
+    # failure must never break the callback (DynamoDB poll is the fallback).
+    try:
+        await event_bus.publish(request.conversation_id, {"type": "status", **item})
+    except Exception as exc:  # noqa: BLE001 - best-effort, do not break callback
+        logger.warning(f"Failed to publish workflow-status to event bus: {exc}")
     return _map_node(item)
 
 
@@ -148,6 +155,12 @@ async def append_workflow_event(
         sequence=request.sequence,
         event=request.event,
     )
+    # Best-effort live fan-out to SSE subscribers on this worker; a publish
+    # failure must never break the callback (DynamoDB poll is the fallback).
+    try:
+        await event_bus.publish(request.conversation_id, {"type": "event", **item})
+    except Exception as exc:  # noqa: BLE001 - best-effort, do not break callback
+        logger.warning(f"Failed to publish workflow-event to event bus: {exc}")
     return _map_node(item)
 
 

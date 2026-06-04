@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class _MorpheusResponse:
@@ -50,11 +50,15 @@ def _run_chat_with_project(project):
     ), patch.object(
         conversation.conversations_repo, "create_conversation"
     ), patch.object(
-        conversation.requests, "post", return_value=_MorpheusResponse()
+        conversation.morpheus_client,
+        "run_workflow",
+        AsyncMock(return_value=_MorpheusResponse().json()),
     ), patch.object(
         conversation.credit_service_instance, "get_model_cost", return_value=1
     ), patch.object(
         conversation.credit_service_instance, "consume_credits"
+    ), patch.object(
+        conversation.assets_repo, "list_assets", return_value=[]
     ), patch.object(
         conversation.asyncio, "sleep", new=_no_sleep
     ):

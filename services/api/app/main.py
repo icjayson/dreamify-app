@@ -54,6 +54,15 @@ def create_app():
                 except json.JSONDecodeError:
                     pass
 
+                async def receive_body():
+                    return {
+                        "type": "http.request",
+                        "body": body_bytes,
+                        "more_body": False,
+                    }
+
+                request._receive = receive_body
+
         response = await call_next(request)
         response.headers["X-Server-Timezone"] = "UTC"
         response.headers["Date"] = formatdate(usegmt=True)

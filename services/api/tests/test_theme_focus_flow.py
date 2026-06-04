@@ -1,7 +1,7 @@
 import asyncio
 import json
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class _MorpheusResponse:
@@ -27,25 +27,39 @@ def test_chat_request_forwards_theme_and_analysis_focus_to_morpheus():
     }
     request = conversation.ConversationChatRequest(
         project_id="project_1",
-        user_node_contents=[{"type": "text", "data": {"text": "Build an HR dashboard"}}],
+        user_node_contents=[
+            {"type": "text", "data": {"text": "Build an HR dashboard"}}
+        ],
         model="fast",
         theme_id="aurora",
         analysis_focus_id="hr_workforce",
     )
 
-    post = MagicMock(return_value=_MorpheusResponse())
-    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
-        conversation.projects_repo, "update_project", return_value={**project, "latest_conversation_id": "conversation_1"}
-    ), patch.object(conversation, "save_conversation"), patch.object(
+    run_workflow = AsyncMock(return_value=_MorpheusResponse().json())
+    with patch.object(
+        conversation.projects_repo, "get_project", return_value=project
+    ), patch.object(
+        conversation.projects_repo,
+        "update_project",
+        return_value={**project, "latest_conversation_id": "conversation_1"},
+    ), patch.object(
+        conversation, "save_conversation"
+    ), patch.object(
         conversation.conversations_repo, "create_conversation"
-    ), patch.object(conversation.requests, "post", post), patch.object(
+    ), patch.object(
+        conversation.morpheus_client, "run_workflow", run_workflow
+    ), patch.object(
         conversation.credit_service_instance, "get_model_cost", return_value=1
-    ), patch.object(conversation.credit_service_instance, "consume_credits"), patch.object(
+    ), patch.object(
+        conversation.credit_service_instance, "consume_credits"
+    ), patch.object(
+        conversation.assets_repo, "list_assets", return_value=[]
+    ), patch.object(
         conversation.asyncio, "sleep", new=_no_sleep
     ):
         asyncio.run(conversation.conversation_chat(request, user_id="user_1"))
 
-    payload = post.call_args.kwargs["json"]
+    payload = run_workflow.call_args.args[0]
     assert payload["theme_id"] == "aurora"
     assert payload["analysis_focus_id"] == "hr_workforce"
     assert payload["template_id"] is None
@@ -62,23 +76,37 @@ def test_chat_request_without_theme_does_not_forward_theme_to_morpheus():
     }
     request = conversation.ConversationChatRequest(
         project_id="project_1",
-        user_node_contents=[{"type": "text", "data": {"text": "Show last week web visitors"}}],
+        user_node_contents=[
+            {"type": "text", "data": {"text": "Show last week web visitors"}}
+        ],
         model="fast",
     )
 
-    post = MagicMock(return_value=_MorpheusResponse())
-    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
-        conversation.projects_repo, "update_project", return_value={**project, "latest_conversation_id": "conversation_1"}
-    ), patch.object(conversation, "save_conversation"), patch.object(
+    run_workflow = AsyncMock(return_value=_MorpheusResponse().json())
+    with patch.object(
+        conversation.projects_repo, "get_project", return_value=project
+    ), patch.object(
+        conversation.projects_repo,
+        "update_project",
+        return_value={**project, "latest_conversation_id": "conversation_1"},
+    ), patch.object(
+        conversation, "save_conversation"
+    ), patch.object(
         conversation.conversations_repo, "create_conversation"
-    ), patch.object(conversation.requests, "post", post), patch.object(
+    ), patch.object(
+        conversation.morpheus_client, "run_workflow", run_workflow
+    ), patch.object(
         conversation.credit_service_instance, "get_model_cost", return_value=1
-    ), patch.object(conversation.credit_service_instance, "consume_credits"), patch.object(
+    ), patch.object(
+        conversation.credit_service_instance, "consume_credits"
+    ), patch.object(
+        conversation.assets_repo, "list_assets", return_value=[]
+    ), patch.object(
         conversation.asyncio, "sleep", new=_no_sleep
     ):
         asyncio.run(conversation.conversation_chat(request, user_id="user_1"))
 
-    payload = post.call_args.kwargs["json"]
+    payload = run_workflow.call_args.args[0]
     assert payload["theme_id"] is None
     assert payload["analysis_focus_id"] is None
     assert payload["template_id"] is None
@@ -95,24 +123,38 @@ def test_chat_request_maps_legacy_template_to_theme_and_focus():
     }
     request = conversation.ConversationChatRequest(
         project_id="project_1",
-        user_node_contents=[{"type": "text", "data": {"text": "Build an HR dashboard"}}],
+        user_node_contents=[
+            {"type": "text", "data": {"text": "Build an HR dashboard"}}
+        ],
         model="fast",
         template_id="hr_workforce",
     )
 
-    post = MagicMock(return_value=_MorpheusResponse())
-    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
-        conversation.projects_repo, "update_project", return_value={**project, "latest_conversation_id": "conversation_1"}
-    ), patch.object(conversation, "save_conversation"), patch.object(
+    run_workflow = AsyncMock(return_value=_MorpheusResponse().json())
+    with patch.object(
+        conversation.projects_repo, "get_project", return_value=project
+    ), patch.object(
+        conversation.projects_repo,
+        "update_project",
+        return_value={**project, "latest_conversation_id": "conversation_1"},
+    ), patch.object(
+        conversation, "save_conversation"
+    ), patch.object(
         conversation.conversations_repo, "create_conversation"
-    ), patch.object(conversation.requests, "post", post), patch.object(
+    ), patch.object(
+        conversation.morpheus_client, "run_workflow", run_workflow
+    ), patch.object(
         conversation.credit_service_instance, "get_model_cost", return_value=1
-    ), patch.object(conversation.credit_service_instance, "consume_credits"), patch.object(
+    ), patch.object(
+        conversation.credit_service_instance, "consume_credits"
+    ), patch.object(
+        conversation.assets_repo, "list_assets", return_value=[]
+    ), patch.object(
         conversation.asyncio, "sleep", new=_no_sleep
     ):
         asyncio.run(conversation.conversation_chat(request, user_id="user_1"))
 
-    payload = post.call_args.kwargs["json"]
+    payload = run_workflow.call_args.args[0]
     assert payload["theme_id"] == "warm"
     assert payload["analysis_focus_id"] == "hr_workforce"
     assert payload["template_id"] == "hr_workforce"
@@ -122,14 +164,25 @@ def test_dashboard_theme_update_syncs_styling_recommendations():
     from app.api.route_modules import conversation
 
     uploaded = {}
-    dashboard = {"dashboard": {"title": "Current"}, "styling_recommendations": {"theme": "default"}}
+    dashboard = {
+        "dashboard": {"title": "Current"},
+        "styling_recommendations": {"theme": "default"},
+    }
     meta = {"user_id": "user_1", "s3_bucket": "bucket", "s3_key": "conversation.json"}
-    convo = {"dashboards": [{"dashboard_id": "dash_1", "s3_uri": "s3://bucket/dashboards/dash_1.json"}]}
+    convo = {
+        "dashboards": [
+            {"dashboard_id": "dash_1", "s3_uri": "s3://bucket/dashboards/dash_1.json"}
+        ]
+    }
 
-    with patch.object(conversation.conversations_repo, "get_conversation", return_value=meta), patch.object(
+    with patch.object(
+        conversation.conversations_repo, "get_conversation", return_value=meta
+    ), patch.object(
         conversation, "load_conversation", return_value=convo
     ), patch.object(
-        conversation, "download_bytes", return_value=json.dumps(dashboard).encode("utf-8")
+        conversation,
+        "download_bytes",
+        return_value=json.dumps(dashboard).encode("utf-8"),
     ), patch.object(
         conversation,
         "upload_bytes",
@@ -141,7 +194,9 @@ def test_dashboard_theme_update_syncs_styling_recommendations():
             conversation.update_dashboard_theme(
                 "conversation_1",
                 "dash_1",
-                conversation.UpdateDashboardThemeRequest(project_id="project_1", theme_id="glacier"),
+                conversation.UpdateDashboardThemeRequest(
+                    project_id="project_1", theme_id="glacier"
+                ),
                 user_id="user_1",
             )
         )
@@ -157,12 +212,20 @@ def test_legacy_template_update_maps_theme_and_focus_fields():
     uploaded = {}
     dashboard = {"dashboard": {"title": "Current"}}
     meta = {"user_id": "user_1", "s3_bucket": "bucket", "s3_key": "conversation.json"}
-    convo = {"dashboards": [{"dashboard_id": "dash_1", "s3_uri": "s3://bucket/dashboards/dash_1.json"}]}
+    convo = {
+        "dashboards": [
+            {"dashboard_id": "dash_1", "s3_uri": "s3://bucket/dashboards/dash_1.json"}
+        ]
+    }
 
-    with patch.object(conversation.conversations_repo, "get_conversation", return_value=meta), patch.object(
+    with patch.object(
+        conversation.conversations_repo, "get_conversation", return_value=meta
+    ), patch.object(
         conversation, "load_conversation", return_value=convo
     ), patch.object(
-        conversation, "download_bytes", return_value=json.dumps(dashboard).encode("utf-8")
+        conversation,
+        "download_bytes",
+        return_value=json.dumps(dashboard).encode("utf-8"),
     ), patch.object(
         conversation,
         "upload_bytes",
@@ -199,7 +262,9 @@ def test_text_only_chat_defaults_to_no_asset_selection_and_forwards_project_asse
     }
     request = conversation.ConversationChatRequest(
         project_id="project_1",
-        user_node_contents=[{"type": "text", "data": {"text": "What is visitor trend last week?"}}],
+        user_node_contents=[
+            {"type": "text", "data": {"text": "What is visitor trend last week?"}}
+        ],
         model="fast",
     )
     saved = {}
@@ -215,18 +280,26 @@ def test_text_only_chat_defaults_to_no_asset_selection_and_forwards_project_asse
         "status": "processed",
     }
 
-    post = MagicMock(return_value=_MorpheusResponse())
-    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
-        conversation.projects_repo, "update_project", return_value={**project, "latest_conversation_id": "conversation_1"}
+    run_workflow = AsyncMock(return_value=_MorpheusResponse().json())
+    with patch.object(
+        conversation.projects_repo, "get_project", return_value=project
+    ), patch.object(
+        conversation.projects_repo,
+        "update_project",
+        return_value={**project, "latest_conversation_id": "conversation_1"},
     ), patch.object(
         conversation,
         "save_conversation",
         side_effect=lambda bucket, key, body: saved.setdefault("conversation", body),
-    ), patch.object(conversation.conversations_repo, "create_conversation"), patch.object(
-        conversation.requests, "post", post
+    ), patch.object(
+        conversation.conversations_repo, "create_conversation"
+    ), patch.object(
+        conversation.morpheus_client, "run_workflow", run_workflow
     ), patch.object(
         conversation.credit_service_instance, "get_model_cost", return_value=1
-    ), patch.object(conversation.credit_service_instance, "consume_credits"), patch.object(
+    ), patch.object(
+        conversation.credit_service_instance, "consume_credits"
+    ), patch.object(
         conversation.asyncio, "sleep", new=_no_sleep
     ), patch.object(
         conversation.assets_repo, "list_assets", return_value=[project_asset]
@@ -235,7 +308,7 @@ def test_text_only_chat_defaults_to_no_asset_selection_and_forwards_project_asse
 
     user_node = saved["conversation"]["nodes"][-1]
     assert user_node["metadata"]["asset_selection"] == "none"
-    payload = post.call_args.kwargs["json"]
+    payload = run_workflow.call_args.args[0]
     assert payload["project_assets"][0]["asset_id"] == "asset_1"
 
 
@@ -247,10 +320,15 @@ def test_chat_request_rejects_asset_from_another_project():
     request = conversation.ConversationChatRequest(
         project_id="project_1",
         user_node_contents=[{"type": "asset", "data": {"asset_id": "asset_1"}}],
-        user_node_metadata={"asset_selection": "explicit", "selected_asset_ids": ["asset_1"]},
+        user_node_metadata={
+            "asset_selection": "explicit",
+            "selected_asset_ids": ["asset_1"],
+        },
     )
 
-    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
+    with patch.object(
+        conversation.projects_repo, "get_project", return_value=project
+    ), patch.object(
         conversation.assets_repo,
         "get_asset",
         return_value={"asset_id": "asset_1", "project_id": "other_project"},
@@ -297,9 +375,9 @@ def test_chat_request_rejects_invalid_clarification_option():
         ],
     )
 
-    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
-        conversation, "_load_existing_conversation", return_value=existing
-    ):
+    with patch.object(
+        conversation.projects_repo, "get_project", return_value=project
+    ), patch.object(conversation, "_load_existing_conversation", return_value=existing):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(conversation.conversation_chat(request, user_id="user_1"))
 
@@ -361,9 +439,9 @@ def test_chat_request_rejects_invalid_option_in_batched_clarifications():
         ],
     )
 
-    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
-        conversation, "_load_existing_conversation", return_value=existing
-    ):
+    with patch.object(
+        conversation.projects_repo, "get_project", return_value=project
+    ), patch.object(conversation, "_load_existing_conversation", return_value=existing):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(conversation.conversation_chat(request, user_id="user_1"))
 
@@ -373,7 +451,11 @@ def test_chat_request_rejects_invalid_option_in_batched_clarifications():
 def test_chat_request_accepts_non_asset_clarification_metadata():
     from app.api.route_modules import conversation
 
-    project = {"project_id": "project_1", "user_id": "user_1", "name": "Untitled Project"}
+    project = {
+        "project_id": "project_1",
+        "user_id": "user_1",
+        "name": "Untitled Project",
+    }
     existing = {
         "nodes": [
             {
@@ -384,7 +466,9 @@ def test_chat_request_accepts_non_asset_clarification_metadata():
                         "data": {
                             "clarification_id": "clarify_output",
                             "reason_code": "output_mode",
-                            "options": [{"id": "inline_visual", "label": "Inline visual answer"}],
+                            "options": [
+                                {"id": "inline_visual", "label": "Inline visual answer"}
+                            ],
                         },
                     }
                 ],
@@ -408,9 +492,11 @@ def test_chat_request_accepts_non_asset_clarification_metadata():
         ],
     )
     saved = {}
-    post = MagicMock(return_value=_MorpheusResponse())
+    run_workflow = AsyncMock(return_value=_MorpheusResponse().json())
 
-    with patch.object(conversation.projects_repo, "get_project", return_value=project), patch.object(
+    with patch.object(
+        conversation.projects_repo, "get_project", return_value=project
+    ), patch.object(
         conversation, "_load_existing_conversation", return_value=existing
     ), patch.object(
         conversation,
@@ -423,12 +509,16 @@ def test_chat_request_accepts_non_asset_clarification_metadata():
     ), patch.object(
         conversation.conversations_repo, "get_conversation", return_value=None
     ), patch.object(
-        conversation.requests, "post", post
+        conversation.morpheus_client, "run_workflow", run_workflow
     ), patch.object(
         conversation.credit_service_instance, "get_model_cost", return_value=1
-    ), patch.object(conversation.credit_service_instance, "consume_credits"), patch.object(
+    ), patch.object(
+        conversation.credit_service_instance, "consume_credits"
+    ), patch.object(
         conversation.asyncio, "sleep", new=_no_sleep
-    ), patch.object(conversation.assets_repo, "list_assets", return_value=[]):
+    ), patch.object(
+        conversation.assets_repo, "list_assets", return_value=[]
+    ):
         asyncio.run(conversation.conversation_chat(request, user_id="user_1"))
 
     user_node = saved["conversation"]["nodes"][-1]
@@ -436,7 +526,7 @@ def test_chat_request_accepts_non_asset_clarification_metadata():
     response_content = user_node["contents"][1]
     assert response_content["type"] == "clarification_response"
     assert response_content["data"]["metadata"]["route_mode"] == "qa_visual"
-    payload = post.call_args.kwargs["json"]
+    payload = run_workflow.call_args.args[0]
     assert payload["conversation_id"] == "conversation_1"
 
 
@@ -508,19 +598,27 @@ def test_dismiss_clarification_persists_no_answer_and_stops_workflow():
     }
     saved = []
     upsert = MagicMock()
-    post = MagicMock()
+    run_workflow = AsyncMock()
 
     with patch.object(
         conversation.conversations_repo,
         "get_conversation",
-        return_value={"user_id": "user_1", "s3_bucket": "bucket", "s3_key": "primary.json"},
-    ), patch.object(conversation, "load_conversation", return_value=existing), patch.object(
+        return_value={
+            "user_id": "user_1",
+            "s3_bucket": "bucket",
+            "s3_key": "primary.json",
+        },
+    ), patch.object(
+        conversation, "load_conversation", return_value=existing
+    ), patch.object(
         conversation,
         "save_conversation",
         side_effect=lambda bucket, key, body: saved.append((bucket, key, body)),
     ), patch.object(
         conversation.workflow_nodes_repo, "upsert_node_status", upsert
-    ), patch.object(conversation.requests, "post", post):
+    ), patch.object(
+        conversation.morpheus_client, "run_workflow", run_workflow
+    ):
         response = asyncio.run(
             conversation.dismiss_clarification(
                 conversation_id="conversation_1",
@@ -532,7 +630,7 @@ def test_dismiss_clarification_persists_no_answer_and_stops_workflow():
 
     assert response.success is True
     assert response.clarification_id == "clarify_1"
-    assert post.call_count == 0
+    assert run_workflow.call_count == 0
     assert saved
     saved_conversation = saved[0][2]
     hidden_node = saved_conversation["nodes"][-1]

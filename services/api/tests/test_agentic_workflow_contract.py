@@ -1,6 +1,6 @@
 import asyncio
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class _MorpheusResponse:
@@ -45,6 +45,7 @@ def test_chat_request_persists_chart_mention_metadata_for_morpheus():
                     "chart_id": "chart_1",
                     "title": "Revenue Trend",
                     "chart_type": "line",
+                    "dashboard_id": "dash_1",
                     "config": {"title": "Revenue Trend", "datasets": []},
                 },
             },
@@ -55,7 +56,7 @@ def test_chat_request_persists_chart_mention_metadata_for_morpheus():
         },
     )
     saved = {}
-    post = MagicMock(return_value=_MorpheusResponse())
+    run_workflow = AsyncMock(return_value=_MorpheusResponse().json())
 
     with patch.object(
         conversation.projects_repo, "get_project", return_value=project
@@ -70,7 +71,7 @@ def test_chat_request_persists_chart_mention_metadata_for_morpheus():
     ), patch.object(
         conversation.conversations_repo, "create_conversation"
     ), patch.object(
-        conversation.requests, "post", post
+        conversation.morpheus_client, "run_workflow", run_workflow
     ), patch.object(
         conversation.credit_service_instance, "get_model_cost", return_value=1
     ), patch.object(
@@ -92,10 +93,11 @@ def test_chat_request_persists_chart_mention_metadata_for_morpheus():
             "chart_id": "chart_1",
             "title": "Revenue Trend",
             "chart_type": "line",
+            "dashboard_id": "dash_1",
             "config": {"title": "Revenue Trend", "datasets": []},
         },
     }
-    payload = post.call_args.kwargs["json"]
+    payload = run_workflow.call_args.args[0]
     assert payload["project_assets"] == []
     assert payload["conversation_id"] == saved["conversation"]["conversation_id"]
 

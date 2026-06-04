@@ -4,7 +4,7 @@ from utils.config import config
 from utils.logger import logger
 
 def is_thinking_model(model_name: str) -> bool:
-    return model_name.startswith("gemini-3")
+    return model_name.startswith("gemini-3") or model_name.startswith("deepseek")
 
 def get_model_for_agent(
     agent="multi_purpose",
@@ -12,7 +12,7 @@ def get_model_for_agent(
 ):
     """
     Get the appropriate LLM model for the specified agent.
-    Supports both OpenAI and Google Gemini models based on config.
+    Supports OpenAI, Google Gemini, and DeepSeek models based on config.
     """
     # Agent config is at root level in config.yaml
     agent_config = None
@@ -28,7 +28,21 @@ def get_model_for_agent(
     model_name = model_override if model_override else agent_config.model
 
     # Determine which provider to use based on model name
-    if model_name.startswith("gemini"):
+    if model_name.startswith("deepseek"):
+        # Use DeepSeek (OpenAI-compatible API) with thinking mode enabled
+        if not config.deepseek or not config.deepseek.api_key:
+            raise ValueError("DeepSeek API key not configured")
+        model = ChatOpenAI(
+            model=model_name,
+            api_key=config.deepseek.api_key,
+            base_url="https://api.deepseek.com",
+            reasoning_effort="low",
+            extra_body={"thinking": {"type": "enabled"}},
+            timeout=180,
+            max_retries=2,
+        )
+        logger.info(f"[Model] Using DeepSeek model: {model_name} with thinking mode enabled")
+    elif model_name.startswith("gemini"):
         # Use Google Gemini
         if not config.google or not config.google.api_key:
             raise ValueError("Google API key not configured")

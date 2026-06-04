@@ -6,7 +6,7 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 import re as _re
@@ -247,7 +247,7 @@ class ThinkingTracer:
         duration_ms: Optional[float] = None,
     ) -> Dict[str, Any]:
         self.sequence += 1
-        now = datetime.now().isoformat()
+        now = datetime.now(tz=timezone.utc).isoformat()
         event = {
             "id": f"{self.run_id}:{self.sequence}",
             "run_id": self.run_id,

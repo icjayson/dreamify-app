@@ -1,5 +1,10 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
+import pythonLanguage from "react-syntax-highlighter/dist/esm/languages/prism/python";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+
+SyntaxHighlighter.registerLanguage("python", pythonLanguage);
 
 interface PythonCodeBlockProps {
   python: string;
@@ -36,9 +41,20 @@ export const PythonCodeBlock = ({ python, output }: PythonCodeBlockProps) => {
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           <span>{copied ? "Copied" : "Copy"}</span>
         </button>
-        <pre className="max-h-72 overflow-auto rounded-md bg-black/80 p-2.5 pr-14 text-[11px] leading-4 text-emerald-100">
-          <code>{python}</code>
-        </pre>
+        <SyntaxHighlighter
+          language="python"
+          style={vscDarkPlus}
+          className="max-h-72 rounded-md"
+          customStyle={{
+            margin: 0,
+            padding: "0.625rem 3.5rem 0.625rem 0.625rem",
+            fontSize: "11px",
+            lineHeight: "1rem",
+          }}
+          codeTagProps={{ className: "font-mono" }}
+        >
+          {python}
+        </SyntaxHighlighter>
       </div>
 
       {output && output.trim() && (

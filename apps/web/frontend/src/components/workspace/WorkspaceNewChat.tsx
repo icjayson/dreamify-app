@@ -32,6 +32,7 @@ import { CONNECTORS } from "@/constants/connectors";
 import { type ConnectorItem } from "@/constants/connectors";
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import { ChevronRight } from "lucide-react";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 export default function WorkspaceNewChat() {
   const navigate = useNavigate();
@@ -98,6 +99,7 @@ export default function WorkspaceNewChat() {
   const [isDragging, setIsDragging] = useState(false);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState<{ open: boolean; category: string; placeholder: string }>({ open: false, category: "", placeholder: "" });
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -666,6 +668,13 @@ export default function WorkspaceNewChat() {
         onClose={() => setTemplateModalOpen(false)}
         onTemplateSelect={handleTemplateSelect}
         initialSelection={selectedTemplate}
+        onRequestTemplate={() => setFeedbackModal({ open: true, category: "Request Template", placeholder: "What template would you like to see? (e.g. specific industry, use case, layout...)" })}
+      />
+      <FeedbackModal
+        open={feedbackModal.open}
+        onClose={() => setFeedbackModal((prev) => ({ ...prev, open: false }))}
+        category={feedbackModal.category}
+        placeholder={feedbackModal.placeholder}
       />
     </div>
   );

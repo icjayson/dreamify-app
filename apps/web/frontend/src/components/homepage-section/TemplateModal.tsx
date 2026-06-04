@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check } from "lucide-react";
+import { Check, MessageSquarePlus } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   ANALYSIS_FOCUSES,
@@ -19,9 +19,10 @@ interface TemplateModalProps {
   initialSelection?: ThemeSelection | null;
   /** 'toolbar' = pre-run pick from chat input; 'header' = restyle current dashboard */
   source?: "toolbar" | "header";
+  onRequestTemplate?: () => void;
 }
 
-const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplateSelect, initialSelection, source = "toolbar" }) => {
+const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplateSelect, initialSelection, source = "toolbar", onRequestTemplate }) => {
   const isHeader = source === "header";
   const copy = {
     title: isHeader ? "Apply a Theme" : "Choose Theme",
@@ -128,11 +129,10 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
             <button
               key={focus.id}
               onClick={() => setSelectedFocusId(focus.id)}
-              className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors ${
-                active
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-background/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
-              }`}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors ${active
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-background/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
               type="button"
             >
               {active && <Check className="h-3 w-3" />}
@@ -152,9 +152,8 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
           <div
             key={theme.id}
             onClick={() => handleThemeClick(theme.id)}
-            className={`group relative aspect-video cursor-pointer overflow-hidden rounded-xl transition-all duration-300 hover:scale-[1.02] ${
-              isSelected ? "ring-2 ring-primary" : ""
-            }`}
+            className={`group relative aspect-video cursor-pointer overflow-hidden rounded-xl transition-all duration-300 hover:scale-[1.02] ${isSelected ? "ring-2 ring-primary" : ""
+              }`}
           >
             <TemplateColorPreview theme={theme.id} className="h-full w-full" />
 
@@ -231,7 +230,17 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
                 </div>
 
                 <div className="flex-shrink-0 border-t border-border bg-muted/50 px-4 py-4">
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between">
+                    {onRequestTemplate ? (
+                      <button
+                        onClick={() => { onClose(); onRequestTemplate(); }}
+                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        type="button"
+                      >
+                        <MessageSquarePlus className="h-4 w-4" />
+                        Request a template
+                      </button>
+                    ) : <span />}
                     <button
                       onClick={handleConfirmClick}
                       disabled={!selectedThemeId}
@@ -276,7 +285,17 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ open, onClose, onTemplate
           </div>
 
           <div className="flex-shrink-0 border-t border-border bg-muted/50 px-6 py-4">
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              {onRequestTemplate ? (
+                <button
+                  onClick={() => { onClose(); onRequestTemplate(); }}
+                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  type="button"
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                  Request a template
+                </button>
+              ) : <span />}
               <button
                 onClick={handleConfirmClick}
                 disabled={!selectedThemeId}

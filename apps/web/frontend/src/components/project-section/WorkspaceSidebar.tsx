@@ -61,10 +61,11 @@ const DiscordIcon = ({ className }: { className?: string }) => (
 );
 
 const CONTACT_LINKS = [
-  { icon: XIcon, href: "https://x.com/dreamify_dev", label: "X (Twitter)" },
-  { icon: FacebookIcon, href: "https://www.facebook.com/profile.php?id=61587411536040", label: "Facebook" },
-  { icon: DiscordIcon, href: "https://discord.gg/GhFjdbgdxd", label: "Discord" },
-  { icon: Mail, href: "https://mail.google.com/mail/?view=cm&to=dreamify.dev@gmail.com&su=Contact%20Dreamify", label: "Email" },
+  { icon: XIcon, href: "https://x.com/dreamify_dev", label: "X (Twitter)", internal: false },
+  { icon: FacebookIcon, href: "https://www.facebook.com/profile.php?id=61587411536040", label: "Facebook", internal: false },
+  { icon: DiscordIcon, href: "https://discord.gg/GhFjdbgdxd", label: "Discord", internal: false },
+  { icon: Mail, href: "https://mail.google.com/mail/?view=cm&to=dreamify.dev@gmail.com&su=Contact%20Dreamify", label: "Email", internal: false },
+  { icon: MessageSquarePlus, href: "/feedback", label: "Feedback", internal: true },
 ];
 
 interface WorkspaceSidebarProps {
@@ -491,18 +492,19 @@ export default function WorkspaceSidebar({
                       : "opacity-0 scale-95 pointer-events-none"
                   )}
                 >
-                  {CONTACT_LINKS.map(({ icon: Icon, href, label }) => (
-                    <a
+                  {CONTACT_LINKS.map(({ icon: Icon, href, label, internal }) => (
+                    <button
                       key={label}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setUserMenuOpen(false)}
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        if (internal) window.open(href, "_blank", "noopener,noreferrer");
+                        else window.open(href, "_blank", "noopener,noreferrer");
+                      }}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-background transition-colors text-sm text-foreground/80 hover:text-foreground"
                     >
                       <Icon className="w-4 h-4 text-muted-foreground" />
                       <span>{label}</span>
-                    </a>
+                    </button>
                   ))}
                 </div>
               </div>

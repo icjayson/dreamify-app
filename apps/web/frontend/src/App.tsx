@@ -31,6 +31,7 @@ import SuccessPage from "./pages/SuccessPage";
 import AdminPage from "./pages/admin";
 import AdminConversationPage from "./pages/admin/conversation";
 import TemplateGalleryPage from "./pages/TemplateGalleryPage";
+import OverallFeedbackPage from "./pages/OverallFeedbackPage";
 import { useChatStore } from "./chat/useChatStore";
 import GA4IntegrationModal from "./components/chat/GA4IntegrationModal";
 import GoogleSheetsIntegrationModal from "./components/chat/GoogleSheetsIntegrationModal";
@@ -64,7 +65,8 @@ const AppContent = () => {
     location.pathname.startsWith("/workspace") ||
     location.pathname.startsWith("/admin") ||
     location.pathname.startsWith("/preview") ||
-    location.pathname.startsWith("/templates");
+    location.pathname.startsWith("/templates") ||
+    location.pathname === "/feedback";
 
   useEffect(() => {
     if (isAppPath) {
@@ -85,12 +87,14 @@ const AppContent = () => {
   const isTermsPath = location.pathname === "/terms";
   const isDocsPath = location.pathname === "/docs";
   const isPreviewPath = location.pathname.startsWith("/preview/");
+  const isFeedbackPath = location.pathname === "/feedback";
 
   const isAllowedSignedInPath =
     location.pathname.startsWith("/workspace") ||
     location.pathname.startsWith("/admin") ||
     location.pathname.startsWith("/preview") ||
     location.pathname.startsWith("/templates") ||
+    location.pathname === "/feedback" ||
     location.pathname === "/docs" ||
     location.pathname === "/sso-callback" ||
     location.pathname === "/cancel" ||
@@ -106,7 +110,8 @@ const AppContent = () => {
     location.pathname === "/terms" ||
     location.pathname === "/docs" ||
     location.pathname === "/login" ||
-    location.pathname === "/signup";
+    location.pathname === "/signup" ||
+    location.pathname === "/feedback";
 
   // Prevent public page flash while Clerk is still resolving auth state.
   if (!isLoaded && isPublicLandingPath) {
@@ -119,7 +124,7 @@ const AppContent = () => {
 
   return (
     <>
-      {(isHomePath || isAboutPath || isPricingPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath && !isDocsPath)) && <Header />}
+      {(isHomePath || isAboutPath || isPricingPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath && !isDocsPath && !isFeedbackPath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/about" element={<AboutPage />} />
@@ -179,6 +184,7 @@ const AppContent = () => {
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/admin/conversation/:conversationId" element={<AdminConversationPage />} />
         <Route path="/templates" element={<TemplateGalleryPage />} />
+        <Route path="/feedback" element={<OverallFeedbackPage />} />
         <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />

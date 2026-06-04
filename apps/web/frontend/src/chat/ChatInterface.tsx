@@ -22,6 +22,7 @@ import {
 } from "@/chat/useChatStore";
 import { useFileStore } from "@/chat/useFileStore";
 import TemplateModal from "@/components/homepage-section/TemplateModal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import type { ThemeSelection } from "@/constants/builtinTemplates";
 import FilePreviewChip from "../components/chat/FilePreviewChip";
 import InlineCsvPreview from "../components/chat/InlineCsvPreview";
@@ -849,6 +850,7 @@ interface ChatInterfaceProps {
   onSwitchToDashboard?: (dashboardId?: string) => void;
   onShowCsvPreview?: (assetId: string, filename: string) => void;
   onProjectNameAccepted?: (projectName: string) => void;
+  onActivityOpenChange?: (open: boolean) => void;
   dashboardComponents?: DashboardComponent[];
   isSidePanelOpen?: boolean;
 }
@@ -1216,7 +1218,7 @@ function SpreadsheetMessagePreview({
   );
 }
 
-const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, onProjectNameAccepted, dashboardComponents, isSidePanelOpen = false }: ChatInterfaceProps) => {
+const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, onShowCsvPreview, onProjectNameAccepted, onActivityOpenChange, dashboardComponents, isSidePanelOpen = false }: ChatInterfaceProps) => {
   const { resolvedTheme } = useTheme();
   const logoFavicon = "/logo-favicon.png";
 
@@ -1226,6 +1228,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const tierLimit = 1000; // All users have Pro access (1000 credits/month)
 
   // Template state (controlled via store so project header can also trigger it)
+  const [feedbackModal, setFeedbackModal] = useState<{ open: boolean; category: string; placeholder: string }>({ open: false, category: "", placeholder: "" });
   const [dragOver, setDragOver] = useState(false);
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -1234,6 +1237,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const [dismissedClarificationIds, setDismissedClarificationIds] = useState<Set<string>>(new Set());
   const [isDismissingClarification, setIsDismissingClarification] = useState(false);
   const [chatPaneView, setChatPaneView] = useState<"chat" | "activity">("chat");
+
+  useEffect(() => {
+    onActivityOpenChange?.(chatPaneView === "activity");
+
+    return () => onActivityOpenChange?.(false);
+  }, [chatPaneView, onActivityOpenChange]);
 
   // @Mention state
   // @Mention / Context Picker state
@@ -3388,6 +3397,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
         onTemplateSelect={handleTemplateSelect}
         initialSelection={selectedTemplate}
         source={templateModalSource}
+        onRequestTemplate={() => setFeedbackModal({ open: true, category: "Request Template", placeholder: "What template would you like to see? (e.g. specific industry, use case, layout...)" })}
+      />
+      <FeedbackModal
+        open={feedbackModal.open}
+        onClose={() => setFeedbackModal((prev) => ({ ...prev, open: false }))}
+        category={feedbackModal.category}
+        placeholder={feedbackModal.placeholder}
       />
     </div>
   );

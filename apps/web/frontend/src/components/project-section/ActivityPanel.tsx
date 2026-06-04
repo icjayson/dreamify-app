@@ -106,21 +106,19 @@ export const ActivityPanel = ({ variant = "rail", onClose }: ActivityPanelProps 
     setActivityOpen(false);
   };
   const stepSummary = steps.length > 0
-    ? `${steps.length} step${steps.length === 1 ? "" : "s"}${
-        totalDurationMs > 0 ? ` · ${formatThoughtFor(totalDurationMs)}` : ""
-      }`
+    ? `${steps.length} step${steps.length === 1 ? "" : "s"}${totalDurationMs > 0 ? ` · ${formatThoughtFor(totalDurationMs)}` : ""
+    }`
     : "";
 
   return (
     <div
-      className={`flex h-full min-h-0 flex-col bg-background ${
-        isEmbedded ? "border-0" : "border-l border-border"
-      }`}
+      className={`flex h-full min-h-0 flex-col bg-background rounded-lg
+        ${isEmbedded ? "border-0" : "border-l border-border"
+        }`}
       data-export-exclude
     >
-      <div className={`shrink-0 flex items-center gap-2 px-3 border-b border-border bg-background/60 backdrop-blur-sm ${
-        isEmbedded ? "h-12" : "h-10"
-      }`}>
+      <div className={`shrink-0 flex items-center gap-2 px-3 rounded-t-lg border-b border-border bg-background/60 backdrop-blur-sm ${isEmbedded ? "h-12" : "h-10"
+        }`}>
         {isEmbedded ? (
           <button
             onClick={closeActivity}

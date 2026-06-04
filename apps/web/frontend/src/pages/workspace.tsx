@@ -64,6 +64,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import HeaderCreditBadge from "@/components/ui/HeaderCreditBadge";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { MetaPixel } from "@/hooks/useMetaPixel";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ConnectorStatus {
@@ -423,6 +424,7 @@ export default function WorkspacePage() {
   const [relatedProjectPreviewUrls, setRelatedProjectPreviewUrls] = useState<Record<string, string>>({});
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
   const [refreshModalOpen, setRefreshModalOpen] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState<{ open: boolean; category: string; placeholder: string }>({ open: false, category: "", placeholder: "" });
   const [refreshDatePreset, setRefreshDatePreset] = useState("last_30d");
   const [refreshStartDate, setRefreshStartDate] = useState("");
   const [refreshEndDate, setRefreshEndDate] = useState("");
@@ -1379,6 +1381,23 @@ export default function WorkspacePage() {
                         </Card>
                       );
                     })}
+                    {/* Request connector card */}
+                    <Card
+                      onClick={() => setFeedbackModal({ open: true, category: "Request Connector", placeholder: "What connector would you like to see? (e.g. specific platform, database, API...)" })}
+                      className="p-4 h-[92px] transition-all hover:border-primary/40 cursor-pointer border-dashed"
+                    >
+                      <div className="flex items-center justify-between h-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/10">
+                            <Plus className="w-5 h-5 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="font-medium text-sm text-foreground">Request a Connector</h3>
+                            <span className="text-xs text-muted-foreground block truncate">Tell us what you need, we build it for you</span>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
                   </div>
                 )}
               </>
@@ -1712,6 +1731,12 @@ export default function WorkspacePage() {
     <OnboardingModal
       open={onboardingModalOpen}
       onDismiss={handleDismissOnboarding}
+    />
+    <FeedbackModal
+      open={feedbackModal.open}
+      onClose={() => setFeedbackModal((prev) => ({ ...prev, open: false }))}
+      category={feedbackModal.category}
+      placeholder={feedbackModal.placeholder}
     />
     </div >
   );

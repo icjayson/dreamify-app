@@ -41,6 +41,7 @@ export default function ProjectPage() {
   const [renameValue, setRenameValue] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isChatActivityOpen, setIsChatActivityOpen] = useState(false);
   const projectTitleRef = useRef(projectTitle);
 
   const {
@@ -925,7 +926,18 @@ export default function ProjectPage() {
           <div className={`${activeTab === 'chat' ? 'block w-full' : 'hidden'} ${isSidePanelOpen ? 'lg:w-full lg:min-w-0' : 'w-full mx-auto lg:w-[1000px] lg:max-w-[calc(100vw-3rem)]'} lg:block transition-all duration-300 h-full lg:h-auto min-h-0 min-w-0`}>
             <div className="bg-muted h-full lg:h-[calc(100vh-4rem)] min-h-0 flex flex-col lg:block">
               <div className="flex-1 min-h-0 h-full lg:h-auto lg:block">
-                <div className="px-1 h-full lg:h-[calc(100vh-4rem)] flex flex-col lg:block" data-chat-root>
+                <div className="px-1 h-full lg:h-[calc(100vh-4rem)] flex flex-col lg:block relative" data-chat-root>
+                  {!isSidePanelOpen && !isChatActivityOpen && (
+                    <video
+                      src="/dreamify-mascot-2.webm"
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      aria-hidden="true"
+                      className="dreamify-mascot--soft-azure absolute bottom-28 right-3 w-16 h-16 z-1 pointer-events-none select-none object-contain"
+                    />
+                  )}
                   <ChatInterface
                     projectId={projectId ?? undefined}
                     onProcessedDataChange={(data) => {
@@ -978,6 +990,7 @@ export default function ProjectPage() {
                       setActiveTab('dashboard');
                     }}
                     onProjectNameAccepted={handleProjectNameAccepted}
+                    onActivityOpenChange={setIsChatActivityOpen}
                     dashboardComponents={dashboardComponents}
                     isSidePanelOpen={isSidePanelOpen}
                   />
@@ -1143,9 +1156,8 @@ export default function ProjectPage() {
                         </div>
                       )}
                       <div
-                        className={`h-full transition-opacity duration-200 ${
-                          isSwitchingDashboard ? 'opacity-60 pointer-events-none' : ''
-                        }`}
+                        className={`h-full transition-opacity duration-200 ${isSwitchingDashboard ? 'opacity-60 pointer-events-none' : ''
+                          }`}
                         aria-busy={isSwitchingDashboard || undefined}
                       >
                         <DashboardPreview

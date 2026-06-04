@@ -60,7 +60,7 @@ DREAMIFY_APP_URL = (
 
 # Chat queries always use the "fast" model alias (5 credits).
 CHAT_MODEL_ALIAS = "fast"
-CHAT_MODEL_ID = os.environ.get("DREAMIFY_FAST_MODEL", "gemini-3-flash-preview")
+CHAT_MODEL_ID = os.environ.get("DREAMIFY_FAST_MODEL", "deepseek-v4-flash")
 CHAT_CREDIT_COST = 5
 
 # Polling config

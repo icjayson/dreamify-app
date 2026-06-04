@@ -29,7 +29,7 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import require_user
+from app.dependencies.auth import optional_user, require_user
 from app.core.analytics import CSVProcessor
 from app.utils.file_handler import FileHandler
 from utils.config import config
@@ -45,7 +45,7 @@ from utils.s3.client import (
     get_s3_client,
 )
 from utils.s3.paths import build_asset_key
-from utils.email_service import send_dashboard_share_email
+from utils.email_service import send_dashboard_share_email, send_feedback_email, send_feedback_thank_you_email
 from clerk_backend_api import Clerk
 
 router = APIRouter(tags=["user"])
@@ -1130,3 +1130,181 @@ async def compatibility_preview_redirect(
         redirect_url += f"?{query_params}"
 
     return RedirectResponse(url=redirect_url)
+
+
+# ── Feedback ───────────────────────────────────────────────────────────────────
+
+class FeedbackRequest(BaseModel):
+    category: str = Field(..., max_length=100)
+    message: str = Field(..., min_length=1, max_length=5000)
+
+
+class OverallFeedbackRequest(BaseModel):
+    full_name: str = Field(..., min_length=1, max_length=120)
+    email: str = Field(..., min_length=1, max_length=320)
+    overall_rating: int = Field(..., ge=1, le=5)
+    visual_appeal_rating: int = Field(..., ge=1, le=5)
+    metrics_insights_rating: int = Field(..., ge=1, le=5)
+    layout_editing_rating: int = Field(..., ge=1, le=5)
+    share_link_rating: int = Field(..., ge=1, le=5)
+    requested_connectors: str = Field(..., min_length=1, max_length=5000)
+    dashboard_improvements: str = Field(..., min_length=1, max_length=5000)
+    export_improvements: str = Field(..., min_length=1, max_length=5000)
+    website: str = Field(default="", max_length=200)
+
+
+def _format_overall_feedback_message(body: OverallFeedbackRequest, user_id: Optional[str]) -> str:
+    def answer(value: str) -> str:
+        return value.strip() or "No answer"
+
+    return "\n".join([
+        "SUBMITTED CONTACT",
+        f"- Full name: {body.full_name.strip()}",
+        f"- Email: {body.email.strip()}",
+        "",
+        "OVERALL RATINGS (1-5)",
+        f"- Overall Dreamify dashboard: {body.overall_rating}/5",
+        f"- Visual appeal: {body.visual_appeal_rating}/5",
+        f"- Metrics and insights coverage: {body.metrics_insights_rating}/5",
+        "",
+        "FEATURE RATINGS (1-5)",
+        f"- Layout editing: {body.layout_editing_rating}/5",
+        f"- Dashboard share link: {body.share_link_rating}/5",
+        "",
+        "OPEN FEEDBACK",
+        f"- Requested data connectors:\n{answer(body.requested_connectors)}",
+        f"- Dashboard features or improvements:\n{answer(body.dashboard_improvements)}",
+        f"- Share link or export improvements:\n{answer(body.export_improvements)}",
+        "",
+        f"Authenticated user ID: {user_id or 'Guest'}",
+    ])
+
+
+async def _resolve_feedback_identity(
+    user_id: Optional[str],
+    fallback_name: str = "Unknown",
+    fallback_email: str = "unknown",
+) -> tuple[str, str]:
+    if not user_id:
+        return fallback_name, fallback_email
+
+    try:
+        clerk_user = await asyncio.to_thread(_clerk_client.users.get, user_id=user_id)
+        name_parts = filter(None, [clerk_user.first_name, clerk_user.last_name])
+        user_name = " ".join(name_parts) or clerk_user.username or fallback_name
+        user_email = (
+            clerk_user.email_addresses[0].email_address
+            if clerk_user.email_addresses
+            else fallback_email
+        )
+        return user_name, user_email
+    except Exception as exc:
+        logger.warning("Could not fetch Clerk user %s: %s", user_id, exc)
+        return fallback_name if fallback_name != "Unknown" else user_id, fallback_email
+
+
+@router.post("/feedback")
+async def submit_feedback(
+    body: FeedbackRequest,
+    user_id: str = Depends(require_user),
+):
+    if not config.resend:
+        raise HTTPException(status_code=503, detail="Email service not configured")
+
+    user_name, user_email = await _resolve_feedback_identity(user_id)
+
+    feedback_key = config.resend.feedback_api_key or config.resend.api_key
+    loop = asyncio.get_running_loop()
+    sent = await loop.run_in_executor(
+        None,
+        lambda: send_feedback_email(
+            category=body.category,
+            message=body.message,
+            user_email=user_email,
+            user_name=user_name,
+            team_email=config.resend.feedback_email,
+            from_email=config.resend.from_email,
+            api_key=feedback_key,
+        ),
+    )
+    if not sent:
+        raise HTTPException(status_code=502, detail="Failed to send feedback email")
+
+    # Best-effort thank-you email — don't fail the request if this doesn't send
+    await loop.run_in_executor(
+        None,
+        lambda: send_feedback_thank_you_email(
+            to_email=user_email,
+            to_name=user_name,
+            category=body.category,
+            from_email=config.resend.from_email,
+            api_key=feedback_key,
+        ),
+    )
+
+    return {"success": True}
+
+
+@router.post("/feedback/overall")
+async def submit_overall_feedback(
+    body: OverallFeedbackRequest,
+    user_id: Optional[str] = Depends(optional_user),
+):
+    if not config.resend:
+        raise HTTPException(status_code=503, detail="Email service not configured")
+
+    # Honeypot for the public form. Return success so automated submissions do
+    # not learn whether they were detected.
+    if body.website:
+        return {"success": True}
+
+    if not body.full_name.strip():
+        raise HTTPException(status_code=422, detail="Please enter your full name")
+
+    submitted_email = body.email.strip()
+    if not submitted_email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
+        raise HTTPException(status_code=422, detail="Please enter a valid email address")
+
+    required_answers = [
+        body.requested_connectors,
+        body.dashboard_improvements,
+        body.export_improvements,
+    ]
+    if any(not answer.strip() for answer in required_answers):
+        raise HTTPException(status_code=422, detail="Please answer every feedback question")
+
+    user_name, user_email = await _resolve_feedback_identity(
+        user_id,
+        fallback_name=body.full_name.strip(),
+        fallback_email=submitted_email,
+    )
+    feedback_key = config.resend.feedback_api_key or config.resend.api_key
+    loop = asyncio.get_running_loop()
+    sent = await loop.run_in_executor(
+        None,
+        lambda: send_feedback_email(
+            category="Overall Product Feedback",
+            message=_format_overall_feedback_message(body, user_id),
+            user_email=user_email,
+            user_name=user_name,
+            team_email=config.resend.feedback_email,
+            from_email=config.resend.from_email,
+            api_key=feedback_key,
+        ),
+    )
+    if not sent:
+        raise HTTPException(status_code=502, detail="Failed to send feedback email")
+
+    if user_email != "unknown":
+        await loop.run_in_executor(
+            None,
+            lambda: send_feedback_thank_you_email(
+                to_email=user_email,
+                to_name=user_name,
+                category="Dreamify overall experience",
+                from_email=config.resend.from_email,
+                api_key=feedback_key,
+            ),
+        )
+
+    return {"success": True}

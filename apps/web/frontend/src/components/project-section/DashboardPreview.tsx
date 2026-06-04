@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type CSSProperties } from "react";
 import { Responsive, WidthProvider, Layouts, Layout } from "react-grid-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Loader2, ChevronDown, ChevronUp, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2, Pencil, CalendarDays, Sparkles } from "lucide-react";
+import { AlertCircle, Loader2, ChevronDown, ChevronUp, MoreVertical, GripVertical, MessageSquare, ImageDown, Trash2, Pencil, CalendarDays, Sparkles, History } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -26,6 +26,8 @@ import ChartRenderer from "@/components/charts/ChartRenderer";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useEditMode, applyEditsToComponents } from "@/hooks/useEditMode";
 import { EditProvider } from "@/components/charts/edit/EditContext";
+import { ChangedBadge } from "@/components/charts/edit/ChangedBadge";
+import { VersionHistoryDialog } from "@/components/charts/edit/VersionHistoryDialog";
 import EditPanel from "@/components/charts/edit/EditPanel";
 import InlineSvgTextEditor from "@/components/charts/edit/InlineSvgTextEditor";
 import { useChatStore } from "@/chat/useChatStore";
@@ -43,6 +45,7 @@ import {
   mergeLayoutIntoComponents,
   buildMinSizeMap,
   buildMinSizeMapForCols,
+  layoutsCoverComponents,
   GRID_COLS,
 } from "@/components/project-section/dashboardLayout";
 import {
@@ -62,7 +65,13 @@ import {
 //   "localstorage" — pre-R6 behavior. Kept as an escape hatch in case the S3
 //                    auto-save path needs to be disabled in production without
 //                    a redeploy.
-const LAYOUT_SOURCE: "s3" | "localstorage" = "s3";
+type LayoutSource = "s3" | "localstorage";
+
+function getLayoutSource(): LayoutSource {
+  return "s3";
+}
+
+const LAYOUT_SOURCE = getLayoutSource();
 import {
   convertLLMStylingToChartStyling,
   validateChartStyling,
@@ -77,6 +86,7 @@ import {
   isLightBackground
 } from "@/utils/chartStyling";
 import type { ChartChipData } from "@/components/chat/ChartPreviewChip";
+import { ChartFixPopover } from "@/components/project-section/ChartFixPopover";
 import { exportChartAsPng } from "@/utils/exportUtils";
 
 const SELECT_CHART_CONTEXT_EVENT = "dreamify:select-chart-context";
@@ -236,6 +246,12 @@ interface DashboardPreviewProps {
   onLayoutPersist?: (components: any[]) => void;
   /** When true, grid drag and resize are disabled (read-only view). */
   readOnly?: boolean;
+  /**
+   * Phase 7: called after a successful revert so the owner can re-fetch the
+   * dashboard data (the backend has written a new "reverted" version). Optional
+   * and backward-compatible; when absent the id-based dashboard refreshes itself.
+   */
+  onDashboardReverted?: () => void;
 }
 
 const DashboardPreview = ({
@@ -253,6 +269,7 @@ const DashboardPreview = ({
   disablePersistence = false,
   onLayoutPersist,
   readOnly = false,
+  onDashboardReverted,
 }: DashboardPreviewProps) => {
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedInsights, setExpandedInsights] = useState(false);
@@ -264,6 +281,8 @@ const DashboardPreview = ({
 
   // Edit feedback loop state from store
   const changedComponentIds = useChatStore((s) => s.changedComponentIds);
+  // Phase 7: conversation id for version-history calls (per-dashboard history).
+  const currentConversationId = useChatStore((s) => s.currentConversationId);
 
   // Manual-edit feature state
   const editMode = useEditMode((s) => s.editMode);
@@ -279,6 +298,8 @@ const DashboardPreview = ({
   const [exportingIds, setExportingIds] = useState<Set<string>>(new Set());
   const [removedComponentIds, setRemovedComponentIds] = useState<Set<string>>(new Set());
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  // Phase 7: version-history dialog, scoped to the component it was opened from.
+  const [historyComponent, setHistoryComponent] = useState<DashboardComponent | null>(null);
   useEffect(() => {
     if (changedComponentIds.size > 0) {
       setHighlightedIds(new Set(changedComponentIds));
@@ -1107,6 +1128,18 @@ const DashboardPreview = ({
   const userLayoutCommitRef = useRef<{ storageKey: string; layoutComponentKey: string; layouts: Layouts; expiresAt: number } | null>(null);
   const [isLayoutReady, setIsLayoutReady] = useState(false);
 
+  // Synchronous guard: does the current lg layout contain an entry for every
+  // component we are about to render? On a dashboard switch the components
+  // update synchronously while `layouts` is rebuilt asynchronously in the effect
+  // below, so for one render the stale layout lacks the new ids. Mounting the
+  // grid then makes react-grid-layout assign fallback w=1/h=1 (the stretched
+  // sliver bug) and even persist that garbage via onLayoutChange. Gating the
+  // render and the persistence handlers on this skips that frame entirely.
+  const layoutsCoverCurrent = layoutsCoverComponents(
+    layouts.lg,
+    editedDisplayComponents as Array<{ id: string | number }>,
+  );
+
   useEffect(() => {
     layoutsRef.current = layouts;
   }, [layouts]);
@@ -1230,6 +1263,10 @@ const DashboardPreview = ({
 
   const handleLayoutChange = (current: Layout[], all: Layouts) => {
     if (!isLayoutReady) return;
+    // Never commit a layout produced while the grid's layout didn't cover the
+    // current components (transitional switch frame) — it would persist the
+    // stretched fallback sizes over the correct layout.
+    if (!layoutsCoverCurrent) return;
     const activeBreakpoint = currentBreakpointRef.current as keyof typeof cols;
     const compactedCurrent = sanitizeLayoutItems(
       compactLayoutVertically(current),
@@ -1268,6 +1305,7 @@ const DashboardPreview = ({
 
   const handleDragResizeStop = (current: Layout[], oldItem: any, newItem: any) => {
     if (!isLayoutReady) return;
+    if (!layoutsCoverCurrent) return;
     const activeBreakpoint = currentBreakpointRef.current as keyof typeof cols;
     const currentCols = cols[activeBreakpoint] || 24;
     const scaledAll = { ...layoutsRef.current };
@@ -1353,9 +1391,10 @@ const DashboardPreview = ({
   };
 
   // Handle component error
-  const handleComponentError = (error: Error, component: any) => {
+  // Stable identity so the memoized ChartRenderer isn't invalidated every render.
+  const handleComponentError = useCallback((error: Error, component: any) => {
     console.error('Chart component error:', error, component);
-  };
+  }, []);
 
   // Extract dashboard metadata (handle both nested and top-level dashboard object)
   const dashboardMetadata = useMemo(() => {
@@ -1695,7 +1734,7 @@ const DashboardPreview = ({
         )}
 
         {/* Responsive Drag & Resize Grid */}
-        {activeDashboard && isLayoutReady && (
+        {activeDashboard && isLayoutReady && layoutsCoverCurrent && (
           <div className="space-y-6">
             {isExporting ? (
               <Responsive
@@ -1824,10 +1863,13 @@ const DashboardPreview = ({
                         )}
                         {showCardActionsMenu && (
                           <div
-                            className="dashboard-card-menu-trigger absolute right-2 top-2 z-20 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150"
+                            className="dashboard-card-menu-trigger absolute right-2 top-2 z-20 flex items-center gap-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150"
                             onPointerDown={(e) => e.stopPropagation()}
                             onMouseDown={(e) => e.stopPropagation()}
                           >
+                            {!editMode && (
+                              <ChartFixPopover chartChip={dashboardComponentToChartChip(component)} />
+                            )}
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <button
@@ -1931,6 +1973,19 @@ const DashboardPreview = ({
                                         : <ImageDown className="h-4 w-4 shrink-0" style={{ color: "var(--dashboard-accent)" }} />}
                                       Export to PNG
                                     </DropdownMenuItem>
+                                    {/* Phase 7: opens the version-history /
+                                        diff / revert dialog scoped to this
+                                        card. Only meaningful when we have a
+                                        real conversation + dashboard id. */}
+                                    {currentConversationId && projectId && (dashboardId || activeDashboard?.id) && (
+                                      <DropdownMenuItem
+                                        className={DASHBOARD_CARD_MENU_ITEM_CLASS}
+                                        onSelect={() => setHistoryComponent(component)}
+                                      >
+                                        <History className="h-4 w-4 shrink-0" style={{ color: "var(--dashboard-accent)" }} />
+                                        History
+                                      </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuSeparator style={{ backgroundColor: premiumDashboardVars["--dashboard-card-border"] }} />
                                   </>
                                 )}
@@ -1949,6 +2004,17 @@ const DashboardPreview = ({
                           component={component}
                           onError={handleComponentError}
                         />
+                        {!isExporting && (
+                          <ChangedBadge
+                            componentId={String(component.id)}
+                            altComponentId={String(compId)}
+                            onOpenHistory={
+                              currentConversationId && projectId && (dashboardId || activeDashboard?.id)
+                                ? () => setHistoryComponent(component)
+                                : undefined
+                            }
+                          />
+                        )}
                       </div>
                       </EditProvider>
                     </div>
@@ -1998,6 +2064,25 @@ const DashboardPreview = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Phase 7: version history / diff / revert, scoped to the card it was
+          opened from. Mounted only while a component is selected. */}
+      <VersionHistoryDialog
+        open={historyComponent !== null}
+        onOpenChange={(open) => { if (!open) setHistoryComponent(null); }}
+        conversationId={currentConversationId}
+        projectId={projectId}
+        dashboardId={dashboardId || activeDashboard?.id}
+        component={historyComponent}
+        onReverted={() => {
+          setHistoryComponent(null);
+          if (onDashboardReverted) {
+            onDashboardReverted();
+          } else if (!processedData && !staticConfig) {
+            // Id-based dashboards own their data via useDashboard — refresh in place.
+            void refreshDashboard({ dashboard_id: String(dashboardId), force_refresh: true });
+          }
+        }}
+      />
     </div>
   );
 };

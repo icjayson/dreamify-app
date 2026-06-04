@@ -23,7 +23,7 @@ export type ComponentLayoutFrame = Pick<Layout, "x" | "y" | "w" | "h"> & Partial
 
 export const STORAGE_KEY_VERSION = "v6";
 export const GRID_COLS = { lg: 24, md: 12, sm: 8, xs: 4, xxs: 2 } as const;
-export const DEFAULT_GRID_COLS = GRID_COLS.lg;
+export const DEFAULT_GRID_COLS: number = GRID_COLS.lg;
 
 /**
  * Per-type minimum width/height in grid units. The 24-col grid uses 30px row
@@ -408,4 +408,26 @@ export function sanitizeLayouts(
     layouts.lg.length === activeComponentIds.size &&
     Array.from(activeComponentIds).every((id) => savedLgIds.has(id));
   return { layouts, fullyCovered };
+}
+
+/**
+ * Render-time guard: does the lg layout contain a layout entry for every
+ * current component id?
+ *
+ * Used to prevent the grid from mounting (or persisting) a layout that does not
+ * cover the components being rendered. On a dashboard switch the new components
+ * are computed synchronously while `layouts` is updated asynchronously in an
+ * effect, so for one render the stale layout lacks the new ids — mounting then
+ * makes react-grid-layout assign fallback w=1/h=1 (the "stretched sliver" bug)
+ * and even commit that garbage via onLayoutChange. Gating on this synchronously
+ * skips that frame entirely.
+ */
+export function layoutsCoverComponents(
+  lgLayout: Layout[] | undefined | null,
+  components: Array<{ id: string | number }> | undefined | null,
+): boolean {
+  if (!components || components.length === 0) return true; // nothing to cover
+  if (!lgLayout || lgLayout.length === 0) return false;
+  const ids = new Set(lgLayout.map((l) => String(l.i)));
+  return components.every((c) => ids.has(String(c.id)));
 }

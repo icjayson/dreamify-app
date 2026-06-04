@@ -1,5 +1,6 @@
 import { api } from './api';
 import { conversationService, ConversationChatRequest } from './conversationService';
+import type { AnalysisStep, ChartChangeSummary, EditDataProvenance } from '@/types/chartEdit';
 
 type ProcessingDashboardData = Record<string, unknown> & {
   theme_id?: string | null;
@@ -8,7 +9,12 @@ type ProcessingDashboardData = Record<string, unknown> & {
 };
 
 type WorkflowStatusMetadata = Record<string, unknown> & {
+  analysis_steps?: AnalysisStep[] | null;
+  change_summary?: ChartChangeSummary | null;
+  computed_values?: EditDataProvenance | null;
+  data_provenance?: EditDataProvenance | null;
   content?: string;
+  edit_note?: string | null;
   error?: string;
   response_type?: string;
   step?: string;
@@ -24,8 +30,13 @@ export interface ProcessingResponse {
     conversation_id?: string;
     message?: string;
     error?: string;
+    dashboard_id?: string | null;
     processed_data?: ProcessingDashboardData | null;
     dashboard_data?: ProcessingDashboardData | null;
+    change_summary?: ChartChangeSummary | null;
+    computed_values?: EditDataProvenance | null;
+    analysis_steps?: AnalysisStep[] | null;
+    edit_note?: string | null;
     project_name?: string;
     response_type?: string;
     workflow_status?: {
@@ -265,7 +276,8 @@ class ProcessingService {
 
         if (workflowStatus === 'completed') {
           // Check response type from workflow status
-          const responseType = status.data?.workflow_status?.metadata?.response_type;
+          const metadata = status.data?.workflow_status?.metadata;
+          const responseType = metadata?.response_type;
 
           if (responseType === 'message' || responseType === 'answer_with_visual' || !responseType) {
             // Q&A response - DON'T fetch dashboard (it's redundant and causes UI confusion)
@@ -279,6 +291,7 @@ class ProcessingService {
                 conversation_id: conversationId,
                 workflow_status: status.data?.workflow_status,
                 response_type: responseType || 'message', // Explicitly mark as QnA response
+                ...(metadata?.analysis_steps !== undefined ? { analysis_steps: metadata.analysis_steps } : {}),
               },
             };
           } else {
@@ -293,7 +306,13 @@ class ProcessingService {
                     status: 'completed',
                     fileID: assetId,
                     conversation_id: conversationId,
+                    dashboard_id: dashboardData.dashboard_id,
                     dashboard_data: dashboardData.dashboard_data,
+                    change_summary: dashboardData.change_summary ?? metadata?.change_summary ?? null,
+                    computed_values: dashboardData.computed_values ?? metadata?.computed_values ?? metadata?.data_provenance ?? null,
+                    analysis_steps: dashboardData.analysis_steps ?? metadata?.analysis_steps ?? null,
+                    edit_note: dashboardData.edit_note ?? metadata?.edit_note ?? null,
+                    workflow_status: status.data?.workflow_status,
                   },
                 };
               } else {

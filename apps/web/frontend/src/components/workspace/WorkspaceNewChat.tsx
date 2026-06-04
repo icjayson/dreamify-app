@@ -226,12 +226,15 @@ export default function WorkspaceNewChat() {
       toast({ title: "Project error", description: "No project context found. Please try uploading again.", variant: "destructive" });
       return;
     }
+    const pendingTemplateSelection = selectedTemplate && isTemplatePending ? selectedTemplate : null;
+
     useChatStore.getState().setPendingAction({
       type: "process_file",
       content: inputValue.trim(),
       files: uploadedFiles,
       projectId: firstUploadedFile.projectId,
       model: selectedModel,
+      templateSelection: pendingTemplateSelection,
     });
     navigate(`/workspace/project?projectId=${firstUploadedFile.projectId}`);
   };

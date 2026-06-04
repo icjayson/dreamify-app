@@ -29,12 +29,16 @@ import ChartPreviewChip from "../components/chat/ChartPreviewChip";
 import { DataContextInlineToken } from "@/components/chat/DataContextInlineToken";
 import { ThemeInlineToken } from "@/components/chat/ThemeInlineToken";
 import type { ChartChipData } from "../components/chat/ChartPreviewChip";
+import type { SelectChartContextDetail } from "@/types/chartEdit";
 import { ChatVisualArtifact } from "@/components/chat/ChatVisualArtifact";
+import { ChartChangeSummaryCard } from "@/components/chat/ChartChangeSummaryCard";
+import { ActivityPanel } from "@/components/project-section/ActivityPanel";
 import {
   ClarificationInputOverlay,
 } from "@/components/chat/ClarificationInputOverlay";
 import { getLatestPendingClarificationMessage } from "@/components/chat/clarificationOverlayUtils";
 import ProjectContextPicker from "../components/chat/ProjectContextPicker";
+import { FirstRunHint } from "../components/chat/FirstRunHint";
 import CreditIcon from "./CreditIcon";
 import ModelSelector from "./ModelSelector";
 import { CreditExhaustedCard } from "./CreditExhaustedCard";
@@ -44,6 +48,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getFilesFromClipboardData } from "@/lib/clipboardFiles";
 import { useTheme } from "@/hooks/useTheme";
 import { formatToDisplay } from "@/utils/timestamp";
+import { buildActivityTimeline } from "@/utils/analysisSteps";
 import {
   getSpreadsheetPreviewTarget,
   normalizeConnectorSource,
@@ -134,6 +139,24 @@ const STEP_VARIANTS: Record<string, string[]> = {
     "Checking whether I should ask first...",
     "Looking for any risky guesses...",
     "Seeing if your choice is needed...",
+  ],
+  'analyzing': [
+    "Analyzing the requested change...",
+    "Reading what needs to change...",
+    "Inspecting the chart to edit...",
+    "Working out what you want adjusted...",
+  ],
+  'recomputing': [
+    "Recomputing the numbers...",
+    "Updating the underlying data...",
+    "Recalculating the values...",
+    "Refreshing the figures...",
+  ],
+  'rendering': [
+    "Rendering the updated chart...",
+    "Redrawing the visual...",
+    "Applying the new look...",
+    "Repainting the chart...",
   ],
   'execution': [
     "Crunching the numbers...",
@@ -688,6 +711,47 @@ const ThinkingProcess = ({ events, fallbackTasks, isActive, inline, compactSurfa
   );
 };
 
+interface ActivityEntryPointProps {
+  stepCount: number;
+  onOpen: () => void;
+  inline?: boolean;
+  compactSurface?: boolean;
+}
+
+const ActivityEntryPoint = ({
+  stepCount,
+  onOpen,
+  inline,
+  compactSurface = false,
+}: ActivityEntryPointProps) => {
+  const wrapperClass = inline
+    ? "ml-5 mt-0.5 w-fit max-w-[min(620px,calc(100vw-180px))]"
+    : `w-fit ${compactSurface ? "max-w-[720px]" : "max-w-[85%]"} mt-1 ml-[58px]`;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onOpen}
+          className={`${wrapperClass} group inline-flex h-7 min-w-0 items-center gap-1.5 rounded-full border border-border/70 bg-background/70 px-2.5 text-xs text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:bg-white/5 dark:hover:bg-white/10`}
+          aria-label="Open activity timeline"
+        >
+          <ListTodo className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="min-w-0 truncate font-medium">Activity</span>
+          {stepCount > 0 && (
+            <span className="flex-shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground dark:bg-white/10 dark:text-white/70">
+              {stepCount === 1 ? "1 step" : `${stepCount} steps`}
+            </span>
+          )}
+          <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-80" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">Open activity timeline</TooltipContent>
+    </Tooltip>
+  );
+};
+
 const ClarificationQuestionTrace = ({
   resolution,
 }: {
@@ -1024,7 +1088,6 @@ function MetadataOverflowToken({ tokens }: { tokens: MetadataTokenDescriptor[] }
         <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Context
         </div>
-        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
         <div className="flex flex-wrap gap-1.5" onClick={() => setOpen(false)}>
           {tokens.map((token) => (
             <Fragment key={token.id}>{token.renderOverflow()}</Fragment>
@@ -1170,6 +1233,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   const [expandedSpreadsheetPreviewIds, setExpandedSpreadsheetPreviewIds] = useState<Set<string>>(new Set());
   const [dismissedClarificationIds, setDismissedClarificationIds] = useState<Set<string>>(new Set());
   const [isDismissingClarification, setIsDismissingClarification] = useState(false);
+  const [chatPaneView, setChatPaneView] = useState<"chat" | "activity">("chat");
 
   // @Mention state
   // @Mention / Context Picker state
@@ -1195,6 +1259,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     inputValue,
     isTyping,
     isProcessing,
+    isStreamingWorkflow,
     messages,
     uploadedFiles,
     addFiles,
@@ -1210,6 +1275,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     currentWorkflowStep,
     priorWorkflowSteps,
     thinkingEvents,
+    analysisSteps,
     currentConversationId,
     setThinkingEvents,
     setInputValue,
@@ -1261,6 +1327,35 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const activityStepCount = useMemo(
+    () => buildActivityTimeline(thinkingEvents, analysisSteps).length,
+    [analysisSteps, thinkingEvents],
+  );
+  const latestAssistantThinkingMessageIndex = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      const hasThinkingTrace = (message.thinkingTrace?.length ?? 0) > 0 || (message.todoTasks?.length ?? 0) > 0;
+      if (message.role === 'assistant' && !message.clarificationResolution && hasThinkingTrace) {
+        return index;
+      }
+    }
+    return -1;
+  }, [messages]);
+  const canShowActivityEntry = Boolean(projectId && currentConversationId);
+  const getActivityEntryStepCount = useCallback((message: Message) => {
+    if (activityStepCount > 0) return activityStepCount;
+    const traceCount = buildActivityTimeline(message.thinkingTrace, null).length;
+    if (traceCount > 0) return traceCount;
+    return message.todoTasks?.length ?? 0;
+  }, [activityStepCount]);
+  const openMessageActivity = useCallback((message: Message) => {
+    onSwitchToDashboard?.(message.dashboardCard?.dashboardId);
+    setIsContextPickerOpen(false);
+    setDropdownOpen(false);
+    setModelDropdownOpen(false);
+    setChatPaneView("activity");
+  }, [onSwitchToDashboard, setDropdownOpen]);
 
   const stagedFiles = uploadedFiles.filter((file) =>
     file.status !== 'error' &&
@@ -1375,9 +1470,14 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
   useEffect(() => {
     const handler = (ev: Event) => {
-      const chart = (ev as CustomEvent<ChartChipData>).detail;
-      if (!chart?.componentId) return;
-      addChartToContext(chart);
+      const detail = (ev as CustomEvent<SelectChartContextDetail>).detail;
+      if (!detail?.componentId) return;
+      addChartToContext(detail);
+      const { promptSeed } = detail;
+      if (promptSeed) {
+        const currentInput = useChatStore.getState().inputValue;
+        setInputValue(currentInput ? `${currentInput} ${promptSeed}` : promptSeed);
+      }
       requestAnimationFrame(() => {
         document.querySelector("[data-chat-root]")?.scrollIntoView({ behavior: "smooth", block: "center" });
         (document.querySelector("textarea[data-chat-input]") as HTMLTextAreaElement | null)?.focus();
@@ -1385,7 +1485,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     };
     window.addEventListener("dreamify:select-chart-context", handler as EventListener);
     return () => window.removeEventListener("dreamify:select-chart-context", handler as EventListener);
-  }, [addChartToContext]);
+  }, [addChartToContext, setInputValue]);
 
   // Eagerly fetch project assets so the "all assets" badge can display the file count
   useEffect(() => {
@@ -1395,7 +1495,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
   }, [projectId]);
 
   useEffect(() => {
-    if (!isProcessing || !currentConversationId || !projectId) return;
+    // When the SSE workflow stream is live it is the sole source of thinking events;
+    // skip the poller to avoid double-writing the same store field.
+    if (!isProcessing || isStreamingWorkflow || !currentConversationId || !projectId) return;
     let cancelled = false;
     const controller = new AbortController();
 
@@ -1423,7 +1525,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       controller.abort();
       window.clearInterval(interval);
     };
-  }, [currentConversationId, isProcessing, projectId, setThinkingEvents]);
+  }, [currentConversationId, isProcessing, isStreamingWorkflow, projectId, setThinkingEvents]);
 
   // Auto-refresh project assets when uploadedFiles changes (e.g. after GA4/Sheets sync)
   useEffect(() => {
@@ -1644,6 +1746,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     }
 
     setIsDismissingClarification(true);
+    // The edit was abandoned — drop the in-flight edit context and the per-chart
+    // "Applying your change…" shimmer so it doesn't linger on the dashboard.
+    useChatStore.getState().clearApplyingComponentIds();
+    useChatStore.getState().setPendingEdit(null);
     try {
       // Each batched question is dismissed individually; the first call also
       // stops the pending workflow, the rest just persist no-answer responses.
@@ -2235,6 +2341,13 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-muted">
+      {chatPaneView === "activity" ? (
+        <ActivityPanel
+          variant="embedded"
+          onClose={() => setChatPaneView("chat")}
+        />
+      ) : (
+        <>
 
       {/* Messages Area */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3 space-y-4 chat-scrollbar-hide">
@@ -2784,13 +2897,23 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                     )}
                     {/* Render saved thinking trace (legacy todo tasks are adapted as fallback) */}
                     {message.role === 'assistant' && !message.clarificationResolution && ((message.thinkingTrace && message.thinkingTrace.length > 0) || (message.todoTasks && message.todoTasks.length > 0)) && (
-                      <ThinkingProcess
-                        events={message.thinkingTrace}
-                        fallbackTasks={message.todoTasks}
-                        isActive={false}
-                        inline
-                        compactSurface={!isSidePanelOpen}
-                      />
+                      <>
+                        <ThinkingProcess
+                          events={message.thinkingTrace}
+                          fallbackTasks={message.todoTasks}
+                          isActive={false}
+                          inline
+                          compactSurface={!isSidePanelOpen}
+                        />
+                        {canShowActivityEntry && index === latestAssistantThinkingMessageIndex && (
+                          <ActivityEntryPoint
+                            stepCount={getActivityEntryStepCount(message)}
+                            onOpen={() => openMessageActivity(message)}
+                            inline
+                            compactSurface={!isSidePanelOpen}
+                          />
+                        )}
+                      </>
                     )}
                     {message.role === 'assistant' && message.visualArtifacts && message.visualArtifacts.length > 0 && (
                       <div className="space-y-3">
@@ -2802,6 +2925,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           />
                         ))}
                       </div>
+                    )}
+                    {message.role === 'assistant' && message.editChangeSummary && (
+                      <ChartChangeSummaryCard summary={message.editChangeSummary} />
                     )}
                     {message.role === 'assistant' && message.dashboardCard && (
                       <DashboardMessageCard
@@ -2911,6 +3037,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
               />
             ) : (
               <>
+                {/* First-run discoverability hint for the @chart editing flow */}
+                <FirstRunHint show={isDashboardOpen && !isContextPickerOpen} />
+
                 {/* Context Picker */}
                 {isContextPickerOpen && (
                   <ProjectContextPicker
@@ -3011,10 +3140,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                           fetchProjectAssets(projectId).then(setProjectAssets);
                         }
                       } else if (lastAtIndex !== -1 && cursorPos > lastAtIndex) {
-                        // User is typing after @
+                        // User is typing after @. Allow spaces so multi-word
+                        // mentions like "@chart revenue trend" keep the picker
+                        // open; only bail out on a newline or a sentence-length
+                        // query (likely no longer a mention).
                         const query = textBeforeCursor.slice(lastAtIndex + 1);
-                        if (!/\s/.test(query)) {
-                          // No space means still in mention mode
+                        if (!/\n/.test(query) && query.length <= 50) {
                           setMentionQuery(query);
                           setIsContextPickerOpen(true);
                           setPickerTriggerMode('mention');
@@ -3032,7 +3163,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
                         }
                       }
                     }}
-                    placeholder={isListening ? 'Listening...' : "Use @ to select the data file to analyze"}
+                    placeholder={isListening ? 'Listening...' : "Ask anything, or type @ to reference a chart or dataset"}
                     className={`w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground/60 chat-scrollbar-hide ${inputValue.length > 100 ? 'pr-6' : ''}`}
                     data-chat-input
                     onKeyDown={(e) => {
@@ -3247,6 +3378,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
           }}
         />
       </div>
+        </>
+      )}
 
       {/* Template Modal */}
       <TemplateModal

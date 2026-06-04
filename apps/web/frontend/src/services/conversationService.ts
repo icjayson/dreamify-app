@@ -1,5 +1,6 @@
 import { api } from './api';
 import { EXPLICIT_PROMPT_THEME_SOURCE, type AssetSelectionMode, type ThinkingEvent } from '@/types/message';
+import type { AnalysisStep, ChartChangeSummary, EditDataProvenance } from '@/types/chartEdit';
 
 export interface ConversationNodeContent {
   type: string;
@@ -17,6 +18,7 @@ export interface ConversationChatRequest {
     selected_asset_ids?: string[];
     selected_chart_ids?: string[];
     clarification_id?: string;
+    clarification_ids?: string[];
     theme_source?: typeof EXPLICIT_PROMPT_THEME_SOURCE;
   };
   model?: 'pro' | 'fast';
@@ -63,6 +65,49 @@ export interface ClarificationDismissResponse {
 export interface DashboardDataResponse {
   dashboard_id: string | null;
   dashboard_data: Record<string, unknown> | null;
+  /**
+   * "What changed" summary. Present only after a chart edit; null/absent for
+   * normal full-dashboard generation. Backward-compatible: older backends omit it.
+   */
+  change_summary?: ChartChangeSummary | null;
+  /**
+   * Edit provenance: the Python the edit ran plus its outputs. Kept for the
+   * Activity tab/audit path; older backends may omit it.
+   */
+  computed_values?: EditDataProvenance | null;
+  /**
+   * "How this was calculated": ordered analysis steps (plain-language
+   * explanation + Python + output). Present whenever the run recorded steps;
+   * null/absent for legacy backends. Drives the Activity tab.
+   */
+  analysis_steps?: AnalysisStep[] | null;
+  /** Optional safety-net note when an attempted edit could not replace the chart. */
+  edit_note?: string | null;
+}
+
+/**
+ * One entry in a dashboard's version history (Phase 7). `source` records how the
+ * snapshot came to be (e.g. "edit", "generation", "revert"); `edit_summary` is a
+ * human-readable "what changed" note when present.
+ */
+export interface DashboardVersionEntry {
+  version: number;
+  created_at: string;
+  edit_summary?: string | null;
+  source: string;
+}
+
+export interface DashboardVersionsResponse {
+  dashboard_id: string;
+  current_version: number;
+  versions: DashboardVersionEntry[];
+}
+
+export interface DashboardRevertResponse {
+  success: boolean;
+  dashboard_id: string;
+  new_version: number;
+  reverted_to: number;
 }
 
 class ConversationService {
@@ -134,11 +179,14 @@ class ConversationService {
     throw new Error(response.error || 'Failed to dismiss clarification');
   }
 
-  async getDashboardData(conversationId: string, projectId: string, dashboardId?: string): Promise<DashboardDataResponse | null> {
+  async getDashboardData(conversationId: string, projectId: string, dashboardId?: string, options?: { noCache?: boolean }): Promise<DashboardDataResponse | null> {
     try {
-      const url = dashboardId
+      const base = dashboardId
         ? `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}&dashboard_id=${dashboardId}`
         : `/api/v1/conversation/${conversationId}/dashboard?project_id=${projectId}`;
+      // Cache-bust on demand (e.g. immediately after an edit) so the browser
+      // HTTP cache can never serve the pre-edit dashboard artifact.
+      const url = options?.noCache ? `${base}&_t=${Date.now()}` : base;
       const response = await api.get<DashboardDataResponse>(url);
       if (response.success && response.data) {
         return response.data;
@@ -187,18 +235,70 @@ class ConversationService {
     dashboardId: string,
     projectId: string,
     dashboardData: Record<string, unknown>,
-  ): Promise<{ success: boolean; error?: string }> {
+    options?: { editSummary?: string; expectedVersion?: number },
+  ): Promise<{ success: boolean; error?: string; conflict?: boolean }> {
     try {
+      const body: Record<string, unknown> = { project_id: projectId, dashboard_data: dashboardData };
+      // Backward-compatible: only send the new fields when provided. Older
+      // callers (layout auto-save) omit them and the backend ignores absence.
+      if (options?.editSummary != null) body.edit_summary = options.editSummary;
+      if (options?.expectedVersion != null) body.expected_version = options.expectedVersion;
       const response = await api.put<{ success: boolean }>(
         `/api/v1/conversation/${conversationId}/dashboard/${dashboardId}/data`,
-        { project_id: projectId, dashboard_data: dashboardData },
+        body,
       );
       if (response.success && response.data) return { success: true };
-      return { success: false, error: response.error || 'Failed to save dashboard' };
+      const conflict = !!response.error && response.error.includes('409');
+      return { success: false, error: response.error || 'Failed to save dashboard', conflict };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      return { success: false, error: msg };
+      return { success: false, error: msg, conflict: msg.includes('409') };
     }
+  }
+
+  async getDashboardVersions(
+    conversationId: string,
+    dashboardId: string,
+    projectId: string,
+  ): Promise<DashboardVersionsResponse> {
+    const response = await api.get<DashboardVersionsResponse>(
+      `/api/v1/conversation/${conversationId}/dashboard/${dashboardId}/versions?project_id=${encodeURIComponent(projectId)}`,
+    );
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.error || 'Failed to load dashboard versions');
+  }
+
+  async getDashboardVersion(
+    conversationId: string,
+    dashboardId: string,
+    projectId: string,
+    version: number,
+  ): Promise<DashboardDataResponse> {
+    const response = await api.get<DashboardDataResponse>(
+      `/api/v1/conversation/${conversationId}/dashboard/${dashboardId}/versions/${version}?project_id=${encodeURIComponent(projectId)}`,
+    );
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.error || 'Failed to load dashboard version');
+  }
+
+  async revertDashboard(
+    conversationId: string,
+    dashboardId: string,
+    projectId: string,
+    targetVersion: number,
+  ): Promise<DashboardRevertResponse> {
+    const response = await api.post<DashboardRevertResponse>(
+      `/api/v1/conversation/${conversationId}/dashboard/${dashboardId}/revert`,
+      { project_id: projectId, target_version: targetVersion },
+    );
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.error || 'Failed to revert dashboard');
   }
 
   async stopWorkflow(conversationId: string, projectId: string): Promise<{ success: boolean; message?: string; error?: string }> {

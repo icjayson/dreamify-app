@@ -15,6 +15,8 @@ import {
 import { createChart, validateChartConfig } from './ChartFactory';
 import ErrorBoundary from '@/components/charts/ErrorBoundary';
 import { getChartStylingClasses, convertLLMStylingToChartStyling } from '@/utils/chartStyling';
+import { useChatStore } from '@/chat/useChatStore';
+import { getComponentKey } from '@/utils/componentKey';
 
 interface ChartRendererProps {
   component: DashboardComponent;
@@ -52,6 +54,12 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
     error: null,
     expandedInsight: false,
   });
+
+  // True while the user is editing this specific chart via chat and Morpheus
+  // is still working. Drives the in-place "Applying your change…" overlay.
+  const isApplying = useChatStore((s) =>
+    s.applyingComponentIds.has(getComponentKey(component))
+  );
 
   // Health-check state: mountKey increments to force re-mount on retry
   const [mountKey, setMountKey] = useState(0);
@@ -260,7 +268,23 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
         }
       }}
     >
-      <div className={`${paddingClass} rounded-[inherit] animate-fade-in bg-transparent ${stylingClasses} ${className}`} style={containerStyle}>
+      <div className={`relative ${paddingClass} rounded-[inherit] animate-fade-in bg-transparent ${stylingClasses} ${className}`} style={containerStyle}>
+        {isApplying && (
+          <div
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 rounded-[inherit] backdrop-blur-[1px] animate-fade-in"
+            data-export-exclude
+            aria-live="polite"
+            style={{ backgroundColor: 'var(--dashboard-card-bg)', opacity: 0.92 }}
+          >
+            <Skeleton className="absolute inset-2 rounded-md opacity-40" />
+            <div className="relative flex items-center gap-2 rounded-full bg-[var(--dashboard-card-bg)] px-3 py-1.5 shadow-sm">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--description-color)' }} />
+              <span className="text-xs font-medium" style={{ color: 'var(--description-color)' }}>
+                Applying your change…
+              </span>
+            </div>
+          </div>
+        )}
         <div ref={chartContentRef} className="chart-content w-full overflow-hidden flex-1 min-h-0">
           {/* key forces a full remount on each retry, clearing any partial extension-blocked state */}
           <React.Fragment key={mountKey}>
@@ -323,4 +347,23 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({
   );
 };
 
-export default ChartRenderer;
+/**
+ * Skip re-render unless the rendered output would actually change. After a
+ * single-chart edit the dashboard data object is replaced wholesale, so every
+ * card receives a new `component` reference — but only the edited card's content
+ * differs. Content-comparing here keeps the unchanged cards from repainting
+ * (the edited card's config differs → it re-renders with fresh data).
+ * Internal store subscriptions (applying overlay, highlight) still re-render the
+ * affected card via Zustand selectors, independent of this prop comparison.
+ */
+export function areChartRendererPropsEqual(
+  prev: ChartRendererProps,
+  next: ChartRendererProps,
+): boolean {
+  if (prev.onError !== next.onError) return false;
+  if (prev.className !== next.className) return false;
+  if (JSON.stringify(prev.style ?? {}) !== JSON.stringify(next.style ?? {})) return false;
+  return JSON.stringify(prev.component) === JSON.stringify(next.component);
+}
+
+export default React.memo(ChartRenderer, areChartRendererPropsEqual);

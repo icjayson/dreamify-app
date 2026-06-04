@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Download, LayoutTemplate, Loader2, Pencil, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
+import { ArrowLeft, Download, LayoutTemplate, Loader2, Pencil, RefreshCw, Sparkles, SquareArrowOutUpRight, X, Database } from "lucide-react";
 import EditModeToolbar from "@/components/charts/edit/EditModeToolbar";
 import { useEditMode } from "@/hooks/useEditMode";
 import ChatInterface from "@/chat/ChatInterface";
@@ -216,6 +216,7 @@ export default function ProjectPage() {
   const isDashboardVisible = (shouldShowDashboard && isDashboardOpen) || (activeTab === 'dashboard');
   const setTemplateModalOpen = useChatStore((s) => s.setTemplateModalOpen);
   const isUpdatingDashboard = useChatStore((s) => s.isUpdatingDashboard);
+  const applyingComponentIds = useChatStore((s) => s.applyingComponentIds);
   const currentWorkflowStep = useChatStore((s) => s.currentWorkflowStep);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const isSwitchingDashboard = useChatStore((s) => s.isSwitchingDashboard);
@@ -307,12 +308,13 @@ export default function ProjectPage() {
       const convoResponse = await conversationService.loadConversation(conversationId, projId);
       if (!isCurrentHydration()) return false;
       const conversation = convoResponse.conversation;
-      const nodes = conversation?.nodes ?? [];
+      const nodes = Array.isArray(conversation?.nodes) ? conversation.nodes : [];
 
       // Extract assets from nodes
       const assets: any[] = [];
       for (const node of nodes) {
-        const contents = node?.contents || [];
+        const nodePayload = node as { contents?: Array<{ type?: string; data?: Record<string, unknown> }> };
+        const contents = Array.isArray(nodePayload.contents) ? nodePayload.contents : [];
         for (const content of contents) {
           if (content?.type === 'asset' || content?.type === 'attachment') {
             const assetData = content?.data || {};
@@ -392,6 +394,21 @@ export default function ProjectPage() {
         if (dashboardResponse.dashboard_id) {
           useChatStore.getState().setSelectedDashboardId(dashboardResponse.dashboard_id);
         }
+        // Phase 6: carry edit completion metadata. Chat renders lightweight
+        // what-changed details; Activity owns reasoning/code/output.
+        useChatStore.getState().setEditChangeSummary(dashboardResponse.change_summary ?? null);
+        useChatStore.getState().setEditProvenance(dashboardResponse.computed_values ?? null);
+        useChatStore.getState().setAnalysisSteps(dashboardResponse.analysis_steps ?? null);
+        if (dashboardResponse.change_summary || dashboardResponse.computed_values || dashboardResponse.edit_note) {
+          useChatStore.getState().upsertEditCompletionMessage({
+            dashboardId: dashboardResponse.dashboard_id,
+            sourceFileName: restoredFile.filename,
+            sourceType,
+            summary: dashboardResponse.change_summary ?? null,
+            provenance: dashboardResponse.computed_values ?? null,
+            editNote: dashboardResponse.edit_note ?? null,
+          });
+        }
         setProcessedData(dashboardResponse.dashboard_data);
         setHasShownInitialDashboard(true);
         setIsDashboardOpen(true);
@@ -419,6 +436,7 @@ export default function ProjectPage() {
     activeProjectIdRef.current = projectId;
     const loadSeq = hydrateRequestSeqRef.current + 1;
     hydrateRequestSeqRef.current = loadSeq;
+    useChatStore.getState().setCurrentProjectId(projectId);
 
     // Only reset if it's a DIFFERENT project
     if (projectRef.current !== projectId) {
@@ -469,6 +487,9 @@ export default function ProjectPage() {
               useChatStore.getState().addFiles(pendingAction.files);
               if (pendingAction.model) {
                 useChatStore.getState().setSelectedModel(pendingAction.model);
+              }
+              if (pendingAction.templateSelection) {
+                useChatStore.getState().setSelectedTemplate(pendingAction.templateSelection, true);
               }
 
               // Execute processing
@@ -637,8 +658,9 @@ export default function ProjectPage() {
       uploadedFiles.find(f => f.projectId === projectId && f.conversationId === currentConversationId && f.processedData) ||
       uploadedFiles.find(f => f.projectId === projectId && f.processedData);
     if (processedFile?.processedData) {
-      processedDataRef.current = processedFile.processedData;
-      setProcessedData(processedFile.processedData);
+      const nextProcessedData = processedFile.processedData as Record<string, unknown>;
+      processedDataRef.current = nextProcessedData;
+      setProcessedData(nextProcessedData);
     }
   }, [currentConversationId, projectId, uploadedFiles]);
 
@@ -1127,6 +1149,11 @@ export default function ProjectPage() {
                         aria-busy={isSwitchingDashboard || undefined}
                       >
                         <DashboardPreview
+                          // Remount on dashboard identity change so layout state
+                          // (layouts/isLayoutReady) resets cleanly and never leaks
+                          // the previous dashboard's grid into the new one. Same
+                          // id (AI edit / layout auto-save) does NOT remount.
+                          key={selectedDashboardId || 'processed_dashboard'}
                           dashboardId={selectedDashboardId || undefined}
                           projectId={projectId || undefined}
                           processedData={processedData}
@@ -1153,21 +1180,20 @@ export default function ProjectPage() {
                     </div>
                   )
                 )}
-                {/* Edit feedback overlay */}
-                {isUpdatingDashboard && (
+                {/* Whole-dashboard progress overlay — only for full (re)generation.
+                    For a targeted chart/table edit the per-card "Applying your
+                    change…" shimmer (ChartRenderer) is shown instead, so we never
+                    stack both treatments. Visuals mirror the per-card shimmer
+                    (light card wash + spinning RefreshCw + single label). */}
+                {isUpdatingDashboard && applyingComponentIds.size === 0 && (
                   <div className="absolute inset-0 z-40 pointer-events-none">
-                    <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
+                    <div className="absolute inset-0 backdrop-blur-[1px]" style={{ backgroundColor: 'var(--dashboard-card-bg)', opacity: 0.6 }} />
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
-                      <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-background dark:bg-black/70 border border-border shadow-lg backdrop-blur-md">
-                        <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
-                        <span className="text-sm text-foreground/90 dark:text-white/90 font-medium whitespace-nowrap">
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full shadow-sm border border-border" style={{ backgroundColor: 'var(--dashboard-card-bg)' }}>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--description-color)' }} />
+                        <span className="text-xs font-medium whitespace-nowrap" style={{ color: 'var(--description-color)' }}>
                           {updatingStepText}
                         </span>
-                        <div className="flex gap-0.5">
-                          <span className="w-1 h-1 rounded-full bg-muted-foreground/60 dark:bg-white/60 animate-bounce [animation-delay:0ms]" />
-                          <span className="w-1 h-1 rounded-full bg-muted-foreground/60 dark:bg-white/60 animate-bounce [animation-delay:150ms]" />
-                          <span className="w-1 h-1 rounded-full bg-muted-foreground/60 dark:bg-white/60 animate-bounce [animation-delay:300ms]" />
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -1175,6 +1201,7 @@ export default function ProjectPage() {
               </div>
             </div>
           </div>
+
         </div>
         {/* Publish Modal */}
         {isPublishOpen && <PublishModal open={isPublishOpen} onOpenChange={setIsPublishOpen} projectId={projectId ?? undefined} processedData={processedData} />}

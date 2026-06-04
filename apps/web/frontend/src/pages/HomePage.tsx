@@ -292,6 +292,8 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       return;
     }
 
+    const pendingTemplateSelection = selectedTemplate && isTemplatePending ? selectedTemplate : null;
+
     // Set pending action for ProjectPage to execute
     useChatStore.getState().setPendingAction({
       type: 'process_file',
@@ -299,6 +301,7 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       files: uploadedFiles,
       projectId: firstUploadedFile.projectId,
       model: selectedModel,
+      templateSelection: pendingTemplateSelection,
     });
 
     navigate(`/workspace/project?projectId=${firstUploadedFile.projectId}`);

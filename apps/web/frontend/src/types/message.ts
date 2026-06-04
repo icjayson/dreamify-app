@@ -1,4 +1,5 @@
 import type { DashboardComponent } from "@/types/dashboard";
+import type { ChartChangeSummary, EditDataProvenance } from "@/types/chartEdit";
 
 export type AssetSelectionMode = "none" | "explicit" | "all";
 export const EXPLICIT_PROMPT_THEME_SOURCE = "explicit_prompt_selection";
@@ -113,6 +114,11 @@ export interface Message {
     accountName?: string;
     sourceType?: string;
   };
+  /** Normal assistant completion signal for chart/table edits. */
+  isEditCompletion?: boolean;
+  editChangeSummary?: ChartChangeSummary | null;
+  editProvenance?: EditDataProvenance | null;
+  editNote?: string | null;
   visualArtifacts?: Array<{
     id: string;
     kind: "chart" | "table";

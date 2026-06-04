@@ -17,6 +17,7 @@ import {
   shouldFillSparse,
   buildMinSizeMap,
   buildMinSizeMapForCols,
+  layoutsCoverComponents,
   type ComponentLike,
 } from "./dashboardLayout";
 
@@ -576,5 +577,52 @@ describe("end-to-end scenario: stale layout from previous dashboard", () => {
     expect(fullyCovered).toBe(true);
     expect(layouts.lg[0].h).toBeGreaterThanOrEqual(8);
     expect(layouts.lg[0].w).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("layoutsCoverComponents (stretch-on-switch guard)", () => {
+  const lg = (ids: string[]): Layout[] =>
+    ids.map((i, idx) => ({ i, x: 0, y: idx, w: 6, h: 8 }));
+
+  it("returns true when every component id has a layout entry", () => {
+    expect(
+      layoutsCoverComponents(lg(["a", "b", "c"]), [
+        { id: "a" },
+        { id: "b" },
+        { id: "c" },
+      ]),
+    ).toBe(true);
+  });
+
+  it("returns false when the layout is from a different (previous) dashboard", () => {
+    // Stale switch frame: layout holds OLD ids, components are the NEW dashboard.
+    expect(
+      layoutsCoverComponents(lg(["old1", "old2"]), [
+        { id: "new1" },
+        { id: "new2" },
+      ]),
+    ).toBe(false);
+  });
+
+  it("returns false when at least one current component is missing from the layout", () => {
+    // "c" has no layout entry -> not covered.
+    expect(
+      layoutsCoverComponents(lg(["a", "b"]), [{ id: "a" }, { id: "b" }, { id: "c" }]),
+    ).toBe(false);
+  });
+
+  it("returns true when there are no components to cover", () => {
+    expect(layoutsCoverComponents(lg(["a"]), [])).toBe(true);
+    expect(layoutsCoverComponents([], [])).toBe(true);
+    expect(layoutsCoverComponents(null, null)).toBe(true);
+  });
+
+  it("returns false when the layout is empty but components exist", () => {
+    expect(layoutsCoverComponents([], [{ id: "a" }])).toBe(false);
+    expect(layoutsCoverComponents(null, [{ id: "a" }])).toBe(false);
+  });
+
+  it("matches ids by string (numeric vs string ids)", () => {
+    expect(layoutsCoverComponents(lg(["1", "2"]), [{ id: 1 }, { id: 2 }])).toBe(true);
   });
 });

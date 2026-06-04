@@ -5,10 +5,13 @@ import {
   WORKSPACE_NEWS_ITEMS,
   type WorkspaceNewsItem,
 } from "@/components/workspace/workspaceNewsContent";
+import { selectWorkspaceNewsItem } from "@/components/workspace/workspaceNewsSelection";
 import OnboardingModal from "@/components/workspace/OnboardingModal";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Shuffle } from "lucide-react";
+
+const PREVIEW_ROTATION_USER_ID = "workspace-news-preview";
 
 export default function WorkspaceNewsPreviewPage() {
   const navigate = useNavigate();
@@ -23,9 +26,14 @@ export default function WorkspaceNewsPreviewPage() {
     setModalOpen(true);
   };
 
-  const openRandomFeature = () => {
-    const randomItem = WORKSPACE_NEWS_ITEMS[Math.floor(Math.random() * WORKSPACE_NEWS_ITEMS.length)];
-    setActiveFeature(randomItem);
+  const openNextRotationFeature = () => {
+    const nextItem = selectWorkspaceNewsItem({
+      userId: PREVIEW_ROTATION_USER_ID,
+      respectCooldown: false,
+    });
+    if (!nextItem) return;
+
+    setActiveFeature(nextItem);
     setModalOpen(true);
   };
 
@@ -45,7 +53,7 @@ export default function WorkspaceNewsPreviewPage() {
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Workspace News Modals Preview</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Test all product news variants before enabling in production.
+              Test all product news variants and rotation behavior before enabling in production.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -55,9 +63,9 @@ export default function WorkspaceNewsPreviewPage() {
             <Button variant="outline" onClick={() => setOnboardingModalOpen(true)}>
               Open Onboarding
             </Button>
-            <Button onClick={openRandomFeature} className="button-gradient">
+            <Button onClick={openNextRotationFeature} className="button-gradient">
               <Shuffle className="mr-2 h-4 w-4" />
-              Open Random
+              Open Next Rotation
             </Button>
           </div>
         </div>

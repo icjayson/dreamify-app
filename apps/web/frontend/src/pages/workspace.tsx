@@ -41,10 +41,8 @@ import HiddenDashboardCapturer from "@/components/workspace/HiddenDashboardCaptu
 import WorkspaceFiles from "@/components/workspace/WorkspaceFiles";
 import ConnectorEntityDetailView from "@/components/workspace/ConnectorEntityDetailView";
 import ProductNewsModal from "@/components/workspace/ProductNewsModal";
-import {
-  WORKSPACE_NEWS_ITEMS,
-  type WorkspaceNewsItem,
-} from "@/components/workspace/workspaceNewsContent";
+import { type WorkspaceNewsItem } from "@/components/workspace/workspaceNewsContent";
+import { selectWorkspaceNewsItem } from "@/components/workspace/workspaceNewsSelection";
 import OnboardingModal from "@/components/workspace/OnboardingModal";
 import { useProjects } from "@/hooks/useProjects";
 import { projectService, type ProjectRecord } from "@/services/projectService";
@@ -118,7 +116,6 @@ const CONNECTOR_CARD_DESCRIPTIONS: Record<string, string> = {
 
 type Tab = "new-chat" | "projects" | "connectors" | "dashboards" | "schedules" | "files" | "settings" | "privacy" | "terms";
 type SettingsSection = "plans" | "account" | "preferences";
-const NEWS_MODAL_COOLDOWN_MS = 3 * 60 * 60 * 1000;
 
 // ─── WorkspaceDocsView ────────────────────────────────────────────────────────
 // Mirrors DocsLayout visually but tracks scroll on the workspace <main> element
@@ -601,17 +598,11 @@ export default function WorkspacePage() {
       return;
     }
 
-    const storageKey = `dreamify:workspace:news:last-shown:${user.id}`;
-    const lastShownAtRaw = localStorage.getItem(storageKey);
-    const lastShownAt = Number(lastShownAtRaw ?? "0");
-    if (Number.isFinite(lastShownAt) && Date.now() - lastShownAt < NEWS_MODAL_COOLDOWN_MS) {
-      return;
-    }
+    const nextNewsItem = selectWorkspaceNewsItem({ userId: user.id });
+    if (!nextNewsItem) return;
 
-    const randomItem = WORKSPACE_NEWS_ITEMS[Math.floor(Math.random() * WORKSPACE_NEWS_ITEMS.length)];
-    setActiveNewsItem(randomItem);
+    setActiveNewsItem(nextNewsItem);
     setNewsModalOpen(true);
-    localStorage.setItem(storageKey, String(Date.now()));
   }, [user?.id]);
 
   const handleDismissOnboarding = useCallback(() => {

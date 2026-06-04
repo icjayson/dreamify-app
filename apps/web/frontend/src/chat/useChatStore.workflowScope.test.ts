@@ -10,6 +10,12 @@ vi.mock("@/services/processingService", () => ({
   },
 }));
 
+// Stream is unavailable in tests; force the polling fallback path so these
+// scope assertions exercise pollProcessingStatus exactly as before.
+vi.mock("@/services/workflowStreamService", () => ({
+  streamWorkflow: vi.fn(async () => ({ connected: false })),
+}));
+
 vi.mock("@/services/conversationService", () => ({
   conversationService: {
     loadConversation: vi.fn(),

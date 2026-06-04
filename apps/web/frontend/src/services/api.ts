@@ -31,6 +31,21 @@ class ApiClient {
     this.authTokenProvider = provider;
   }
 
+  /** Exposes the configured base URL for callers that build raw requests (e.g. SSE streaming). */
+  public getBaseUrl(): string {
+    return this.baseURL;
+  }
+
+  /** Resolves the current auth token, or null if unavailable. Used by raw fetch callers (e.g. SSE). */
+  public async getAuthToken(): Promise<string | null> {
+    if (!this.authTokenProvider) return null;
+    try {
+      return await this.authTokenProvider();
+    } catch (_) {
+      return null;
+    }
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -265,6 +280,8 @@ export const api = {
   put: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.put<T>(endpoint, data, options),
   patch: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.patch<T>(endpoint, data, options),
   delete: <T>(endpoint: string, options?: RequestInit) => apiClient.delete<T>(endpoint, options),
+  getBaseUrl: () => apiClient.getBaseUrl(),
+  getAuthToken: () => apiClient.getAuthToken(),
   postFormData: <T>(endpoint: string, formData: FormData, options?: RequestInit) =>
     apiClient.postFormData<T>(endpoint, formData, options),
   uploadFile: <T>(endpoint: string, file: File, options?: RequestInit, extraFields?: Record<string, string>, onProgress?: (percent: number) => void) =>

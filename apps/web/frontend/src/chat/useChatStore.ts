@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { EXPLICIT_PROMPT_THEME_SOURCE, type AssetSelectionMode, type ClarificationAnswer, type ClarificationOption, type Message, type ThinkingEvent } from '@/types/message';
 import { conversationNodesToMessages } from '@/chat/conversationToMessages';
-import { processingService } from '@/services/processingService';
-import type { ConversationChatRequest } from '@/services/conversationService';
+import { processingService, type ProcessingResponse } from '@/services/processingService';
+import { streamWorkflow } from '@/services/workflowStreamService';
+import type { ConversationChatRequest, DashboardDataResponse } from '@/services/conversationService';
+import type { AnalysisStep, ChartChangeSummary, EditDataProvenance } from '@/types/chartEdit';
 import type { AssetRecord } from '@/services/fileService';
 import {
   createThemeSelection,
@@ -166,6 +168,12 @@ export interface UploadedFile {
   schemaOnly?: boolean;
 }
 
+type DashboardDataForView = Record<string, unknown> & {
+  theme_id?: string | null;
+  analysis_focus_id?: string | null;
+  template_id?: string | null;
+};
+
 /** Result of Meta Ads sync API (used by Meta modal for empty-data hybrid flow) */
 export interface MetaAdsSyncResult {
   success: true;
@@ -212,6 +220,17 @@ export function getExplicitPromptFiles(
 
 function uniqueIds(ids: readonly (string | undefined | null)[]): string[] {
   return Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
+}
+
+interface EditCompletionPayload {
+  dashboardId?: string | null;
+  dashboardTitle?: string | null;
+  sourceFileName?: string;
+  accountName?: string;
+  sourceType?: string;
+  summary?: ChartChangeSummary | null;
+  provenance?: EditDataProvenance | null;
+  editNote?: string | null;
 }
 
 export function getExplicitPromptAssetIds(
@@ -266,6 +285,8 @@ interface ChatState {
   currentWorkflowStep: string | null;
   priorWorkflowSteps: string[];
   thinkingEvents: ThinkingEvent[];
+  /** True while an SSE workflow stream is the live source of step/thinking updates. */
+  isStreamingWorkflow: boolean;
 
   // UI state
   dropdownOpen: boolean;
@@ -294,7 +315,30 @@ interface ChatState {
   isSwitchingDashboard: boolean;
   previousDashboardData: unknown | null;
   changedComponentIds: Set<string>;
+  // Per-component "applying edit" state. Holds the canonical component keys
+  // (see getComponentKey) of charts the user is actively editing via chat, so
+  // the target card can show an in-place "Applying your change…" overlay while
+  // Morpheus works. Cleared the moment new dashboard data lands so the existing
+  // `dashboard-component-highlight` pulse takes over seamlessly.
+  applyingComponentIds: Set<string>;
+  // In-flight chart/table edit context, persisted so it survives an ask-first
+  // clarification round-trip (the clarification answer is a separate store
+  // action). Null when no edit is in flight.
+  pendingEdit: { dashboardId: string | null; componentKeys: string[] } | null;
   dashboardThumbnails: Record<string, string>;
+  // Phase 6 edit metadata. Both are populated only after a chart edit (the
+  // backend returns them on the dashboard response) and stay null for normal
+  // full-dashboard generation. Chat keeps lightweight what-changed completion
+  // details; Activity owns reasoning/code/output.
+  editChangeSummary: ChartChangeSummary | null;
+  editProvenance: EditDataProvenance | null;
+  // Activity transparency ("How this was calculated"). `analysisSteps` is the
+  // persisted, final list from the dashboard response (null until a run records
+  // steps); the Activity tab falls back to live `thinkingEvents` while a run
+  // is still processing. `isActivityOpen` is retained for compatibility with
+  // legacy/mobile callers; the desktop Activity display is embedded in chat.
+  analysisSteps: AnalysisStep[] | null;
+  isActivityOpen: boolean;
 
   // Dashboard selection state
   selectedDashboardId: string | null;
@@ -358,6 +402,7 @@ interface ChatState {
   setThinkingEvents: (events: ThinkingEvent[]) => void;
   clearThinkingEvents: () => void;
   updateMessages: (updater: (prev: Message[]) => Message[]) => void;
+  upsertEditCompletionMessage: (payload: EditCompletionPayload) => void;
   setDashboardTheme: (theme: 'light' | 'dark') => void;
   setIsThemeChanging: (changing: boolean) => void;
   setHasShownInitialDashboard: (flag: boolean) => void;
@@ -367,6 +412,13 @@ interface ChatState {
   setIsSwitchingDashboard: (switching: boolean) => void;
   setPreviousDashboardData: (data: unknown | null) => void;
   setChangedComponentIds: (ids: Set<string>) => void;
+  setEditChangeSummary: (summary: ChartChangeSummary | null) => void;
+  setEditProvenance: (provenance: EditDataProvenance | null) => void;
+  setAnalysisSteps: (steps: AnalysisStep[] | null) => void;
+  setActivityOpen: (open: boolean) => void;
+  setApplyingComponentIds: (ids: string[]) => void;
+  clearApplyingComponentIds: () => void;
+  setPendingEdit: (edit: { dashboardId: string | null; componentKeys: string[] } | null) => void;
   setDashboardThumbnail: (dashboardId: string, thumbnailUrl: string) => void;
   setSelectedDashboardId: (dashboardId: string | null) => void;
   setOriginalFile: (file: { blob: Blob; name: string } | null) => void;
@@ -404,6 +456,7 @@ interface ChatState {
   syncGoogleSheets: (projectId?: string, oauthToken?: string) => Promise<void>;
   syncGA4: (propertyId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string, propertyName?: string) => Promise<void>;
   syncMetaAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string, adsetIds?: string[], campaignIds?: string[]) => Promise<MetaAdsSyncResult>;
+  syncTikTokAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<TikTokAdsSyncResult>;
   syncAppsFlyer: (appId: string, appName: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<AppsFlyerSyncResult>;
   syncStripe: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
   syncGoogleAds: (adAccountId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<StripeSyncResult>;
@@ -434,14 +487,71 @@ export interface PendingAction {
   files: UploadedFile[];
   projectId: string;
   model?: 'pro' | 'fast';
+  templateSelection?: ThemeSelection | null;
 }
 
 // Ordered sequence of workflow steps (used to reconstruct prior steps on resume)
-const STEP_ORDER = ['initializing', 'initialized', 'load_conversation', 'download_asset', 'run_workflow', 'explore_files', 'ask_first', 'routing', 'reasoning', 'reasoning_internal', 'execution', 'synthesis', 'validation', 'finish'];
+const STEP_ORDER = ['initializing', 'initialized', 'load_conversation', 'download_asset', 'run_workflow', 'explore_files', 'ask_first', 'routing', 'reasoning', 'reasoning_internal', 'analyzing', 'execution', 'recomputing', 'synthesis', 'rendering', 'validation', 'finish'];
 
 const getPriorWorkflowSteps = (step: string): string[] => {
   const stepIdx = STEP_ORDER.indexOf(step);
   return stepIdx > 0 ? STEP_ORDER.slice(0, stepIdx) : [];
+};
+
+/**
+ * Drives live workflow updates, preferring the SSE stream and falling back to polling.
+ *
+ * Mirrors processingService.pollProcessingStatus's signature so call sites are unchanged.
+ * If the stream connects, it becomes the sole source of step + thinking-event updates
+ * (ChatInterface's thinking-events poller stands down via `isStreamingWorkflow`). If the
+ * stream cannot connect — or drops before reaching a terminal status — we fall back to
+ * polling so updates are never lost.
+ */
+const runWorkflowUpdates = async (
+  assetId: string,
+  projectId: string,
+  conversationId: string | undefined,
+  onStatusUpdate: (status: ProcessingResponse) => void,
+  maxAttempts: number,
+  intervalMs: number,
+  abortSignal: AbortSignal,
+): Promise<ProcessingResponse> => {
+  if (conversationId) {
+    let streamResult;
+    try {
+      streamResult = await streamWorkflow({
+        conversationId,
+        projectId,
+        assetId,
+        abortSignal,
+        onStatusUpdate,
+        onConnected: () => useChatStore.setState({ isStreamingWorkflow: true }),
+        onThinkingEvents: (events) => {
+          if (abortSignal.aborted) return;
+          useChatStore.getState().setThinkingEvents(events);
+        },
+      });
+    } finally {
+      useChatStore.setState({ isStreamingWorkflow: false });
+    }
+
+    // Stream connected AND reached a terminal status — use its resolved result.
+    if (streamResult?.connected && streamResult.result) {
+      return streamResult.result;
+    }
+    // Stream connected but dropped without a terminal status: fall through to poll.
+    // Stream never connected: fall through to poll (existing behavior).
+  }
+
+  return processingService.pollProcessingStatus(
+    assetId,
+    projectId,
+    conversationId,
+    onStatusUpdate,
+    maxAttempts,
+    intervalMs,
+    abortSignal,
+  );
 };
 
 function getPendingPromptTheme(state: Pick<ChatState, 'selectedTheme' | 'selectedTemplate' | 'isThemePending' | 'isTemplatePending'>): SelectedTemplate | null {
@@ -611,6 +721,183 @@ const initialMessages: Message[] = [
   }
 ];
 
+function dashboardResponseFromProcessing(data?: ProcessingResponse['data']): DashboardDataResponse | null {
+  if (!data) return null;
+  const hasDashboardResponse =
+    data.dashboard_id !== undefined ||
+    data.dashboard_data !== undefined ||
+    data.change_summary !== undefined ||
+    data.computed_values !== undefined ||
+    data.analysis_steps !== undefined ||
+    data.edit_note !== undefined;
+  if (!hasDashboardResponse) return null;
+
+  return {
+    dashboard_id: data.dashboard_id ?? null,
+    dashboard_data: data.dashboard_data ?? null,
+    change_summary: data.change_summary ?? null,
+    computed_values: data.computed_values ?? null,
+    analysis_steps: data.analysis_steps ?? null,
+    edit_note: typeof data.edit_note === 'string' && data.edit_note.trim()
+      ? data.edit_note.trim()
+      : null,
+  };
+}
+
+function mergeDashboardResponses(
+  primary: DashboardDataResponse | null,
+  fallback: DashboardDataResponse | null,
+): DashboardDataResponse | null {
+  if (!primary) return fallback;
+  if (!fallback) return primary;
+
+  return {
+    dashboard_id: primary.dashboard_id ?? fallback.dashboard_id,
+    dashboard_data: primary.dashboard_data ?? fallback.dashboard_data,
+    change_summary: primary.change_summary ?? fallback.change_summary ?? null,
+    computed_values: primary.computed_values ?? fallback.computed_values ?? null,
+    analysis_steps: primary.analysis_steps ?? fallback.analysis_steps ?? null,
+    edit_note: primary.edit_note ?? fallback.edit_note ?? null,
+  };
+}
+
+/**
+ * Re-fetch the edited dashboard by id (cache-busted) so the view shows the true
+ * in-place server state, preserving edit metadata from both the live workflow
+ * response and the dashboard endpoint.
+ */
+async function refetchEditedDashboardResponse(
+  conversationId: string,
+  projectId: string,
+  editTargetDashboardId: string | null,
+  fallbackResponse: DashboardDataResponse | null,
+): Promise<DashboardDataResponse | null> {
+  if (!editTargetDashboardId) return fallbackResponse;
+
+  const { conversationService } = await import('@/services/conversationService');
+  const targeted = await conversationService.getDashboardData(
+    conversationId,
+    projectId,
+    editTargetDashboardId,
+    { noCache: true },
+  );
+  return mergeDashboardResponses(targeted, fallbackResponse);
+}
+
+function latestUserMessageIndex(messages: Message[]): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === 'user') return i;
+  }
+  return -1;
+}
+
+function latestChartMentionNames(messages: Message[]): string[] {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role !== 'user' || !message.chartMentions?.length) continue;
+    return message.chartMentions.map((chart) => chart.title).filter(Boolean);
+  }
+  return [];
+}
+
+function buildEditCompletionContent(
+  messages: Message[],
+  payload: EditCompletionPayload,
+  existingContent?: string,
+): string {
+  const editNote = payload.editNote?.trim();
+  if (editNote) return editNote;
+
+  const humanSummary = payload.summary?.human_summary?.trim();
+  if (humanSummary) return humanSummary;
+
+  const existing = existingContent?.trim();
+  if (existing) return existing;
+
+  const names = latestChartMentionNames(messages);
+  const target = names.length
+    ? names.join(', ')
+    : payload.dashboardTitle || 'the selected chart or table';
+  return `Done! I've updated ${target}. The dashboard has been refreshed with your changes.`;
+}
+
+function upsertEditCompletionMessageInList(
+  messages: Message[],
+  payload: EditCompletionPayload,
+): Message[] {
+  const userIndex = latestUserMessageIndex(messages);
+  const dashboardId = payload.dashboardId ?? null;
+  let targetIndex = -1;
+  let dashboardCardFallbackIndex = -1;
+
+  for (let i = messages.length - 1; i > userIndex; i -= 1) {
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+    if (message.isEditCompletion || (dashboardId && message.dashboardCard?.dashboardId === dashboardId)) {
+      targetIndex = i;
+      break;
+    }
+    if (dashboardCardFallbackIndex < 0 && message.dashboardCard) {
+      dashboardCardFallbackIndex = i;
+    }
+  }
+
+  if (targetIndex < 0) {
+    targetIndex = dashboardCardFallbackIndex;
+  }
+
+  if (targetIndex >= 0) {
+    const next = messages.slice();
+    const existing = next[targetIndex];
+    const updated: Message = {
+      ...existing,
+      content: buildEditCompletionContent(messages, payload, existing.content),
+      isEditCompletion: true,
+      editChangeSummary: payload.summary ?? null,
+      editProvenance: payload.provenance ?? null,
+      editNote: payload.editNote ?? null,
+    };
+    delete updated.dashboardCard;
+    next[targetIndex] = updated;
+    return next;
+  }
+
+  return [
+    ...messages,
+    {
+      id: `edit-completion-${dashboardId || Date.now()}`,
+      role: 'assistant',
+      content: buildEditCompletionContent(messages, payload),
+      timestamp: new Date(),
+      isEditCompletion: true,
+      editChangeSummary: payload.summary ?? null,
+      editProvenance: payload.provenance ?? null,
+      editNote: payload.editNote ?? null,
+    },
+  ];
+}
+
+/**
+ * Write processed dashboard data to the file the dashboard view actually reads
+ * (matched by project + conversation), not just uploadedFiles[0] — otherwise
+ * project.tsx's sync effect can overwrite fresh data with a stale file's.
+ */
+function writeProcessedDataToViewFile(
+  files: Array<{ fileID: string; projectId?: string; conversationId?: string }>,
+  projectId: string,
+  conversationId: string,
+  data: unknown,
+  updateFile: (fileID: string, patch: Record<string, unknown>) => void,
+): void {
+  const target =
+    files.find((f) => f.projectId === projectId && f.conversationId === conversationId) ||
+    files.find((f) => f.projectId === projectId) ||
+    files[0];
+  if (target) {
+    updateFile(target.fileID, { status: 'processed', processedData: data });
+  }
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   // Initial state
   inputValue: "",
@@ -624,6 +911,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentWorkflowStep: null,
   priorWorkflowSteps: [],
   thinkingEvents: [],
+  isStreamingWorkflow: false,
   dropdownOpen: false,
   selectedDataSource: "",
   isListening: false,
@@ -638,6 +926,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isSwitchingDashboard: false,
   previousDashboardData: null,
   changedComponentIds: new Set<string>(),
+  editChangeSummary: null,
+  editProvenance: null,
+  analysisSteps: null,
+  isActivityOpen: false,
+  applyingComponentIds: new Set<string>(),
+  pendingEdit: null,
   dashboardThumbnails: {},
   selectedDashboardId: null,
   originalFileBlob: null,
@@ -704,6 +998,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setThinkingEvents: (events) => set({ thinkingEvents: events }),
   clearThinkingEvents: () => set({ thinkingEvents: [] }),
   updateMessages: (updater) => set((state) => ({ messages: updater(state.messages) })),
+  upsertEditCompletionMessage: (payload) => set((state) => ({
+    messages: upsertEditCompletionMessageInList(state.messages, payload),
+  })),
   setDashboardTheme: (theme) => set({ dashboardTheme: theme }),
   setIsThemeChanging: (changing) => set({ isThemeChanging: changing }),
   setHasShownInitialDashboard: (flag) => set({ hasShownInitialDashboard: flag }),
@@ -713,6 +1010,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsSwitchingDashboard: (switching) => set({ isSwitchingDashboard: switching }),
   setPreviousDashboardData: (data) => set({ previousDashboardData: data }),
   setChangedComponentIds: (ids) => set({ changedComponentIds: ids }),
+  setEditChangeSummary: (summary) => set({ editChangeSummary: summary }),
+  setEditProvenance: (provenance) => set({ editProvenance: provenance }),
+  setAnalysisSteps: (steps) => set({ analysisSteps: steps }),
+  setActivityOpen: (open) => set({ isActivityOpen: open }),
+  setApplyingComponentIds: (ids) => set({ applyingComponentIds: new Set(ids) }),
+  clearApplyingComponentIds: () => set({ applyingComponentIds: new Set<string>() }),
+  setPendingEdit: (edit) => set({ pendingEdit: edit }),
   setDashboardThumbnail: (dashboardId, thumbnailUrl) => set((state) => ({
     dashboardThumbnails: { ...state.dashboardThumbnails, [dashboardId]: thumbnailUrl }
   })),
@@ -1088,7 +1392,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      !abortController.signal.aborted &&
 	      isSameWorkflowContext(conversationId)
 	    );
-	    set({ abortController, currentProjectId: workflowProjectId, thinkingEvents: [], priorWorkflowSteps: [] });
+	    set({ abortController, currentProjectId: workflowProjectId, thinkingEvents: [], priorWorkflowSteps: [], isStreamingWorkflow: false, analysisSteps: null });
 
 	    // Clear current workflow step at start
 	    setCurrentWorkflowStep(null);
@@ -1177,6 +1481,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         let assetContents: ConversationChatRequest['user_node_contents'] = undefined;
         const assetId: string | null = freshUploads[0]?.fileID ?? null;
 
+        // When this message carries chart mentions it is an in-place edit of the
+        // dashboard the user is currently viewing — capture that id NOW so the
+        // completion handler re-selects/re-fetches the edited dashboard instead of
+        // jumping to the conversation's latest one. Null when not an edit.
+        const editTargetDashboardId = mentionedCharts && mentionedCharts.length > 0
+          ? get().selectedDashboardId ?? null
+          : null;
+
         const assetContentsList: ConversationChatRequest['user_node_contents'] = [];
         for (const file of freshUploads) {
           try {
@@ -1239,9 +1551,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 title: chart.title,
                 chart_type: chart.type,
                 config: chart.config,
+                dashboard_id: editTargetDashboardId,
               }
             });
           }
+
+          // Mark the mentioned charts as "applying" so each target card can
+          // show an in-place overlay while Morpheus works. The mention
+          // `componentId` (and `id`) match getComponentKey(component) because
+          // both `component.id` and `component.component_config.id` are built
+          // from the same source value during extraction (see project.tsx).
+          const applyingKeys = mentionedCharts.flatMap((chart) =>
+            [chart.componentId, chart.id].filter((value): value is string => Boolean(value))
+          );
+          // Persist the edit context so it survives an ask-first clarification
+          // round-trip (the clarification answer is a separate store action).
+          set({
+            applyingComponentIds: new Set(applyingKeys),
+            pendingEdit: { dashboardId: editTargetDashboardId, componentKeys: applyingKeys },
+          });
         }
 
         if (assetContentsList.length > 0) {
@@ -1287,8 +1615,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	            setCurrentConversationId(conversationId);
 	          }
 
-          // Poll for completion
-          const finalResult = await processingService.pollProcessingStatus(
+          // Stream live progress (falls back to polling if the stream is unavailable)
+          const finalResult = await runWorkflowUpdates(
             '',  // No assetId for Q&A
             projectId,
 	            conversationId,
@@ -1306,6 +1634,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
               if (workflowStatus === 'error' || workflowStatus === 'stopped') {
                 setIsProcessing(false);
+                // Workflow won't produce new data — drop the applying overlay
+                // and the in-flight edit context.
+                set({ applyingComponentIds: new Set<string>(), pendingEdit: null });
               }
               if (workflowStatus === 'stopped') {
                 setIsTyping(false);
@@ -1351,18 +1682,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	                if (!isCurrentWorkflowRun(conversationId)) return;
 	                const conversation = conversationResponse.conversation;
 
-                // Extract dashboard_id from conversation
-                const dashboards = conversation.dashboards || [];
+                // Extract dashboard_id from conversation. For an in-place edit we
+                // stay on the dashboard the user was editing; otherwise (a new
+                // dashboard generation) we open the conversation's latest.
+                const dashboards = Array.isArray(conversation.dashboards) ? conversation.dashboards : [];
                 const latestDashboard = dashboards[dashboards.length - 1];
-                const dashboardId = latestDashboard?.dashboard_id || "";
+                const dashboardId = editTargetDashboardId || (typeof latestDashboard?.dashboard_id === 'string' ? latestDashboard.dashboard_id : "");
+                let editDashboardResponse: DashboardDataResponse | null = null;
 
-	                // Set the latest dashboard as selected and update processedData
+	                // Set the dashboard as selected and update processedData
 	                if (dashboardId) {
 	                  set({ selectedDashboardId: dashboardId, isDashboardOpen: true });
+	                  // On an edit the polled `dashboard_data` is the conversation's
+	                  // latest dashboard, not the edited one — re-fetch the edited
+	                  // dashboard by id so the panel shows the correct data.
+	                  const fallbackResponse = dashboardResponseFromProcessing(finalResult.data);
+	                  editDashboardResponse = await refetchEditedDashboardResponse(
+	                    conversationId,
+	                    projectId,
+	                    editTargetDashboardId,
+	                    fallbackResponse,
+	                  );
+	                  if (!isCurrentWorkflowRun(conversationId)) return;
+	                  const editedDashboardData = (editDashboardResponse?.dashboard_data ?? finalResult.data.dashboard_data) as DashboardDataForView | null;
 	                  const generatedTheme = resolveStoredTheme(
-	                    finalResult.data.dashboard_data?.theme_id ?? null,
-	                    finalResult.data.dashboard_data?.analysis_focus_id ?? null,
-	                    finalResult.data.dashboard_data?.template_id ?? null,
+	                    editedDashboardData?.theme_id ?? null,
+	                    editedDashboardData?.analysis_focus_id ?? null,
+	                    editedDashboardData?.template_id ?? null,
 	                  );
 	                  const appliedTheme = promptTheme ?? generatedTheme;
 	                  const themeId = getThemeId(appliedTheme);
@@ -1378,14 +1724,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	                    isTemplatePending: false,
 	                  });
                   // Update processedData with the new dashboard data (first file for display)
-                  const firstFile = get().uploadedFiles[0];
-                  if (firstFile) {
-                    updateFile(firstFile.fileID, { status: 'processed', processedData: finalResult.data.dashboard_data });
+                  // Write to the file the dashboard view actually reads (matched by
+                  // project + conversation), not just uploadedFiles[0] — otherwise
+                  // project.tsx's sync effect can overwrite the fresh data with a
+                  // different file's stale processedData.
+                  const editFiles = get().uploadedFiles;
+                  const editTargetFile = editFiles.find(f => f.projectId === projectId && f.conversationId === conversationId)
+                    || editFiles.find(f => f.projectId === projectId)
+                    || editFiles[0];
+                  if (editTargetFile) {
+                    updateFile(editTargetFile.fileID, { status: 'processed', processedData: editedDashboardData });
                   }
+
+                  // New chart data has landed — drop the in-place applying
+                  // overlay in the same tick the data renders so the existing
+                  // `dashboard-component-highlight` pulse takes over seamlessly.
+                  set({
+                    applyingComponentIds: new Set<string>(),
+                    pendingEdit: null,
+                    editChangeSummary: editDashboardResponse?.change_summary ?? null,
+                    editProvenance: editDashboardResponse?.computed_values ?? null,
+                    analysisSteps: editDashboardResponse?.analysis_steps ?? null,
+                  });
 
                   // Signal completion to UI for automatic rendering (unconditional)
                   if (onProcessedDataChange) {
-                    onProcessedDataChange(finalResult.data.dashboard_data);
+                    onProcessedDataChange(editedDashboardData);
                   }
 
                   // Auto-capture PNG preview (fire-and-forget, non-blocking)
@@ -1471,6 +1835,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   }
 
                   get().setMessages(restoredMessages);
+                  if (editTargetDashboardId) {
+                    get().upsertEditCompletionMessage({
+                      dashboardId,
+                      dashboardTitle: latestDashboard?.title || undefined,
+                      sourceFileName: firstFile?.filename || 'dashboard',
+                      accountName: firstFile?.accountName,
+                      sourceType: firstFile?.sourceType,
+                      summary: editDashboardResponse?.change_summary ?? null,
+                      provenance: editDashboardResponse?.computed_values ?? null,
+                      editNote: editDashboardResponse?.edit_note ?? null,
+                    });
+                  }
                 }
 	              } catch (error) {
 	                if (!isCurrentWorkflowRun(conversationId)) return;
@@ -1506,6 +1882,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 const restoredMessages = conversationNodesToMessages(conversation);
                 if (restoredMessages.length) {
                   get().setMessages(restoredMessages);
+                  set({ analysisSteps: finalResult.data?.analysis_steps ?? null });
 
                   // Auto-open dashboard if the latest message includes a dashboard card
                   const lastMsg = restoredMessages[restoredMessages.length - 1];
@@ -1531,7 +1908,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 // Fallback to workflow status metadata
                 const workflowStatus = finalResult.data?.workflow_status;
                 const responseText = workflowStatus?.metadata?.content ||
-                  workflowStatus?.message ||
+                  finalResult.data?.message ||
                   "I've processed your question.";
 
                 updateMessages((prev) => ([
@@ -1597,7 +1974,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	        if (isWorkflowRunActive(workflowRunId) && isSameWorkflowContext(workflowConversationId)) {
 	          setIsTyping(false);
 	          setIsProcessing(false);
-	          set({ isUpdatingDashboard: false, abortController: null });
+	          // Safety net: ensure the applying overlay never gets stuck if the
+	          // workflow exits without landing new data (it's already cleared in
+	          // the data-applied and error/stopped paths above).
+	          set({ isUpdatingDashboard: false, abortController: null, ...(get().pendingEdit ? {} : { applyingComponentIds: new Set<string>() }) });
 	          finishWorkflowRun(workflowRunId);
 	        }
 	      }
@@ -1638,6 +2018,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       console.log('Starting processing for fileIDs:', freshPromptUploads.map(f => f.fileID));
       const freshUploadsForProcessing = freshPromptUploads;
+      // Chart mentions mark this as an in-place edit of the currently-viewed
+      // dashboard — capture its id so the completion handler stays on it instead
+      // of jumping to the conversation's latest. Null when not an edit.
+      const editTargetDashboardId = mentionedCharts && mentionedCharts.length > 0
+        ? get().selectedDashboardId ?? null
+        : null;
       const assetContentsList: ConversationChatRequest['user_node_contents'] = [];
       for (const file of freshUploadsForProcessing) {
         try {
@@ -1700,6 +2086,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               title: chart.title,
               chart_type: chart.type,
               config: chart.config,
+              dashboard_id: editTargetDashboardId,
             }
           });
         }
@@ -1745,7 +2132,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	        }
 
         console.log('Processing started, beginning polling...');
-        const finalResult = await processingService.pollProcessingStatus(
+        const finalResult = await runWorkflowUpdates(
           firstUploadedFile.fileID,
 	          projectId,
 	          conversationId,
@@ -1806,27 +2193,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	              if (!isCurrentWorkflowRun(conversationId)) return;
 	              const conversation = conversationResponse.conversation;
 
-              // Extract dashboard_id from conversation
-              const dashboards = conversation.dashboards || [];
+              // Extract dashboard_id from conversation. For an in-place edit we
+              // stay on the dashboard the user was editing; otherwise (a new
+              // dashboard generation) we open the conversation's latest.
+              const dashboards = Array.isArray(conversation.dashboards) ? conversation.dashboards : [];
               const latestDashboard = dashboards[dashboards.length - 1];
-              const dashboardId = latestDashboard?.dashboard_id || "";
+              const dashboardId = editTargetDashboardId || (typeof latestDashboard?.dashboard_id === 'string' ? latestDashboard.dashboard_id : "");
+              let editDashboardResponse: DashboardDataResponse | null = null;
 
-              // Set the latest dashboard as selected and update processedData
+              // Set the dashboard as selected and update processedData
               if (dashboardId) {
+                // On an edit the polled `dashboard_data` is the conversation's
+                // latest dashboard, not the edited one — re-fetch the edited
+                // dashboard by id so the panel shows the correct data.
+                const fallbackResponse = dashboardResponseFromProcessing(finalResult.data);
+                editDashboardResponse = await refetchEditedDashboardResponse(
+                  conversationId,
+                  projectId,
+                  editTargetDashboardId,
+                  fallbackResponse,
+                );
+                if (!isCurrentWorkflowRun(conversationId)) return;
+                const editedDashboardData = (editDashboardResponse?.dashboard_data ?? finalResult.data.dashboard_data) as DashboardDataForView | null;
                 // Auto open the dashboard FIRST, before signaling data
                 set({
                   selectedDashboardId: dashboardId,
                   isDashboardOpen: true,
                   hasShownInitialDashboard: true,
                   isInitialLoading: false,
+                  editChangeSummary: editDashboardResponse?.change_summary ?? null,
+                  editProvenance: editDashboardResponse?.computed_values ?? null,
+                  analysisSteps: editDashboardResponse?.analysis_steps ?? null,
                 });
                 const files = get().uploadedFiles;
-                if (files.length > 0) {
-                  updateFile(files[0].fileID, { processedData: finalResult.data.dashboard_data });
+                // Target the file the dashboard view reads (project + conversation),
+                // falling back to [0], so the sync effect doesn't clobber fresh data.
+                const editTargetFile = files.find(f => f.projectId === projectId && f.conversationId === conversationId)
+                  || files.find(f => f.projectId === projectId)
+                  || files[0];
+                if (editTargetFile) {
+                  updateFile(editTargetFile.fileID, { processedData: editedDashboardData });
                 }
                 // Signal completion to UI for automatic rendering
                 if (onProcessedDataChange) {
-                  onProcessedDataChange(finalResult.data.dashboard_data);
+                  onProcessedDataChange(editedDashboardData);
                 }
 
                 // Auto-capture PNG preview (fire-and-forget, non-blocking)
@@ -1850,9 +2260,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 }, 4000);
 
 	                const generatedTheme = resolveStoredTheme(
-	                  finalResult.data.dashboard_data?.theme_id ?? null,
-	                  finalResult.data.dashboard_data?.analysis_focus_id ?? null,
-	                  finalResult.data.dashboard_data?.template_id ?? null,
+	                  editedDashboardData?.theme_id ?? null,
+	                  editedDashboardData?.analysis_focus_id ?? null,
+	                  editedDashboardData?.template_id ?? null,
 	                );
 	                const appliedTheme = promptTheme ?? generatedTheme;
 	                const themeId = getThemeId(appliedTheme);
@@ -1893,6 +2303,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
               });
               if (restoredMessages.length) {
                 get().setMessages(restoredMessages);
+                if (editTargetDashboardId) {
+                  get().upsertEditCompletionMessage({
+                    dashboardId,
+                    dashboardTitle: latestDashboard?.title || undefined,
+                    sourceFileName: currentFiles[0]?.filename ?? 'dashboard',
+                    accountName: currentFiles[0]?.accountName,
+                    sourceType: currentFiles[0]?.sourceType,
+                    summary: editDashboardResponse?.change_summary ?? null,
+                    provenance: editDashboardResponse?.computed_values ?? null,
+                    editNote: editDashboardResponse?.edit_note ?? null,
+                  });
+                }
               }
 
               // DON'T clear uploadedFile - ProjectPage needs it to determine dashboard display
@@ -1941,6 +2363,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               console.log('Q&A conversation loaded, restored', restoredMessages.length, 'messages');
               if (restoredMessages.length) {
                 get().setMessages(restoredMessages);
+                set({ analysisSteps: finalResult.data?.analysis_steps ?? null });
 
                 // Auto-open dashboard if the latest message includes a dashboard card
                 const lastMsg = restoredMessages[restoredMessages.length - 1];
@@ -1964,7 +2387,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               // Fallback to workflow status metadata
               const workflowStatus = finalResult.data?.workflow_status;
               const responseText = workflowStatus?.metadata?.content ||
-                workflowStatus?.message ||
+                finalResult.data?.message ||
                 "I've processed your question.";
 
               updateMessages((prev) => ([
@@ -2081,6 +2504,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      throw new Error('Conversation context missing for clarification response');
 	    }
 
+	    // Edit continuation: this clarification answers an in-flight chart/table
+	    // edit. Re-engage the per-chart shimmer for the answer-run (it was set
+	    // when the edit was first sent and persisted across the clarification).
+	    const pendingEdit = get().pendingEdit;
+	    if (pendingEdit && pendingEdit.componentKeys.length > 0) {
+	      set({ applyingComponentIds: new Set(pendingEdit.componentKeys) });
+	    }
+
 	    const workflowRunId = beginWorkflowRun();
 	    const abortController = new AbortController();
 	    let workflowConversationId = currentConversationId;
@@ -2095,7 +2526,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      !abortController.signal.aborted &&
 	      isSameWorkflowContext(conversationId)
 	    );
-	    set({ abortController, currentProjectId: projectId, thinkingEvents: [], priorWorkflowSteps: [] });
+	    set({ abortController, currentProjectId: projectId, thinkingEvents: [], priorWorkflowSteps: [], isStreamingWorkflow: false, analysisSteps: null });
     setCurrentWorkflowStep(null);
     setPriorWorkflowSteps([]);
 
@@ -2159,7 +2590,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      workflowConversationId = conversationId;
 	      setCurrentConversationId(conversationId);
 
-      const finalResult = await processingService.pollProcessingStatus(
+      const finalResult = await runWorkflowUpdates(
         '',
 	        projectId,
 	        conversationId,
@@ -2195,8 +2626,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (restoredMessages.length) {
           get().setMessages(restoredMessages);
         }
+        set({ analysisSteps: finalResult.data?.analysis_steps ?? null });
         const lastMsg = restoredMessages[restoredMessages.length - 1];
         const dashId = lastMsg?.dashboardCard?.dashboardId;
+        // Edit continuation: update the edited dashboard IN PLACE (same id)
+        // so the chart/table reflects the change with no F5, instead of
+        // jumping to the conversation's latest dashboard.
+        if (pendingEdit) {
+          const editTargetDashboardId = pendingEdit.dashboardId || dashId || null;
+          if (editTargetDashboardId) {
+            set({ selectedDashboardId: editTargetDashboardId, isDashboardOpen: true, hasShownInitialDashboard: true, isInitialLoading: false });
+          }
+          const fallbackResponse = dashboardResponseFromProcessing(finalResult.data);
+          const editedResponse = await refetchEditedDashboardResponse(
+            conversationId,
+            projectId,
+            editTargetDashboardId,
+            fallbackResponse,
+          );
+          if (!isCurrentWorkflowRun(conversationId)) return;
+          const editedData = editedResponse?.dashboard_data ?? null;
+          if (editedData) {
+            writeProcessedDataToViewFile(get().uploadedFiles, projectId, conversationId, editedData, get().updateFile);
+          }
+          set({
+            applyingComponentIds: new Set<string>(),
+            pendingEdit: null,
+            editChangeSummary: editedResponse?.change_summary ?? null,
+            editProvenance: editedResponse?.computed_values ?? null,
+            analysisSteps: editedResponse?.analysis_steps ?? null,
+          });
+          const dashboards = Array.isArray(conversation.dashboards) ? conversation.dashboards : [];
+          const editedDashboard = dashboards.find((dashboard) => dashboard?.dashboard_id === editTargetDashboardId);
+          const firstFile = get().uploadedFiles[0];
+          get().upsertEditCompletionMessage({
+            dashboardId: editTargetDashboardId,
+            dashboardTitle: editedDashboard?.title || undefined,
+            sourceFileName: firstFile?.filename || 'dashboard',
+            accountName: firstFile?.accountName,
+            sourceType: firstFile?.sourceType,
+            summary: editedResponse?.change_summary ?? null,
+            provenance: editedResponse?.computed_values ?? null,
+            editNote: editedResponse?.edit_note ?? null,
+          });
+          if (editedData && onProcessedDataChange) {
+            onProcessedDataChange(editedData);
+          }
+          return;
+        }
         if (dashId) {
           set({
             isDashboardOpen: true,
@@ -2286,7 +2763,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      set({ isProcessing: true, isTyping: true });
 	      setCurrentConversationId(conversationId);
 
-	      const finalResult = await processingService.pollProcessingStatus(
+	      const finalResult = await runWorkflowUpdates(
 	        '',
 	        projectId,
 	        conversationId,
@@ -2319,6 +2796,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (restoredMessages.length) {
           get().setMessages(restoredMessages);
         }
+        set({ analysisSteps: finalResult.data?.analysis_steps ?? null });
 
         // Auto-open dashboard if the latest message has a dashboard card
         const lastMsg = restoredMessages[restoredMessages.length - 1];
@@ -2383,6 +2861,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       abortController: null,
       isProcessing: false,
       isTyping: false,
+      isStreamingWorkflow: false,
     });
   },
 
@@ -2408,6 +2887,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      currentWorkflowStep: null,
       priorWorkflowSteps: [],
       thinkingEvents: [],
+      isStreamingWorkflow: false,
       dropdownOpen: false,
       selectedDataSource: "",
       isListening: false,
@@ -2420,6 +2900,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      isSwitchingDashboard: false,
 	      previousDashboardData: null,
 	      changedComponentIds: new Set<string>(),
+	      editChangeSummary: null,
+	      editProvenance: null,
+	      analysisSteps: null,
+	      isActivityOpen: false,
+	      applyingComponentIds: new Set<string>(),
+	      pendingEdit: null,
 	      selectedDashboardId: null,
       selectedTheme: preservedTheme,
       selectedAnalysisFocusId: preservedTheme?.analysisFocusId ?? null,
@@ -2460,6 +2946,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 	      if (myReq !== selectDashboardSeq) return null;
 	      const current = get();
 	      if (current.currentProjectId !== projectId || current.currentConversationId !== currentConversationId) return null;
+
+	      // Phase 6: restore edit completion metadata and Activity steps when
+	      // the backend attached them to this dashboard (edit responses only).
+	      // Null for normal full-dashboard generation, clearing stale edit UI.
+	      set({
+	        editChangeSummary: response?.change_summary ?? null,
+	        editProvenance: response?.computed_values ?? null,
+	        analysisSteps: response?.analysis_steps ?? null,
+	      });
 
 	      if (response?.dashboard_data) {
         // Prefer theme_id baked into the dashboard JSON, then legacy template_id,

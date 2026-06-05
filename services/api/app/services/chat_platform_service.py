@@ -14,17 +14,24 @@ Flow per query:
 """
 
 import asyncio
+import base64
+import json
 import logging
 import os
+import re
+import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 import requests
 
 from app.services.credit_service import CreditService
-from app.services.chart_renderer import is_chart_rendering_enabled, render_dashboard_previews
+from app.services.chart_renderer import (
+    is_chart_rendering_enabled,
+    render_dashboard_previews,
+)
 from app.services.slack_service import (
     build_analyzing_blocks,
     build_error_blocks,
@@ -58,19 +65,22 @@ DREAMIFY_APP_URL = (
     else "https://app.dreamify.dev"
 )
 
-# Chat queries always use the "fast" model alias (5 credits).
-CHAT_MODEL_ALIAS = "fast"
-CHAT_MODEL_ID = os.environ.get("DREAMIFY_FAST_MODEL", "deepseek-v4-flash")
-CHAT_CREDIT_COST = 5
+# Chat queries always use the "pro" model alias (10 credits).
+CHAT_MODEL_ALIAS = "pro"
+CHAT_MODEL_ID = os.environ.get("DREAMIFY_PRO_MODEL", "gpt-5.4-mini")
+CHAT_CREDIT_COST = 10
 
 # Polling config
 POLL_INTERVAL_S = 3
 POLL_MAX_ATTEMPTS = 100  # ~5 minutes
+PENDING_CLARIFICATION_TTL_S = 24 * 60 * 60
+CALLBACK_PREFIX = "dfc"
 
 credit_service = CreditService()
 
 
 # ── Conversation helpers ──────────────────────────────────────────────────────
+
 
 def _now_iso() -> str:
     return utc_now_iso()
@@ -104,7 +114,9 @@ def _make_greeting_node() -> Dict[str, Any]:
     }
 
 
-def _build_conversation_keys(user_id: str, project_id: str, conversation_id: str) -> Dict[str, str]:
+def _build_conversation_keys(
+    user_id: str, project_id: str, conversation_id: str
+) -> Dict[str, str]:
     primary = build_conversation_key(user_id, project_id, conversation_id, backup=False)
     backup = build_conversation_key(user_id, project_id, conversation_id, backup=True)
     return {"primary": primary, "backup": backup}
@@ -120,7 +132,9 @@ def _extract_narrative(conversation: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _build_dashboard_url(project_id: str, conversation: Dict[str, Any]) -> Optional[str]:
+def _build_dashboard_url(
+    project_id: str, conversation: Dict[str, Any]
+) -> Optional[str]:
     """Return the public preview URL for the most recently created dashboard."""
     dashboards = conversation.get("dashboards", [])
     if not dashboards:
@@ -140,7 +154,7 @@ def _load_dashboard_json(s3_uri: str) -> Optional[Dict[str, Any]]:
     try:
         if not s3_uri or not s3_uri.startswith("s3://"):
             return None
-        without_scheme = s3_uri[len("s3://"):]
+        without_scheme = s3_uri[len("s3://") :]
         bucket, _, key = without_scheme.partition("/")
         raw = download_bytes(bucket, key)
         return json.loads(raw)
@@ -154,7 +168,650 @@ def _extract_top_metrics(dashboard: Dict[str, Any], max_n: int = 4) -> list:
     return dashboard.get("metrics", [])[:max_n]
 
 
+def _build_workspace_project_url(project_id: str) -> str:
+    return f"{DREAMIFY_APP_URL}/workspace/project?projectId={project_id}"
+
+
+def _analysis_incomplete_message(project_id: str) -> str:
+    return (
+        "Analysis did not complete. Please try again, or open Dreamify: "
+        f"{_build_workspace_project_url(project_id)}"
+    )
+
+
+def _mark_user_node_assets_selected(node: Dict[str, Any], asset_ids: list) -> None:
+    selected_asset_ids = [
+        str(asset_id).strip()
+        for asset_id in asset_ids
+        if asset_id is not None and str(asset_id).strip()
+    ]
+    if not selected_asset_ids:
+        return
+    metadata = node.setdefault("metadata", {})
+    existing_ids = metadata.get("selected_asset_ids", [])
+    if not isinstance(existing_ids, list):
+        existing_ids = []
+    metadata["asset_selection"] = "explicit"
+    metadata["selected_asset_ids"] = list(
+        dict.fromkeys([*existing_ids, *selected_asset_ids])
+    )
+
+
+def _project_asset_summaries(user_id: str, project_id: str) -> List[Dict[str, Any]]:
+    summaries: List[Dict[str, Any]] = []
+    for asset in assets_repo.list_assets(user_id=user_id, project_id=project_id):
+        asset_id = asset.get("asset_id")
+        if not asset_id:
+            continue
+        summaries.append(
+            {
+                "asset_id": asset_id,
+                "file_id": asset.get("file_id"),
+                "filename": asset.get("filename") or "",
+                "extension": asset.get("extension") or "",
+                "asset_type": asset.get("asset_type") or "",
+                "row_count": asset.get("row_count"),
+                "column_count": asset.get("column_count"),
+                "status": asset.get("status"),
+            }
+        )
+    return summaries
+
+
+def _asset_content_from_asset(asset: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "type": "asset",
+        "data": {
+            "asset_id": asset.get("asset_id"),
+            "file_id": asset.get("file_id") or asset.get("asset_id"),
+            "s3_bucket": asset.get("s3_bucket"),
+            "s3_key": asset.get("s3_key"),
+            "extension": asset.get("extension", ""),
+            "filename": asset.get("filename", ""),
+            "sourceType": asset.get("asset_type", ""),
+        },
+    }
+
+
+def _trim(value: Any, limit: int = 75) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _valid_options(clarification: Dict[str, Any]) -> List[Dict[str, Any]]:
+    options: List[Dict[str, Any]] = []
+    for option in clarification.get("options", []):
+        if not isinstance(option, dict):
+            continue
+        option_id = str(option.get("id") or "").strip()
+        label = str(option.get("label") or "").strip()
+        if option_id and label:
+            options.append(option)
+    return options
+
+
+def _normalize_clarifications(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
+    for node in reversed(conversation.get("nodes", [])):
+        if node.get("role") != "assistant":
+            continue
+        items: List[Dict[str, Any]] = []
+        for content in node.get("contents", []):
+            if content.get("type") != "clarification_request":
+                continue
+            data = content.get("data") or {}
+            if not isinstance(data, dict):
+                continue
+            clarification_id = str(data.get("clarification_id") or "").strip()
+            question = str(data.get("question") or "").strip()
+            options = _valid_options(data)
+            if not clarification_id or not question or not options:
+                continue
+            normalized = dict(data)
+            normalized["options"] = options
+            items.append(normalized)
+        if items:
+            return items
+    return []
+
+
+def _load_valid_clarifications(
+    bucket: str, key: str
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    conversation = load_conversation(bucket, key)
+    return conversation, _normalize_clarifications(conversation)
+
+
+def _default_selected_option_ids(
+    clarifications: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    selected: Dict[str, str] = {}
+    for clarification in clarifications:
+        options = _valid_options(clarification)
+        if not options:
+            continue
+        choice = next((o for o in options if o.get("recommended")), options[0])
+        selected[str(clarification["clarification_id"])] = str(choice["id"])
+    return selected
+
+
+def _build_pending_clarification(
+    *,
+    platform: str,
+    conversation_id: str,
+    project_id: str,
+    user_id: str,
+    thread_key: str,
+    clarifications: List[Dict[str, Any]],
+    message: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "status": "awaiting_user_input",
+        "platform": platform,
+        "nonce": uuid.uuid4().hex[:10],
+        "conversation_id": conversation_id,
+        "project_id": project_id,
+        "user_id": user_id,
+        "thread_key": thread_key,
+        "clarifications": clarifications,
+        "selected_option_ids": _default_selected_option_ids(clarifications),
+        "message": message,
+        "created_at": _now_iso(),
+        "expires_at": int(time.time()) + PENDING_CLARIFICATION_TTL_S,
+    }
+
+
+def _is_pending_active(pending: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(pending, dict):
+        return False
+    if pending.get("status") not in {"awaiting_user_input", "resuming"}:
+        return False
+    expires_at = int(pending.get("expires_at") or 0)
+    return not expires_at or expires_at > int(time.time())
+
+
+def _get_active_pending(
+    platform_workspace_id: str, thread_key: str
+) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    session = chat_platform_repo.get_session(platform_workspace_id, thread_key)
+    pending = (session or {}).get("pending_clarification")
+    if pending and not _is_pending_active(pending):
+        chat_platform_repo.clear_session_pending_clarification(
+            platform_workspace_id, thread_key
+        )
+        return session, None
+    return session, pending if _is_pending_active(pending) else None
+
+
+def has_pending_clarification(platform_workspace_id: str, thread_key: str) -> bool:
+    _, pending = _get_active_pending(platform_workspace_id, thread_key)
+    return pending is not None
+
+
+def _store_pending(
+    platform_workspace_id: str, thread_key: str, pending: Dict[str, Any]
+) -> None:
+    chat_platform_repo.set_session_pending_clarification(
+        platform_workspace_id, thread_key, pending
+    )
+
+
+def _clear_pending(platform_workspace_id: str, thread_key: str) -> None:
+    chat_platform_repo.clear_session_pending_clarification(
+        platform_workspace_id, thread_key
+    )
+
+
+def _encode_callback_value(payload: Dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(",", ":")).encode()
+    encoded = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    return f"{CALLBACK_PREFIX}:{encoded}"
+
+
+def _decode_callback_value(value: str) -> Dict[str, Any]:
+    if not value.startswith(f"{CALLBACK_PREFIX}:"):
+        return {}
+    encoded = value.split(":", 1)[1]
+    padded = encoded + "=" * (-len(encoded) % 4)
+    try:
+        data = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _telegram_callback_data(
+    action: str, nonce: str, clarification_index: int = -1, option_index: int = -1
+) -> str:
+    return f"{CALLBACK_PREFIX}:{action}:{nonce}:{clarification_index}:{option_index}"
+
+
+def _parse_telegram_callback_data(data: str) -> Dict[str, Any]:
+    parts = data.split(":")
+    if len(parts) != 5 or parts[0] != CALLBACK_PREFIX:
+        return {}
+    try:
+        return {
+            "action": parts[1],
+            "nonce": parts[2],
+            "clarification_index": int(parts[3]),
+            "option_index": int(parts[4]),
+        }
+    except ValueError:
+        return {}
+
+
+def _option_by_id(
+    clarification: Dict[str, Any], option_id: str
+) -> Optional[Dict[str, Any]]:
+    for option in _valid_options(clarification):
+        if str(option.get("id")) == option_id:
+            return option
+    return None
+
+
+def _selected_label(pending: Dict[str, Any], clarification: Dict[str, Any]) -> str:
+    selected = (pending.get("selected_option_ids") or {}).get(
+        str(clarification.get("clarification_id"))
+    )
+    option = _option_by_id(clarification, str(selected or ""))
+    return str((option or {}).get("label") or "Not selected")
+
+
+def _slack_select_option(
+    pending: Dict[str, Any],
+    thread_key: str,
+    clarification: Dict[str, Any],
+    option: Dict[str, Any],
+) -> Dict[str, Any]:
+    value = _encode_callback_value(
+        {
+            "action": "select",
+            "thread_key": thread_key,
+            "nonce": pending["nonce"],
+            "clarification_id": clarification["clarification_id"],
+            "option_id": option["id"],
+        }
+    )
+    item = {
+        "text": {"type": "plain_text", "text": _trim(option.get("label"), 75)},
+        "value": value,
+    }
+    description = str(option.get("description") or option.get("impact") or "").strip()
+    if description:
+        item["description"] = {"type": "plain_text", "text": _trim(description, 75)}
+    return item
+
+
+def build_slack_clarification_blocks(pending: Dict[str, Any], project_id: str) -> list:
+    thread_key = str(pending.get("thread_key") or "")
+    intro = "I need your choice before I continue the analysis."
+    if pending.get("last_error"):
+        intro = f"{intro}\n\n⚠️ {pending['last_error']}"
+    blocks: list = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*📊 Dreamify*\n\n{intro}",
+            },
+        }
+    ]
+    for idx, clarification in enumerate(pending.get("clarifications", []), start=1):
+        selected_label = _selected_label(pending, clarification)
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*{idx}. {clarification.get('question')}*\n_Selected: {selected_label}_",
+                },
+            }
+        )
+        options = [
+            _slack_select_option(pending, thread_key, clarification, option)
+            for option in _valid_options(clarification)
+        ][:10]
+        selected_id = (pending.get("selected_option_ids") or {}).get(
+            str(clarification.get("clarification_id"))
+        )
+        initial = next(
+            (
+                o
+                for o in options
+                if _decode_callback_value(o["value"]).get("option_id") == selected_id
+            ),
+            None,
+        )
+        select = {
+            "type": "static_select",
+            "action_id": "dreamify_clarification_select",
+            "placeholder": {"type": "plain_text", "text": "Choose an option"},
+            "options": options,
+        }
+        if initial:
+            select["initial_option"] = initial
+        blocks.append({"type": "actions", "elements": [select]})
+    blocks.append(
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "action_id": "dreamify_clarification_continue",
+                    "text": {"type": "plain_text", "text": "Continue"},
+                    "style": "primary",
+                    "value": _encode_callback_value(
+                        {
+                            "action": "continue",
+                            "thread_key": thread_key,
+                            "nonce": pending["nonce"],
+                        }
+                    ),
+                },
+                {
+                    "type": "button",
+                    "action_id": "dreamify_clarification_cancel",
+                    "text": {"type": "plain_text", "text": "Cancel"},
+                    "style": "danger",
+                    "value": _encode_callback_value(
+                        {
+                            "action": "cancel",
+                            "thread_key": thread_key,
+                            "nonce": pending["nonce"],
+                        }
+                    ),
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Open in Dreamify"},
+                    "url": _build_workspace_project_url(project_id),
+                },
+            ],
+        }
+    )
+    return blocks
+
+
+def build_telegram_clarification_message(
+    pending: Dict[str, Any], project_id: str
+) -> Tuple[str, Any]:
+    from app.services.telegram_service import escape_markdown
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    lines = [
+        "📊 *Dreamify*",
+        "",
+        "I need your choice before I continue the analysis\\.",
+    ]
+    if pending.get("last_error"):
+        lines.extend(["", f"⚠️ {escape_markdown(str(pending['last_error']))}"])
+    keyboard = []
+    nonce = pending["nonce"]
+    for ci, clarification in enumerate(pending.get("clarifications", []), start=0):
+        selected = _selected_label(pending, clarification)
+        lines.append("")
+        lines.append(
+            f"*{ci + 1}\\. {escape_markdown(str(clarification.get('question')))}*"
+        )
+        lines.append(f"_Selected: {escape_markdown(selected)}_")
+        for oi, option in enumerate(_valid_options(clarification)):
+            marker = "✓ " if str(option.get("label")) == selected else ""
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"{marker}{_trim(option.get('label'), 48)}",
+                        callback_data=_telegram_callback_data("s", nonce, ci, oi),
+                    )
+                ]
+            )
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "Continue", callback_data=_telegram_callback_data("go", nonce)
+            ),
+            InlineKeyboardButton(
+                "Cancel", callback_data=_telegram_callback_data("x", nonce)
+            ),
+        ]
+    )
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "Open in Dreamify", url=_build_workspace_project_url(project_id)
+            )
+        ]
+    )
+    return "\n".join(lines), InlineKeyboardMarkup(keyboard)
+
+
+def build_zalo_clarification_message(pending: Dict[str, Any], project_id: str) -> str:
+    lines = ["📊 Dreamify", "", "I need your choice before I continue the analysis."]
+    if pending.get("last_error"):
+        lines.extend(["", f"⚠️ {pending['last_error']}"])
+    for ci, clarification in enumerate(pending.get("clarifications", []), start=1):
+        lines.append("")
+        lines.append(f"{ci}. {clarification.get('question')}")
+        for oi, option in enumerate(_valid_options(clarification), start=1):
+            suffix = " (recommended)" if option.get("recommended") else ""
+            lines.append(f"{oi}. {option.get('label')}{suffix}")
+            if option.get("description"):
+                lines.append(f"   {option.get('description')}")
+    lines.append("")
+    lines.append("Reply with the option number, exact label, or cancel.")
+    lines.append(f"Open in Dreamify: {_build_workspace_project_url(project_id)}")
+    return "\n".join(lines)
+
+
+def _parse_single_text_answer(
+    clarification: Dict[str, Any], answer: str
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    text = answer.strip()
+    if not text:
+        return None, None
+    options = _valid_options(clarification)
+    if text.isdigit():
+        index = int(text) - 1
+        if 0 <= index < len(options):
+            return options[index], None
+    lowered = text.lower()
+    for option in options:
+        if lowered == str(option.get("id") or "").strip().lower():
+            return option, None
+        if lowered == str(option.get("label") or "").strip().lower():
+            return option, None
+    if clarification.get("reason_code") == "analysis_context" and clarification.get(
+        "allow_free_text"
+    ):
+        option = next(
+            (o for o in options if str(o.get("id")) == "define_metric_scope"), None
+        )
+        if option:
+            return option, text
+    return None, None
+
+
+def parse_text_clarification_reply(
+    pending: Dict[str, Any], reply_text: str
+) -> Tuple[str, Optional[Dict[str, Any]], str]:
+    clean = re.sub(r"<@[A-Z0-9]+>", "", reply_text or "").strip()
+    if clean.lower() == "cancel":
+        return "cancel", None, ""
+    clarifications = list(pending.get("clarifications") or [])
+    separators = r"[\n,]+"
+    parts = [part.strip() for part in re.split(separators, clean) if part.strip()]
+    if len(clarifications) == 1:
+        parts = [clean]
+    if len(parts) < len(clarifications):
+        return "invalid", None, "Please answer each pending choice in order."
+    selected: Dict[str, str] = {}
+    free_text: Dict[str, str] = {}
+    for clarification, answer in zip(clarifications, parts):
+        option, answer_text = _parse_single_text_answer(clarification, answer)
+        if not option:
+            return (
+                "invalid",
+                None,
+                "I could not match that answer to one of the choices.",
+            )
+        cid = str(clarification["clarification_id"])
+        selected[cid] = str(option["id"])
+        if answer_text:
+            free_text[cid] = answer_text
+    updated = dict(pending)
+    updated["selected_option_ids"] = {
+        **(pending.get("selected_option_ids") or {}),
+        **selected,
+    }
+    if free_text:
+        updated["free_text_by_id"] = {
+            **(pending.get("free_text_by_id") or {}),
+            **free_text,
+        }
+    return "valid", updated, ""
+
+
+def _responses_from_pending(
+    pending: Dict[str, Any],
+) -> Tuple[List[Dict[str, Any]], List[str], Optional[str]]:
+    responses: List[Dict[str, Any]] = []
+    selected_asset_ids: List[str] = []
+    selected = pending.get("selected_option_ids") or {}
+    free_text_by_id = pending.get("free_text_by_id") or {}
+    for clarification in pending.get("clarifications") or []:
+        cid = str(clarification.get("clarification_id") or "")
+        option = _option_by_id(clarification, str(selected.get(cid) or ""))
+        if not option:
+            return [], [], f"Missing choice for {clarification.get('question')}"
+        metadata = dict(option.get("metadata") or {})
+        if cid in free_text_by_id:
+            metadata["free_text"] = free_text_by_id[cid]
+        asset_ids = [
+            str(asset_id).strip()
+            for asset_id in metadata.get("asset_ids", [])
+            if str(asset_id).strip()
+        ]
+        selected_asset_ids.extend(asset_ids)
+        responses.append(
+            {
+                "type": "clarification_response",
+                "data": {
+                    "clarification_id": cid,
+                    "selected_option_id": option.get("id"),
+                    "selected_option_label": option.get("label"),
+                    "metadata": metadata,
+                },
+            }
+        )
+    return responses, list(dict.fromkeys(selected_asset_ids)), None
+
+
+def _hydrate_asset_contents(user_id: str, asset_ids: List[str]) -> List[Dict[str, Any]]:
+    contents: List[Dict[str, Any]] = []
+    for asset_id in asset_ids:
+        asset = assets_repo.get_asset(user_id, asset_id)
+        if not asset:
+            logger.warning("Selected clarification asset not found: %s", asset_id)
+            continue
+        contents.append(_asset_content_from_asset(asset))
+    return contents
+
+
+def _append_clarification_response_node(
+    pending: Dict[str, Any],
+) -> Tuple[str, Dict[str, str]]:
+    user_id = pending["user_id"]
+    project_id = pending["project_id"]
+    conversation_id = pending["conversation_id"]
+    responses, selected_asset_ids, error = _responses_from_pending(pending)
+    if error:
+        raise RuntimeError(error)
+
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation_meta:
+        raise RuntimeError(f"Conversation {conversation_id} not found in DynamoDB")
+    bucket = conversation_meta["s3_bucket"]
+    keys = _build_conversation_keys(user_id, project_id, conversation_id)
+    conversation = load_conversation(bucket, conversation_meta["s3_key"])
+    asset_contents = _hydrate_asset_contents(user_id, selected_asset_ids)
+    labels = [
+        str(response["data"].get("selected_option_label") or "")
+        for response in responses
+        if response.get("data")
+    ]
+    user_node = _make_user_node("Clarification answer: " + "; ".join(labels))
+    user_node.setdefault("contents", []).extend(responses)
+    user_node["contents"].extend(asset_contents)
+    if selected_asset_ids:
+        _mark_user_node_assets_selected(user_node, selected_asset_ids)
+    conversation.setdefault("nodes", []).append(user_node)
+    conversation["updated_at"] = _now_iso()
+    save_conversation(bucket, keys["primary"], conversation)
+    save_conversation(bucket, keys["backup"], conversation)
+    return bucket, keys
+
+
+def _append_no_answer_node(pending: Dict[str, Any]) -> None:
+    user_id = pending["user_id"]
+    project_id = pending["project_id"]
+    conversation_id = pending["conversation_id"]
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation_meta:
+        return
+    bucket = conversation_meta["s3_bucket"]
+    keys = _build_conversation_keys(user_id, project_id, conversation_id)
+    conversation = load_conversation(bucket, conversation_meta["s3_key"])
+    contents = []
+    for clarification in pending.get("clarifications") or []:
+        contents.append(
+            {
+                "type": "clarification_response",
+                "data": {
+                    "clarification_id": clarification.get("clarification_id"),
+                    "selected_option_id": None,
+                    "selected_option_label": None,
+                    "answer_status": "no_answer",
+                },
+            }
+        )
+    node = {
+        "node_id": f"node_{uuid.uuid4().hex[:8]}",
+        "role": "user",
+        "status": "completed",
+        "created_at": _now_iso(),
+        "contents": contents,
+        "metadata": {
+            "hidden": True,
+            "chat_mode": CHAT_MODEL_ALIAS,
+            "resolved_model": CHAT_MODEL_ID,
+        },
+    }
+    conversation.setdefault("nodes", []).append(node)
+    conversation["updated_at"] = _now_iso()
+    save_conversation(bucket, keys["primary"], conversation)
+    save_conversation(bucket, keys["backup"], conversation)
+
+
+def _stop_pending_workflow(pending: Dict[str, Any]) -> None:
+    now_iso = _now_iso()
+    metadata = {
+        "step": "clarification_dismissed",
+        "answer_status": "no_answer",
+        "stopped_at": now_iso,
+        "stopped_by": pending.get("user_id"),
+    }
+    for node_id in ("workflow", "stop_signal"):
+        workflow_nodes_repo.upsert_node_status(
+            conversation_id=pending["conversation_id"],
+            node_id=node_id,
+            status="stopped",
+            metadata=metadata,
+        )
+
+
 # ── Session management ────────────────────────────────────────────────────────
+
 
 def _get_or_create_session(
     platform_workspace_id: str,
@@ -182,6 +839,7 @@ def _get_or_create_session(
 
 
 # ── S3 + DynamoDB conversation persistence ────────────────────────────────────
+
 
 def _save_new_conversation(
     user_id: str, project_id: str, conversation_id: str, query: str
@@ -230,7 +888,9 @@ def _append_user_node_to_conversation(
     conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
     if not conversation_meta:
         raise RuntimeError(f"Conversation {conversation_id} not found in DynamoDB")
-    conversation = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+    conversation = load_conversation(
+        conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+    )
     conversation.setdefault("nodes", []).append(_make_user_node(query))
     conversation["updated_at"] = _now_iso()
     save_conversation(bucket, keys["primary"], conversation)
@@ -240,12 +900,15 @@ def _append_user_node_to_conversation(
 
 # ── Morpheus call ─────────────────────────────────────────────────────────────
 
+
 def _call_morpheus(
     conversation_id: str,
     project_id: str,
     user_id: str,
     bucket: str,
     keys: Dict[str, str],
+    *,
+    skip_ask_first: bool = False,
 ) -> None:
     payload = {
         "conversation_id": conversation_id,
@@ -254,17 +917,25 @@ def _call_morpheus(
         "project_id": project_id,
         "user_id": user_id,
         "model": CHAT_MODEL_ID,
+        "project_assets": _project_asset_summaries(user_id, project_id),
+        "skip_ask_first": skip_ask_first,
     }
     try:
-        response = requests.post(f"{MORPHEUS_SERVICE_URL}/run", json=payload, timeout=30)
+        response = requests.post(
+            f"{MORPHEUS_SERVICE_URL}/run", json=payload, timeout=30
+        )
         response.raise_for_status()
     except requests.exceptions.ReadTimeout:
         # Morpheus /run blocks while waiting for a previous workflow to stop before
         # returning. The job has been accepted and will run; we can poll for completion.
-        logger.warning("Morpheus /run read timeout for %s — workflow accepted, polling anyway", conversation_id)
+        logger.warning(
+            "Morpheus /run read timeout for %s — workflow accepted, polling anyway",
+            conversation_id,
+        )
 
 
 # ── Polling ───────────────────────────────────────────────────────────────────
+
 
 async def _poll_workflow(
     conversation_id: str,
@@ -280,7 +951,9 @@ async def _poll_workflow(
         try:
             node = workflow_nodes_repo.get_node(conversation_id, "workflow")
         except Exception as e:
-            logger.warning("DynamoDB get_node error for %s (will retry): %s", conversation_id, e)
+            logger.warning(
+                "DynamoDB get_node error for %s (will retry): %s", conversation_id, e
+            )
             continue
         if not node:
             continue
@@ -291,9 +964,112 @@ async def _poll_workflow(
             last_step = current_step
             if on_step and current_step:
                 await on_step(step_label(current_step))
-        if status in ("completed", "error", "stopped"):
+        if status in ("completed", "error", "stopped", "awaiting_user_input"):
             return status, last_step, metadata
     return "timeout", last_step, {}
+
+
+def _workspace_result(
+    user_id: str,
+    project_id: str,
+    conversation_id: str,
+    final_meta: Dict[str, Any],
+) -> Tuple[str, Optional[str], list, Optional[Dict[str, Any]]]:
+    metrics: list = []
+    dashboard_json: Optional[Dict[str, Any]] = None
+    if final_meta.get("response_type") in (
+        "message",
+        "answer_with_visual",
+    ) and final_meta.get("content"):
+        return final_meta["content"], None, metrics, dashboard_json
+
+    conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+    if not conversation_meta:
+        raise RuntimeError(
+            f"Post-poll: conversation {conversation_id} not found in DynamoDB"
+        )
+    conversation = load_conversation(
+        conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+    )
+    narrative = (
+        _extract_narrative(conversation) or "Analysis complete. No narrative returned."
+    )
+    dashboard_url = _build_dashboard_url(project_id, conversation)
+    dashboards = conversation.get("dashboards", [])
+    if dashboards:
+        try:
+            projects_repo.update_project(
+                user_id=user_id,
+                project_id=project_id,
+                is_preview_public=True,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to enable public preview for %s: %s", project_id, exc
+            )
+        s3_uri = dashboards[-1].get("s3_uri")
+        if s3_uri:
+            dashboard_json = _load_dashboard_json(s3_uri)
+            if dashboard_json:
+                metrics = _extract_top_metrics(dashboard_json)
+    return narrative, dashboard_url, metrics, dashboard_json
+
+
+def _awaiting_message_text(project_id: str) -> str:
+    return (
+        "I need your choice before I continue. "
+        f"Open in Dreamify: {_build_workspace_project_url(project_id)}"
+    )
+
+
+def _prepare_pending_from_conversation(
+    *,
+    platform: str,
+    platform_workspace_id: str,
+    thread_key: str,
+    conversation_id: str,
+    project_id: str,
+    user_id: str,
+    bucket: str,
+    keys: Dict[str, str],
+    message: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    try:
+        _, clarifications = _load_valid_clarifications(bucket, keys["primary"])
+    except Exception as exc:
+        logger.warning(
+            "Failed to load paused workflow %s clarification payload: %s",
+            conversation_id,
+            exc,
+        )
+        return None
+    if not clarifications:
+        logger.warning(
+            "Workflow %s paused without valid clarification choices",
+            conversation_id,
+        )
+        return None
+    pending = _build_pending_clarification(
+        platform=platform,
+        conversation_id=conversation_id,
+        project_id=project_id,
+        user_id=user_id,
+        thread_key=thread_key,
+        clarifications=clarifications,
+        message=message,
+    )
+    _store_pending(platform_workspace_id, thread_key, pending)
+    return pending
+
+
+def _set_pending_resuming(
+    platform_workspace_id: str, pending: Dict[str, Any]
+) -> Dict[str, Any]:
+    updated = dict(pending)
+    updated["status"] = "resuming"
+    updated["resuming_at"] = _now_iso()
+    _store_pending(platform_workspace_id, pending["thread_key"], updated)
+    return updated
 
 
 # ── Slack file handling ───────────────────────────────────────────────────────
@@ -343,7 +1119,11 @@ async def _download_and_attach_slack_files(
                     url, headers={"Authorization": f"Bearer {bot_token}"}
                 ) as resp:
                     if resp.status != 200:
-                        logger.error("Failed to download Slack file %s: HTTP %s", filename, resp.status)
+                        logger.error(
+                            "Failed to download Slack file %s: HTTP %s",
+                            filename,
+                            resp.status,
+                        )
                         continue
                     file_bytes = await resp.read()
         except Exception as exc:
@@ -351,7 +1131,9 @@ async def _download_and_attach_slack_files(
             continue
 
         asset_id = str(uuid.uuid4())
-        s3_key = f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+        s3_key = (
+            f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+        )
 
         try:
             s3 = boto3.client(
@@ -360,7 +1142,12 @@ async def _download_and_attach_slack_files(
                 aws_access_key_id=config.aws.access_key.AWS_ACCESS_KEY_ID,
                 aws_secret_access_key=config.aws.access_key.AWS_SECRET_ACCESS_KEY,
             )
-            s3.put_object(Bucket=bucket, Key=s3_key, Body=file_bytes, ContentType=mimetype or "application/octet-stream")
+            s3.put_object(
+                Bucket=bucket,
+                Key=s3_key,
+                Body=file_bytes,
+                ContentType=mimetype or "application/octet-stream",
+            )
         except Exception as exc:
             logger.error("Failed to upload Slack file %s to S3: %s", filename, exc)
             continue
@@ -385,27 +1172,34 @@ async def _download_and_attach_slack_files(
             logger.error("Failed to create asset record for %s: %s", filename, exc)
             continue
 
-        asset_nodes.append({
-            "type": "asset",
-            "data": {
-                "asset_id": asset_id,
-                "file_id": asset_id,
-                "s3_bucket": bucket,
-                "s3_key": s3_key,
-                "extension": ext,
-                "filename": filename,
-            },
-        })
+        asset_nodes.append(
+            {
+                "type": "asset",
+                "data": {
+                    "asset_id": asset_id,
+                    "file_id": asset_id,
+                    "s3_bucket": bucket,
+                    "s3_key": s3_key,
+                    "extension": ext,
+                    "filename": filename,
+                },
+            }
+        )
         logger.info("Attached Slack file %s as asset %s", filename, asset_id)
 
     if not asset_nodes:
         return
 
-    # Append asset nodes to the last user node's contents
+    # Append asset nodes to the last user node's contents and mark them selected
+    # so Morpheus downloads the uploaded files instead of treating the turn as
+    # pure Q&A.
     nodes = conversation.get("nodes", [])
     for node in reversed(nodes):
         if node.get("role") == "user":
             node.setdefault("contents", []).extend(asset_nodes)
+            _mark_user_node_assets_selected(
+                node, [asset["data"]["asset_id"] for asset in asset_nodes]
+            )
             break
 
     conversation["updated_at"] = _now_iso()
@@ -413,7 +1207,198 @@ async def _download_and_attach_slack_files(
     save_conversation(bucket, keys["backup"], conversation)
 
 
+async def _update_slack_clarification_card(
+    client: Any, pending: Dict[str, Any]
+) -> None:
+    message = pending.get("message") or {}
+    await client.chat_update(
+        channel=message.get("channel_id"),
+        ts=message.get("message_ts"),
+        blocks=build_slack_clarification_blocks(pending, pending["project_id"]),
+        text=_awaiting_message_text(pending["project_id"]),
+    )
+
+
+async def _post_slack_result(
+    client: Any,
+    pending: Dict[str, Any],
+    final_meta: Dict[str, Any],
+) -> None:
+    message = pending.get("message") or {}
+    narrative, dashboard_url, metrics, dashboard_json = _workspace_result(
+        pending["user_id"],
+        pending["project_id"],
+        pending["conversation_id"],
+        final_meta,
+    )
+    await client.chat_update(
+        channel=message.get("channel_id"),
+        ts=message.get("message_ts"),
+        blocks=build_response_blocks(
+            narrative, dashboard_url, CHAT_CREDIT_COST, metrics=metrics
+        ),
+        text=narrative,
+    )
+    thread_ts = message.get("thread_ts") or message.get("message_ts")
+    if is_chart_rendering_enabled() and dashboard_json:
+        for png_bytes, chart_title in render_dashboard_previews(
+            dashboard_json, max_charts=3
+        ):
+            safe_name = chart_title.lower().replace(" ", "_").replace("/", "_")
+            await client.files_upload_v2(
+                channel=message.get("channel_id"),
+                thread_ts=thread_ts,
+                content=png_bytes,
+                filename=f"{safe_name}.png",
+                title=chart_title,
+            )
+
+
+async def _resume_slack_pending(
+    client: Any, platform_workspace_id: str, pending: Dict[str, Any]
+) -> None:
+    if pending.get("status") == "resuming":
+        return
+    pending = _set_pending_resuming(platform_workspace_id, pending)
+    message = pending.get("message") or {}
+    await client.chat_update(
+        channel=message.get("channel_id"),
+        ts=message.get("message_ts"),
+        blocks=build_status_blocks("Continuing analysis..."),
+        text="Continuing analysis...",
+    )
+    bucket, keys = _append_clarification_response_node(pending)
+    _call_morpheus(
+        pending["conversation_id"],
+        pending["project_id"],
+        pending["user_id"],
+        bucket,
+        keys,
+    )
+    credit_service.consume_credits(pending["user_id"], CHAT_CREDIT_COST)
+    final_status, _, final_meta = await _poll_workflow(pending["conversation_id"])
+    if final_status == "awaiting_user_input":
+        next_pending = _prepare_pending_from_conversation(
+            platform="slack",
+            platform_workspace_id=platform_workspace_id,
+            thread_key=pending["thread_key"],
+            conversation_id=pending["conversation_id"],
+            project_id=pending["project_id"],
+            user_id=pending["user_id"],
+            bucket=bucket,
+            keys=keys,
+            message=message,
+        )
+        if next_pending:
+            await _update_slack_clarification_card(client, next_pending)
+            return
+    _clear_pending(platform_workspace_id, pending["thread_key"])
+    if final_status == "completed":
+        await _post_slack_result(client, pending, final_meta)
+        return
+    err = _analysis_incomplete_message(pending["project_id"])
+    await client.chat_update(
+        channel=message.get("channel_id"),
+        ts=message.get("message_ts"),
+        blocks=build_error_blocks(err),
+        text=err,
+    )
+
+
+async def handle_slack_clarification_interaction(payload: Dict[str, Any]) -> None:
+    from slack_sdk.web.async_client import AsyncWebClient
+
+    action = (payload.get("actions") or [{}])[0]
+    value = action.get("value")
+    if action.get("selected_option"):
+        value = action["selected_option"].get("value")
+    data = _decode_callback_value(str(value or ""))
+    if not data:
+        return
+    team_id = ((payload.get("team") or {}).get("id") or "").strip()
+    platform_workspace_id = f"slack:{team_id}"
+    thread_key = str(data.get("thread_key") or "")
+    _, pending = _get_active_pending(platform_workspace_id, thread_key)
+    if not pending or data.get("nonce") != pending.get("nonce"):
+        return
+    workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+    if not workspace:
+        return
+    client = AsyncWebClient(token=decrypt_token(workspace["bot_token_encrypted"]))
+
+    action_name = data.get("action")
+    if action_name == "select":
+        updated = dict(pending)
+        selected = dict(updated.get("selected_option_ids") or {})
+        selected[str(data.get("clarification_id"))] = str(data.get("option_id"))
+        updated["selected_option_ids"] = selected
+        updated.pop("last_error", None)
+        _store_pending(platform_workspace_id, thread_key, updated)
+        await _update_slack_clarification_card(client, updated)
+        return
+    if action_name == "cancel":
+        _append_no_answer_node(pending)
+        _stop_pending_workflow(pending)
+        _clear_pending(platform_workspace_id, thread_key)
+        message = pending.get("message") or {}
+        await client.chat_update(
+            channel=message.get("channel_id"),
+            ts=message.get("message_ts"),
+            blocks=build_error_blocks("Clarification cancelled. No credits used."),
+            text="Clarification cancelled.",
+        )
+        return
+    if action_name == "continue":
+        responses, _, error = _responses_from_pending(pending)
+        if error or not responses:
+            updated = dict(pending)
+            updated["last_error"] = (
+                error or "Please choose an option before continuing."
+            )
+            _store_pending(platform_workspace_id, thread_key, updated)
+            await _update_slack_clarification_card(client, updated)
+            return
+        await _resume_slack_pending(client, platform_workspace_id, pending)
+
+
+async def handle_slack_clarification_reply(
+    query: str,
+    platform_workspace_id: str,
+    channel_id: str,
+    thread_ts: str,
+    bot_token_encrypted: str,
+) -> None:
+    from slack_sdk.web.async_client import AsyncWebClient
+
+    thread_key = f"{channel_id}#{thread_ts}"
+    _, pending = _get_active_pending(platform_workspace_id, thread_key)
+    if not pending:
+        return
+    client = AsyncWebClient(token=decrypt_token(bot_token_encrypted))
+    status, updated, error = parse_text_clarification_reply(pending, query)
+    if status == "cancel":
+        _append_no_answer_node(pending)
+        _stop_pending_workflow(pending)
+        _clear_pending(platform_workspace_id, thread_key)
+        message = pending.get("message") or {}
+        await client.chat_update(
+            channel=message.get("channel_id"),
+            ts=message.get("message_ts"),
+            blocks=build_error_blocks("Clarification cancelled. No credits used."),
+            text="Clarification cancelled.",
+        )
+        return
+    if status != "valid" or not updated:
+        pending["last_error"] = error or "Please reply with a listed option."
+        _store_pending(platform_workspace_id, thread_key, pending)
+        await _update_slack_clarification_card(client, pending)
+        return
+    _store_pending(platform_workspace_id, thread_key, updated)
+    await _resume_slack_pending(client, platform_workspace_id, updated)
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
+
 
 async def handle_slack_query(
     query: str,
@@ -432,7 +1417,9 @@ async def handle_slack_query(
     try:
         bot_token = decrypt_token(bot_token_encrypted)
     except Exception as exc:
-        logger.error("Failed to decrypt bot token for %s: %s", platform_workspace_id, exc)
+        logger.error(
+            "Failed to decrypt bot token for %s: %s", platform_workspace_id, exc
+        )
         return
 
     client = AsyncWebClient(token=bot_token)
@@ -475,7 +1462,9 @@ async def handle_slack_query(
         )
 
         if is_new:
-            bucket, keys = _save_new_conversation(user_id, project_id, conversation_id, query)
+            bucket, keys = _save_new_conversation(
+                user_id, project_id, conversation_id, query
+            )
         else:
             bucket, keys = _append_user_node_to_conversation(
                 user_id, project_id, conversation_id, query
@@ -488,27 +1477,59 @@ async def handle_slack_query(
         await asyncio.sleep(0.5)  # S3 eventual consistency buffer
 
         if slack_files:
-            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
-            if conversation_meta:
-                conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+            try:
+                conv = load_conversation(bucket, keys["primary"])
                 await _download_and_attach_slack_files(
                     slack_files, bot_token, user_id, project_id, conv, bucket, keys
                 )
                 await asyncio.sleep(0.5)  # S3 consistency after file upload
+            except Exception as exc:
+                logger.error(
+                    "Failed to attach Slack files for conversation %s: %s",
+                    conversation_id,
+                    exc,
+                    exc_info=True,
+                )
 
         _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
         credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
 
-        final_status, _, final_meta = await _poll_workflow(conversation_id, on_step=update_status)
+        final_status, _, final_meta = await _poll_workflow(
+            conversation_id, on_step=update_status
+        )
+
+        if final_status == "awaiting_user_input":
+            pending = _prepare_pending_from_conversation(
+                platform="slack",
+                platform_workspace_id=platform_workspace_id,
+                thread_key=thread_key,
+                conversation_id=conversation_id,
+                project_id=project_id,
+                user_id=user_id,
+                bucket=bucket,
+                keys=keys,
+                message={
+                    "channel_id": channel_id,
+                    "message_ts": placeholder_ts,
+                    "thread_ts": thread_ts,
+                },
+            )
+            if pending:
+                await _update_slack_clarification_card(client, pending)
+                return
 
         if final_status != "completed":
+            message = _analysis_incomplete_message(project_id)
+            logger.info(
+                "Workspace Slack workflow %s ended with status %s",
+                conversation_id,
+                final_status,
+            )
             await client.chat_update(
                 channel=channel_id,
                 ts=placeholder_ts,
-                blocks=build_error_blocks(
-                    "Analysis did not complete. Please try again."
-                ),
-                text="Analysis failed.",
+                blocks=build_error_blocks(message),
+                text=message,
             )
             return
 
@@ -516,21 +1537,37 @@ async def handle_slack_query(
         # so we can skip the S3 load entirely.
         metrics: list = []
         dashboard_json: Optional[Dict[str, Any]] = None
-        if final_meta.get("response_type") in ("message", "answer_with_visual") and final_meta.get("content"):
+        if final_meta.get("response_type") in (
+            "message",
+            "answer_with_visual",
+        ) and final_meta.get("content"):
             narrative = final_meta["content"]
             dashboard_url = None
-            logger.info("Using inline narrative from workflow metadata (len=%d)", len(narrative))
+            logger.info(
+                "Using inline narrative from workflow metadata (len=%d)", len(narrative)
+            )
         else:
             # Load completed conversation and extract narrative
             logger.info("Workflow completed, loading conversation %s", conversation_id)
-            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            conversation_meta = conversations_repo.get_conversation(
+                project_id, conversation_id
+            )
             if not conversation_meta:
-                raise RuntimeError(f"Post-poll: conversation {conversation_id} not found in DynamoDB")
-            logger.info("Loading S3 conversation from %s/%s", conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+                raise RuntimeError(
+                    f"Post-poll: conversation {conversation_id} not found in DynamoDB"
+                )
+            logger.info(
+                "Loading S3 conversation from %s/%s",
+                conversation_meta["s3_bucket"],
+                conversation_meta["s3_key"],
+            )
             conversation = load_conversation(
                 conversation_meta["s3_bucket"], conversation_meta["s3_key"]
             )
-            narrative = _extract_narrative(conversation) or "Analysis complete. No narrative returned."
+            narrative = (
+                _extract_narrative(conversation)
+                or "Analysis complete. No narrative returned."
+            )
             dashboard_url = _build_dashboard_url(project_id, conversation)
 
             # Auto-enable public preview and extract dashboard metrics
@@ -544,24 +1581,32 @@ async def handle_slack_query(
                     )
                     logger.info("Enabled public preview for project %s", project_id)
                 except Exception as exc:
-                    logger.warning("Failed to enable public preview for %s: %s", project_id, exc)
+                    logger.warning(
+                        "Failed to enable public preview for %s: %s", project_id, exc
+                    )
 
                 s3_uri = dashboards[-1].get("s3_uri")
                 if s3_uri:
                     dashboard_json = _load_dashboard_json(s3_uri)
                     if dashboard_json:
                         metrics = _extract_top_metrics(dashboard_json)
-                        logger.info("Extracted %d metric(s) from dashboard", len(metrics))
+                        logger.info(
+                            "Extracted %d metric(s) from dashboard", len(metrics)
+                        )
 
         logger.info("Updating Slack message with narrative (len=%d)", len(narrative))
 
         await client.chat_update(
             channel=channel_id,
             ts=placeholder_ts,
-            blocks=build_response_blocks(narrative, dashboard_url, CHAT_CREDIT_COST, metrics=metrics),
+            blocks=build_response_blocks(
+                narrative, dashboard_url, CHAT_CREDIT_COST, metrics=metrics
+            ),
             text=narrative,
         )
-        logger.info("Successfully updated Slack message for conversation %s", conversation_id)
+        logger.info(
+            "Successfully updated Slack message for conversation %s", conversation_id
+        )
 
         # Phase 2B — upload chart preview PNGs into the thread (opt-in)
         if is_chart_rendering_enabled() and dashboard_json:
@@ -581,13 +1626,20 @@ async def handle_slack_query(
                     logger.warning("Failed to upload chart '%s': %s", chart_title, exc)
 
     except Exception as exc:
-        logger.error("handle_slack_query failed for %s: %s", platform_workspace_id, exc, exc_info=True)
+        logger.error(
+            "handle_slack_query failed for %s: %s",
+            platform_workspace_id,
+            exc,
+            exc_info=True,
+        )
         if placeholder_ts:
             try:
                 await client.chat_update(
                     channel=channel_id,
                     ts=placeholder_ts,
-                    blocks=build_error_blocks("Something went wrong. Please try again."),
+                    blocks=build_error_blocks(
+                        "Something went wrong. Please try again."
+                    ),
                     text="Error.",
                 )
             except Exception:
@@ -634,7 +1686,9 @@ async def post_sync_to_slack(
     # 1. Find the user's connected Slack workspace and decrypt token
     workspace = chat_platform_repo.get_workspace_by_user(user_id, "slack")
     if not workspace:
-        logger.info("No Slack workspace connected for user %s — skipping Slack post", user_id)
+        logger.info(
+            "No Slack workspace connected for user %s — skipping Slack post", user_id
+        )
         return
     try:
         bot_token = decrypt_token(workspace["bot_token_encrypted"])
@@ -649,7 +1703,9 @@ async def post_sync_to_slack(
     try:
         resp = await client.chat_postMessage(
             channel=channel_id,
-            blocks=build_sync_placeholder_blocks(provider_label, account_name, rows_fetched),
+            blocks=build_sync_placeholder_blocks(
+                provider_label, account_name, rows_fetched
+            ),
             text=f"✅ {account_name} synced · Analyzing…",
         )
         placeholder_ts = resp["ts"]
@@ -684,7 +1740,14 @@ async def post_sync_to_slack(
             {"type": "text", "data": {"text": SYNC_ANALYSIS_PROMPT}},
             asset_content,
         ],
-        "metadata": {"chat_mode": CHAT_MODEL_ALIAS, "resolved_model": CHAT_MODEL_ID},
+        "metadata": {
+            "chat_mode": CHAT_MODEL_ALIAS,
+            "resolved_model": CHAT_MODEL_ID,
+            "asset_selection": "explicit",
+            "selected_asset_ids": [
+                asset_id for asset_id in [asset.get("asset_id")] if asset_id
+            ],
+        },
     }
     conversation = {
         "user_id": user_id,
@@ -723,7 +1786,9 @@ async def post_sync_to_slack(
             latest_conversation_id=conversation_id,
         )
     except Exception as exc:
-        logger.error("Failed to save sync analysis conversation %s: %s", conversation_id, exc)
+        logger.error(
+            "Failed to save sync analysis conversation %s: %s", conversation_id, exc
+        )
         await _update_slack_error(client, channel_id, placeholder_ts)
         return
 
@@ -734,7 +1799,9 @@ async def post_sync_to_slack(
         _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
         credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
     except Exception as exc:
-        logger.error("Failed to trigger Morpheus for sync analysis %s: %s", conversation_id, exc)
+        logger.error(
+            "Failed to trigger Morpheus for sync analysis %s: %s", conversation_id, exc
+        )
         await _update_slack_error(client, channel_id, placeholder_ts)
         return
 
@@ -751,22 +1818,71 @@ async def post_sync_to_slack(
             except Exception:
                 pass
 
-    final_status, _, final_meta = await _poll_workflow(conversation_id, on_step=_on_step)
+    final_status, _, final_meta = await _poll_workflow(
+        conversation_id, on_step=_on_step
+    )
+
+    if final_status == "awaiting_user_input":
+        platform_workspace_id = workspace["platform_workspace_id"]
+        thread_key = f"{channel_id}#{placeholder_ts}"
+        if not chat_platform_repo.get_session(platform_workspace_id, thread_key):
+            chat_platform_repo.create_session(
+                platform_workspace_id=platform_workspace_id,
+                thread_key=thread_key,
+                conversation_id=conversation_id,
+                project_id=project_id,
+                user_id=user_id,
+            )
+        pending = _prepare_pending_from_conversation(
+            platform="slack",
+            platform_workspace_id=platform_workspace_id,
+            thread_key=thread_key,
+            conversation_id=conversation_id,
+            project_id=project_id,
+            user_id=user_id,
+            bucket=bucket,
+            keys=keys,
+            message={
+                "channel_id": channel_id,
+                "message_ts": placeholder_ts,
+                "thread_ts": placeholder_ts,
+            },
+        )
+        if pending:
+            await _update_slack_clarification_card(client, pending)
+            return
 
     if final_status != "completed":
-        await _update_slack_error(client, channel_id, placeholder_ts, "Analysis did not complete.")
+        logger.info(
+            "Scheduled Slack workspace workflow %s ended with status %s",
+            conversation_id,
+            final_status,
+        )
+        await _update_slack_error(
+            client,
+            channel_id,
+            placeholder_ts,
+            _analysis_incomplete_message(project_id),
+        )
         return
 
     # 6. Extract result and update Slack message
     metrics: list = []
     dashboard_url: Optional[str] = None
-    if final_meta.get("response_type") in ("message", "answer_with_visual") and final_meta.get("content"):
+    if final_meta.get("response_type") in (
+        "message",
+        "answer_with_visual",
+    ) and final_meta.get("content"):
         narrative = final_meta["content"]
     else:
         try:
-            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            conversation_meta = conversations_repo.get_conversation(
+                project_id, conversation_id
+            )
             if conversation_meta:
-                conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+                conv = load_conversation(
+                    conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+                )
                 narrative = _extract_narrative(conv) or "Analysis complete."
                 dashboard_url = _build_dashboard_url(project_id, conv)
                 dashboards = conv.get("dashboards", [])
@@ -790,7 +1906,12 @@ async def post_sync_to_slack(
             channel=channel_id,
             ts=placeholder_ts,
             blocks=build_sync_result_blocks(
-                provider_label, account_name, rows_fetched, narrative, dashboard_url, metrics
+                provider_label,
+                account_name,
+                rows_fetched,
+                narrative,
+                dashboard_url,
+                metrics,
             ),
             text=narrative,
         )
@@ -814,10 +1935,13 @@ async def trigger_auto_refresh(
         bucket = config.aws.s3.USER_ASSETS_BUCKET
         keys = _build_conversation_keys(user_id, project_id, conversation_id)
 
-        conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+        conversation_meta = conversations_repo.get_conversation(
+            project_id, conversation_id
+        )
         if not conversation_meta:
             logger.warning(
-                "Auto-refresh: conversation %s not found in DynamoDB — skipping", conversation_id
+                "Auto-refresh: conversation %s not found in DynamoDB — skipping",
+                conversation_id,
             )
             return
 
@@ -847,7 +1971,14 @@ async def trigger_auto_refresh(
                 {"type": "text", "data": {"text": prompt}},
                 asset_content,
             ],
-            "metadata": {"chat_mode": CHAT_MODEL_ALIAS, "resolved_model": CHAT_MODEL_ID},
+            "metadata": {
+                "chat_mode": CHAT_MODEL_ALIAS,
+                "resolved_model": CHAT_MODEL_ID,
+                "asset_selection": "explicit",
+                "selected_asset_ids": [
+                    asset_id for asset_id in [asset.get("asset_id")] if asset_id
+                ],
+            },
         }
         conversation.setdefault("nodes", []).append(user_node)
         conversation["updated_at"] = now_iso
@@ -865,24 +1996,39 @@ async def trigger_auto_refresh(
             )
 
         await asyncio.sleep(0.3)
-        _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
+        _call_morpheus(
+            conversation_id,
+            project_id,
+            user_id,
+            bucket,
+            keys,
+            skip_ask_first=True,
+        )
         credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
         logger.info(
             "Auto-refresh triggered for conversation %s in project %s",
-            conversation_id, project_id,
+            conversation_id,
+            project_id,
         )
     except Exception as exc:
         logger.error(
-            "Auto-refresh failed for conversation %s: %s", conversation_id, exc, exc_info=True
+            "Auto-refresh failed for conversation %s: %s",
+            conversation_id,
+            exc,
+            exc_info=True,
         )
 
 
 async def _update_slack_error(
-    client: Any, channel_id: str, placeholder_ts: Optional[str], msg: str = "Something went wrong."
+    client: Any,
+    channel_id: str,
+    placeholder_ts: Optional[str],
+    msg: str = "Something went wrong.",
 ) -> None:
     if placeholder_ts:
         try:
             from app.services.slack_service import build_error_blocks
+
             await client.chat_update(
                 channel=channel_id,
                 ts=placeholder_ts,
@@ -939,7 +2085,11 @@ async def _download_and_attach_telegram_files(
             async with aiohttp.ClientSession() as session:
                 async with session.get(download_url) as resp:
                     if resp.status != 200:
-                        logger.error("Failed to download Telegram file %s: HTTP %s", filename, resp.status)
+                        logger.error(
+                            "Failed to download Telegram file %s: HTTP %s",
+                            filename,
+                            resp.status,
+                        )
                         continue
                     file_bytes = await resp.read()
         except Exception as exc:
@@ -951,7 +2101,9 @@ async def _download_and_attach_telegram_files(
             continue
 
         asset_id = str(uuid.uuid4())
-        s3_key = f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+        s3_key = (
+            f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+        )
 
         try:
             s3 = boto3.client(
@@ -982,20 +2134,24 @@ async def _download_and_attach_telegram_files(
                 extension=ext,
             )
         except Exception as exc:
-            logger.error("Failed to create asset record for Telegram file %s: %s", filename, exc)
+            logger.error(
+                "Failed to create asset record for Telegram file %s: %s", filename, exc
+            )
             continue
 
-        asset_nodes.append({
-            "type": "asset",
-            "data": {
-                "asset_id": asset_id,
-                "file_id": asset_id,
-                "s3_bucket": bucket,
-                "s3_key": s3_key,
-                "extension": ext,
-                "filename": filename,
-            },
-        })
+        asset_nodes.append(
+            {
+                "type": "asset",
+                "data": {
+                    "asset_id": asset_id,
+                    "file_id": asset_id,
+                    "s3_bucket": bucket,
+                    "s3_key": s3_key,
+                    "extension": ext,
+                    "filename": filename,
+                },
+            }
+        )
         logger.info("Attached Telegram file %s as asset %s", filename, asset_id)
 
     if not asset_nodes:
@@ -1005,6 +2161,9 @@ async def _download_and_attach_telegram_files(
     for node in reversed(nodes):
         if node.get("role") == "user":
             node.setdefault("contents", []).extend(asset_nodes)
+            _mark_user_node_assets_selected(
+                node, [asset["data"]["asset_id"] for asset in asset_nodes]
+            )
             break
 
     conversation["updated_at"] = _now_iso()
@@ -1012,7 +2171,227 @@ async def _download_and_attach_telegram_files(
     save_conversation(bucket, keys["backup"], conversation)
 
 
+async def _update_telegram_clarification_card(
+    bot: Any, pending: Dict[str, Any]
+) -> None:
+    message = pending.get("message") or {}
+    text, reply_markup = build_telegram_clarification_message(
+        pending, pending["project_id"]
+    )
+    await bot.edit_message_text(
+        chat_id=message.get("chat_id"),
+        message_id=message.get("message_id"),
+        text=text,
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup,
+    )
+
+
+async def _post_telegram_result(
+    bot: Any, pending: Dict[str, Any], final_meta: Dict[str, Any]
+) -> None:
+    from app.services.telegram_service import (
+        build_dashboard_keyboard,
+        format_response_message,
+    )
+
+    message = pending.get("message") or {}
+    narrative, dashboard_url, metrics, dashboard_json = _workspace_result(
+        pending["user_id"],
+        pending["project_id"],
+        pending["conversation_id"],
+        final_meta,
+    )
+    reply_markup = build_dashboard_keyboard(dashboard_url) if dashboard_url else None
+    await bot.edit_message_text(
+        chat_id=message.get("chat_id"),
+        message_id=message.get("message_id"),
+        text=format_response_message(
+            narrative, dashboard_url, CHAT_CREDIT_COST, metrics
+        ),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup,
+    )
+    if is_chart_rendering_enabled() and dashboard_json:
+        from telegram import InputMediaPhoto
+
+        previews = render_dashboard_previews(dashboard_json, max_charts=4)
+        if len(previews) == 1:
+            png_bytes, chart_title = previews[0]
+            await bot.send_photo(
+                chat_id=message.get("chat_id"),
+                photo=png_bytes,
+                caption=chart_title[:1024],
+                message_thread_id=message.get("message_thread_id"),
+            )
+        elif len(previews) > 1:
+            media = [
+                InputMediaPhoto(media=png, caption=title[:1024])
+                for png, title in previews
+            ]
+            await bot.send_media_group(
+                chat_id=message.get("chat_id"),
+                media=media,
+                message_thread_id=message.get("message_thread_id"),
+            )
+
+
+async def _resume_telegram_pending(
+    bot: Any, platform_workspace_id: str, pending: Dict[str, Any]
+) -> None:
+    from app.services.telegram_service import (
+        format_status_message,
+        format_error_message,
+    )
+
+    if pending.get("status") == "resuming":
+        return
+    pending = _set_pending_resuming(platform_workspace_id, pending)
+    message = pending.get("message") or {}
+    await bot.edit_message_text(
+        chat_id=message.get("chat_id"),
+        message_id=message.get("message_id"),
+        text=format_status_message("Continuing analysis..."),
+        parse_mode="MarkdownV2",
+    )
+    bucket, keys = _append_clarification_response_node(pending)
+    _call_morpheus(
+        pending["conversation_id"],
+        pending["project_id"],
+        pending["user_id"],
+        bucket,
+        keys,
+    )
+    credit_service.consume_credits(pending["user_id"], CHAT_CREDIT_COST)
+    final_status, _, final_meta = await _poll_workflow(pending["conversation_id"])
+    if final_status == "awaiting_user_input":
+        next_pending = _prepare_pending_from_conversation(
+            platform="telegram",
+            platform_workspace_id=platform_workspace_id,
+            thread_key=pending["thread_key"],
+            conversation_id=pending["conversation_id"],
+            project_id=pending["project_id"],
+            user_id=pending["user_id"],
+            bucket=bucket,
+            keys=keys,
+            message=message,
+        )
+        if next_pending:
+            await _update_telegram_clarification_card(bot, next_pending)
+            return
+    _clear_pending(platform_workspace_id, pending["thread_key"])
+    if final_status == "completed":
+        await _post_telegram_result(bot, pending, final_meta)
+        return
+    await bot.edit_message_text(
+        chat_id=message.get("chat_id"),
+        message_id=message.get("message_id"),
+        text=format_error_message(_analysis_incomplete_message(pending["project_id"])),
+        parse_mode="MarkdownV2",
+    )
+
+
+async def handle_telegram_clarification_callback(callback: Dict[str, Any]) -> None:
+    from app.services.telegram_service import get_telegram_bot
+
+    bot = await get_telegram_bot()
+    callback_id = callback.get("id")
+    if callback_id:
+        try:
+            await bot.answer_callback_query(callback_query_id=callback_id)
+        except Exception as exc:
+            logger.debug("Telegram answer_callback_query failed: %s", exc)
+    data = _parse_telegram_callback_data(str(callback.get("data") or ""))
+    message = callback.get("message") or {}
+    chat_id = (message.get("chat") or {}).get("id")
+    if not data or not chat_id:
+        return
+    thread_key = f"{chat_id}#{message.get('message_thread_id') or 0}"
+    platform_workspace_id = f"telegram:{chat_id}"
+    _, pending = _get_active_pending(platform_workspace_id, thread_key)
+    if not pending or data.get("nonce") != pending.get("nonce"):
+        return
+
+    action = data.get("action")
+    if action == "s":
+        try:
+            clarification = pending["clarifications"][data["clarification_index"]]
+            option = _valid_options(clarification)[data["option_index"]]
+        except Exception:
+            return
+        updated = dict(pending)
+        selected = dict(updated.get("selected_option_ids") or {})
+        selected[str(clarification["clarification_id"])] = str(option["id"])
+        updated["selected_option_ids"] = selected
+        updated.pop("last_error", None)
+        _store_pending(platform_workspace_id, thread_key, updated)
+        await _update_telegram_clarification_card(bot, updated)
+        return
+    if action == "x":
+        _append_no_answer_node(pending)
+        _stop_pending_workflow(pending)
+        _clear_pending(platform_workspace_id, thread_key)
+        from app.services.telegram_service import format_error_message
+
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message.get("message_id"),
+            text=format_error_message("Clarification cancelled. No credits used."),
+            parse_mode="MarkdownV2",
+        )
+        return
+    if action == "go":
+        responses, _, error = _responses_from_pending(pending)
+        if error or not responses:
+            updated = dict(pending)
+            updated["last_error"] = (
+                error or "Please choose an option before continuing."
+            )
+            _store_pending(platform_workspace_id, thread_key, updated)
+            await _update_telegram_clarification_card(bot, updated)
+            return
+        await _resume_telegram_pending(bot, platform_workspace_id, pending)
+
+
+async def handle_telegram_clarification_reply(
+    query: str,
+    platform_workspace_id: str,
+    chat_id: int,
+    message_thread_id: Optional[int],
+) -> None:
+    from app.services.telegram_service import get_telegram_bot
+
+    thread_key = f"{chat_id}#{message_thread_id or 0}"
+    _, pending = _get_active_pending(platform_workspace_id, thread_key)
+    if not pending:
+        return
+    bot = await get_telegram_bot()
+    status, updated, error = parse_text_clarification_reply(pending, query)
+    if status == "cancel":
+        _append_no_answer_node(pending)
+        _stop_pending_workflow(pending)
+        _clear_pending(platform_workspace_id, thread_key)
+        from app.services.telegram_service import format_error_message
+
+        message = pending.get("message") or {}
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message.get("message_id"),
+            text=format_error_message("Clarification cancelled. No credits used."),
+            parse_mode="MarkdownV2",
+        )
+        return
+    if status != "valid" or not updated:
+        pending["last_error"] = error or "Please reply with a listed option."
+        _store_pending(platform_workspace_id, thread_key, pending)
+        await _update_telegram_clarification_card(bot, pending)
+        return
+    _store_pending(platform_workspace_id, thread_key, updated)
+    await _resume_telegram_pending(bot, platform_workspace_id, updated)
+
+
 # ── Telegram main entry point ─────────────────────────────────────────────────
+
 
 async def handle_telegram_query(
     query: str,
@@ -1081,7 +2460,9 @@ async def handle_telegram_query(
         )
 
         if is_new:
-            bucket, keys = _save_new_conversation(user_id, project_id, conversation_id, query)
+            bucket, keys = _save_new_conversation(
+                user_id, project_id, conversation_id, query
+            )
         else:
             bucket, keys = _append_user_node_to_conversation(
                 user_id, project_id, conversation_id, query
@@ -1093,29 +2474,58 @@ async def handle_telegram_query(
         await asyncio.sleep(0.5)
 
         if telegram_files:
-            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
-            if conversation_meta:
-                conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+            try:
+                conv = load_conversation(bucket, keys["primary"])
                 await _download_and_attach_telegram_files(
                     telegram_files, user_id, project_id, conv, bucket, keys
                 )
                 await asyncio.sleep(0.5)
-            else:
-                logger.warning(
-                    "Conversation meta not found for %s — skipping file attachment",
+            except Exception as exc:
+                logger.error(
+                    "Failed to attach Telegram files for conversation %s: %s",
                     conversation_id,
+                    exc,
+                    exc_info=True,
                 )
 
         _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
         credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
 
-        final_status, _, final_meta = await _poll_workflow(conversation_id, on_step=update_status)
+        final_status, _, final_meta = await _poll_workflow(
+            conversation_id, on_step=update_status
+        )
+
+        if final_status == "awaiting_user_input":
+            pending = _prepare_pending_from_conversation(
+                platform="telegram",
+                platform_workspace_id=platform_workspace_id,
+                thread_key=thread_key,
+                conversation_id=conversation_id,
+                project_id=project_id,
+                user_id=user_id,
+                bucket=bucket,
+                keys=keys,
+                message={
+                    "chat_id": chat_id,
+                    "message_id": placeholder_message_id,
+                    "message_thread_id": message_thread_id,
+                },
+            )
+            if pending:
+                await _update_telegram_clarification_card(bot, pending)
+                return
 
         if final_status != "completed":
+            message = _analysis_incomplete_message(project_id)
+            logger.info(
+                "Workspace Telegram workflow %s ended with status %s",
+                conversation_id,
+                final_status,
+            )
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=placeholder_message_id,
-                text=format_error_message("Analysis did not complete. Please try again."),
+                text=format_error_message(message),
                 parse_mode="MarkdownV2",
             )
             return
@@ -1124,17 +2534,30 @@ async def handle_telegram_query(
         dashboard_url: Optional[str] = None
         dashboard_json: Optional[Dict[str, Any]] = None
 
-        if final_meta.get("response_type") in ("message", "answer_with_visual") and final_meta.get("content"):
+        if final_meta.get("response_type") in (
+            "message",
+            "answer_with_visual",
+        ) and final_meta.get("content"):
             narrative = final_meta["content"]
-            logger.info("Using inline narrative from Telegram workflow metadata (len=%d)", len(narrative))
+            logger.info(
+                "Using inline narrative from Telegram workflow metadata (len=%d)",
+                len(narrative),
+            )
         else:
-            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            conversation_meta = conversations_repo.get_conversation(
+                project_id, conversation_id
+            )
             if not conversation_meta:
-                raise RuntimeError(f"Post-poll: conversation {conversation_id} not found in DynamoDB")
+                raise RuntimeError(
+                    f"Post-poll: conversation {conversation_id} not found in DynamoDB"
+                )
             conversation = load_conversation(
                 conversation_meta["s3_bucket"], conversation_meta["s3_key"]
             )
-            narrative = _extract_narrative(conversation) or "Analysis complete. No narrative returned."
+            narrative = (
+                _extract_narrative(conversation)
+                or "Analysis complete. No narrative returned."
+            )
             dashboard_url = _build_dashboard_url(project_id, conversation)
 
             dashboards = conversation.get("dashboards", [])
@@ -1146,7 +2569,9 @@ async def handle_telegram_query(
                         is_preview_public=True,
                     )
                 except Exception as exc:
-                    logger.warning("Failed to enable public preview for %s: %s", project_id, exc)
+                    logger.warning(
+                        "Failed to enable public preview for %s: %s", project_id, exc
+                    )
 
                 s3_uri = dashboards[-1].get("s3_uri")
                 if s3_uri:
@@ -1154,15 +2579,21 @@ async def handle_telegram_query(
                     if dashboard_json:
                         metrics = _extract_top_metrics(dashboard_json)
 
-        reply_markup = build_dashboard_keyboard(dashboard_url) if dashboard_url else None
+        reply_markup = (
+            build_dashboard_keyboard(dashboard_url) if dashboard_url else None
+        )
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=placeholder_message_id,
-            text=format_response_message(narrative, dashboard_url, CHAT_CREDIT_COST, metrics),
+            text=format_response_message(
+                narrative, dashboard_url, CHAT_CREDIT_COST, metrics
+            ),
             parse_mode="MarkdownV2",
             reply_markup=reply_markup,
         )
-        logger.info("Successfully updated Telegram message for conversation %s", conversation_id)
+        logger.info(
+            "Successfully updated Telegram message for conversation %s", conversation_id
+        )
 
         # Phase 2B — upload chart previews into the chat (opt-in via ENABLE_CHART_RENDERING).
         # Album for 2-10 charts, single send_photo for 1.
@@ -1171,6 +2602,7 @@ async def handle_telegram_query(
             if chart_previews:
                 try:
                     from telegram import InputMediaPhoto
+
                     if len(chart_previews) == 1:
                         png_bytes, chart_title = chart_previews[0]
                         await bot.send_photo(
@@ -1189,18 +2621,27 @@ async def handle_telegram_query(
                             media=media,
                             message_thread_id=message_thread_id,
                         )
-                    logger.info("Sent %d chart preview(s) to Telegram", len(chart_previews))
+                    logger.info(
+                        "Sent %d chart preview(s) to Telegram", len(chart_previews)
+                    )
                 except Exception as exc:
                     logger.warning("Failed to send Telegram chart previews: %s", exc)
 
     except Exception as exc:
-        logger.error("handle_telegram_query failed for %s: %s", platform_workspace_id, exc, exc_info=True)
+        logger.error(
+            "handle_telegram_query failed for %s: %s",
+            platform_workspace_id,
+            exc,
+            exc_info=True,
+        )
         if placeholder_message_id:
             try:
                 await bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=placeholder_message_id,
-                    text=format_error_message("Something went wrong. Please try again."),
+                    text=format_error_message(
+                        "Something went wrong. Please try again."
+                    ),
                     parse_mode="MarkdownV2",
                 )
             except Exception:
@@ -1236,7 +2677,9 @@ def _download_and_attach_zalo_files(
 
         result = info.get("result", {}) or {}
         download_url = result.get("file_url") or result.get("file_path") or ""
-        filename = (download_url.rsplit("/", 1)[-1] if download_url else f"{file_id}.bin").split("?")[0]
+        filename = (
+            download_url.rsplit("/", 1)[-1] if download_url else f"{file_id}.bin"
+        ).split("?")[0]
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
 
         if not download_url:
@@ -1246,7 +2689,11 @@ def _download_and_attach_zalo_files(
         try:
             resp = requests.get(download_url, timeout=20)
             if resp.status_code != 200:
-                logger.error("Failed to download Zalo file %s: HTTP %s", file_id, resp.status_code)
+                logger.error(
+                    "Failed to download Zalo file %s: HTTP %s",
+                    file_id,
+                    resp.status_code,
+                )
                 continue
             file_bytes = resp.content
         except Exception as exc:
@@ -1258,7 +2705,9 @@ def _download_and_attach_zalo_files(
             continue
 
         asset_id = str(uuid.uuid4())
-        s3_key = f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+        s3_key = (
+            f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+        )
 
         try:
             s3 = boto3.client(
@@ -1289,20 +2738,24 @@ def _download_and_attach_zalo_files(
                 extension=ext,
             )
         except Exception as exc:
-            logger.error("Failed to create asset record for Zalo file %s: %s", filename, exc)
+            logger.error(
+                "Failed to create asset record for Zalo file %s: %s", filename, exc
+            )
             continue
 
-        asset_nodes.append({
-            "type": "asset",
-            "data": {
-                "asset_id": asset_id,
-                "file_id": asset_id,
-                "s3_bucket": bucket,
-                "s3_key": s3_key,
-                "extension": ext,
-                "filename": filename,
-            },
-        })
+        asset_nodes.append(
+            {
+                "type": "asset",
+                "data": {
+                    "asset_id": asset_id,
+                    "file_id": asset_id,
+                    "s3_bucket": bucket,
+                    "s3_key": s3_key,
+                    "extension": ext,
+                    "filename": filename,
+                },
+            }
+        )
         logger.info("Attached Zalo file %s as asset %s", filename, asset_id)
 
     if not asset_nodes:
@@ -1312,6 +2765,9 @@ def _download_and_attach_zalo_files(
     for node in reversed(nodes):
         if node.get("role") == "user":
             node.setdefault("contents", []).extend(asset_nodes)
+            _mark_user_node_assets_selected(
+                node, [asset["data"]["asset_id"] for asset in asset_nodes]
+            )
             break
 
     conversation["updated_at"] = _now_iso()
@@ -1319,7 +2775,120 @@ def _download_and_attach_zalo_files(
     save_conversation(bucket, keys["backup"], conversation)
 
 
+def _post_zalo_result(
+    chat_id: Any, pending: Dict[str, Any], final_meta: Dict[str, Any]
+) -> None:
+    from app.services import zalo_service
+
+    narrative, dashboard_url, metrics, dashboard_json = _workspace_result(
+        pending["user_id"],
+        pending["project_id"],
+        pending["conversation_id"],
+        final_meta,
+    )
+    zalo_service.send_message(
+        chat_id,
+        zalo_service.format_response_message(
+            narrative, dashboard_url, CHAT_CREDIT_COST, metrics
+        ),
+    )
+    if is_chart_rendering_enabled() and dashboard_json:
+        for png_bytes, chart_title in render_dashboard_previews(
+            dashboard_json, max_charts=4
+        ):
+            zalo_service.send_photo(
+                chat_id,
+                png_bytes,
+                caption=chart_title[:1024],
+                filename=f"{chart_title[:40] or 'chart'}.png",
+            )
+
+
+async def _resume_zalo_pending(
+    chat_id: Any, platform_workspace_id: str, pending: Dict[str, Any]
+) -> None:
+    from app.services import zalo_service
+
+    if pending.get("status") == "resuming":
+        return
+    pending = _set_pending_resuming(platform_workspace_id, pending)
+    zalo_service.send_message(chat_id, "Continuing analysis...")
+    bucket, keys = _append_clarification_response_node(pending)
+    _call_morpheus(
+        pending["conversation_id"],
+        pending["project_id"],
+        pending["user_id"],
+        bucket,
+        keys,
+    )
+    credit_service.consume_credits(pending["user_id"], CHAT_CREDIT_COST)
+    final_status, _, final_meta = await _poll_workflow(pending["conversation_id"])
+    if final_status == "awaiting_user_input":
+        next_pending = _prepare_pending_from_conversation(
+            platform="zalo",
+            platform_workspace_id=platform_workspace_id,
+            thread_key=pending["thread_key"],
+            conversation_id=pending["conversation_id"],
+            project_id=pending["project_id"],
+            user_id=pending["user_id"],
+            bucket=bucket,
+            keys=keys,
+            message={"chat_id": chat_id},
+        )
+        if next_pending:
+            zalo_service.send_message(
+                chat_id,
+                build_zalo_clarification_message(next_pending, pending["project_id"]),
+            )
+            return
+    _clear_pending(platform_workspace_id, pending["thread_key"])
+    if final_status == "completed":
+        _post_zalo_result(chat_id, pending, final_meta)
+        return
+    zalo_service.send_message(
+        chat_id,
+        zalo_service.format_error_message(
+            _analysis_incomplete_message(pending["project_id"])
+        ),
+    )
+
+
+async def handle_zalo_clarification_reply(
+    query: str,
+    platform_workspace_id: str,
+    chat_id: Any,
+) -> None:
+    from app.services import zalo_service
+
+    thread_key = f"{chat_id}#0"
+    _, pending = _get_active_pending(platform_workspace_id, thread_key)
+    if not pending:
+        return
+    status, updated, error = parse_text_clarification_reply(pending, query)
+    if status == "cancel":
+        _append_no_answer_node(pending)
+        _stop_pending_workflow(pending)
+        _clear_pending(platform_workspace_id, thread_key)
+        zalo_service.send_message(
+            chat_id,
+            zalo_service.format_error_message(
+                "Clarification cancelled. No credits used."
+            ),
+        )
+        return
+    if status != "valid" or not updated:
+        pending["last_error"] = error or "Please reply with a listed option."
+        _store_pending(platform_workspace_id, thread_key, pending)
+        zalo_service.send_message(
+            chat_id, build_zalo_clarification_message(pending, pending["project_id"])
+        )
+        return
+    _store_pending(platform_workspace_id, thread_key, updated)
+    await _resume_zalo_pending(chat_id, platform_workspace_id, updated)
+
+
 # ── Zalo main entry point ─────────────────────────────────────────────────────
+
 
 async def handle_zalo_query(
     query: str,
@@ -1373,7 +2942,9 @@ async def handle_zalo_query(
         )
 
         if is_new:
-            bucket, keys = _save_new_conversation(user_id, project_id, conversation_id, query)
+            bucket, keys = _save_new_conversation(
+                user_id, project_id, conversation_id, query
+            )
         else:
             bucket, keys = _append_user_node_to_conversation(
                 user_id, project_id, conversation_id, query
@@ -1392,55 +2963,105 @@ async def handle_zalo_query(
         pending_assets = workspace.get("pending_assets") or []
         if pending_assets:
             try:
-                conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+                conversation_meta = conversations_repo.get_conversation(
+                    project_id, conversation_id
+                )
                 if conversation_meta:
-                    conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+                    conv = load_conversation(
+                        conversation_meta["s3_bucket"], conversation_meta["s3_key"]
+                    )
                     asset_nodes = []
                     for a in pending_assets:
-                        asset_nodes.append({
-                            "type": "asset",
-                            "data": {
-                                "asset_id": a.get("asset_id"),
-                                "file_id": a.get("asset_id"),
-                                "s3_bucket": a.get("s3_bucket"),
-                                "s3_key": a.get("s3_key"),
-                                "extension": a.get("extension"),
-                                "filename": a.get("filename"),
-                            },
-                        })
+                        asset_nodes.append(
+                            {
+                                "type": "asset",
+                                "data": {
+                                    "asset_id": a.get("asset_id"),
+                                    "file_id": a.get("asset_id"),
+                                    "s3_bucket": a.get("s3_bucket"),
+                                    "s3_key": a.get("s3_key"),
+                                    "extension": a.get("extension"),
+                                    "filename": a.get("filename"),
+                                },
+                            }
+                        )
                     nodes = conv.get("nodes", [])
                     for node in reversed(nodes):
                         if node.get("role") == "user":
                             node.setdefault("contents", []).extend(asset_nodes)
+                            _mark_user_node_assets_selected(
+                                node,
+                                [
+                                    asset["data"]["asset_id"]
+                                    for asset in asset_nodes
+                                    if asset.get("data", {}).get("asset_id")
+                                ],
+                            )
                             break
                     conv["updated_at"] = _now_iso()
                     save_conversation(bucket, keys["primary"], conv)
                     save_conversation(bucket, keys["backup"], conv)
-                    logger.info("Attached %d pending Zalo asset(s) to conversation %s",
-                                len(asset_nodes), conversation_id)
+                    logger.info(
+                        "Attached %d pending Zalo asset(s) to conversation %s",
+                        len(asset_nodes),
+                        conversation_id,
+                    )
                 chat_platform_repo.clear_pending_assets(platform_workspace_id)
             except Exception as exc:
                 logger.warning("Failed to drain Zalo pending assets: %s", exc)
             await asyncio.sleep(0.3)
 
         if zalo_file_ids:
-            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
-            if conversation_meta:
-                conv = load_conversation(conversation_meta["s3_bucket"], conversation_meta["s3_key"])
+            try:
+                conv = load_conversation(bucket, keys["primary"])
                 _download_and_attach_zalo_files(
                     zalo_file_ids, user_id, project_id, conv, bucket, keys
                 )
                 await asyncio.sleep(0.5)
+            except Exception as exc:
+                logger.error(
+                    "Failed to attach Zalo files for conversation %s: %s",
+                    conversation_id,
+                    exc,
+                    exc_info=True,
+                )
 
         _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
         credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
 
-        final_status, _, final_meta = await _poll_workflow(conversation_id, on_step=update_status)
+        final_status, _, final_meta = await _poll_workflow(
+            conversation_id, on_step=update_status
+        )
+
+        if final_status == "awaiting_user_input":
+            pending = _prepare_pending_from_conversation(
+                platform="zalo",
+                platform_workspace_id=platform_workspace_id,
+                thread_key=thread_key,
+                conversation_id=conversation_id,
+                project_id=project_id,
+                user_id=user_id,
+                bucket=bucket,
+                keys=keys,
+                message={"chat_id": chat_id},
+            )
+            if pending:
+                zalo_service.send_message(
+                    chat_id,
+                    build_zalo_clarification_message(pending, project_id),
+                )
+                return
 
         if final_status != "completed":
+            message = _analysis_incomplete_message(project_id)
+            logger.info(
+                "Workspace Zalo workflow %s ended with status %s",
+                conversation_id,
+                final_status,
+            )
             zalo_service.send_message(
                 chat_id,
-                zalo_service.format_error_message("Analysis did not complete. Please try again."),
+                zalo_service.format_error_message(message),
             )
             return
 
@@ -1448,17 +3069,30 @@ async def handle_zalo_query(
         dashboard_url: Optional[str] = None
         dashboard_json: Optional[Dict[str, Any]] = None
 
-        if final_meta.get("response_type") in ("message", "answer_with_visual") and final_meta.get("content"):
+        if final_meta.get("response_type") in (
+            "message",
+            "answer_with_visual",
+        ) and final_meta.get("content"):
             narrative = final_meta["content"]
-            logger.info("Using inline narrative from Zalo workflow metadata (len=%d)", len(narrative))
+            logger.info(
+                "Using inline narrative from Zalo workflow metadata (len=%d)",
+                len(narrative),
+            )
         else:
-            conversation_meta = conversations_repo.get_conversation(project_id, conversation_id)
+            conversation_meta = conversations_repo.get_conversation(
+                project_id, conversation_id
+            )
             if not conversation_meta:
-                raise RuntimeError(f"Post-poll: conversation {conversation_id} not found in DynamoDB")
+                raise RuntimeError(
+                    f"Post-poll: conversation {conversation_id} not found in DynamoDB"
+                )
             conversation = load_conversation(
                 conversation_meta["s3_bucket"], conversation_meta["s3_key"]
             )
-            narrative = _extract_narrative(conversation) or "Analysis complete. No narrative returned."
+            narrative = (
+                _extract_narrative(conversation)
+                or "Analysis complete. No narrative returned."
+            )
             dashboard_url = _build_dashboard_url(project_id, conversation)
 
             dashboards = conversation.get("dashboards", [])
@@ -1470,7 +3104,9 @@ async def handle_zalo_query(
                         is_preview_public=True,
                     )
                 except Exception as exc:
-                    logger.warning("Failed to enable public preview for %s: %s", project_id, exc)
+                    logger.warning(
+                        "Failed to enable public preview for %s: %s", project_id, exc
+                    )
 
                 s3_uri = dashboards[-1].get("s3_uri")
                 if s3_uri:
@@ -1480,9 +3116,13 @@ async def handle_zalo_query(
 
         zalo_service.send_message(
             chat_id,
-            zalo_service.format_response_message(narrative, dashboard_url, CHAT_CREDIT_COST, metrics),
+            zalo_service.format_response_message(
+                narrative, dashboard_url, CHAT_CREDIT_COST, metrics
+            ),
         )
-        logger.info("Successfully sent Zalo response for conversation %s", conversation_id)
+        logger.info(
+            "Successfully sent Zalo response for conversation %s", conversation_id
+        )
 
         # Phase 2B — upload chart previews via sendPhoto (sequential; Zalo Bot
         # Platform has no documented sendMediaGroup). Throttled at 200 ms to
@@ -1500,15 +3140,24 @@ async def handle_zalo_query(
                     )
                     logger.info("Sent Zalo chart preview '%s'", chart_title)
                 except Exception as exc:
-                    logger.warning("Failed to send Zalo chart '%s': %s", chart_title, exc)
+                    logger.warning(
+                        "Failed to send Zalo chart '%s': %s", chart_title, exc
+                    )
                 await asyncio.sleep(0.2)
 
     except Exception as exc:
-        logger.error("handle_zalo_query failed for %s: %s", platform_workspace_id, exc, exc_info=True)
+        logger.error(
+            "handle_zalo_query failed for %s: %s",
+            platform_workspace_id,
+            exc,
+            exc_info=True,
+        )
         try:
             zalo_service.send_message(
                 chat_id,
-                zalo_service.format_error_message("Something went wrong. Please try again."),
+                zalo_service.format_error_message(
+                    "Something went wrong. Please try again."
+                ),
             )
         except Exception:
             pass

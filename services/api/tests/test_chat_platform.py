@@ -10,6 +10,8 @@ Covers:
 
 import json
 import os
+import importlib
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -245,6 +247,27 @@ class TestChatPlatformServiceHelpers:
             "dashboards": [],
         }
 
+    def test_workspace_agent_default_model_is_pro(self, monkeypatch):
+        from app.services import chat_platform_service as svc
+
+        original_model = os.environ.get("DREAMIFY_PRO_MODEL")
+        try:
+            monkeypatch.setenv("DREAMIFY_PRO_MODEL", "pro-env-model")
+            svc = importlib.reload(svc)
+            assert svc.CHAT_MODEL_ID == "pro-env-model"
+
+            monkeypatch.delenv("DREAMIFY_PRO_MODEL", raising=False)
+            svc = importlib.reload(svc)
+            assert svc.CHAT_MODEL_ALIAS == "pro"
+            assert svc.CHAT_MODEL_ID == "gpt-5.4-mini"
+            assert svc.CHAT_CREDIT_COST == 10
+        finally:
+            if original_model is None:
+                os.environ.pop("DREAMIFY_PRO_MODEL", None)
+            else:
+                os.environ["DREAMIFY_PRO_MODEL"] = original_model
+            importlib.reload(svc)
+
     def test_extract_narrative_returns_last_assistant_text(self):
         from app.services.chat_platform_service import _extract_narrative
 
@@ -347,19 +370,713 @@ class TestChatPlatformServiceHelpers:
         assert len(result) == 1
 
     def test_make_user_node_structure(self):
-        from app.services.chat_platform_service import _make_user_node
+        from app.services import chat_platform_service as svc
 
-        node = _make_user_node("show me revenue trends")
+        node = svc._make_user_node("show me revenue trends")
         assert node["role"] == "user"
         assert node["status"] == "completed"
         assert node["contents"][0]["type"] == "text"
         assert node["contents"][0]["data"]["text"] == "show me revenue trends"
         assert node["node_id"].startswith("node_")
+        assert node["metadata"]["chat_mode"] == "pro"
+        assert node["metadata"]["resolved_model"] == svc.CHAT_MODEL_ID
+
+    def test_mark_user_node_assets_selected(self):
+        from app.services import chat_platform_service as svc
+
+        node = {"metadata": {"selected_asset_ids": ["asset_existing"]}}
+        svc._mark_user_node_assets_selected(
+            node, ["asset_existing", "asset_uploaded", None, ""]
+        )
+
+        assert node["metadata"]["asset_selection"] == "explicit"
+        assert node["metadata"]["selected_asset_ids"] == [
+            "asset_existing",
+            "asset_uploaded",
+        ]
+
+    def test_download_and_attach_slack_files_marks_assets_selected(self):
+        from app.services import chat_platform_service as svc
+
+        class FakeResponse:
+            status = 200
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def read(self):
+                return b"day,installs\n2026-06-01,10\n"
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def get(self, *args, **kwargs):
+                return FakeResponse()
+
+        conversation = self._make_conversation(
+            [
+                {
+                    "role": "user",
+                    "status": "completed",
+                    "contents": [{"type": "text", "data": {"text": "analyze this"}}],
+                    "metadata": {"chat_mode": "pro"},
+                }
+            ]
+        )
+        slack_files = [
+            {
+                "name": "growth.csv",
+                "size": 128,
+                "url_private_download": "https://slack.example/files/growth.csv",
+                "mimetype": "text/csv",
+            }
+        ]
+
+        with patch("aiohttp.ClientSession", return_value=FakeSession()), patch.object(
+            svc.boto3, "client", return_value=MagicMock()
+        ), patch.object(svc.assets_repo, "create_asset"), patch.object(
+            svc, "save_conversation"
+        ):
+            asyncio.run(
+                svc._download_and_attach_slack_files(
+                    slack_files,
+                    "xoxb-token",
+                    "user-1",
+                    "proj-1",
+                    conversation,
+                    "bucket",
+                    {"primary": "primary.json", "backup": "backup.json"},
+                )
+            )
+
+        user_node = conversation["nodes"][-1]
+        asset_contents = [
+            content for content in user_node["contents"] if content["type"] == "asset"
+        ]
+        assert len(asset_contents) == 1
+        assert user_node["metadata"]["asset_selection"] == "explicit"
+        assert user_node["metadata"]["selected_asset_ids"] == [
+            asset_contents[0]["data"]["asset_id"]
+        ]
+
+    def test_call_morpheus_sends_pro_model_project_assets_and_ask_first_payload(self):
+        from app.services import chat_platform_service as svc
+
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        keys = {"primary": "conversations/conv-1.json", "backup": "backups/conv-1.json"}
+
+        with patch.object(
+            svc.requests, "post", return_value=response
+        ) as mock_post, patch.object(
+            svc.assets_repo,
+            "list_assets",
+            return_value=[
+                {
+                    "asset_id": "asset-1",
+                    "file_id": "file-1",
+                    "filename": "growth.csv",
+                    "extension": "csv",
+                    "asset_type": "raw",
+                    "row_count": 10,
+                    "column_count": 3,
+                    "status": "ready",
+                }
+            ],
+        ):
+            svc._call_morpheus("conv-1", "proj-1", "user-1", "bucket", keys)
+
+        mock_post.assert_called_once()
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["model"] == svc.CHAT_MODEL_ID
+        assert kwargs["json"]["model"] == os.environ.get(
+            "DREAMIFY_PRO_MODEL", "gpt-5.4-mini"
+        )
+        assert kwargs["json"]["skip_ask_first"] is False
+        assert kwargs["json"]["project_assets"][0]["asset_id"] == "asset-1"
+
+    def test_call_morpheus_can_skip_ask_first_for_auto_refresh(self):
+        from app.services import chat_platform_service as svc
+
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        keys = {"primary": "conversations/conv-1.json", "backup": "backups/conv-1.json"}
+
+        with patch.object(
+            svc.requests, "post", return_value=response
+        ) as mock_post, patch.object(svc.assets_repo, "list_assets", return_value=[]):
+            svc._call_morpheus(
+                "conv-1", "proj-1", "user-1", "bucket", keys, skip_ask_first=True
+            )
+
+        assert mock_post.call_args.kwargs["json"]["skip_ask_first"] is True
+
+    def test_poll_workflow_returns_awaiting_user_input(self):
+        from app.services import chat_platform_service as svc
+
+        awaiting_node = {
+            "status": "awaiting_user_input",
+            "metadata": {"step": "clarification"},
+        }
+        with patch.object(svc.asyncio, "sleep", new=AsyncMock()), patch.object(
+            svc.workflow_nodes_repo,
+            "get_node",
+            return_value=awaiting_node,
+        ):
+            status, step, metadata = asyncio.run(svc._poll_workflow("conv-1"))
+
+        assert status == "awaiting_user_input"
+        assert step == "clarification"
+        assert metadata["step"] == "clarification"
+
+    def test_parse_text_clarification_reply_accepts_numbers_labels_and_cancel(self):
+        from app.services import chat_platform_service as svc
+
+        pending = {
+            "clarifications": [
+                {
+                    "clarification_id": "clarify_data",
+                    "reason_code": "missing_data_context",
+                    "question": "Choose data",
+                    "options": [
+                        {"id": "asset:asset-1", "label": "Growth CSV"},
+                        {"id": "answer_without_data", "label": "Answer without data"},
+                    ],
+                },
+                {
+                    "clarification_id": "clarify_output",
+                    "reason_code": "output_mode",
+                    "question": "What should I produce?",
+                    "options": [
+                        {"id": "saved_dashboard", "label": "Saved dashboard"},
+                        {"id": "text_answer", "label": "Text answer"},
+                    ],
+                },
+            ],
+            "selected_option_ids": {},
+        }
+
+        status, updated, _ = svc.parse_text_clarification_reply(
+            pending, "2\nText answer"
+        )
+        assert status == "valid"
+        assert updated["selected_option_ids"] == {
+            "clarify_data": "answer_without_data",
+            "clarify_output": "text_answer",
+        }
+        status, _, _ = svc.parse_text_clarification_reply(pending, "cancel")
+        assert status == "cancel"
+
+    def test_append_clarification_response_node_hydrates_selected_assets(self):
+        from app.services import chat_platform_service as svc
+
+        pending = {
+            "conversation_id": "conv-1",
+            "project_id": "proj-1",
+            "user_id": "user-1",
+            "clarifications": [
+                {
+                    "clarification_id": "clarify_data",
+                    "question": "Choose data",
+                    "options": [
+                        {
+                            "id": "asset:asset-1",
+                            "label": "Growth CSV",
+                            "metadata": {
+                                "asset_ids": ["asset-1"],
+                                "asset_selection": "explicit",
+                            },
+                        }
+                    ],
+                }
+            ],
+            "selected_option_ids": {"clarify_data": "asset:asset-1"},
+        }
+        conversation = self._make_conversation([])
+        saved = []
+
+        with patch.object(
+            svc.conversations_repo,
+            "get_conversation",
+            return_value={"s3_bucket": "bucket", "s3_key": "primary.json"},
+        ), patch.object(
+            svc, "load_conversation", return_value=conversation
+        ), patch.object(
+            svc.assets_repo,
+            "get_asset",
+            return_value={
+                "asset_id": "asset-1",
+                "file_id": "file-1",
+                "s3_bucket": "bucket",
+                "s3_key": "assets/growth.csv",
+                "extension": "csv",
+                "filename": "growth.csv",
+                "asset_type": "raw",
+            },
+        ), patch.object(
+            svc, "save_conversation", side_effect=lambda b, k, c: saved.append(c)
+        ):
+            bucket, keys = svc._append_clarification_response_node(pending)
+
+        assert bucket == "bucket"
+        assert keys["primary"].endswith("conversation.json")
+        user_node = saved[-1]["nodes"][-1]
+        assert user_node["contents"][1]["type"] == "clarification_response"
+        assert user_node["contents"][2]["type"] == "asset"
+        assert user_node["metadata"]["asset_selection"] == "explicit"
+        assert user_node["metadata"]["selected_asset_ids"] == ["asset-1"]
 
 
 # ── Route handlers — called directly (no TestClient needed) ───────────────────
 # FastAPI Depends() defaults are skipped when calling async handlers directly;
 # pass the resolved dependency values as keyword arguments.
+
+
+class TestChatPlatformServiceHandlers:
+    def _workspace(self, platform: str = "slack") -> Dict[str, Any]:
+        return {
+            "platform_workspace_id": f"{platform}:T123",
+            "project_id": "proj-1",
+            "user_id": "user-1",
+            "platform": platform,
+            "bot_token_encrypted": "enc",
+        }
+
+    def _pending(self, platform: str = "slack") -> Dict[str, Any]:
+        return {
+            "status": "awaiting_user_input",
+            "platform": platform,
+            "nonce": "nonce123",
+            "conversation_id": "conv-1",
+            "project_id": "proj-1",
+            "user_id": "user-1",
+            "thread_key": "C123#1700.1" if platform == "slack" else "123#0",
+            "selected_option_ids": {"clarify_data": "asset:asset-1"},
+            "message": {
+                "channel_id": "C123",
+                "message_ts": "placeholder-ts",
+                "thread_ts": "1700.1",
+                "chat_id": 123,
+                "message_id": 99,
+            },
+            "clarifications": [
+                {
+                    "clarification_id": "clarify_data",
+                    "reason_code": "missing_data_context",
+                    "question": "Choose the data context",
+                    "options": [
+                        {
+                            "id": "asset:asset-1",
+                            "label": "Growth CSV",
+                            "description": "growth.csv",
+                            "recommended": True,
+                            "metadata": {
+                                "asset_ids": ["asset-1"],
+                                "asset_selection": "explicit",
+                            },
+                        },
+                        {
+                            "id": "answer_without_data",
+                            "label": "Answer without data",
+                            "metadata": {"asset_selection": "none"},
+                        },
+                    ],
+                }
+            ],
+        }
+
+    def test_slack_awaiting_state_uses_generic_fallback(self):
+        from app.services import chat_platform_service as svc
+
+        client = MagicMock()
+        client.chat_postMessage = AsyncMock(return_value={"ts": "placeholder-ts"})
+        client.chat_update = AsyncMock()
+        keys = {"primary": "conversation.json", "backup": "backup.json"}
+
+        with patch(
+            "slack_sdk.web.async_client.AsyncWebClient", return_value=client
+        ), patch.object(svc, "decrypt_token", return_value="token"), patch.object(
+            svc.chat_platform_repo, "get_workspace", return_value=self._workspace()
+        ), patch.object(
+            svc, "_get_or_create_session", return_value=("conv-1", "proj-1", True)
+        ), patch.object(
+            svc, "_save_new_conversation", return_value=("bucket", keys)
+        ), patch.object(
+            svc, "_call_morpheus"
+        ) as mock_call, patch.object(
+            svc.credit_service, "consume_credits"
+        ) as mock_credit, patch.object(
+            svc,
+            "_poll_workflow",
+            new=AsyncMock(return_value=("awaiting_user_input", "clarification", {})),
+        ), patch.object(
+            svc, "_prepare_pending_from_conversation", return_value=None
+        ):
+            asyncio.run(
+                svc.handle_slack_query(
+                    "analyze installs",
+                    "slack:T123",
+                    "C123",
+                    "1700.1",
+                    "enc",
+                )
+            )
+
+        mock_call.assert_called_once()
+        mock_credit.assert_called_once_with("user-1", svc.CHAT_CREDIT_COST)
+        update_kwargs = client.chat_update.call_args.kwargs
+        blocks = str(update_kwargs["blocks"])
+        assert "Analysis did not complete" in blocks
+        assert "/workspace/project?projectId=proj-1" in blocks
+        assert "quick choice" not in blocks
+        assert "Define metric and period" not in blocks
+
+    def test_slack_awaiting_state_renders_clarification_card(self):
+        from app.services import chat_platform_service as svc
+
+        client = MagicMock()
+        client.chat_postMessage = AsyncMock(return_value={"ts": "placeholder-ts"})
+        client.chat_update = AsyncMock()
+        pending = self._pending("slack")
+
+        with patch(
+            "slack_sdk.web.async_client.AsyncWebClient", return_value=client
+        ), patch.object(svc, "decrypt_token", return_value="token"), patch.object(
+            svc.chat_platform_repo, "get_workspace", return_value=self._workspace()
+        ), patch.object(
+            svc, "_get_or_create_session", return_value=("conv-1", "proj-1", True)
+        ), patch.object(
+            svc,
+            "_save_new_conversation",
+            return_value=("bucket", {"primary": "p", "backup": "b"}),
+        ), patch.object(
+            svc, "_call_morpheus"
+        ), patch.object(
+            svc.credit_service, "consume_credits"
+        ), patch.object(
+            svc,
+            "_poll_workflow",
+            new=AsyncMock(return_value=("awaiting_user_input", "clarification", {})),
+        ), patch.object(
+            svc, "_prepare_pending_from_conversation", return_value=pending
+        ):
+            asyncio.run(
+                svc.handle_slack_query(
+                    "analyze installs", "slack:T123", "C123", "1700.1", "enc"
+                )
+            )
+
+        blocks = client.chat_update.call_args.kwargs["blocks"]
+        serialized = str(blocks)
+        assert "Choose the data context" in serialized
+        assert "static_select" in serialized
+        assert "Open in Dreamify" in serialized
+        assert "0 quick choices" not in serialized
+
+    def test_telegram_awaiting_state_uses_generic_fallback(self):
+        from app.services import chat_platform_service as svc
+
+        bot = MagicMock()
+        bot.send_message = AsyncMock(return_value=MagicMock(message_id=99))
+        bot.edit_message_text = AsyncMock()
+
+        with patch(
+            "app.services.telegram_service.get_telegram_bot",
+            new=AsyncMock(return_value=bot),
+        ), patch.object(
+            svc.chat_platform_repo,
+            "get_workspace",
+            return_value=self._workspace("telegram"),
+        ), patch.object(
+            svc, "_get_or_create_session", return_value=("conv-1", "proj-1", True)
+        ), patch.object(
+            svc,
+            "_save_new_conversation",
+            return_value=("bucket", {"primary": "p", "backup": "b"}),
+        ), patch.object(
+            svc, "_call_morpheus"
+        ) as mock_call, patch.object(
+            svc.credit_service, "consume_credits"
+        ) as mock_credit, patch.object(
+            svc,
+            "_poll_workflow",
+            new=AsyncMock(return_value=("awaiting_user_input", "clarification", {})),
+        ), patch.object(
+            svc, "_prepare_pending_from_conversation", return_value=None
+        ):
+            asyncio.run(
+                svc.handle_telegram_query(
+                    "analyze installs", "telegram:T123", 123, None
+                )
+            )
+
+        mock_call.assert_called_once()
+        mock_credit.assert_called_once_with("user-1", svc.CHAT_CREDIT_COST)
+        text = bot.edit_message_text.call_args.kwargs["text"]
+        assert "Analysis did not complete" in text
+        assert "workspace/project?projectId\\=proj\\-1" in text
+        assert "quick choice" not in text
+        assert "Define metric and period" not in text
+
+    def test_telegram_and_zalo_clarification_formatters(self):
+        from app.services import chat_platform_service as svc
+
+        pending = self._pending("telegram")
+        text, markup = svc.build_telegram_clarification_message(pending, "proj-1")
+        assert "Choose the data context" in text
+        assert markup.inline_keyboard
+
+        zalo_text = svc.build_zalo_clarification_message(
+            self._pending("zalo"), "proj-1"
+        )
+        assert "Choose the data context" in zalo_text
+        assert "1. Growth CSV" in zalo_text
+        assert "Open in Dreamify" in zalo_text
+
+    def test_zalo_awaiting_state_uses_generic_fallback(self):
+        from app.services import chat_platform_service as svc
+        from app.services import zalo_service
+
+        with patch.object(
+            zalo_service, "_bot_token", return_value="token"
+        ), patch.object(
+            zalo_service, "send_message", return_value={"ok": True}
+        ) as mock_send, patch.object(
+            svc.chat_platform_repo,
+            "get_workspace",
+            return_value=self._workspace("zalo"),
+        ), patch.object(
+            svc, "_get_or_create_session", return_value=("conv-1", "proj-1", True)
+        ), patch.object(
+            svc,
+            "_save_new_conversation",
+            return_value=("bucket", {"primary": "p", "backup": "b"}),
+        ), patch.object(
+            svc, "_call_morpheus"
+        ) as mock_call, patch.object(
+            svc.credit_service, "consume_credits"
+        ) as mock_credit, patch.object(
+            svc,
+            "_poll_workflow",
+            new=AsyncMock(return_value=("awaiting_user_input", "clarification", {})),
+        ), patch.object(
+            svc, "_prepare_pending_from_conversation", return_value=None
+        ):
+            asyncio.run(
+                svc.handle_zalo_query("analyze installs", "zalo:T123", "chat-1")
+            )
+
+        mock_call.assert_called_once()
+        mock_credit.assert_called_once_with("user-1", svc.CHAT_CREDIT_COST)
+        sent_text = "\n".join(str(call.args) for call in mock_send.call_args_list)
+        assert "Analysis did not complete" in sent_text
+        assert "/workspace/project?projectId=proj-1" in sent_text
+        assert "quick choice" not in sent_text
+        assert "Define metric and period" not in sent_text
+
+    def test_invalid_zalo_clarification_reply_reprompts_without_billing(self):
+        from app.services import chat_platform_service as svc
+        from app.services import zalo_service
+
+        pending = self._pending("zalo")
+        with patch.object(
+            svc.chat_platform_repo,
+            "get_session",
+            return_value={"pending_clarification": pending},
+        ), patch.object(
+            svc.chat_platform_repo, "set_session_pending_clarification"
+        ) as mock_store, patch.object(
+            zalo_service, "send_message", return_value={"ok": True}
+        ) as mock_send, patch.object(
+            svc, "_call_morpheus"
+        ) as mock_call, patch.object(
+            svc.credit_service, "consume_credits"
+        ) as mock_credit:
+            asyncio.run(
+                svc.handle_zalo_clarification_reply("not a choice", "zalo:T123", "123")
+            )
+
+        mock_store.assert_called_once()
+        mock_send.assert_called_once()
+        mock_call.assert_not_called()
+        mock_credit.assert_not_called()
+        assert "could not match" in mock_store.call_args.args[2]["last_error"].lower()
+
+    def test_slack_continue_interaction_resumes_and_bills_once(self):
+        from app.services import chat_platform_service as svc
+
+        pending = self._pending("slack")
+        value = svc._encode_callback_value(
+            {"action": "continue", "thread_key": "C123#1700.1", "nonce": "nonce123"}
+        )
+        payload = {
+            "type": "block_actions",
+            "team": {"id": "T123"},
+            "actions": [{"value": value}],
+        }
+        client = MagicMock()
+        client.chat_update = AsyncMock()
+        client.files_upload_v2 = AsyncMock()
+
+        with patch(
+            "slack_sdk.web.async_client.AsyncWebClient", return_value=client
+        ), patch.object(
+            svc.chat_platform_repo,
+            "get_session",
+            return_value={"pending_clarification": pending},
+        ), patch.object(
+            svc.chat_platform_repo,
+            "get_workspace",
+            return_value=self._workspace(),
+        ), patch.object(
+            svc, "decrypt_token", return_value="token"
+        ), patch.object(
+            svc.chat_platform_repo, "set_session_pending_clarification"
+        ), patch.object(
+            svc,
+            "_append_clarification_response_node",
+            return_value=("bucket", {"primary": "p", "backup": "b"}),
+        ), patch.object(
+            svc, "_call_morpheus"
+        ) as mock_call, patch.object(
+            svc.credit_service, "consume_credits"
+        ) as mock_credit, patch.object(
+            svc,
+            "_poll_workflow",
+            new=AsyncMock(return_value=("completed", "finish", {})),
+        ), patch.object(
+            svc,
+            "_workspace_result",
+            return_value=("Done", "https://example.com/dashboard", [], None),
+        ), patch.object(
+            svc.chat_platform_repo, "clear_session_pending_clarification"
+        ):
+            asyncio.run(svc.handle_slack_clarification_interaction(payload))
+
+        mock_call.assert_called_once()
+        mock_credit.assert_called_once_with("user-1", svc.CHAT_CREDIT_COST)
+        assert "Done" in client.chat_update.call_args.kwargs["text"]
+
+    def test_scheduled_slack_awaiting_state_uses_generic_fallback(self):
+        from app.services import chat_platform_service as svc
+
+        client = MagicMock()
+        client.chat_postMessage = AsyncMock(return_value={"ts": "sync-ts"})
+        client.chat_update = AsyncMock()
+        asset = {
+            "asset_id": "asset-1",
+            "file_id": "file-1",
+            "s3_bucket": "bucket",
+            "s3_key": "assets/a.csv",
+            "extension": "csv",
+            "filename": "a.csv",
+            "asset_type": "raw",
+        }
+
+        with patch(
+            "slack_sdk.web.async_client.AsyncWebClient", return_value=client
+        ), patch.object(svc, "decrypt_token", return_value="token"), patch.object(
+            svc.chat_platform_repo,
+            "get_workspace_by_user",
+            return_value=self._workspace(),
+        ), patch.object(
+            svc, "save_conversation"
+        ), patch.object(
+            svc.conversations_repo, "create_conversation"
+        ), patch.object(
+            svc.projects_repo, "update_project"
+        ), patch.object(
+            svc, "_call_morpheus"
+        ), patch.object(
+            svc.credit_service, "consume_credits"
+        ), patch.object(
+            svc,
+            "_poll_workflow",
+            new=AsyncMock(return_value=("awaiting_user_input", "clarification", {})),
+        ), patch.object(
+            svc.chat_platform_repo, "get_session", return_value=None
+        ), patch.object(
+            svc.chat_platform_repo, "create_session"
+        ), patch.object(
+            svc, "_prepare_pending_from_conversation", return_value=None
+        ):
+            asyncio.run(
+                svc.post_sync_to_slack(
+                    "user-1", "proj-1", "C123", "ga4", "GA4 property", 7, asset
+                )
+            )
+
+        blocks = str(client.chat_update.call_args.kwargs["blocks"])
+        assert "Analysis did not complete" in blocks
+        assert "/workspace/project?projectId=proj-1" in blocks
+        assert "quick choice" not in blocks
+        assert "Define metric and period" not in blocks
+
+    def test_scheduled_slack_awaiting_state_creates_session_and_renders_card(self):
+        from app.services import chat_platform_service as svc
+
+        client = MagicMock()
+        client.chat_postMessage = AsyncMock(return_value={"ts": "sync-ts"})
+        client.chat_update = AsyncMock()
+        asset = {
+            "asset_id": "asset-1",
+            "file_id": "file-1",
+            "s3_bucket": "bucket",
+            "s3_key": "assets/a.csv",
+            "extension": "csv",
+            "filename": "a.csv",
+            "asset_type": "raw",
+        }
+        pending = self._pending("slack")
+        pending["thread_key"] = "C123#sync-ts"
+        pending["message"]["message_ts"] = "sync-ts"
+        pending["message"]["thread_ts"] = "sync-ts"
+
+        with patch(
+            "slack_sdk.web.async_client.AsyncWebClient", return_value=client
+        ), patch.object(svc, "decrypt_token", return_value="token"), patch.object(
+            svc.chat_platform_repo,
+            "get_workspace_by_user",
+            return_value=self._workspace(),
+        ), patch.object(
+            svc, "save_conversation"
+        ), patch.object(
+            svc.conversations_repo, "create_conversation"
+        ), patch.object(
+            svc.projects_repo, "update_project"
+        ), patch.object(
+            svc, "_call_morpheus"
+        ), patch.object(
+            svc.credit_service, "consume_credits"
+        ), patch.object(
+            svc,
+            "_poll_workflow",
+            new=AsyncMock(return_value=("awaiting_user_input", "clarification", {})),
+        ), patch.object(
+            svc.chat_platform_repo, "get_session", return_value=None
+        ), patch.object(
+            svc.chat_platform_repo, "create_session"
+        ) as mock_create_session, patch.object(
+            svc, "_prepare_pending_from_conversation", return_value=pending
+        ):
+            asyncio.run(
+                svc.post_sync_to_slack(
+                    "user-1", "proj-1", "C123", "ga4", "GA4 property", 7, asset
+                )
+            )
+
+        mock_create_session.assert_called_once()
+        assert mock_create_session.call_args.kwargs["thread_key"] == "C123#sync-ts"
+        blocks = str(client.chat_update.call_args.kwargs["blocks"])
+        assert "Choose the data context" in blocks
+        assert "static_select" in blocks
 
 
 class TestChatPlatformRoutes:
@@ -375,6 +1092,14 @@ class TestChatPlatformRoutes:
         req.body = AsyncMock(return_value=json.dumps(body_json).encode())
         return req
 
+    def _mock_json_request(self, body_json: dict) -> MagicMock:
+        from unittest.mock import AsyncMock
+
+        req = MagicMock()
+        req.json = AsyncMock(return_value=body_json)
+        req.headers = {}
+        return req
+
     def test_slack_url_verification(self):
         from app.api.route_modules.chat_platform import slack_events
 
@@ -382,6 +1107,67 @@ class TestChatPlatformRoutes:
         payload = {"type": "url_verification", "challenge": challenge}
         result = self._run(slack_events(self._mock_request(payload), MagicMock()))
         assert result["challenge"] == challenge
+
+    def test_slack_interactions_verifies_signature_and_dispatches(self):
+        import hashlib
+        import hmac
+        import time
+        from urllib.parse import quote
+        from fastapi import BackgroundTasks
+        from app.api.route_modules import chat_platform
+
+        payload = {
+            "type": "block_actions",
+            "team": {"id": "T123"},
+            "actions": [{"value": "value"}],
+        }
+        body = f"payload={quote(json.dumps(payload))}".encode()
+        timestamp = str(int(time.time()))
+        signature = (
+            "v0="
+            + hmac.new(
+                b"secret",
+                f"v0:{timestamp}:{body.decode()}".encode(),
+                hashlib.sha256,
+            ).hexdigest()
+        )
+        req = MagicMock()
+        req.body = AsyncMock(return_value=body)
+        req.headers = {
+            "X-Slack-Request-Timestamp": timestamp,
+            "X-Slack-Signature": signature,
+        }
+        bg = MagicMock(spec=BackgroundTasks)
+
+        with patch.object(
+            chat_platform.config, "slack", MagicMock(signing_secret="secret")
+        ):
+            result = self._run(chat_platform.slack_interactions(req, bg))
+
+        assert result["ok"] is True
+        bg.add_task.assert_called_once()
+        assert (
+            bg.add_task.call_args.args[0].__name__
+            == "handle_slack_clarification_interaction"
+        )
+
+    def test_slack_interactions_rejects_invalid_signature(self):
+        import time
+        from fastapi import HTTPException
+        from app.api.route_modules import chat_platform
+
+        req = MagicMock()
+        req.body = AsyncMock(return_value=b"payload=%7B%7D")
+        req.headers = {
+            "X-Slack-Request-Timestamp": str(int(time.time())),
+            "X-Slack-Signature": "v0=bad",
+        }
+        with patch.object(
+            chat_platform.config, "slack", MagicMock(signing_secret="secret")
+        ):
+            with pytest.raises(HTTPException) as exc:
+                self._run(chat_platform.slack_interactions(req, MagicMock()))
+        assert exc.value.status_code == 403
 
     def test_slack_mention_unknown_workspace_returns_ok(self):
         from app.api.route_modules.chat_platform import slack_events
@@ -402,6 +1188,85 @@ class TestChatPlatformRoutes:
         ):
             result = self._run(slack_events(self._mock_request(payload), MagicMock()))
         assert result["ok"] is True
+
+    def test_fetch_slack_files_uses_thread_parent_and_exact_message_ts(self):
+        from app.api.route_modules.chat_platform import _fetch_slack_files
+        from app.api.route_modules import chat_platform
+
+        captured: Dict[str, Any] = {}
+        slack_file = {"id": "F123", "name": "growth.csv"}
+
+        def _fake_get(url, headers=None, params=None, timeout=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["params"] = params
+            captured["timeout"] = timeout
+            response = MagicMock()
+            response.json.return_value = {
+                "ok": True,
+                "messages": [{"ts": "1700.2", "files": [slack_file]}],
+            }
+            return response
+
+        with patch.object(chat_platform.http_requests, "get", side_effect=_fake_get):
+            files = _fetch_slack_files(
+                "xoxb-token", "C123", "1700.2", thread_ts="1700.1"
+            )
+
+        assert files == [slack_file]
+        assert captured["params"]["ts"] == "1700.1"
+        assert captured["params"]["oldest"] == "1700.2"
+        assert captured["params"]["latest"] == "1700.2"
+        assert captured["params"]["inclusive"] == "true"
+
+    def test_slack_mention_dispatches_fetched_files(self):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules.chat_platform import slack_events
+
+        bg = MagicMock(spec=BackgroundTasks)
+        slack_file = {"id": "F123", "name": "growth.csv"}
+        workspace = {
+            "platform_workspace_id": "slack:T123",
+            "platform": "slack",
+            "workspace_name": "Acme",
+            "project_id": "proj-1",
+            "language": "en",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "bot_token_encrypted": "enc",
+            "user_id": "user-1",
+        }
+        payload = {
+            "team_id": "T123",
+            "type": "event_callback",
+            "event": {
+                "type": "app_mention",
+                "text": "<@U123> analyze this csv",
+                "channel": "C123",
+                "thread_ts": "1700.1",
+                "ts": "1700.2",
+            },
+        }
+
+        with patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value=workspace,
+        ), patch(
+            "app.api.route_modules.chat_platform.decrypt_token",
+            return_value="xoxb-token",
+        ), patch(
+            "app.api.route_modules.chat_platform._fetch_slack_files",
+            return_value=[slack_file],
+        ) as mock_fetch:
+            result = self._run(slack_events(self._mock_request(payload), bg))
+
+        assert result["ok"] is True
+        mock_fetch.assert_called_once_with(
+            "xoxb-token", "C123", "1700.2", thread_ts="1700.1"
+        )
+        bg.add_task.assert_called_once()
+        kwargs = bg.add_task.call_args.kwargs
+        assert kwargs["thread_ts"] == "1700.1"
+        assert kwargs["slack_files"] == [slack_file]
 
     def test_get_workspace_not_found(self):
         from fastapi import HTTPException

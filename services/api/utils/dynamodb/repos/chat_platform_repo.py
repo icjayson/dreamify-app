@@ -18,6 +18,7 @@ def _now_iso() -> str:
 
 # ── Workspaces ────────────────────────────────────────────────────────────────
 
+
 def get_workspace(platform_workspace_id: str) -> Optional[Dict]:
     table = get_table(tables.chat_workspaces)
     resp = table.get_item(Key={"platform_workspace_id": platform_workspace_id})
@@ -81,7 +82,9 @@ def clear_pending_assets(platform_workspace_id: str) -> None:
     )
 
 
-def cleanup_expired_pending(platform: str, ttl_seconds: int, user_id: Optional[str] = None) -> int:
+def cleanup_expired_pending(
+    platform: str, ttl_seconds: int, user_id: Optional[str] = None
+) -> int:
     """Delete pending registration rows older than ``ttl_seconds``.
 
     Called opportunistically from the `generate-code` endpoints so the table
@@ -106,7 +109,9 @@ def cleanup_expired_pending(platform: str, ttl_seconds: int, user_id: Optional[s
         except Exception:
             age = ttl_seconds + 1  # malformed timestamp → treat as expired
         if age > ttl_seconds:
-            table.delete_item(Key={"platform_workspace_id": item["platform_workspace_id"]})
+            table.delete_item(
+                Key={"platform_workspace_id": item["platform_workspace_id"]}
+            )
             deleted += 1
     return deleted
 
@@ -131,7 +136,8 @@ def get_workspace_by_telegram_user_id(telegram_user_id: str) -> Optional[Dict]:
     """Find a Telegram DM workspace by the Telegram user_id stored at registration."""
     table = get_table(tables.chat_workspaces)
     resp = table.scan(
-        FilterExpression=Attr("platform").eq("telegram") & Attr("telegram_user_id").eq(telegram_user_id),
+        FilterExpression=Attr("platform").eq("telegram")
+        & Attr("telegram_user_id").eq(telegram_user_id),
         Limit=10,
     )
     items = resp.get("Items", [])
@@ -142,7 +148,8 @@ def get_workspace_by_zalo_user_id(zalo_user_id: str) -> Optional[Dict]:
     """Find a Zalo DM workspace by the Zalo user_id stored at registration."""
     table = get_table(tables.chat_workspaces)
     resp = table.scan(
-        FilterExpression=Attr("platform").eq("zalo") & Attr("zalo_user_id").eq(zalo_user_id),
+        FilterExpression=Attr("platform").eq("zalo")
+        & Attr("zalo_user_id").eq(zalo_user_id),
         Limit=10,
     )
     items = resp.get("Items", [])
@@ -160,6 +167,7 @@ def update_workspace_language(platform_workspace_id: str, language: str) -> None
 
 
 # ── Sessions ──────────────────────────────────────────────────────────────────
+
 
 def get_session(platform_workspace_id: str, thread_key: str) -> Optional[Dict]:
     table = get_table(tables.chat_sessions)
@@ -202,4 +210,32 @@ def update_session_conversation(
             ":cid": conversation_id,
             ":ts": _now_iso(),
         },
+    )
+
+
+def set_session_pending_clarification(
+    platform_workspace_id: str,
+    thread_key: str,
+    pending: Dict,
+) -> None:
+    table = get_table(tables.chat_sessions)
+    table.update_item(
+        Key={"platform_workspace_id": platform_workspace_id, "thread_key": thread_key},
+        UpdateExpression="SET pending_clarification = :pending, last_active_at = :ts",
+        ExpressionAttributeValues={
+            ":pending": pending,
+            ":ts": _now_iso(),
+        },
+    )
+
+
+def clear_session_pending_clarification(
+    platform_workspace_id: str,
+    thread_key: str,
+) -> None:
+    table = get_table(tables.chat_sessions)
+    table.update_item(
+        Key={"platform_workspace_id": platform_workspace_id, "thread_key": thread_key},
+        UpdateExpression="SET last_active_at = :ts REMOVE pending_clarification",
+        ExpressionAttributeValues={":ts": _now_iso()},
     )

@@ -21,7 +21,7 @@ import re
 import time
 import uuid
 from typing import Any, Dict, Optional
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 
 import requests as http_requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
@@ -30,9 +30,15 @@ from pydantic import BaseModel
 
 from app.dependencies.auth import require_user
 from app.services.chat_platform_service import (
+    handle_slack_clarification_interaction,
+    handle_slack_clarification_reply,
     handle_slack_query,
+    handle_telegram_clarification_callback,
+    handle_telegram_clarification_reply,
     handle_telegram_query,
+    handle_zalo_clarification_reply,
     handle_zalo_query,
+    has_pending_clarification,
 )
 from app.services.slack_service import decrypt_token, encrypt_token
 from utils.config import config
@@ -100,8 +106,11 @@ ZALO_CODE_TTL = 900  # 15 minutes
 
 # ── State token (signed, short-lived, no new deps) ────────────────────────────
 
+
 def _create_state_token(user_id: str) -> str:
-    payload = json.dumps({"user_id": user_id, "exp": int(time.time()) + STATE_TOKEN_TTL})
+    payload = json.dumps(
+        {"user_id": user_id, "exp": int(time.time()) + STATE_TOKEN_TTL}
+    )
     sig = hmac.new(
         config.app.secret_key.encode(),
         payload.encode(),
@@ -133,15 +142,21 @@ def _verify_state_token(token: str) -> str:
 
 # ── Slack file fetch helper ──────────────────────────────────────────────────
 
-def _fetch_slack_files(bot_token: str, channel_id: str, message_ts: str) -> list:
+
+def _fetch_slack_files(
+    bot_token: str,
+    channel_id: str,
+    message_ts: str,
+    thread_ts: Optional[str] = None,
+) -> list:
     """
     Retrieve the file attachments for a specific Slack message.
 
-    The ``app_mention`` event payload intentionally omits the ``files`` field;
-    only ``message`` events carry it.  The authoritative way to get files for a
-    given message is to call ``conversations.replies`` with the exact message
-    timestamp (inclusive=True, limit=1) — this works for both top-level messages
-    and thread replies.
+    The ``app_mention`` event payload often omits the ``files`` field; only
+    message/file events reliably carry it.  The authoritative way to get files
+    for a given mention is to fetch the thread via ``conversations.replies`` and
+    narrow to the exact message timestamp.  For thread replies, ``ts`` must be
+    the thread parent timestamp, not the reply timestamp.
 
     Requires the ``files:read`` bot scope so that ``url_private_download`` links
     are accessible for download later.
@@ -151,14 +166,17 @@ def _fetch_slack_files(bot_token: str, channel_id: str, message_ts: str) -> list
     if not bot_token or not channel_id or not message_ts:
         return []
 
+    thread_root_ts = thread_ts or message_ts
+
     try:
         resp = http_requests.get(
             "https://slack.com/api/conversations.replies",
             headers={"Authorization": f"Bearer {bot_token}"},
             params={
                 "channel": channel_id,
-                "ts": message_ts,        # thread parent (or the message itself)
-                "latest": message_ts,   # narrow to exactly this message
+                "ts": thread_root_ts,
+                "oldest": message_ts,
+                "latest": message_ts,
                 "inclusive": "true",
                 "limit": "1",
             },
@@ -167,8 +185,10 @@ def _fetch_slack_files(bot_token: str, channel_id: str, message_ts: str) -> list
         data = resp.json()
         if not data.get("ok"):
             logger.warning(
-                "conversations.replies returned error for ts=%s: %s",
-                message_ts, data.get("error"),
+                "conversations.replies returned error for ts=%s thread_ts=%s: %s",
+                message_ts,
+                thread_root_ts,
+                data.get("error"),
             )
             return []
 
@@ -177,19 +197,55 @@ def _fetch_slack_files(bot_token: str, channel_id: str, message_ts: str) -> list
             if msg.get("ts") == message_ts:
                 files = msg.get("files", [])
                 logger.info(
-                    "Fetched %d file(s) from Slack message ts=%s", len(files), message_ts
+                    "Fetched %d file(s) from Slack message ts=%s",
+                    len(files),
+                    message_ts,
                 )
                 return files
 
-        logger.info("No message matched ts=%s in conversations.replies response", message_ts)
+        logger.info(
+            "No message matched ts=%s in conversations.replies response for thread %s",
+            message_ts,
+            thread_root_ts,
+        )
         return []
 
     except Exception as exc:
-        logger.warning("_fetch_slack_files failed for ts=%s: %s", message_ts, exc)
+        logger.warning(
+            "_fetch_slack_files failed for ts=%s thread_ts=%s: %s",
+            message_ts,
+            thread_root_ts,
+            exc,
+        )
         return []
 
 
+def _verify_slack_signature(request: Request, body: bytes) -> bool:
+    signing_secret = config.slack.signing_secret if config.slack else ""
+    if not signing_secret:
+        return True
+    timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
+    signature = request.headers.get("X-Slack-Signature", "")
+    try:
+        ts_int = int(timestamp)
+    except ValueError:
+        return False
+    if abs(int(time.time()) - ts_int) > 300:
+        return False
+    base = f"v0:{timestamp}:{body.decode()}".encode()
+    expected = (
+        "v0="
+        + hmac.new(
+            signing_secret.encode(),
+            base,
+            hashlib.sha256,
+        ).hexdigest()
+    )
+    return hmac.compare_digest(expected, signature)
+
+
 # ── Slack Events API ──────────────────────────────────────────────────────────
+
 
 @router.post("/chat/slack/events")
 async def slack_events(request: Request, background_tasks: BackgroundTasks):
@@ -224,18 +280,34 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
 
         workspace = chat_platform_repo.get_workspace(platform_workspace_id)
         if not workspace:
-            logger.warning("Mention from unregistered workspace: %s", platform_workspace_id)
+            logger.warning(
+                "Mention from unregistered workspace: %s", platform_workspace_id
+            )
             return {"ok": True}
 
-        # The app_mention event never includes a `files` field by Slack design.
-        # Fetch the real message object via conversations.replies to get attachments.
+        if has_pending_clarification(
+            platform_workspace_id, f"{channel_id}#{thread_ts}"
+        ):
+            background_tasks.add_task(
+                handle_slack_clarification_reply,
+                query=query,
+                platform_workspace_id=platform_workspace_id,
+                channel_id=channel_id,
+                thread_ts=thread_ts,
+                bot_token_encrypted=workspace["bot_token_encrypted"],
+            )
+            return {"ok": True}
+
         message_ts = event.get("ts", "")
         bot_token = decrypt_token(workspace["bot_token_encrypted"])
-        slack_files = _fetch_slack_files(bot_token, channel_id, message_ts)
+        slack_files = event.get("files") or _fetch_slack_files(
+            bot_token, channel_id, message_ts, thread_ts=thread_ts
+        )
         if slack_files:
             logger.info(
                 "Found %d file(s) attached to Slack mention (ts=%s)",
-                len(slack_files), message_ts,
+                len(slack_files),
+                message_ts,
             )
         else:
             logger.info("No file attachments on Slack mention (ts=%s)", message_ts)
@@ -253,7 +325,25 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
     return {"ok": True}
 
 
+@router.post("/chat/slack/interactions")
+async def slack_interactions(request: Request, background_tasks: BackgroundTasks):
+    """Receive Slack Block Kit action payloads for workspace-agent clarifications."""
+    body = await request.body()
+    if not _verify_slack_signature(request, body):
+        raise HTTPException(status_code=403, detail="Invalid Slack signature")
+    form = parse_qs(body.decode())
+    payload_raw = (form.get("payload") or ["{}"])[0]
+    try:
+        payload = json.loads(payload_raw)
+    except Exception:
+        return {"ok": True}
+    if payload.get("type") == "block_actions":
+        background_tasks.add_task(handle_slack_clarification_interaction, payload)
+    return {"ok": True}
+
+
 # ── Slack OAuth ───────────────────────────────────────────────────────────────
+
 
 class SlackAuthUrlResponse(BaseModel):
     url: str
@@ -355,6 +445,7 @@ async def slack_oauth_callback(
 
     try:
         from slack_sdk.web.async_client import AsyncWebClient
+
         client = AsyncWebClient(token=bot_token)
         await client.chat_postMessage(
             channel="general",
@@ -373,6 +464,7 @@ async def slack_oauth_callback(
 
 
 # ── Slack status & disconnect ─────────────────────────────────────────────────
+
 
 class SlackStatusResponse(BaseModel):
     connected: bool
@@ -412,6 +504,7 @@ async def disconnect_workspace(
 
 # ── Admin / debug ─────────────────────────────────────────────────────────────
 
+
 class WorkspaceResponse(BaseModel):
     platform_workspace_id: str
     platform: str
@@ -421,7 +514,9 @@ class WorkspaceResponse(BaseModel):
     created_at: str
 
 
-@router.get("/chat/workspaces/{platform_workspace_id}", response_model=WorkspaceResponse)
+@router.get(
+    "/chat/workspaces/{platform_workspace_id}", response_model=WorkspaceResponse
+)
 async def get_workspace(platform_workspace_id: str):
     """Return workspace metadata (no token). Admin/debug use."""
     workspace = chat_platform_repo.get_workspace(platform_workspace_id)
@@ -475,6 +570,13 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     except Exception:
         return {"ok": True}
 
+    callback_query = body.get("callback_query")
+    if callback_query:
+        background_tasks.add_task(
+            handle_telegram_clarification_callback, callback_query
+        )
+        return {"ok": True}
+
     message = body.get("message") or body.get("edited_message")
     if not message:
         return {"ok": True}
@@ -515,7 +617,9 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
 
     # ── /connect — group linking ──────────────────────────────────────────────
     if text.startswith("/connect") and chat_type in ("group", "supergroup"):
-        background_tasks.add_task(_handle_telegram_connect, chat_id, chat, telegram_user_id)
+        background_tasks.add_task(
+            _handle_telegram_connect, chat_id, chat, telegram_user_id
+        )
         return {"ok": True}
 
     # ── Query messages ────────────────────────────────────────────────────────
@@ -539,12 +643,25 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     platform_workspace_id = f"telegram:{chat_id}"
     workspace = chat_platform_repo.get_workspace(platform_workspace_id)
     if not workspace:
-        logger.warning("Telegram message from unregistered chat: %s", platform_workspace_id)
+        logger.warning(
+            "Telegram message from unregistered chat: %s", platform_workspace_id
+        )
         # Reply with a hint so the user isn't stuck in a silent chat.
         # Only send for DMs — in groups, the bot was @mentioned but isn't
         # connected, and we don't want to spam the channel.
         if is_dm:
             background_tasks.add_task(_send_telegram_unregistered_hint, chat_id)
+        return {"ok": True}
+
+    thread_key = f"{chat_id}#{message_thread_id or 0}"
+    if has_pending_clarification(platform_workspace_id, thread_key):
+        background_tasks.add_task(
+            handle_telegram_clarification_reply,
+            query=query,
+            platform_workspace_id=platform_workspace_id,
+            chat_id=chat_id,
+            message_thread_id=message_thread_id,
+        )
         return {"ok": True}
 
     # Resolve file metadata (including download URL) now, while we have async context.
@@ -581,7 +698,7 @@ def _is_bot_mentioned(message: Dict[str, Any]) -> bool:
             length = entity.get("length", 0)
             # Mention offset/length applies to whichever text field is present.
             source_text = message.get("text") or message.get("caption") or ""
-            mention = source_text[offset:offset + length].lower()
+            mention = source_text[offset : offset + length].lower()
             if mention == bot_mention:
                 return True
     return False
@@ -589,7 +706,9 @@ def _is_bot_mentioned(message: Dict[str, Any]) -> bool:
 
 def _strip_bot_mention(text: str) -> str:
     """Remove @BotUsername from the query text."""
-    return re.sub(rf"@{re.escape(_telegram_bot_username())}", "", text, flags=re.IGNORECASE).strip()
+    return re.sub(
+        rf"@{re.escape(_telegram_bot_username())}", "", text, flags=re.IGNORECASE
+    ).strip()
 
 
 async def _fetch_telegram_document_metadata(message: Dict[str, Any]) -> list:
@@ -618,7 +737,9 @@ async def _fetch_telegram_document_metadata(message: Dict[str, Any]) -> list:
         # Use it directly — do NOT prepend the base URL again.
         download_url = tg_file.file_path or ""
     except Exception as exc:
-        logger.warning("Failed to resolve Telegram file %s (%s): %s", file_id, filename, exc)
+        logger.warning(
+            "Failed to resolve Telegram file %s (%s): %s", file_id, filename, exc
+        )
         return []
 
     return [
@@ -634,6 +755,7 @@ async def _fetch_telegram_document_metadata(message: Dict[str, Any]) -> list:
 async def _send_telegram_start_hint(chat_id: int) -> None:
     try:
         from app.services.telegram_service import get_telegram_bot
+
         bot = await get_telegram_bot()
         await bot.send_message(
             chat_id=chat_id,
@@ -653,6 +775,7 @@ async def _send_telegram_unregistered_hint(chat_id: int) -> None:
     so users aren't stuck wondering why nothing happens."""
     try:
         from app.services.telegram_service import get_telegram_bot
+
         bot = await get_telegram_bot()
         await bot.send_message(
             chat_id=chat_id,
@@ -682,7 +805,7 @@ async def _handle_telegram_start(
     pending_key = f"pending:{code}"
     logger.info("Looking up Telegram pending key: %s", pending_key)
     pending = chat_platform_repo.get_workspace(pending_key)
-    
+
     if not pending:
         logger.warning("Telegram registration code not found: %s", code)
         try:
@@ -700,7 +823,12 @@ async def _handle_telegram_start(
     try:
         created_at = parse_timestamp_to_utc(created_at_str)
         age_seconds = (_datetime.now(_timezone.utc) - created_at).total_seconds()
-        logger.info("Telegram code %s age: %.1fs (TTL: %d)", code, age_seconds, TELEGRAM_CODE_TTL)
+        logger.info(
+            "Telegram code %s age: %.1fs (TTL: %d)",
+            code,
+            age_seconds,
+            TELEGRAM_CODE_TTL,
+        )
     except Exception as exc:
         logger.error("Failed to parse created_at for code %s: %s", code, exc)
         age_seconds = TELEGRAM_CODE_TTL + 1  # treat malformed timestamp as expired
@@ -736,7 +864,9 @@ async def _handle_telegram_start(
         )
         project_id = project["project_id"]
 
-    logger.info("Saving Telegram workspace: %s for user %s", platform_workspace_id, user_id)
+    logger.info(
+        "Saving Telegram workspace: %s for user %s", platform_workspace_id, user_id
+    )
     try:
         chat_platform_repo.save_workspace(
             platform_workspace_id=platform_workspace_id,
@@ -744,12 +874,16 @@ async def _handle_telegram_start(
             project_id=project_id,
             platform="telegram",
             bot_token_encrypted="",  # global bot token used from env
-            workspace_name=from_user.get("first_name") or from_user.get("username") or "Telegram DM",
+            workspace_name=from_user.get("first_name")
+            or from_user.get("username")
+            or "Telegram DM",
             telegram_user_id=telegram_user_id,
         )
         logger.info("Successfully saved Telegram workspace: %s", platform_workspace_id)
     except Exception as exc:
-        logger.error("Failed to save Telegram workspace %s: %s", platform_workspace_id, exc)
+        logger.error(
+            "Failed to save Telegram workspace %s: %s", platform_workspace_id, exc
+        )
         return
 
     chat_platform_repo.delete_workspace(pending_key)
@@ -783,15 +917,18 @@ async def _handle_telegram_connect(
         return
 
     # Look up the DM workspace for this Telegram user
-    dm_workspace = chat_platform_repo.get_workspace_by_telegram_user_id(telegram_user_id)
+    dm_workspace = chat_platform_repo.get_workspace_by_telegram_user_id(
+        telegram_user_id
+    )
     if not dm_workspace:
         try:
             await bot.send_message(
                 chat_id=chat_id,
                 text=(
                     "⚠️ You haven't connected your Dreamify account yet\\.\n\n"
-                    "DM me first: click [here](https://t.me/" +
-                    re.escape(_telegram_bot_username()) + ") and send `/start YOUR_CODE`\\."
+                    "DM me first: click [here](https://t.me/"
+                    + re.escape(_telegram_bot_username())
+                    + ") and send `/start YOUR_CODE`\\."
                 ),
                 parse_mode="MarkdownV2",
             )
@@ -835,7 +972,9 @@ async def _handle_telegram_connect(
             chat_id=chat_id,
             text=(
                 "✅ *Dreamify connected to this group\\!*\n\n"
-                "Mention me with a question: `@" + _telegram_bot_username() + " why did signups drop?`"
+                "Mention me with a question: `@"
+                + _telegram_bot_username()
+                + " why did signups drop?`"
             ),
             parse_mode="MarkdownV2",
         )
@@ -844,6 +983,7 @@ async def _handle_telegram_connect(
 
 
 # ── Telegram registration code ────────────────────────────────────────────────
+
 
 class TelegramCodeResponse(BaseModel):
     code: str
@@ -856,7 +996,9 @@ class TelegramCodeResponse(BaseModel):
 async def telegram_generate_code(user_id: str = Depends(require_user)):
     """Generate a short-lived registration code for Telegram DM linking."""
     if not _telegram_bot_token():
-        raise HTTPException(status_code=503, detail="Telegram integration not configured")
+        raise HTTPException(
+            status_code=503, detail="Telegram integration not configured"
+        )
 
     # Opportunistic GC: prune any expired pending rows for this user before
     # adding a new one. Cheap (scoped scan), keeps the table tidy.
@@ -865,7 +1007,9 @@ async def telegram_generate_code(user_id: str = Depends(require_user)):
             "telegram_pending", TELEGRAM_CODE_TTL, user_id=user_id
         )
         if pruned:
-            logger.info("Pruned %d expired telegram_pending rows for user %s", pruned, user_id)
+            logger.info(
+                "Pruned %d expired telegram_pending rows for user %s", pruned, user_id
+            )
     except Exception as exc:
         logger.warning("telegram_pending GC failed: %s", exc)
 
@@ -893,6 +1037,7 @@ async def telegram_generate_code(user_id: str = Depends(require_user)):
 
 # ── Telegram status ───────────────────────────────────────────────────────────
 
+
 class TelegramStatusResponse(BaseModel):
     connected: bool
     workspace_name: Optional[str] = None
@@ -916,6 +1061,7 @@ async def get_telegram_status(user_id: str = Depends(require_user)):
 
 # ── Zalo Bot Platform webhook ─────────────────────────────────────────────────
 
+
 def _verify_zalo_webhook(request: Request) -> bool:
     webhook_secret = _zalo_webhook_secret()
     if not webhook_secret:
@@ -933,8 +1079,16 @@ def _extract_zalo_image_file_ids(message: Dict[str, Any]) -> list:
     """
     candidates = [
         message.get("file_id"),
-        (message.get("photo") or {}).get("file_id") if isinstance(message.get("photo"), dict) else None,
-        (message.get("image") or {}).get("file_id") if isinstance(message.get("image"), dict) else None,
+        (
+            (message.get("photo") or {}).get("file_id")
+            if isinstance(message.get("photo"), dict)
+            else None
+        ),
+        (
+            (message.get("image") or {}).get("file_id")
+            if isinstance(message.get("image"), dict)
+            else None
+        ),
     ]
     return [c for c in candidates if c]
 
@@ -1018,6 +1172,15 @@ async def zalo_webhook(request: Request, background_tasks: BackgroundTasks):
         return {"ok": True}
 
     query = text or "(image attachment)"
+    thread_key = f"{chat_id}#0"
+    if text and has_pending_clarification(platform_workspace_id, thread_key):
+        background_tasks.add_task(
+            handle_zalo_clarification_reply,
+            query=query,
+            platform_workspace_id=platform_workspace_id,
+            chat_id=chat_id,
+        )
+        return {"ok": True}
 
     background_tasks.add_task(
         handle_zalo_query,
@@ -1032,6 +1195,7 @@ async def zalo_webhook(request: Request, background_tasks: BackgroundTasks):
 def _send_zalo_start_hint(chat_id: Any) -> None:
     try:
         from app.services import zalo_service
+
         zalo_service.send_message(
             chat_id,
             "👋 Hi! I'm Dreamify Morpheus, your analytics teammate.\n\n"
@@ -1046,6 +1210,7 @@ def _send_zalo_unregistered_hint(chat_id: Any) -> None:
     """Reply when a Zalo DM arrives from a chat we don't have a workspace for."""
     try:
         from app.services import zalo_service
+
         zalo_service.send_message(
             chat_id,
             "🔌 You're not connected to Dreamify yet.\n\n"
@@ -1301,7 +1466,11 @@ def _handle_zalo_start(
     if existing:
         project_id = existing["project_id"]
     else:
-        display_name = from_user.get("display_name") or from_user.get("name") or f"user_{zalo_user_id}"
+        display_name = (
+            from_user.get("display_name")
+            or from_user.get("name")
+            or f"user_{zalo_user_id}"
+        )
         project = projects_repo.create_project(
             user_id=user_id,
             name=f"Zalo — {display_name}",
@@ -1309,11 +1478,7 @@ def _handle_zalo_start(
         )
         project_id = project["project_id"]
 
-    workspace_name = (
-        from_user.get("display_name")
-        or from_user.get("name")
-        or "Zalo DM"
-    )
+    workspace_name = from_user.get("display_name") or from_user.get("name") or "Zalo DM"
     chat_platform_repo.save_workspace(
         platform_workspace_id=platform_workspace_id,
         user_id=user_id,
@@ -1339,6 +1504,7 @@ def _handle_zalo_start(
 
 # ── Zalo registration code ────────────────────────────────────────────────────
 
+
 class ZaloCodeResponse(BaseModel):
     code: str
     bot_username: str
@@ -1359,7 +1525,9 @@ async def zalo_generate_code(user_id: str = Depends(require_user)):
             "zalo_pending", ZALO_CODE_TTL, user_id=user_id
         )
         if pruned:
-            logger.info("Pruned %d expired zalo_pending rows for user %s", pruned, user_id)
+            logger.info(
+                "Pruned %d expired zalo_pending rows for user %s", pruned, user_id
+            )
     except Exception as exc:
         logger.warning("zalo_pending GC failed: %s", exc)
 
@@ -1386,6 +1554,7 @@ async def zalo_generate_code(user_id: str = Depends(require_user)):
 
 
 # ── Zalo QR code (anonymous) ──────────────────────────────────────────────────
+
 
 @router.get("/chat/zalo/qr/{code}")
 async def zalo_qr_code(code: str):
@@ -1418,6 +1587,7 @@ async def zalo_qr_code(code: str):
 
 
 # ── Zalo status ───────────────────────────────────────────────────────────────
+
 
 class ZaloStatusResponse(BaseModel):
     connected: bool

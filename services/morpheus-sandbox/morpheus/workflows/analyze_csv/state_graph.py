@@ -49,6 +49,7 @@ class StatefulAnalyzeCSVWorkflow:
         theme_id: Optional[str] = None,
         analysis_focus_id: Optional[str] = None,
         template_id: Optional[str] = None,
+        skip_ask_first: bool = False,
     ):
         """Initialize workflow with model, tools, and node registry."""
         self.config = load_config()
@@ -59,6 +60,7 @@ class StatefulAnalyzeCSVWorkflow:
         self.model_with_tools = self.model.bind_tools(self.tools)
 
         self.theme_id = theme_id or "default"
+        self.skip_ask_first = skip_ask_first
         self.template_spec = None
         focus_id = analysis_focus_id or template_id
         if focus_id:
@@ -90,7 +92,9 @@ class StatefulAnalyzeCSVWorkflow:
         self.nodes = {
             "START": nodes.node_start,
             "EXPLORE_FILES": nodes.node_explore_files,
-            "ASK_FIRST": nodes.node_ask_first,
+            "ASK_FIRST": (
+                self._skip_ask_first_node if skip_ask_first else nodes.node_ask_first
+            ),
             "ROUTING": nodes.node_routing,
             "REASONING": nodes.node_reasoning,
             "REASONING_INTERNAL": nodes.node_reasoning_internal,
@@ -109,6 +113,11 @@ class StatefulAnalyzeCSVWorkflow:
         self._sync_executor: Optional[ThreadPoolExecutor] = None
 
         logger.info("StatefulAnalyzeCSVWorkflow initialized")
+
+    @staticmethod
+    def _skip_ask_first_node(state: AgentState, **kwargs) -> AgentState:
+        logger.info("ASK_FIRST skipped for this workflow run")
+        return state
 
     def _get_server_functions(self):
         """

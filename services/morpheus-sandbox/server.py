@@ -69,6 +69,7 @@ class RunRequest(BaseModel):
     # Legacy compatibility: older backend payloads sent use-case template IDs.
     template_id: Optional[str] = None
     project_assets: List[Dict[str, Any]] = []
+    skip_ask_first: bool = False
 
 
 class StatusRequest(BaseModel):
@@ -1127,6 +1128,7 @@ def _process_conversation_background(
     analysis_focus_id: Optional[str] = None,
     template_id: Optional[str] = None,
     project_assets: Optional[List[Dict[str, Any]]] = None,
+    skip_ask_first: bool = False,
 ):
     """Background processing function for workflow execution."""
     temp_file_path = None
@@ -1212,7 +1214,12 @@ def _process_conversation_background(
         selection_mode = latest_data_selection(conversation).get(
             "asset_selection", "none"
         )
-        if chart_mentions and selection_mode == "none" and edit_needs_data(user_prompt):
+        if (
+            not skip_ask_first
+            and chart_mentions
+            and selection_mode == "none"
+            and edit_needs_data(user_prompt)
+        ):
             single_source_id = resolve_single_data_source(project_assets or [])
             if single_source_id:
                 _synthesize_explicit_selection_node(conversation, single_source_id)
@@ -1272,6 +1279,7 @@ def _process_conversation_background(
         if (
             not assets
             and not chart_mentions
+            and not skip_ask_first
             and _is_data_context_needed(user_prompt)
             and not (
                 answered_clarification_reason_codes(conversation)
@@ -1399,6 +1407,7 @@ def _process_conversation_background(
             theme_id=effective_theme_id,
             analysis_focus_id=analysis_focus_id,
             template_id=template_id,
+            skip_ask_first=skip_ask_first,
         )
         _collecting_post_status(conversation_id, "processing", {"step": "run_workflow"})
 
@@ -1467,6 +1476,18 @@ def _process_conversation_background(
         chart_edit_target_dashboard_id = None
 
         if response_type == "clarification_request":
+            if skip_ask_first:
+                error_msg = (
+                    "Workflow requested clarification while ask-first is skipped"
+                )
+                logger.error(error_msg)
+                _collecting_post_status(
+                    conversation_id,
+                    "error",
+                    {"step": "clarification", "error": error_msg},
+                )
+                return
+
             clarifications = result.get("clarifications")
             if not clarifications:
                 single = result.get("clarification") or result.get("data")
@@ -2266,6 +2287,7 @@ async def run_workflow(request: RunRequest, background_tasks: BackgroundTasks):
             request.analysis_focus_id,
             request.template_id,
             request.project_assets,
+            request.skip_ask_first,
         )
 
         return {

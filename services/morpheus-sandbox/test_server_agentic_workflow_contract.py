@@ -103,6 +103,7 @@ def _run_background(server, conversation, result, **kwargs):
             analysis_focus_id=kwargs.get("analysis_focus_id"),
             template_id=kwargs.get("template_id"),
             project_assets=kwargs.get("project_assets"),
+            skip_ask_first=kwargs.get("skip_ask_first", False),
         )
 
     return persisted, statuses, uploaded
@@ -153,6 +154,60 @@ def test_background_persists_batched_clarification_request_from_workflow():
         "join_strategy",
         "output_mode",
     ]
+
+
+def test_background_skip_ask_first_bypasses_data_context_pause():
+    import server
+
+    persisted, statuses, _uploaded = _run_background(
+        server,
+        _conversation("analyze performance"),
+        {"type": "message", "content": "Analysis complete."},
+        project_assets=[_downloadable_project_asset("asset_a")],
+        skip_ask_first=True,
+    )
+
+    assert _FakeWorkflow.init_kwargs[0]["skip_ask_first"] is True
+    assert _FakeWorkflow.calls, "skip_ask_first should continue into workflow execution"
+    assert all(status["status"] != "awaiting_user_input" for status in statuses)
+    assert statuses[-1]["status"] == "completed"
+    assert persisted[-1]["nodes"][-1]["status"] == "completed"
+
+
+def test_background_workspace_project_assets_create_data_context_choices():
+    import server
+
+    persisted, statuses, _uploaded = _run_background(
+        server,
+        _conversation("analyze growth performance"),
+        {"type": "message", "content": "should not run yet"},
+        project_assets=[
+            {
+                "asset_id": "asset_a",
+                "file_id": "file_a",
+                "filename": "growth.csv",
+                "extension": "csv",
+                "asset_type": "raw",
+                "row_count": 7,
+                "column_count": 4,
+                "status": "ready",
+            }
+        ],
+    )
+
+    assert not _FakeWorkflow.calls, "workspace source choice should pause first"
+    final_status = statuses[-1]
+    assert final_status["status"] == "awaiting_user_input"
+    assert final_status["metadata"]["response_type"] == "clarification_request"
+    assistant_node = persisted[-1]["nodes"][-1]
+    clarification = next(
+        content["data"]
+        for content in assistant_node["contents"]
+        if content["type"] == "clarification_request"
+    )
+    option_ids = [option["id"] for option in clarification["options"]]
+    assert "asset:asset_a" in option_ids
+    assert "answer_without_data" in option_ids
 
 
 def test_background_persists_text_qna_message_for_frontend_restore():

@@ -11,7 +11,7 @@ import os
 import tempfile
 import threading
 import time
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from morpheus.workflows.analyze_csv.edges import decide_next_node
 from morpheus.workflows.analyze_csv import nodes
@@ -69,6 +69,32 @@ def test_ask_first_clarification_finishes():
 def test_ask_first_without_clarification_routes():
     state = _make_state("ASK_FIRST")
     state.output = None
+    assert decide_next_node(state) == "ROUTING"
+
+
+def test_skip_ask_first_workflow_node_routes_without_clarification():
+    from morpheus.workflows.analyze_csv.state_graph import StatefulAnalyzeCSVWorkflow
+
+    model = MagicMock()
+    model.bind_tools.return_value = MagicMock()
+    quick_model = MagicMock()
+
+    with patch(
+        "morpheus.workflows.analyze_csv.state_graph.get_model_for_agent",
+        return_value=model,
+    ), patch(
+        "morpheus.workflows.analyze_csv.state_graph.get_model_for_quick_agent",
+        return_value=quick_model,
+    ), patch(
+        "morpheus.workflows.analyze_csv.state_graph.PythonREPLTool",
+        return_value=MagicMock(),
+    ):
+        workflow = StatefulAnalyzeCSVWorkflow(skip_ask_first=True)
+
+    state = _make_state("ASK_FIRST")
+    state = workflow.nodes["ASK_FIRST"](state)
+
+    assert state.output is None
     assert decide_next_node(state) == "ROUTING"
 
 

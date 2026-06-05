@@ -35,6 +35,7 @@ def save_workspace(
     language: str = "en",
     telegram_user_id: Optional[str] = None,
     zalo_user_id: Optional[str] = None,
+    whatsapp_user_id: Optional[str] = None,
     target_workspace_id: Optional[str] = None,
 ) -> Dict:
     table = get_table(tables.chat_workspaces)
@@ -52,6 +53,8 @@ def save_workspace(
         item["telegram_user_id"] = telegram_user_id
     if zalo_user_id is not None:
         item["zalo_user_id"] = zalo_user_id
+    if whatsapp_user_id is not None:
+        item["whatsapp_user_id"] = whatsapp_user_id
     if target_workspace_id is not None:
         # Used by short-lived `zalo_upload:{token}` rows to point at the
         # real Zalo workspace that owns the upload session.
@@ -150,6 +153,18 @@ def get_workspace_by_zalo_user_id(zalo_user_id: str) -> Optional[Dict]:
     resp = table.scan(
         FilterExpression=Attr("platform").eq("zalo")
         & Attr("zalo_user_id").eq(zalo_user_id),
+        Limit=10,
+    )
+    items = resp.get("Items", [])
+    return items[0] if items else None
+
+
+def get_workspace_by_whatsapp_user_id(whatsapp_user_id: str) -> Optional[Dict]:
+    """Find a WhatsApp DM workspace by the wa_id stored at registration."""
+    table = get_table(tables.chat_workspaces)
+    resp = table.scan(
+        FilterExpression=Attr("platform").eq("whatsapp")
+        & Attr("whatsapp_user_id").eq(whatsapp_user_id),
         Limit=10,
     )
     items = resp.get("Items", [])

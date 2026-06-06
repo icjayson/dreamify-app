@@ -294,6 +294,14 @@ const Header = () => {
               >
                 About Us
               </button>
+
+              <button
+                onClick={() => navigate("/blog")}
+                className={navItemClass(location.pathname.startsWith("/blog"))}
+              >
+                Blog
+              </button>
+
               <a
                 href="https://discord.gg/GhFjdbgdxd"
                 target="_blank"
@@ -486,6 +494,14 @@ const Header = () => {
               >
                 About
               </button>
+
+              <button
+                onClick={() => { setMobileNavOpen(false); navigate("/blog"); }}
+                className={mobileNavItemClass(location.pathname.startsWith("/blog"))}
+              >
+                Blog
+              </button>
+
               <a
                 href="https://discord.gg/GhFjdbgdxd"
                 target="_blank"

@@ -43,6 +43,13 @@ export const API_ENDPOINTS = {
   ADMIN_CONVERSATION_NODES: '/api/v1/admin/conversations',
   ADMIN_METRICS: '/api/v1/admin/metrics',
   ADMIN_TIMESERIES: '/api/v1/admin/metrics/timeseries',
+
+  // Blog (public reads)
+  BLOG_POSTS: '/api/v1/blog/posts',
+
+  // Blog CMS (admin)
+  CMS_POSTS: '/api/v1/admin/blog/posts',
+  CMS_ASSETS: '/api/v1/admin/blog/assets',
 } as const;
 
 // HTTP Methods

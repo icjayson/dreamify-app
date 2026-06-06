@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemap.org/schemas/sitemap/0.9">
+  <!-- Core -->
+  <url><loc>https://app.dreamify.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://app.dreamify.dev/landingpage</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>
+  <url><loc>https://app.dreamify.dev/about</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/pricing</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://app.dreamify.dev/features</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/security</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/docs</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://app.dreamify.dev/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://app.dreamify.dev/terms</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+
+  <!-- Product · Data Connectors -->
+  <url><loc>https://app.dreamify.dev/product/data-connectors</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/meta-ads</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/google-ads</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/ga4</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/tiktok-ads</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/google-sheets</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/stripe</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/appsflyer</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/firebase</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/postgresql</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/bigquery</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/product/data-connectors/snowflake</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+
+  <!-- Product · Workspace Agents -->
+  <url><loc>https://app.dreamify.dev/product/workspace-agents</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://app.dreamify.dev/product/workspace-agents/slack</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/product/workspace-agents/telegram</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://app.dreamify.dev/product/workspace-agents/zalo</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/product/workspace-agents/whatsapp</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+
+  <!-- Comparisons -->
+  <url><loc>https://app.dreamify.dev/vs</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://app.dreamify.dev/vs/julius-ai</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/vs/looker-studio</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://app.dreamify.dev/vs/power-bi</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://app.dreamify.dev/vs/airbook</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/vs/omni</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/vs/tableau</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/vs/chatgpt-for-data</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+
+  <!-- Blog -->
+  <url><loc>https://app.dreamify.dev/blog</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/blog/marketing-dashboard-in-5-minutes</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/blog/multi-channel-ad-dashboard</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/blog/spreadsheet-reporting-killing-friday</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/blog/ai-data-visualization-vs-bi</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/blog/sme-dashboard-without-data-team</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/blog/dashboards-in-slack</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/blog/tiktok-ads-reporting-2026</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://app.dreamify.dev/blog/cost-of-manual-reporting</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+
+  <!-- Customers -->
+  <url><loc>https://app.dreamify.dev/customers</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/customers/vietnamese-ecommerce-sme</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/customers/saas-founder-50</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/customers/performance-marketing-agency</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/customers/d2c-brand-revenue</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.dreamify.dev/customers/agency-onboarding</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+</urlset>

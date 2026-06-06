@@ -1434,7 +1434,7 @@ export default function WorkspacePage() {
                     })}
                     {/* Request connector card */}
                     <Card
-                      onClick={() => setFeedbackModal({ open: true, category: "Request Connector", placeholder: "What connector would you like to see? (e.g. specific platform, database, API...)" })}
+                      onClick={() => setFeedbackModal({ open: true, category: "Request Connector & Workspace", placeholder: "What connector would you like to see? (e.g. specific platform, database, API...)" })}
                       className="p-4 h-[92px] transition-all hover:border-primary/40 cursor-pointer border-dashed"
                     >
                       <div className="flex items-center justify-between h-full">

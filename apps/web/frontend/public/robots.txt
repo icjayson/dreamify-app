@@ -1,14 +1,33 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
 User-agent: *
 Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+Disallow: /workspace
+Disallow: /admin
+Disallow: /preview
+Disallow: /success
+Disallow: /cancel
+Disallow: /sso-callback
+Disallow: /zalo-upload
+
+Sitemap: https://app.dreamify.dev/sitemap.xml

@@ -32,8 +32,22 @@ import CancelPage from "./pages/CancelPage";
 import SuccessPage from "./pages/SuccessPage";
 import AdminPage from "./pages/admin";
 import AdminConversationPage from "./pages/admin/conversation";
+import AdminRoute from "./components/auth/AdminRoute";
+import CmsListPage from "./pages/cms/CmsListPage";
+import CmsEditorPage from "./pages/cms/CmsEditorPage";
 import TemplateGalleryPage from "./pages/TemplateGalleryPage";
 import OverallFeedbackPage from "./pages/OverallFeedbackPage";
+import LandingPage from "./pages/LandingPage";
+import IntegrationPage from "./pages/IntegrationPage";
+import WorkspacePageSeo from "./pages/WorkspacePageSeo";
+import ComparisonPage from "./pages/ComparisonPage";
+import VsHub from "./pages/VsHub";
+import BlogIndex from "./pages/BlogIndex";
+import BlogPost from "./pages/BlogPost";
+import CustomersIndex from "./pages/CustomersIndex";
+import CustomerCaseStudy from "./pages/CustomerCaseStudy";
+import FeaturesPage from "./pages/FeaturesPage";
+import SecurityPage from "./pages/SecurityPage";
 import { useChatStore } from "./chat/useChatStore";
 import GA4IntegrationModal from "./components/chat/GA4IntegrationModal";
 import GoogleSheetsIntegrationModal from "./components/chat/GoogleSheetsIntegrationModal";
@@ -93,6 +107,19 @@ const AppContent = () => {
   const isPreviewPath = location.pathname.startsWith("/preview/");
   const isFeedbackPath = location.pathname === "/feedback";
 
+  const isSeoMarketingPath =
+    location.pathname === "/landingpage" ||
+    location.pathname === "/features" ||
+    location.pathname === "/security" ||
+    location.pathname.startsWith("/product/data-connectors") ||
+    location.pathname.startsWith("/product/workspace-agents") ||
+    location.pathname === "/vs" ||
+    location.pathname.startsWith("/vs/") ||
+    location.pathname === "/blog" ||
+    location.pathname.startsWith("/blog/") ||
+    location.pathname === "/customers" ||
+    location.pathname.startsWith("/customers/");
+
   const isAllowedSignedInPath =
     location.pathname.startsWith("/workspace") ||
     location.pathname.startsWith("/admin") ||
@@ -104,7 +131,8 @@ const AppContent = () => {
     location.pathname === "/sso-callback" ||
     location.pathname === "/cancel" ||
     location.pathname === "/success" ||
-    location.pathname.startsWith("/zalo-upload");
+    location.pathname.startsWith("/zalo-upload") ||
+    isSeoMarketingPath;
 
   const isPublicLandingPath =
     location.pathname === "/" ||
@@ -117,7 +145,8 @@ const AppContent = () => {
     location.pathname === "/docs" ||
     location.pathname === "/login" ||
     location.pathname === "/signup" ||
-    location.pathname === "/feedback";
+    location.pathname === "/feedback" ||
+    isSeoMarketingPath;
 
   // Prevent public page flash while Clerk is still resolving auth state.
   if (!isLoaded && isPublicLandingPath) {
@@ -190,11 +219,31 @@ const AppContent = () => {
         <Route path="/preview/:assetId" element={<FilePreviewPage />} />
         <Route path="/cancel" element={<CancelPage />} />
         <Route path="/success" element={<SuccessPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/admin/conversation/:conversationId" element={<AdminConversationPage />} />
+        <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+        <Route path="/admin/conversation/:conversationId" element={<AdminRoute><AdminConversationPage /></AdminRoute>} />
+        <Route path="/admin/cms" element={<AdminRoute><CmsListPage /></AdminRoute>} />
+        <Route path="/admin/cms/new" element={<AdminRoute><CmsEditorPage /></AdminRoute>} />
+        <Route path="/admin/cms/:postId" element={<AdminRoute><CmsEditorPage /></AdminRoute>} />
         <Route path="/templates" element={<TemplateGalleryPage />} />
         <Route path="/feedback" element={<OverallFeedbackPage />} />
         <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
+        {/* SEO marketing routes (additive, do not modify existing routes above) */}
+        <Route path="/landingpage" element={<LandingPage />} />
+        <Route path="/features" element={<FeaturesPage />} />
+        <Route path="/security" element={<SecurityPage />} />
+        <Route path="/product/data-connectors/:tool" element={<IntegrationPage />} />
+        <Route path="/product/workspace-agents/:platform" element={<WorkspacePageSeo />} />
+        {/* Legacy hub paths → redirect to new product hubs */}
+        <Route path="/integrations" element={<Navigate to="/product/data-connectors" replace />} />
+        <Route path="/integrations/:tool" element={<Navigate to="/product/data-connectors" replace />} />
+        <Route path="/workspaces" element={<Navigate to="/product/workspace-agents" replace />} />
+        <Route path="/workspaces/:platform" element={<Navigate to="/product/workspace-agents" replace />} />
+        <Route path="/vs" element={<VsHub />} />
+        <Route path="/vs/:competitor" element={<ComparisonPage />} />
+        <Route path="/blog" element={<BlogIndex />} />
+        <Route path="/blog/:slug" element={<BlogPost />} />
+        <Route path="/customers" element={<CustomersIndex />} />
+        <Route path="/customers/:slug" element={<CustomerCaseStudy />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

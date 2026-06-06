@@ -18,6 +18,7 @@ import {
   Info,
   Mail,
   BookOpen,
+  Newspaper,
   Settings,
   FolderOpen,
 } from "lucide-react";
@@ -518,6 +519,17 @@ export default function WorkspaceSidebar({
               >
                 <BookOpen className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-foreground">Documentation</span>
+              </button>
+
+              <button
+                className="w-full flex items-center gap-2 p-2 hover:bg-background rounded-md transition-colors"
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  window.open("/blog", "_blank", "noopener,noreferrer");
+                }}
+              >
+                <Newspaper className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm text-foreground">Blog</span>
               </button>
 
               <div className="border-t border-border my-1"></div>

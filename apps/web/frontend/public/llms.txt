@@ -1,0 +1,32 @@
+# Dreamify
+> AI Data Visualization platform. Turns raw business data from Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Google Sheets, PostgreSQL, BigQuery, and Snowflake into decision-ready dashboards in minutes. Built for marketers, sellers, and founders at SMEs. Pricing: Sandbox free, Pro $15/mo, Team $18/seat/mo.
+
+## Core
+- [Homepage](https://app.dreamify.dev/): Product overview and CTA
+- [Landing page](https://app.dreamify.dev/landingpage): Full positioning, connectors, workspace agents, pricing
+- [About](https://app.dreamify.dev/about): Mission, problem, features
+- [Pricing](https://app.dreamify.dev/pricing): Sandbox / Pro / Team tiers
+- [Docs](https://app.dreamify.dev/docs): How Dreamify works
+
+## Product
+- [Data Connectors](https://app.dreamify.dev/product/data-connectors): Live connectors for AI dashboards
+- [Workspace Agents](https://app.dreamify.dev/product/workspace-agents): Dreamify inside Slack, Telegram, Zalo, WhatsApp
+
+## Data Connectors (individual)
+- [Meta Ads](https://app.dreamify.dev/product/data-connectors/meta-ads)
+- [Google Ads](https://app.dreamify.dev/product/data-connectors/google-ads)
+- [GA4](https://app.dreamify.dev/product/data-connectors/ga4)
+- [TikTok Ads](https://app.dreamify.dev/product/data-connectors/tiktok-ads)
+- [Google Sheets](https://app.dreamify.dev/product/data-connectors/google-sheets)
+- [Stripe](https://app.dreamify.dev/product/data-connectors/stripe)
+- [AppsFlyer](https://app.dreamify.dev/product/data-connectors/appsflyer)
+- [Firebase](https://app.dreamify.dev/product/data-connectors/firebase)
+- [PostgreSQL](https://app.dreamify.dev/product/data-connectors/postgresql)
+- [BigQuery](https://app.dreamify.dev/product/data-connectors/bigquery)
+- [Snowflake](https://app.dreamify.dev/product/data-connectors/snowflake)
+
+## Workspace Agents (individual)
+- [Slack](https://app.dreamify.dev/product/workspace-agents/slack)
+- [Telegram](https://app.dreamify.dev/product/workspace-agents/telegram)
+- [Zalo](https://app.dreamify.dev/product/workspace-agents/zalo)
+- [WhatsApp](https://app.dreamify.dev/product/workspace-agents/whatsapp)

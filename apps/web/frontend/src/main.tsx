@@ -3,6 +3,7 @@ import App from './App.tsx'
 import './index.css'
 import { ClerkProvider, useAuth } from '@clerk/clerk-react'
 import { BrowserRouter } from 'react-router-dom'
+import { HelmetProvider } from 'react-helmet-async'
 
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -51,17 +52,19 @@ const AppWithRouter = () => {
 
   return (
     <BrowserRouter>
-      <ClerkProvider
-        publishableKey={PUBLISHABLE_KEY}
-        afterSignOutUrl="/"
-        signInForceRedirectUrl={CLERK_SIGN_IN_FORCE_REDIRECT_URL}
-        signUpForceRedirectUrl={CLERK_SIGN_UP_FORCE_REDIRECT_URL}
-        signInFallbackRedirectUrl={CLERK_SIGN_IN_FALLBACK_REDIRECT_URL}
-        signUpFallbackRedirectUrl={CLERK_SIGN_UP_FALLBACK_REDIRECT_URL}
-      >
-        <TokenBridge />
-          <App />
-      </ClerkProvider>
+      <HelmetProvider>
+        <ClerkProvider
+          publishableKey={PUBLISHABLE_KEY}
+          afterSignOutUrl="/"
+          signInForceRedirectUrl={CLERK_SIGN_IN_FORCE_REDIRECT_URL}
+          signUpForceRedirectUrl={CLERK_SIGN_UP_FORCE_REDIRECT_URL}
+          signInFallbackRedirectUrl={CLERK_SIGN_IN_FALLBACK_REDIRECT_URL}
+          signUpFallbackRedirectUrl={CLERK_SIGN_UP_FALLBACK_REDIRECT_URL}
+        >
+          <TokenBridge />
+            <App />
+        </ClerkProvider>
+      </HelmetProvider>
     </BrowserRouter>
   )
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, LayoutGrid, Table2, PanelLeft, ChevronLeft, ChevronRight, Activity, MessageSquare, LogOut, ShieldAlert, LogIn } from 'lucide-react';
+import { Search, LayoutGrid, Table2, PanelLeft, ChevronLeft, ChevronRight, Activity, MessageSquare, LogOut, FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ConversationTable } from '@/components/admin/ConversationTable';
@@ -26,7 +26,7 @@ type ViewMode = 'table' | 'card' | 'split';
 const PAGE_SIZE = 20;
 
 export default function AdminPage() {
-  const { isSignedIn, isAdmin, userEmail, getToken, signOut } = useAdminAuth();
+  const { isAdmin, userEmail, getToken, signOut } = useAdminAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('split');
@@ -68,43 +68,8 @@ export default function AdminPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Not signed in at all
-  if (!isSignedIn) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card>
-          <CardContent className="p-8 text-center space-y-4">
-            <LogIn className="h-12 w-12 mx-auto text-muted-foreground" />
-            <h2 className="text-xl font-semibold">Sign In Required</h2>
-            <p className="text-muted-foreground">Please sign in to access the admin panel.</p>
-            <Button onClick={() => navigate('/login')}>
-              Go to Sign In
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Signed in but not admin
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card>
-          <CardContent className="p-8 text-center space-y-4">
-            <ShieldAlert className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-xl font-semibold">Access Denied</h2>
-            <p className="text-muted-foreground">
-              You don't have admin permissions. Contact an administrator if you believe this is an error.
-            </p>
-            <Button variant="outline" onClick={() => navigate('/')}>
-              Go Home
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // Access control (signed-in + admin) is enforced by the <AdminRoute> wrapper
+  // in App.tsx, so this component can assume an authenticated admin.
 
   return (
     <div className="min-h-screen bg-muted flex flex-col">
@@ -113,6 +78,10 @@ export default function AdminPage() {
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
           <div className="flex items-center gap-4">
+            <Button variant="outline" size="sm" onClick={() => navigate('/admin/cms')} className="gap-2">
+              <FileText className="h-4 w-4" />
+              Blog CMS
+            </Button>
             <span className="text-sm text-muted-foreground mr-2">
               Logged in as <span className="font-medium text-foreground">{userEmail}</span>
             </span>

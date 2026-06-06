@@ -1,5 +1,5 @@
-import { type ElementType, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { type ElementType, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import {
   ArrowRight,
@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 import { CONNECTORS } from "@/constants/connectors";
 import { Button } from "@/components/ui/button";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import { FeedbackFloatingButton } from "@/components/ui/feedback-button";
 import { FooterSection } from "@/components/homepage-section/footer-section";
+import { ProductFaqAccordion } from "@/components/seo/ProductFaqAccordion";
 import VideoBackground from "@/components/homepage-section/VideoBackground";
 import WaveBackground from "../../../src/ui/lightswind/wave-background";
 import { useTheme } from "@/hooks/useTheme";
@@ -23,12 +25,14 @@ import {
   WhatsAppLogo,
   ZaloLogo,
 } from "@/components/integrations/ChatPlatformLogos";
+import Seo from "@/components/seo/Seo";
 
 const LIVE_PRODUCT_CONNECTORS = CONNECTORS.filter(
   (connector) => connector.isActive && connector.showOnProductPage === true,
 );
 
 const CHANNELS: {
+  slug: string;
   name: string;
   description: string;
   helper: string;
@@ -36,6 +40,7 @@ const CHANNELS: {
   Logo: ElementType;
 }[] = [
   {
+    slug: "slack",
     name: "Slack",
     description: "Ask Dreamify in shared channels and keep the answer in the thread.",
     helper: "Best for team analysis threads",
@@ -43,6 +48,7 @@ const CHANNELS: {
     Logo: SlackLogo,
   },
   {
+    slug: "telegram",
     name: "Telegram",
     description: "Bring dashboard answers into fast-moving team chats and groups.",
     helper: "Best for lightweight operations teams",
@@ -50,6 +56,7 @@ const CHANNELS: {
     Logo: TelegramLogo,
   },
   {
+    slug: "zalo",
     name: "Zalo",
     description: "Use Dreamify in local team conversations and direct messages.",
     helper: "Best for Vietnam-based teams",
@@ -57,11 +64,41 @@ const CHANNELS: {
     Logo: ZaloLogo,
   },
   {
+    slug: "whatsapp",
     name: "WhatsApp",
     description: "Send analysis, updates, and dashboard links back to your team.",
     helper: "Best for distributed operators",
     logoBg: "bg-[#25D366]",
     Logo: WhatsAppLogo,
+  },
+];
+
+// Shared between visible FAQ section and FAQPage JSON-LD — same source of truth.
+const WORKSPACE_AGENTS_FAQ: { question: string; answer: string }[] = [
+  {
+    question: "What are workspace agents?",
+    answer:
+      "A workspace agent is Dreamify running inside your team's chat — Slack, Telegram, Zalo, or WhatsApp. Ask a question in a channel and the agent answers in-thread with a fresh chart from your connected data. Schedule a recurring snapshot to land in any channel. Get an anomaly alert the moment a key metric moves outside expected ranges.\n\nThe point is that dashboards belong where attention already lives. Workspace agents put live data answers in the same conversation where the decision gets made, instead of a BI portal nobody opens.",
+  },
+  {
+    question: "Which chat platforms does Dreamify support?",
+    answer:
+      "Dreamify supports Slack, Telegram, Zalo, and WhatsApp workspace agents today. Each agent runs as a bot inside your team chat and can answer questions, generate dashboards, and post scheduled snapshots. More platforms are added on a rolling basis based on which channels teams request most.",
+  },
+  {
+    question: "How do workspace agents differ from the Dreamify app?",
+    answer:
+      "Workspace agents bring the Dreamify experience into your team chat — ask a question in Slack or WhatsApp and get a dashboard answer right in the thread, without leaving the conversation. The full Dreamify app remains available for deeper editing, sharing, and dashboard management.",
+  },
+  {
+    question: "Is data secure when posted to a workspace chat?",
+    answer:
+      "Dreamify only posts the dashboards and answers you explicitly request. Source credentials and raw data stay inside Dreamify — what gets sent to Slack, Telegram, Zalo, or WhatsApp is the rendered chart or numeric answer, not the underlying tables.",
+  },
+  {
+    question: "Can I schedule reports to a specific channel or chat?",
+    answer:
+      "Yes. Each connected workspace lets you pick a destination channel, group, or direct message and a schedule (daily, weekly, monthly, or custom). Threshold and anomaly alerts can also be routed to dedicated channels.",
   },
 ];
 
@@ -83,6 +120,7 @@ export default function ProductWorkspaceAgentsPage() {
   const { isSignedIn } = useAuth();
   const { resolvedTheme } = useTheme();
   const channelsRef = useRef<HTMLElement>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const liveConnectors = useMemo(() => LIVE_PRODUCT_CONNECTORS, []);
 
@@ -95,6 +133,54 @@ export default function ProductWorkspaceAgentsPage() {
   };
 
   return (
+    <>
+      <Seo
+        title="Workspace Agents — Dreamify | Slack, Telegram, Zalo, WhatsApp Dashboard Bots"
+        description="Dreamify lives where your team works. Ask in Slack, Telegram, Zalo, or WhatsApp; turn answers into AI dashboards and send them back to the team."
+        canonical="https://app.dreamify.dev/product/workspace-agents"
+        jsonLd={[
+          {
+            "@context": "https://schema.org",
+            "@type": "CollectionPage",
+            "@id": "https://app.dreamify.dev/product/workspace-agents#webpage",
+            name: "Dreamify Workspace Agents",
+            url: "https://app.dreamify.dev/product/workspace-agents",
+            description:
+              "Dreamify workspace agents bring AI dashboards into Slack, Telegram, Zalo, and WhatsApp.",
+            isPartOf: { "@id": "https://app.dreamify.dev/#website" },
+            about: { "@id": "https://app.dreamify.dev/#organization" },
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: "Dreamify", item: "https://app.dreamify.dev/" },
+              { "@type": "ListItem", position: 2, name: "Product", item: "https://app.dreamify.dev/landingpage" },
+              { "@type": "ListItem", position: 3, name: "Workspace Agents", item: "https://app.dreamify.dev/product/workspace-agents" },
+            ],
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            name: "Dreamify Workspace Agents",
+            itemListElement: CHANNELS.map((c, i) => ({
+              "@type": "ListItem",
+              position: i + 1,
+              name: c.name,
+              url: `https://app.dreamify.dev/product/workspace-agents/${c.slug}`,
+            })),
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: WORKSPACE_AGENTS_FAQ.map((item) => ({
+              "@type": "Question",
+              name: item.question,
+              acceptedAnswer: { "@type": "Answer", text: item.answer },
+            })),
+          },
+        ]}
+      />
     <div className="min-h-screen overflow-x-hidden overflow-y-auto homepage-scrollbar bg-background text-foreground">
       {resolvedTheme === "dark" ? (
         <WaveBackground className="fixed inset-0 z-0" />
@@ -113,7 +199,7 @@ export default function ProductWorkspaceAgentsPage() {
               </div>
               <h1
                 className="font-instrument-serif text-4xl font-semibold italic leading-[0.95] tracking-normal text-foreground dark:text-white sm:text-6xl lg:text-6xl xl:text-[4.25rem]"
-                aria-label="Dreamify lives in your team workspace."
+                aria-label="Workspace Agents — Dreamify dashboards inside Slack, Telegram, Zalo, and WhatsApp"
               >
                 Dreamify lives in
                 <span className="block text-primary">your team workspace.</span>
@@ -159,12 +245,11 @@ export default function ProductWorkspaceAgentsPage() {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               {CHANNELS.map((channel) => (
-                <button
+                <Link
                   key={channel.name}
-                  type="button"
-                  onClick={openWorkspace}
+                  to={`/product/workspace-agents/${channel.slug}`}
                   className="group flex min-h-32 w-full items-center gap-4 rounded-lg border border-border/60 bg-background/70 p-5 text-left shadow-sm backdrop-blur-xl transition-colors hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  aria-label={`Open ${channel.name} workspace agent setup`}
+                  aria-label={`Learn about the ${channel.name} workspace agent`}
                 >
                   <div className={cn("flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg", channel.logoBg)}>
                     <channel.Logo className="h-7 w-7" aria-hidden />
@@ -183,7 +268,7 @@ export default function ProductWorkspaceAgentsPage() {
                     className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
                     aria-hidden
                   />
-                </button>
+                </Link>
               ))}
             </div>
           </div>
@@ -236,7 +321,7 @@ export default function ProductWorkspaceAgentsPage() {
             </div>
             <Button
               variant="outline"
-              onClick={() => navigate("/feedback")}
+              onClick={() => setFeedbackOpen(true)}
               className="h-11 rounded-md px-5 text-sm"
             >
               <MessageSquarePlus className="h-4 w-4" />
@@ -245,10 +330,24 @@ export default function ProductWorkspaceAgentsPage() {
           </div>
         </section>
 
+        <ProductFaqAccordion
+          headingId="workspace-agents-faq"
+          title="Frequently asked questions"
+          description="The most common questions teams ask about Dreamify workspace agents."
+          items={WORKSPACE_AGENTS_FAQ}
+        />
+
         <FooterSection />
       </main>
       <FeedbackFloatingButton />
+      <FeedbackModal
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        category="Request Connector & Workspace"
+        placeholder="Which workspace platform would you like to see? (e.g. Microsoft Teams, Discord, Line...)"
+      />
     </div>
+    </>
   );
 }
 

@@ -1,0 +1,98 @@
+[
+  {
+    "slug": "marketing-dashboard-in-5-minutes",
+    "title": "How to Build a Marketing Dashboard in 5 Minutes (No SQL Required)",
+    "description": "A step-by-step guide to building a multi-channel marketing dashboard in under five minutes — without SQL, BI tools, or a data team.",
+    "target_keyword": "marketing dashboard automation",
+    "persona": "Marketer",
+    "author": "Dreamify Team",
+    "status": "published",
+    "published_at": "2026-06-06",
+    "cover_image_url": "/og-image.png",
+    "content_html": "<h2>Why most marketing dashboards take a week to build</h2>\n<p>If you've ever tried to build a marketing dashboard, you know the pattern: pull data from Meta Ads, paste into a spreadsheet, do the same for Google Ads and GA4, write a few VLOOKUPs, fight with pivot tables, draw a chart, and pray that no one wants a small tweak before Friday.</p>\n<p>The reason it takes a week isn't because the data is hard. It's because every step is manual. Each platform has its own export format, its own metric names, and its own refresh cadence. By the time you finish, the data is already stale.</p>\n<h2>What a 5-minute dashboard actually looks like</h2>\n<p>Connect your ad accounts (Meta, Google, TikTok) and GA4 in a single click each. Describe the dashboard you want in plain English — for example, 'weekly ROAS by channel with spend pacing.' The AI generates the dashboard with the right metrics, chart types, and breakdowns.</p>\n<p>From there you can refine: ask follow-up questions, change a metric, schedule the dashboard to Slack or WhatsApp. Total time end-to-end is well under five minutes for a first draft.</p>\n<h2>The five steps</h2>\n<p>Step 1: Connect your sources. Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase — each in one click via OAuth.</p>\n<p>Step 2: Pick or describe a template. Start from 'Cross-channel ROAS' or just type what you want.</p>\n<p>Step 3: Review the generated dashboard. Charts, filters, and KPIs are pre-arranged.</p>\n<p>Step 4: Refine in chat. Ask for a different breakdown, a new metric, or a tweak — the AI updates the dashboard in place.</p>\n<p>Step 5: Share or schedule. Public link, embed, or scheduled delivery to Slack, Telegram, Zalo, or WhatsApp.</p>\n<h2>When this approach breaks down</h2>\n<p>If your dashboard requires a custom semantic model with governance, RLS, and a 50-table data warehouse, you still want a traditional BI tool. The five-minute path works for marketing, sales, founder, and ops dashboards where speed matters more than perfect governance.</p>\n<p>Most SME marketing dashboards fall in that bucket. The five-minute approach gets you 90% of the value at 5% of the effort.</p>"
+  },
+  {
+    "slug": "multi-channel-ad-dashboard",
+    "title": "Meta Ads + Google Ads + GA4: The Ultimate Multi-Channel Dashboard",
+    "description": "Build a unified Meta + Google + GA4 dashboard that shows true cross-channel ROAS, attribution, and pacing — without manual spreadsheets.",
+    "target_keyword": "multi channel ad dashboard",
+    "persona": "Marketer",
+    "author": "Dreamify Team",
+    "status": "published",
+    "published_at": "2026-06-06",
+    "cover_image_url": "/og-image.png",
+    "content_html": "<h2>Why single-platform dashboards lie</h2>\n<p>Meta Ads Manager reports a different ROAS than GA4. Google Ads attribution disagrees with both. If you only look at any one platform's native reporting, you're seeing that platform's version of the truth — usually the most flattering one.</p>\n<p>A unified multi-channel dashboard joins spend from each ad platform to conversions from GA4 (or your own analytics) so you compare apples to apples. The numbers won't be perfect — attribution never is — but they'll be consistent.</p>\n<h2>What to put in a multi-channel dashboard</h2>\n<p>At minimum: spend, impressions, clicks, conversions, conversion value, and ROAS — sliced by channel and grouped at the campaign level. Layer in a GA4 view of conversions by source/medium so you can cross-check the ad platforms' self-reported numbers.</p>\n<p>Add pacing: daily spend vs the target budget for the month. Add anomaly callouts: a row that fires when ROAS drops more than 20% week-over-week.</p>\n<h2>How to build it without SQL</h2>\n<p>Connect Meta Ads, Google Ads, and GA4 in Dreamify. Describe what you want — 'cross-channel weekly ROAS with pacing and anomaly callouts.' Dreamify generates the dashboard with the right joins on UTM and campaign identifiers.</p>\n<p>Schedule the dashboard to Slack or WhatsApp every Monday morning. That's the entire pipeline replaced with one tool.</p>\n<h2>The hidden value: confidence</h2>\n<p>The point of a multi-channel dashboard isn't just better numbers. It's confidence. When your team trusts that the dashboard reflects reality, you can move budget faster, test more aggressively, and stop the Monday-morning attribution arguments.</p>"
+  },
+  {
+    "slug": "spreadsheet-reporting-killing-friday",
+    "title": "Why Spreadsheet-Based Reporting Is Killing Your Friday",
+    "description": "Manual spreadsheet reporting consumes 5–10 hours per week per operator. Here's why it persists, what it actually costs, and how to break the cycle.",
+    "target_keyword": "weekly report automation",
+    "persona": "Founder/Ops",
+    "author": "Dreamify Team",
+    "status": "published",
+    "published_at": "2026-06-06",
+    "cover_image_url": "/og-image.png",
+    "content_html": "<h2>The Friday spreadsheet ritual</h2>\n<p>Every operator we talk to has the same Friday: pull data from three or four platforms, paste into a tracker sheet, format the cells, screenshot the chart, drop it into Slack. Three hours minimum, more if any number looks off.</p>\n<p>Multiply that across the year: 150 hours of one operator's time, every year, on the same report.</p>\n<h2>Why it persists</h2>\n<p>It persists because each step is small. No single hour feels worth fixing. And the report does get done — just at the cost of one Friday afternoon a week.</p>\n<p>It also persists because the alternatives have historically required a data team. BI tools assume an analyst. Most SMEs don't have one.</p>\n<h2>The real cost</h2>\n<p>The visible cost is the operator's time. The invisible cost is everything that doesn't happen because the operator is spending Friday on the report — campaign reviews, customer calls, creative briefs.</p>\n<p>There's also a delay cost. By the time Friday's report ships, the data is days old. Anything that needed a fast decision earlier in the week didn't get it.</p>\n<h2>Breaking the cycle</h2>\n<p>Replace the manual pipeline with a connected one. Connect each source, build the dashboard once, schedule it to deliver itself to Slack or WhatsApp.</p>\n<p>The Friday afternoon comes back. The report ships faster. The numbers are fresher. The operator does the work that actually moves the business.</p>"
+  },
+  {
+    "slug": "ai-data-visualization-vs-bi",
+    "title": "AI Data Visualization vs Business Intelligence: What's the Difference?",
+    "description": "AI Data Visualization and Business Intelligence solve overlapping problems but with different shapes. Here's how they differ and when to use each.",
+    "target_keyword": "ai data visualization vs bi",
+    "persona": "Evaluator",
+    "author": "Dreamify Team",
+    "status": "published",
+    "published_at": "2026-06-06",
+    "cover_image_url": "/og-image.png",
+    "content_html": "<h2>Two different starting assumptions</h2>\n<p>Traditional BI assumes you have a data team. The data team builds a semantic model, defines metrics, and publishes dashboards. End users consume.</p>\n<p>AI Data Visualization assumes you don't have a data team — or you do, but the team has a queue. End users describe what they want, the AI generates it, and the dashboard exists immediately.</p>\n<h2>Where BI wins</h2>\n<p>BI wins when governance, row-level security, and a single source of metric truth matter more than speed. If you're a regulated business, an enterprise with hundreds of consumers, or a data org with strong modeling discipline, BI is still the right shape.</p>\n<p>BI also wins for deeply custom analyst workflows — DAX measures, complex joins, bespoke modeling.</p>\n<h2>Where AI Data Visualization wins</h2>\n<p>It wins when speed matters more than perfection. Marketing dashboards that change weekly. Founder reports that need a new metric tomorrow. Operator dashboards that should live in Slack, not a BI portal.</p>\n<p>It wins when the bottleneck is the data team's queue. Most SMEs and growth-stage companies hit this wall.</p>\n<h2>Both, not either</h2>\n<p>Mature companies use both. BI for governed analytics, AI Data Visualization for everything that moves faster than BI cycles can. The choice isn't ideological — it's operational.</p>"
+  },
+  {
+    "slug": "sme-dashboard-without-data-team",
+    "title": "The SME's Guide to Dashboards Without a Data Team",
+    "description": "A practical guide for SMEs (50–500 employees) to build the dashboards they need without hiring a data analyst.",
+    "target_keyword": "sme dashboard without data analyst",
+    "persona": "Founder",
+    "author": "Dreamify Team",
+    "status": "published",
+    "published_at": "2026-06-06",
+    "cover_image_url": "/og-image.png",
+    "content_html": "<h2>The SME analytics gap</h2>\n<p>Most SMEs sit in a frustrating middle. Too big for spreadsheets and gut feel. Too small to justify a full data team. The result is a long list of dashboards everyone agrees they need but no one has built.</p>\n<p>The cost is real: slower decisions, blind spots on ad spend, no early warning when MRR slips, and finance running on Excel formulas inherited from someone who left two years ago.</p>\n<h2>What dashboards an SME actually needs</h2>\n<p>Five to seven dashboards cover most SMEs: multi-channel marketing performance, sales pipeline, revenue and SaaS metrics, customer engagement, operational KPIs, and a weekly founder snapshot.</p>\n<p>You don't need all of these from day one. Start with the report that costs the most manual time today and replace that first.</p>\n<h2>How to build them without an analyst</h2>\n<p>Connect your sources once — Meta, Google, GA4, Stripe, Sheets, Postgres. Describe the dashboard you want. Iterate in plain language until it's right. Schedule it to deliver itself into your team's chat.</p>\n<p>The whole process for one dashboard is measured in minutes. The whole process for an SME's analytics stack is measured in days, not quarters.</p>\n<h2>When you eventually do hire a data analyst</h2>\n<p>When you do hire, the analyst inherits a working analytics surface they can extend — not a backlog of dashboards to build from scratch. That's a much better first month for them and for you.</p>"
+  },
+  {
+    "slug": "dashboards-in-slack",
+    "title": "From Spreadsheet to Slack: Dashboards That Live Where You Work",
+    "description": "Why dashboards belong in Slack (and Telegram, Zalo, WhatsApp) — not in a separate BI portal nobody checks.",
+    "target_keyword": "slack dashboard automation",
+    "persona": "Ops",
+    "author": "Dreamify Team",
+    "status": "published",
+    "published_at": "2026-06-06",
+    "cover_image_url": "/og-image.png",
+    "content_html": "<h2>The portal problem</h2>\n<p>BI portals have a usage problem. Adoption studies routinely show that 80% of dashboards built in BI tools are opened fewer than five times. Once the novelty fades, no one logs in to check.</p>\n<p>The data hasn't gotten worse. The dashboards are usually fine. The problem is the location: they're in a tab nobody opens.</p>\n<h2>Where attention actually lives</h2>\n<p>Your team's attention lives in Slack. Or Telegram. Or Zalo. Or WhatsApp. The number of tabs your team will actually check daily is small — and the BI portal is rarely on the list.</p>\n<p>The fix is to move the dashboards to the surface that already has the attention.</p>\n<h2>What 'in Slack' actually means</h2>\n<p>It means a scheduled chart image posted to the right channel every morning. It means an anomaly alert pinging when something breaks. It means replying to a dashboard message and getting a follow-up answer in-thread.</p>\n<p>It doesn't mean a link to the BI portal that nobody clicks.</p>\n<h2>What this changes</h2>\n<p>When dashboards live in the chat, decisions move faster. Marketers see a CPM spike before lunch, not on Friday's report. Founders catch revenue dips on Monday, not at the end of the month. The data starts driving the conversation instead of trailing it.</p>"
+  },
+  {
+    "slug": "tiktok-ads-reporting-2026",
+    "title": "TikTok Ads Reporting in 2026: Beyond the Native Dashboard",
+    "description": "TikTok Ads Manager is built for operators. Here's how to get the marketer-grade reporting you need on TikTok Ads in 2026.",
+    "target_keyword": "tiktok ads reporting tool",
+    "persona": "Marketer",
+    "author": "Dreamify Team",
+    "status": "published",
+    "published_at": "2026-06-06",
+    "cover_image_url": "/og-image.png",
+    "content_html": "<h2>The gap in TikTok's native reporting</h2>\n<p>TikTok Ads Manager has improved every quarter but still optimizes for the campaign operator — not the marketing lead or founder who needs a clean ROAS story across channels.</p>\n<p>Creative performance is buried. Multi-channel comparison is impossible inside TikTok. Anomaly detection doesn't exist.</p>\n<h2>What good TikTok reporting looks like</h2>\n<p>Creative-level performance ranked by ROAS and completion rate, with the winners and laggards called out. Daily pacing against budget. Cross-channel comparison against Meta and Google. Audience and placement breakdowns.</p>\n<p>All of this is in TikTok's API. None of it is one-click in the native UI.</p>\n<h2>How to build it</h2>\n<p>Connect TikTok Ads via the Marketing API. Add Meta Ads and Google Ads for cross-channel comparison. Generate a dashboard that surfaces creative performance and multi-channel ROAS automatically.</p>\n<p>Schedule the dashboard to Slack or Telegram so your team sees creative trends as they happen, not at month-end.</p>\n<h2>APAC operators: a note on volume</h2>\n<p>TikTok ad volume in Southeast Asia is now competitive with Meta for many advertisers. If you're in Vietnam, Indonesia, Thailand, or the Philippines and treat TikTok as secondary in your reporting, you're flying blind on a third of your spend.</p>"
+  },
+  {
+    "slug": "cost-of-manual-reporting",
+    "title": "The Real Cost of Manual Reporting (Calculator Included)",
+    "description": "Manual reporting feels free until you do the math. Here's a simple calculator for the true cost — and what you could redirect that budget toward.",
+    "target_keyword": "manual reporting cost calculator",
+    "persona": "Founder",
+    "author": "Dreamify Team",
+    "status": "published",
+    "published_at": "2026-06-06",
+    "cover_image_url": "/og-image.png",
+    "content_html": "<h2>The simple calculation</h2>\n<p>Take the operator who builds the report. Multiply their fully-loaded hourly cost by the hours per week they spend on reporting. Multiply by 50 weeks. That's the cash cost.</p>\n<p>For a $90,000/year operator (≈ $60/hour fully loaded) spending 6 hours per week on reporting, that's $18,000 a year. For an agency with three operators on three accounts each, it's $54,000.</p>\n<h2>The bigger number</h2>\n<p>The cash cost is the visible number. The decision-delay cost is bigger. Every week the report ships on Friday means decisions made on stale data Monday through Thursday. Reasonable estimates put the decision cost at 2–3× the cash cost.</p>\n<p>For our example operator, that's $36,000–$54,000 a year in foregone decision quality, on top of the $18,000 in time.</p>\n<h2>What automation actually costs</h2>\n<p>Dreamify Pro is $15/month. Team is $18/seat/month. For an SME automating its weekly reporting, total annual cost is in the low hundreds of dollars — not the tens of thousands.</p>\n<h2>What you could do with that budget instead</h2>\n<p>Hire a part-time creative. Run an extra campaign. Build the new product feature. Pay for the conference. The operator gets their Friday back and the business gets one more growth lever.</p>"
+  }
+]

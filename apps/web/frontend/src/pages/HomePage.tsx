@@ -1104,9 +1104,9 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
 
       {/* Login modal for signed-out users */}
       <Dialog open={waitlistOpen} onOpenChange={setWaitlistOpen}>
-        <DialogContent className="bg-muted border border-border rounded-xl sm:rounded-2xl p-5 sm:p-6 w-full max-w-[92vw] sm:max-w-xl">
-          <DialogTitle className="text-2xl md:text-3xl font-semibold text-white">Login to Dreamify</DialogTitle>
-          <DialogDescription className="text-white/70 mt-1 text-sm md:text-base">
+        <DialogContent className="w-full max-w-[92vw] rounded-xl border border-border/70 bg-white/85 p-5 text-foreground shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-2xl sm:max-w-xl sm:rounded-2xl sm:p-6 dark:bg-muted/90">
+          <DialogTitle className="text-2xl font-semibold text-foreground md:text-3xl">Login to Dreamify</DialogTitle>
+          <DialogDescription className="mt-1 text-sm text-muted-foreground md:text-base">
             Please login to access all features and start building your dashboards.
           </DialogDescription>
           <div className="mt-6 flex items-center gap-4">

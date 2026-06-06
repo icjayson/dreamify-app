@@ -36,6 +36,8 @@ from app.services.chat_platform_service import (
     handle_telegram_clarification_callback,
     handle_telegram_clarification_reply,
     handle_telegram_query,
+    handle_whatsapp_clarification_reply,
+    handle_whatsapp_query,
     handle_zalo_clarification_reply,
     handle_zalo_query,
     has_pending_clarification,
@@ -1603,6 +1605,369 @@ async def get_zalo_status(user_id: str = Depends(require_user)):
     if not workspace:
         return ZaloStatusResponse(connected=False)
     return ZaloStatusResponse(
+        connected=True,
+        workspace_name=workspace.get("workspace_name"),
+        platform_workspace_id=workspace["platform_workspace_id"],
+        project_id=workspace.get("project_id"),
+    )
+
+
+# ── WhatsApp Business Cloud API webhook ───────────────────────────────────────
+#
+# WhatsApp is DM-only (the Cloud API has no bot group chats / @-mentions), so it
+# follows the Zalo model: a single Dreamify-owned sender number, code-link
+# onboarding via `start CODE`, every inbound text is a query. It improves on Zalo
+# with native inbound media download and interactive CTA-URL / reply buttons.
+
+WHATSAPP_CODE_TTL = 900  # 15 minutes
+
+
+def _whatsapp_app_secret() -> str:
+    return config.whatsapp.app_secret if config.whatsapp else ""
+
+
+def _whatsapp_verify_token() -> str:
+    return config.whatsapp.verify_token if config.whatsapp else ""
+
+
+def _whatsapp_bot_username() -> str:
+    return config.whatsapp.bot_username if config.whatsapp else "Dreamify"
+
+
+def _whatsapp_display_number() -> str:
+    return config.whatsapp.business_phone_display if config.whatsapp else ""
+
+
+def _whatsapp_deeplink(code: str) -> str:
+    """wa.me deep link that pre-fills the `start CODE` message (better UX than
+    Zalo's profile-only QR — WhatsApp supports prefilled text)."""
+    number = _whatsapp_display_number()
+    return f"https://wa.me/{number}?text={quote(f'start {code}')}"
+
+
+def _verify_whatsapp_signature(request: Request, body: bytes) -> bool:
+    """Verify Meta's X-Hub-Signature-256 (HMAC-SHA256 of the raw body with the
+    app secret). Dev-mode fallback (allow) when no secret is configured —
+    mirrors the Telegram/Zalo webhook verifiers."""
+    app_secret = _whatsapp_app_secret()
+    if not app_secret:
+        return True
+    header = request.headers.get("X-Hub-Signature-256", "")
+    if not header.startswith("sha256="):
+        return False
+    expected = hmac.new(app_secret.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(header[len("sha256="):], expected)
+
+
+@router.get("/chat/whatsapp/webhook")
+async def whatsapp_webhook_verify(request: Request):
+    """Meta webhook verification handshake. Echo hub.challenge when the token
+    matches. Returns plaintext per Meta's spec."""
+    from fastapi.responses import PlainTextResponse
+
+    params = request.query_params
+    mode = params.get("hub.mode")
+    token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge", "")
+    if mode == "subscribe" and token and token == _whatsapp_verify_token():
+        return PlainTextResponse(content=challenge)
+    raise HTTPException(status_code=403, detail="Verification failed")
+
+
+def _extract_whatsapp_messages(body: Dict[str, Any]) -> list:
+    """Flatten the Cloud API webhook envelope to a list of message objects.
+
+    Shape: entry[].changes[].value.messages[]. Statuses/echoes live under
+    value.statuses and are ignored.
+    """
+    out = []
+    for entry in body.get("entry", []) or []:
+        for change in entry.get("changes", []) or []:
+            value = change.get("value", {}) or {}
+            for msg in value.get("messages", []) or []:
+                out.append(msg)
+    return out
+
+
+def _whatsapp_message_text(message: Dict[str, Any]) -> str:
+    """Extract user-typed text from text or interactive (button/list) replies."""
+    mtype = message.get("type")
+    if mtype == "text":
+        return (message.get("text", {}) or {}).get("body", "").strip()
+    if mtype == "interactive":
+        interactive = message.get("interactive", {}) or {}
+        itype = interactive.get("type")
+        if itype == "button_reply":
+            return (interactive.get("button_reply", {}) or {}).get("title", "").strip()
+        if itype == "list_reply":
+            return (interactive.get("list_reply", {}) or {}).get("title", "").strip()
+    if mtype == "button":
+        # Template quick-reply button
+        return (message.get("button", {}) or {}).get("text", "").strip()
+    return ""
+
+
+def _extract_whatsapp_media_ids(message: Dict[str, Any]) -> list:
+    """Return media_ids for image/document attachments on an inbound message."""
+    ids = []
+    for key in ("image", "document", "video", "audio"):
+        obj = message.get(key)
+        if isinstance(obj, dict) and obj.get("id"):
+            ids.append(obj["id"])
+    return ids
+
+
+@router.post("/chat/whatsapp/webhook")
+async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
+    """Receive WhatsApp Cloud API events. Must respond within ~seconds; actual
+    processing runs in a background task."""
+    body_bytes = await request.body()
+    if not _verify_whatsapp_signature(request, body_bytes):
+        raise HTTPException(status_code=403, detail="Invalid signature")
+
+    try:
+        body = json.loads(body_bytes)
+    except Exception:
+        return {"ok": True}
+
+    for message in _extract_whatsapp_messages(body):
+        wa_id = str(message.get("from", ""))
+        if not wa_id:
+            continue
+
+        text = _whatsapp_message_text(message)
+        media_ids = _extract_whatsapp_media_ids(message)
+
+        # `start CODE` registration handshake
+        lowered = text.lower()
+        if lowered.startswith("start ") or lowered == "start":
+            parts = text.split(maxsplit=1)
+            code = parts[1].strip() if len(parts) > 1 else ""
+            if code:
+                background_tasks.add_task(_handle_whatsapp_start, code, wa_id, message)
+            else:
+                background_tasks.add_task(_send_whatsapp_start_hint, wa_id)
+            continue
+
+        if not text and not media_ids:
+            continue
+
+        platform_workspace_id = f"whatsapp:{wa_id}"
+        workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+        if not workspace:
+            logger.warning("WhatsApp message from unregistered wa_id: %s", wa_id)
+            background_tasks.add_task(_send_whatsapp_unregistered_hint, wa_id)
+            continue
+
+        query = text or "(image attachment)"
+        thread_key = f"{wa_id}#0"
+        if text and has_pending_clarification(platform_workspace_id, thread_key):
+            background_tasks.add_task(
+                handle_whatsapp_clarification_reply,
+                query=query,
+                platform_workspace_id=platform_workspace_id,
+                wa_id=wa_id,
+            )
+            continue
+
+        background_tasks.add_task(
+            handle_whatsapp_query,
+            query=query,
+            platform_workspace_id=platform_workspace_id,
+            wa_id=wa_id,
+            whatsapp_media_ids=media_ids,
+        )
+
+    return {"ok": True}
+
+
+def _send_whatsapp_start_hint(wa_id: str) -> None:
+    try:
+        from app.services import whatsapp_service
+
+        whatsapp_service.send_message(
+            wa_id,
+            "👋 Hi! I'm Dreamify Morpheus, your analytics teammate.\n\n"
+            "To connect, generate a code at app.dreamify.dev under "
+            "Integrations → WhatsApp, then send `start YOUR_CODE` here.",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send WhatsApp start hint: %s", exc)
+
+
+def _send_whatsapp_unregistered_hint(wa_id: str) -> None:
+    try:
+        from app.services import whatsapp_service
+
+        whatsapp_service.send_message(
+            wa_id,
+            "🔌 You're not connected to Dreamify yet.\n\n"
+            "Generate a code at app.dreamify.dev under Integrations → WhatsApp, "
+            "then send `start YOUR_CODE` here.",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send WhatsApp unregistered hint: %s", exc)
+
+
+def _handle_whatsapp_start(code: str, wa_id: str, message: Dict[str, Any]) -> None:
+    """Validate registration code and create the WhatsApp workspace."""
+    from app.services import whatsapp_service
+
+    if not whatsapp_service.is_configured():
+        logger.error("WhatsApp bot not configured")
+        return
+
+    pending_key = f"pending:{code}"
+    pending = chat_platform_repo.get_workspace(pending_key)
+    if not pending or pending.get("platform") != "whatsapp_pending":
+        whatsapp_service.send_message(
+            wa_id, "❌ Code not found. Please generate a new code at app.dreamify.dev."
+        )
+        return
+
+    created_at_str = pending.get("created_at", "")
+    try:
+        created_at = parse_timestamp_to_utc(created_at_str)
+        age_seconds = (_datetime.now(_timezone.utc) - created_at).total_seconds()
+    except Exception:
+        age_seconds = WHATSAPP_CODE_TTL + 1
+
+    if age_seconds > WHATSAPP_CODE_TTL:
+        chat_platform_repo.delete_workspace(pending_key)
+        whatsapp_service.send_message(
+            wa_id, "⏰ Code expired. Please generate a new code at app.dreamify.dev."
+        )
+        return
+
+    user_id = pending["user_id"]
+    platform_workspace_id = f"whatsapp:{wa_id}"
+
+    # The contact name (if shared) lives in value.contacts[].profile.name; the
+    # message payload itself doesn't carry it, so fall back to the number.
+    display_name = (message.get("profile", {}) or {}).get("name") or f"+{wa_id}"
+
+    existing = chat_platform_repo.get_workspace(platform_workspace_id)
+    if existing:
+        project_id = existing["project_id"]
+    else:
+        project = projects_repo.create_project(
+            user_id=user_id,
+            name=f"WhatsApp — {display_name}",
+            description="Auto-created for WhatsApp DM integration",
+        )
+        project_id = project["project_id"]
+
+    chat_platform_repo.save_workspace(
+        platform_workspace_id=platform_workspace_id,
+        user_id=user_id,
+        project_id=project_id,
+        platform="whatsapp",
+        bot_token_encrypted="",  # global token used from config
+        workspace_name=display_name,
+        whatsapp_user_id=wa_id,
+    )
+    chat_platform_repo.delete_workspace(pending_key)
+
+    whatsapp_service.send_message(
+        wa_id,
+        "✅ Dreamify connected!\n\n"
+        "I'm Morpheus, your analytics teammate. "
+        "Just message me with a question about your data.\n\n"
+        "Example: What were our top performing campaigns last month?",
+    )
+
+
+# ── WhatsApp registration code ────────────────────────────────────────────────
+
+
+class WhatsAppCodeResponse(BaseModel):
+    code: str
+    bot_username: str
+    phone_number: str
+    deeplink: str
+    qr_url: str
+    expires_in: int
+
+
+@router.post("/chat/whatsapp/generate-code", response_model=WhatsAppCodeResponse)
+async def whatsapp_generate_code(user_id: str = Depends(require_user)):
+    """Generate a short-lived registration code for WhatsApp DM linking."""
+    if config.whatsapp is None or not config.whatsapp.phone_number_id:
+        raise HTTPException(status_code=503, detail="WhatsApp integration not configured")
+
+    try:
+        pruned = chat_platform_repo.cleanup_expired_pending(
+            "whatsapp_pending", WHATSAPP_CODE_TTL, user_id=user_id
+        )
+        if pruned:
+            logger.info(
+                "Pruned %d expired whatsapp_pending rows for user %s", pruned, user_id
+            )
+    except Exception as exc:
+        logger.warning("whatsapp_pending GC failed: %s", exc)
+
+    code = _generate_telegram_code()  # shared helper — same alphabet/length
+    pending_key = f"pending:{code}"
+
+    chat_platform_repo.save_workspace(
+        platform_workspace_id=pending_key,
+        user_id=user_id,
+        project_id="",
+        platform="whatsapp_pending",
+        bot_token_encrypted="",
+    )
+
+    return WhatsAppCodeResponse(
+        code=code,
+        bot_username=_whatsapp_bot_username(),
+        phone_number=_whatsapp_display_number(),
+        deeplink=_whatsapp_deeplink(code),
+        qr_url=f"/api/v1/chat/whatsapp/qr/{code}",
+        expires_in=WHATSAPP_CODE_TTL,
+    )
+
+
+# ── WhatsApp QR code (anonymous) ──────────────────────────────────────────────
+
+
+@router.get("/chat/whatsapp/qr/{code}")
+async def whatsapp_qr_code(code: str):
+    """Render an SVG QR encoding the wa.me deep link with the `start CODE`
+    message pre-filled, so scanning opens a chat ready to send."""
+    from fastapi.responses import Response
+    import io
+    import segno
+
+    if not _whatsapp_display_number():
+        raise HTTPException(status_code=503, detail="WhatsApp integration not configured")
+
+    target = _whatsapp_deeplink(code)
+    buf = io.BytesIO()
+    segno.make(target, error="m").save(buf, kind="svg", scale=8, border=2)
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=900"},
+    )
+
+
+# ── WhatsApp status ───────────────────────────────────────────────────────────
+
+
+class WhatsAppStatusResponse(BaseModel):
+    connected: bool
+    workspace_name: Optional[str] = None
+    platform_workspace_id: Optional[str] = None
+    project_id: Optional[str] = None
+
+
+@router.get("/chat/whatsapp/me", response_model=WhatsAppStatusResponse)
+async def get_whatsapp_status(user_id: str = Depends(require_user)):
+    """Return the current user's connected WhatsApp workspace, or connected=false."""
+    workspace = chat_platform_repo.get_workspace_by_user(user_id, "whatsapp")
+    if not workspace:
+        return WhatsAppStatusResponse(connected=False)
+    return WhatsAppStatusResponse(
         connected=True,
         workspace_name=workspace.get("workspace_name"),
         platform_workspace_id=workspace["platform_workspace_id"],

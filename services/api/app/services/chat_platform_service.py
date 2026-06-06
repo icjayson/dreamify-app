@@ -3161,3 +3161,448 @@ async def handle_zalo_query(
             )
         except Exception:
             pass
+
+
+# ── WhatsApp file handling ────────────────────────────────────────────────────
+
+WHATSAPP_FILE_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB (Cloud API media ceiling)
+
+_WHATSAPP_MIME_EXT = {
+    "text/csv": "csv",
+    "application/csv": "csv",
+    "application/pdf": "pdf",
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+    "application/json": "json",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "text/plain": "txt",
+}
+
+
+def _ext_from_mime(mime: str) -> str:
+    if not mime:
+        return "bin"
+    base = mime.split(";")[0].strip().lower()
+    if base in _WHATSAPP_MIME_EXT:
+        return _WHATSAPP_MIME_EXT[base]
+    # Fall back to the subtype (e.g. "image/heic" -> "heic").
+    return base.rsplit("/", 1)[-1] if "/" in base else "bin"
+
+
+def _download_and_attach_whatsapp_files(
+    media_ids: list,
+    user_id: str,
+    project_id: str,
+    conversation: Dict[str, Any],
+    bucket: str,
+    keys: Dict[str, str],
+) -> None:
+    """Resolve WhatsApp media_ids via the Graph API, download the bytes, push to
+    S3, and attach asset nodes to the last user node. WhatsApp delivers media
+    natively (unlike Zalo), so no web-upload detour is needed."""
+    from app.services import whatsapp_service
+
+    asset_nodes = []
+    for media_id in media_ids:
+        meta = whatsapp_service.get_media_meta(media_id)
+        if not meta:
+            logger.warning("Failed to resolve WhatsApp media %s", media_id)
+            continue
+
+        ext = _ext_from_mime(meta.get("mime_type", ""))
+        file_bytes = whatsapp_service.download_media(meta["url"])
+        if not file_bytes:
+            logger.error("Failed to download WhatsApp media %s", media_id)
+            continue
+        if len(file_bytes) > WHATSAPP_FILE_SIZE_LIMIT:
+            logger.warning("WhatsApp media %s exceeds size limit, skipping", media_id)
+            continue
+
+        asset_id = str(uuid.uuid4())
+        filename = f"{asset_id}.{ext}"
+        s3_key = (
+            f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+        )
+
+        try:
+            s3 = boto3.client(
+                "s3",
+                region_name=config.aws.access_key.AWS_DEFAULT_REGION,
+                aws_access_key_id=config.aws.access_key.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=config.aws.access_key.AWS_SECRET_ACCESS_KEY,
+            )
+            s3.put_object(Bucket=bucket, Key=s3_key, Body=file_bytes)
+        except Exception as exc:
+            logger.error("Failed to upload WhatsApp media %s to S3: %s", media_id, exc)
+            continue
+
+        try:
+            assets_repo.create_asset(
+                user_id=user_id,
+                project_id=project_id,
+                s3_bucket=bucket,
+                s3_key=s3_key,
+                asset_type="raw",
+                size_bytes=len(file_bytes),
+                checksum_sha256=None,
+                version="1",
+                content_type=meta.get("mime_type"),
+                asset_id=asset_id,
+                file_id=asset_id,
+                original_filename=filename,
+                extension=ext,
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed to create asset record for WhatsApp media %s: %s", media_id, exc
+            )
+            continue
+
+        asset_nodes.append(
+            {
+                "type": "asset",
+                "data": {
+                    "asset_id": asset_id,
+                    "file_id": asset_id,
+                    "s3_bucket": bucket,
+                    "s3_key": s3_key,
+                    "extension": ext,
+                    "filename": filename,
+                },
+            }
+        )
+        logger.info("Attached WhatsApp media %s as asset %s", media_id, asset_id)
+
+    if not asset_nodes:
+        return
+
+    nodes = conversation.get("nodes", [])
+    for node in reversed(nodes):
+        if node.get("role") == "user":
+            node.setdefault("contents", []).extend(asset_nodes)
+            _mark_user_node_assets_selected(
+                node, [asset["data"]["asset_id"] for asset in asset_nodes]
+            )
+            break
+
+    conversation["updated_at"] = _now_iso()
+    save_conversation(bucket, keys["primary"], conversation)
+    save_conversation(bucket, keys["backup"], conversation)
+
+
+# ── WhatsApp clarifications ───────────────────────────────────────────────────
+
+
+def build_whatsapp_clarification_message(pending: Dict[str, Any], project_id: str) -> str:
+    lines = ["📊 *Dreamify*", "", "I need your choice before I continue the analysis."]
+    if pending.get("last_error"):
+        lines.extend(["", f"⚠️ {pending['last_error']}"])
+    for ci, clarification in enumerate(pending.get("clarifications", []), start=1):
+        lines.append("")
+        lines.append(f"{ci}. {clarification.get('question')}")
+        for oi, option in enumerate(_valid_options(clarification), start=1):
+            suffix = " (recommended)" if option.get("recommended") else ""
+            lines.append(f"{oi}. {option.get('label')}{suffix}")
+            if option.get("description"):
+                lines.append(f"   {option.get('description')}")
+    lines.append("")
+    lines.append("Reply with the option number, exact label, or cancel.")
+    lines.append(f"Open in Dreamify: {_build_workspace_project_url(project_id)}")
+    return "\n".join(lines)
+
+
+def _send_whatsapp_clarification(
+    wa_id: Any, pending: Dict[str, Any], project_id: str
+) -> None:
+    """Send the clarification as a numbered text prompt, and — when a single
+    clarification has short-enough option labels — also offer interactive reply
+    buttons (a WhatsApp affordance Zalo lacks). Button titles equal the option
+    labels so a tapped reply parses through the same text path."""
+    from app.services import whatsapp_service
+
+    whatsapp_service.send_message(
+        wa_id, build_whatsapp_clarification_message(pending, project_id)
+    )
+
+    clarifications = pending.get("clarifications", [])
+    if len(clarifications) != 1:
+        return
+    options = _valid_options(clarifications[0])
+    if not (1 <= len(options) <= 3):
+        return
+    if any(len(str(o.get("label", ""))) > 20 for o in options):
+        return  # labels too long to round-trip through a 20-char button title
+    buttons = [(str(o.get("id")), str(o.get("label"))) for o in options]
+    try:
+        whatsapp_service.send_reply_buttons(
+            wa_id, "Tap a choice below:", buttons
+        )
+    except Exception as exc:
+        logger.debug("WhatsApp reply buttons failed (non-fatal): %s", exc)
+
+
+def _deliver_whatsapp_answer(
+    wa_id: Any,
+    narrative: str,
+    dashboard_url: Optional[str],
+    metrics: list,
+    dashboard_json: Optional[Dict[str, Any]],
+) -> None:
+    """Send the narrative + KPI chips, a CTA-URL dashboard button, and chart
+    image previews."""
+    from app.services import whatsapp_service
+
+    whatsapp_service.send_message(
+        wa_id,
+        whatsapp_service.format_response_message(
+            narrative, None, CHAT_CREDIT_COST, metrics
+        ),
+    )
+
+    if dashboard_url:
+        res = whatsapp_service.send_cta_url(
+            wa_id, "📈 Open your live dashboard in Dreamify", "View Dashboard", dashboard_url
+        )
+        if not res or res.get("error"):
+            whatsapp_service.send_message(wa_id, f"📈 View dashboard: {dashboard_url}")
+
+    if is_chart_rendering_enabled() and dashboard_json:
+        for png_bytes, chart_title in render_dashboard_previews(
+            dashboard_json, max_charts=4
+        ):
+            try:
+                safe_name = chart_title.lower().replace(" ", "_").replace("/", "_")
+                whatsapp_service.send_image(
+                    wa_id,
+                    png_bytes,
+                    caption=chart_title,
+                    filename=f"{safe_name or 'chart'}.png",
+                )
+            except Exception as exc:
+                logger.warning("Failed to send WhatsApp chart '%s': %s", chart_title, exc)
+
+
+def _post_whatsapp_result(
+    wa_id: Any, pending: Dict[str, Any], final_meta: Dict[str, Any]
+) -> None:
+    narrative, dashboard_url, metrics, dashboard_json = _workspace_result(
+        pending["user_id"],
+        pending["project_id"],
+        pending["conversation_id"],
+        final_meta,
+    )
+    _deliver_whatsapp_answer(wa_id, narrative, dashboard_url, metrics, dashboard_json)
+
+
+async def _resume_whatsapp_pending(
+    wa_id: Any, platform_workspace_id: str, pending: Dict[str, Any]
+) -> None:
+    from app.services import whatsapp_service
+
+    if pending.get("status") == "resuming":
+        return
+    pending = _set_pending_resuming(platform_workspace_id, pending)
+    whatsapp_service.send_message(wa_id, "Continuing analysis...")
+    bucket, keys = _append_clarification_response_node(pending)
+    _call_morpheus(
+        pending["conversation_id"],
+        pending["project_id"],
+        pending["user_id"],
+        bucket,
+        keys,
+    )
+    credit_service.consume_credits(pending["user_id"], CHAT_CREDIT_COST)
+    final_status, _, final_meta = await _poll_workflow(pending["conversation_id"])
+    if final_status == "awaiting_user_input":
+        next_pending = _prepare_pending_from_conversation(
+            platform="whatsapp",
+            platform_workspace_id=platform_workspace_id,
+            thread_key=pending["thread_key"],
+            conversation_id=pending["conversation_id"],
+            project_id=pending["project_id"],
+            user_id=pending["user_id"],
+            bucket=bucket,
+            keys=keys,
+            message={"wa_id": wa_id},
+        )
+        if next_pending:
+            _send_whatsapp_clarification(wa_id, next_pending, pending["project_id"])
+            return
+    _clear_pending(platform_workspace_id, pending["thread_key"])
+    if final_status == "completed":
+        _post_whatsapp_result(wa_id, pending, final_meta)
+        return
+    whatsapp_service.send_message(
+        wa_id,
+        whatsapp_service.format_error_message(
+            _analysis_incomplete_message(pending["project_id"])
+        ),
+    )
+
+
+async def handle_whatsapp_clarification_reply(
+    query: str,
+    platform_workspace_id: str,
+    wa_id: Any,
+) -> None:
+    from app.services import whatsapp_service
+
+    thread_key = f"{wa_id}#0"
+    _, pending = _get_active_pending(platform_workspace_id, thread_key)
+    if not pending:
+        return
+    status, updated, error = parse_text_clarification_reply(pending, query)
+    if status == "cancel":
+        _append_no_answer_node(pending)
+        _stop_pending_workflow(pending)
+        _clear_pending(platform_workspace_id, thread_key)
+        whatsapp_service.send_message(
+            wa_id,
+            whatsapp_service.format_error_message(
+                "Clarification cancelled. No credits used."
+            ),
+        )
+        return
+    if status != "valid" or not updated:
+        pending["last_error"] = error or "Please reply with a listed option."
+        _store_pending(platform_workspace_id, thread_key, pending)
+        _send_whatsapp_clarification(wa_id, pending, pending["project_id"])
+        return
+    _store_pending(platform_workspace_id, thread_key, updated)
+    await _resume_whatsapp_pending(wa_id, platform_workspace_id, updated)
+
+
+# ── WhatsApp main entry point ─────────────────────────────────────────────────
+
+
+async def handle_whatsapp_query(
+    query: str,
+    platform_workspace_id: str,
+    wa_id: Any,
+    whatsapp_media_ids: list = [],
+) -> None:
+    """
+    Full lifecycle for a WhatsApp Cloud API message query. Runs as a background
+    task.
+
+    Like Zalo, WhatsApp has no message-edit API, so we post a one-shot
+    "Analyzing..." placeholder and send the final answer as new messages.
+    Unlike Zalo, inbound media is delivered natively and downloaded directly
+    via the Graph media endpoint.
+    """
+    from app.services import whatsapp_service
+
+    if not whatsapp_service.is_configured():
+        logger.error("WhatsApp bot not configured")
+        return
+
+    try:
+        whatsapp_service.send_message(
+            wa_id, whatsapp_service.format_analyzing_message(query)
+        )
+    except Exception as exc:
+        logger.error("Failed to post placeholder to WhatsApp %s: %s", wa_id, exc)
+        return
+
+    try:
+        workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+        if not workspace:
+            raise RuntimeError(f"Workspace {platform_workspace_id} not found")
+
+        user_id = workspace["user_id"]
+        thread_key = f"{wa_id}#0"
+        conversation_id, project_id, is_new = _get_or_create_session(
+            platform_workspace_id, thread_key, workspace
+        )
+
+        if is_new:
+            bucket, keys = _save_new_conversation(
+                user_id, project_id, conversation_id, query
+            )
+        else:
+            bucket, keys = _append_user_node_to_conversation(
+                user_id, project_id, conversation_id, query
+            )
+            chat_platform_repo.update_session_conversation(
+                platform_workspace_id, thread_key, conversation_id
+            )
+
+        await asyncio.sleep(0.5)
+
+        if whatsapp_media_ids:
+            try:
+                conv = load_conversation(bucket, keys["primary"])
+                _download_and_attach_whatsapp_files(
+                    whatsapp_media_ids, user_id, project_id, conv, bucket, keys
+                )
+                await asyncio.sleep(0.5)
+            except Exception as exc:
+                logger.error(
+                    "Failed to attach WhatsApp media for conversation %s: %s",
+                    conversation_id,
+                    exc,
+                    exc_info=True,
+                )
+
+        _call_morpheus(conversation_id, project_id, user_id, bucket, keys)
+        credit_service.consume_credits(user_id, CHAT_CREDIT_COST)
+
+        final_status, _, final_meta = await _poll_workflow(conversation_id)
+
+        if final_status == "awaiting_user_input":
+            pending = _prepare_pending_from_conversation(
+                platform="whatsapp",
+                platform_workspace_id=platform_workspace_id,
+                thread_key=thread_key,
+                conversation_id=conversation_id,
+                project_id=project_id,
+                user_id=user_id,
+                bucket=bucket,
+                keys=keys,
+                message={"wa_id": wa_id},
+            )
+            if pending:
+                _send_whatsapp_clarification(wa_id, pending, project_id)
+                return
+
+        if final_status != "completed":
+            message = _analysis_incomplete_message(project_id)
+            logger.info(
+                "Workspace WhatsApp workflow %s ended with status %s",
+                conversation_id,
+                final_status,
+            )
+            whatsapp_service.send_message(
+                wa_id, whatsapp_service.format_error_message(message)
+            )
+            return
+
+        narrative, dashboard_url, metrics, dashboard_json = _workspace_result(
+            user_id, project_id, conversation_id, final_meta
+        )
+        _deliver_whatsapp_answer(
+            wa_id, narrative, dashboard_url, metrics, dashboard_json
+        )
+        logger.info(
+            "Successfully sent WhatsApp response for conversation %s", conversation_id
+        )
+
+    except Exception as exc:
+        logger.error(
+            "handle_whatsapp_query failed for %s: %s",
+            platform_workspace_id,
+            exc,
+            exc_info=True,
+        )
+        try:
+            whatsapp_service.send_message(
+                wa_id,
+                whatsapp_service.format_error_message(
+                    "Something went wrong. Please try again."
+                ),
+            )
+        except Exception:
+            pass

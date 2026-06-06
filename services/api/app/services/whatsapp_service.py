@@ -225,17 +225,27 @@ def send_image(
     )
 
 
-def get_media_url(media_id: str) -> Optional[str]:
-    """Resolve a media_id to a short-lived, Bearer-protected download URL."""
+def get_media_meta(media_id: str) -> Optional[Dict[str, Any]]:
+    """Resolve a media_id to its metadata: ``{url, mime_type, file_size, ...}``.
+    The ``url`` is short-lived and Bearer-protected."""
     try:
         resp = requests.get(
             f"{_graph_base()}/{media_id}", headers=_auth_headers(), timeout=_TIMEOUT_S
         )
         body = resp.json() if resp.content else {}
     except Exception as exc:
-        logger.warning("WhatsApp get_media_url failed for %s: %s", media_id, exc)
+        logger.warning("WhatsApp get_media_meta failed for %s: %s", media_id, exc)
         return None
-    return body.get("url")
+    if not body.get("url"):
+        logger.warning("WhatsApp media meta missing url for %s: %s", media_id, body)
+        return None
+    return body
+
+
+def get_media_url(media_id: str) -> Optional[str]:
+    """Convenience wrapper returning only the download URL."""
+    meta = get_media_meta(media_id)
+    return meta.get("url") if meta else None
 
 
 def download_media(url: str) -> Optional[bytes]:

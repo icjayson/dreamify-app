@@ -598,6 +598,7 @@ export default function ProjectPage() {
       'google-sheets': store.setGoogleSheetsModalOpen,
       'google-ads': store.setGoogleAdsModalOpen,
       'firebase': store.setFirebaseModalOpen,
+      'postgres': store.setWarehouseModalOpen,
     };
 
     const openModal = CONNECTOR_MODAL_MAP[connectorParam];
@@ -630,6 +631,7 @@ export default function ProjectPage() {
       integration_tiktok: 'TikTok Ads',
       integration_appsflyer: 'AppsFlyer',
       integration_stripe: 'Stripe',
+      warehouse_extract: 'PostgreSQL',
     };
 
     fileService.getAsset(analyzeAssetId).then((res) => {

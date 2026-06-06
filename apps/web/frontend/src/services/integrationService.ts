@@ -41,6 +41,11 @@ export interface ConnectorSelectedEntity {
   name: string;
   type?: string;
   account_name?: string;
+  connection_id?: string;
+  connector_key?: string;
+  database_type?: string;
+  schema_name?: string;
+  table_name?: string;
 }
 
 export interface ConnectorOverviewItem {
@@ -128,6 +133,79 @@ export interface UpdateSyncVersionNameResponse {
   error?: string;
 }
 
+export interface WarehouseColumn {
+  name: string;
+  ordinal_position?: number;
+  data_type?: string;
+  native_type?: string;
+  nullable?: boolean;
+}
+
+export interface WarehouseTable {
+  schema: string;
+  name: string;
+  type?: string;
+  columns: WarehouseColumn[];
+}
+
+export interface WarehouseSchema {
+  name: string;
+  tables: WarehouseTable[];
+}
+
+export interface WarehouseSchemaSnapshot {
+  refreshed_at?: string;
+  schemas: WarehouseSchema[];
+  table_count: number;
+  schema_fingerprint?: string;
+}
+
+export interface WarehouseConnection {
+  connection_id: string;
+  connector_key: 'postgres';
+  database_type: 'postgres';
+  display_name: string;
+  host?: string;
+  port?: string;
+  database?: string;
+  username?: string;
+  include_schemas: string[];
+  source_timezone: string;
+  schema_snapshot: WarehouseSchemaSnapshot;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WarehouseConnectionsResponse {
+  success: boolean;
+  connections: WarehouseConnection[];
+  error?: string;
+}
+
+export interface WarehouseQuickConnectRequest {
+  connector_key?: 'postgres';
+  connection_uri: string;
+  display_name?: string;
+  include_schemas?: string[];
+  source_timezone?: string;
+}
+
+export interface WarehouseSampleResponse {
+  success: boolean;
+  columns: string[];
+  rows: unknown[][];
+  generated_sql: string;
+  error?: string;
+}
+
+export interface WarehouseSyncRequest {
+  schema_name: string;
+  table_name: string;
+  columns?: string[];
+  project_id?: string;
+  row_limit?: number;
+}
+
 class IntegrationService {
   private baseUrl = '/api/v1/integration';
 
@@ -138,6 +216,78 @@ class IntegrationService {
       return { success: false, connectors: [], error: res.error || 'Failed to fetch connectors overview' };
     } catch (error) {
       return { success: false, connectors: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async quickConnectWarehouse(payload: WarehouseQuickConnectRequest): Promise<WarehouseConnection> {
+    const res = await api.post<WarehouseConnection>(`${this.baseUrl}/warehouse/connections/quick-connect`, {
+      connector_key: payload.connector_key || 'postgres',
+      connection_uri: payload.connection_uri,
+      display_name: payload.display_name || '',
+      include_schemas: payload.include_schemas || [],
+      source_timezone: payload.source_timezone || 'UTC',
+    });
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || 'Failed to connect PostgreSQL warehouse');
+  }
+
+  async fetchWarehouseConnections(): Promise<WarehouseConnectionsResponse> {
+    try {
+      const res = await api.get<WarehouseConnectionsResponse>(`${this.baseUrl}/warehouse/connections`);
+      if (res.success && res.data) return res.data;
+      return { success: false, connections: [], error: res.error || 'Failed to load warehouse connections' };
+    } catch (error) {
+      return { success: false, connections: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async refreshWarehouseSchema(connectionId: string): Promise<WarehouseConnection> {
+    const res = await api.post<WarehouseConnection>(
+      `${this.baseUrl}/warehouse/connections/${encodeURIComponent(connectionId)}/schema/refresh`,
+      {}
+    );
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || 'Failed to refresh warehouse schema');
+  }
+
+  async sampleWarehouseTable(
+    connectionId: string,
+    payload: { schema_name: string; table_name: string; columns?: string[]; limit?: number }
+  ): Promise<WarehouseSampleResponse> {
+    try {
+      const res = await api.post<WarehouseSampleResponse>(
+        `${this.baseUrl}/warehouse/connections/${encodeURIComponent(connectionId)}/tables/sample`,
+        payload
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, columns: [], rows: [], generated_sql: '', error: res.error || 'Failed to sample table' };
+    } catch (error) {
+      return { success: false, columns: [], rows: [], generated_sql: '', error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncWarehouseTable(connectionId: string, payload: WarehouseSyncRequest): Promise<GA4SyncResponse> {
+    try {
+      const res = await api.post<GA4SyncResponse>(
+        `${this.baseUrl}/warehouse/connections/${encodeURIComponent(connectionId)}/sync`,
+        payload
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync warehouse table' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async deleteWarehouseConnection(connectionId: string): Promise<DeleteConnectorEntityResponse> {
+    try {
+      const res = await api.delete<DeleteConnectorEntityResponse>(
+        `${this.baseUrl}/warehouse/connections/${encodeURIComponent(connectionId)}`
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to delete warehouse connection' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
 
@@ -793,4 +943,3 @@ export interface FirebaseSyncRequest {
 }
 
 export const integrationService = new IntegrationService();
-

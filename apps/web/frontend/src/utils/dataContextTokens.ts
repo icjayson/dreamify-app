@@ -46,6 +46,7 @@ const CONNECTOR_ALIASES: Array<{
   { name: "Firebase", shortName: "Firebase", aliases: ["firebase", "integration_firebase"] },
   { name: "AppsFlyer", shortName: "AppsFlyer", aliases: ["appsflyer", "apps_flyer", "integration_appsflyer"] },
   { name: "Stripe", shortName: "Stripe", aliases: ["stripe", "integration_stripe"] },
+  { name: "PostgreSQL", shortName: "Postgres", aliases: ["postgres", "postgresql", "warehouse", "warehouse_extract"] },
 ];
 
 function compact(value: string): string {

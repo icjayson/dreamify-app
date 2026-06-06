@@ -380,6 +380,31 @@ export default function ConnectorEntityDetailView(props: Props) {
         entityName,
       };
     }
+    if (connectorKey === "postgres") {
+      const entity = connectorDetail?.entity;
+      const [connectionIdFromId, tablePath = ""] = entityId.split(":");
+      const dotIndex = tablePath.indexOf(".");
+      const schemaFromId = dotIndex >= 0 ? tablePath.slice(0, dotIndex) : "";
+      const tableFromId = dotIndex >= 0 ? tablePath.slice(dotIndex + 1) : tablePath;
+      const connectionId = String(scheduleConfig.connection_id || entity?.connection_id || connectionIdFromId);
+      const schema = String(scheduleConfig.schema || entity?.schema_name || schemaFromId);
+      const table = String(scheduleConfig.table || entity?.table_name || tableFromId);
+      return {
+        provider: "warehouse" as ProviderKey,
+        config: {
+          connector_key: "postgres",
+          connection_id: connectionId,
+          schema,
+          table,
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
     return null;
   }, [connectorDetail, connectorKey, fallbackSchedule, projects, selectedConnectorCard.entityId, selectedConnectorCard.entityName]);
 

@@ -368,6 +368,7 @@ interface ChatState {
   isStripeModalOpen: boolean;
   isGoogleAdsModalOpen: boolean;
   isFirebaseModalOpen: boolean;
+  isWarehouseModalOpen: boolean;
   isAllConnectorsModalOpen: boolean;
   isTemplateModalOpen: boolean;
   templateModalSource: 'toolbar' | 'header';
@@ -437,6 +438,7 @@ interface ChatState {
   setStripeModalOpen: (open: boolean) => void;
   setGoogleAdsModalOpen: (open: boolean) => void;
   setFirebaseModalOpen: (open: boolean) => void;
+  setWarehouseModalOpen: (open: boolean) => void;
   setAllConnectorsModalOpen: (open: boolean) => void;
   setTemplateModalOpen: (open: boolean, source?: 'toolbar' | 'header') => void;
   setGoogleSheetsFileId: (id: string | null) => void;
@@ -951,6 +953,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isStripeModalOpen: false,
   isGoogleAdsModalOpen: false,
   isFirebaseModalOpen: false,
+  isWarehouseModalOpen: false,
   isAllConnectorsModalOpen: false,
   isTemplateModalOpen: false,
   templateModalSource: 'toolbar' as const,
@@ -1080,6 +1083,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setStripeModalOpen: (open) => set({ isStripeModalOpen: open }),
   setGoogleAdsModalOpen: (open) => set({ isGoogleAdsModalOpen: open }),
   setFirebaseModalOpen: (open) => set({ isFirebaseModalOpen: open }),
+  setWarehouseModalOpen: (open) => set({ isWarehouseModalOpen: open }),
   setAllConnectorsModalOpen: (open) => set({ isAllConnectorsModalOpen: open }),
   setTemplateModalOpen: (open, source = 'toolbar') => set({ isTemplateModalOpen: open, templateModalSource: source }),
   setGoogleSheetsFileId: (id) => {

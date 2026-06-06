@@ -20,6 +20,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   tiktok: 'TikTok Ads',
   appsflyer: 'AppsFlyer',
   stripe: 'Stripe',
+  warehouse: 'Warehouse',
 };
 
 const FREQ_LABELS: Record<string, string> = {

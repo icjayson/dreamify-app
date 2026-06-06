@@ -41,6 +41,7 @@ import AppsFlyerIntegrationModal from "./components/chat/AppsFlyerIntegrationMod
 import StripeIntegrationModal from "./components/chat/StripeIntegrationModal";
 import GoogleAdsIntegrationModal from "./components/chat/GoogleAdsIntegrationModal";
 import FirebaseIntegrationModal from "./components/chat/FirebaseIntegrationModal";
+import WarehouseIntegrationModal from "./components/chat/WarehouseIntegrationModal";
 import AllConnectorsModal from "./components/chat/AllConnectorsModal";
 
 const queryClient = new QueryClient();
@@ -197,6 +198,7 @@ const AppContent = () => {
       <StripeIntegrationModal />
       <GoogleAdsIntegrationModal />
       <FirebaseIntegrationModal />
+      <WarehouseIntegrationModal />
       <AllConnectorsModal />
     </>
   );

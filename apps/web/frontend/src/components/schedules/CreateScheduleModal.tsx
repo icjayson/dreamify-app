@@ -38,6 +38,7 @@ const PROVIDER_LABELS: Record<ProviderKey, string> = {
   tiktok: 'TikTok Ads',
   appsflyer: 'AppsFlyer',
   stripe: 'Stripe',
+  warehouse: 'Warehouse',
 };
 
 const FREQUENCY_OPTIONS: { value: FrequencyKey; label: string }[] = [
@@ -78,6 +79,7 @@ const CONNECTOR_TO_PROVIDER: Record<string, ProviderKey> = {
   tiktok_ads: 'tiktok',
   appsflyer: 'appsflyer',
   stripe: 'stripe',
+  postgres: 'warehouse',
 };
 
 const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
@@ -86,6 +88,7 @@ const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
   tiktok: 'tiktok_ads',
   appsflyer: 'appsflyer',
   stripe: 'stripe',
+  warehouse: 'postgres',
 };
 
 const STRIPE_REPORT_ENTITIES: ConnectorSelectedEntity[] = [
@@ -99,6 +102,14 @@ function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unk
   if (provider === 'meta_ads' || provider === 'tiktok') return String(config.ad_account_id || '');
   if (provider === 'appsflyer') return String(config.app_id || '');
   if (provider === 'stripe') return String(config.report_type || 'charges');
+  if (provider === 'warehouse') {
+    const entityId = String(config.entity_id || '');
+    if (entityId) return entityId;
+    const connectionId = String(config.connection_id || '');
+    const schema = String(config.schema || config.schema_name || '');
+    const table = String(config.table || config.table_name || '');
+    return connectionId && schema && table ? `${connectionId}:${schema}.${table}` : '';
+  }
   return '';
 }
 
@@ -111,6 +122,24 @@ function buildConnectorConfig(provider: ProviderKey, entity: ConnectorSelectedEn
   }
   if (provider === 'appsflyer') {
     return { app_id: entity.id, app_name: entity.name };
+  }
+  if (provider === 'warehouse') {
+    const [connectionIdFromId, tablePath = ''] = entity.id.split(':');
+    const dotIndex = tablePath.indexOf('.');
+    const schemaFromId = dotIndex >= 0 ? tablePath.slice(0, dotIndex) : '';
+    const tableFromId = dotIndex >= 0 ? tablePath.slice(dotIndex + 1) : tablePath;
+    const connectionId = entity.connection_id || connectionIdFromId;
+    const schema = entity.schema_name || schemaFromId;
+    const table = entity.table_name || tableFromId;
+    return {
+      connector_key: entity.connector_key || 'postgres',
+      connection_id: connectionId,
+      schema,
+      table,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+    };
   }
   return { report_type: ['charges', 'subscriptions', 'customers'].includes(entity.id) ? entity.id : 'charges' };
 }
@@ -167,6 +196,13 @@ async function fetchProviderEntities(provider: ProviderKey): Promise<ConnectorSe
       name: app.app_name || app.app_id,
       type: 'app',
     }));
+  }
+
+  if (provider === 'warehouse') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load warehouse tables.');
+    const postgres = response.connectors.find((connector) => connector.connector_key === 'postgres');
+    return postgres?.selected_entities || [];
   }
 
   return STRIPE_REPORT_ENTITIES;

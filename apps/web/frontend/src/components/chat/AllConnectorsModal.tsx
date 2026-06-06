@@ -26,6 +26,7 @@ export default function AllConnectorsModal() {
     setStripeModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
+    setWarehouseModalOpen,
   } = useChatStore();
 
   const [connectorStatus, setConnectorStatus] = useState<Record<string, ConnectorStatus>>({});
@@ -88,6 +89,20 @@ export default function AllConnectorsModal() {
         ? { connected: true, info: 'Stripe' }
         : { connected: false };
 
+      const overview = await integrationService.fetchConnectorsOverview();
+      if (overview.success) {
+        const postgres = overview.connectors.find((connector) => connector.connector_key === 'postgres');
+        if (postgres?.connected) {
+          const tableCount = postgres.selected_entities?.length || 0;
+          results['PostgreSQL'] = {
+            connected: true,
+            info: tableCount > 0 ? `${tableCount} table${tableCount === 1 ? '' : 's'}` : 'PostgreSQL',
+          };
+        } else {
+          results['PostgreSQL'] = { connected: false };
+        }
+      }
+
       setConnectorStatus(results);
     } catch (e) {
       console.error('AllConnectorsModal: failed to fetch statuses', e);
@@ -111,6 +126,7 @@ export default function AllConnectorsModal() {
       else if (connectorName === 'Stripe') setStripeModalOpen(true);
       else if (connectorName === 'Google Ads') setGoogleAdsModalOpen(true);
       else if (connectorName === 'Firebase') setFirebaseModalOpen(true);
+      else if (connectorName === 'PostgreSQL') setWarehouseModalOpen(true);
     }, 0);
   };
 

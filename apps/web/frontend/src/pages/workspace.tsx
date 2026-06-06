@@ -57,6 +57,7 @@ import { useChatStore } from "@/chat/useChatStore";
 import { SlackIntegrationCard } from "@/components/integrations/SlackIntegrationCard";
 import { TelegramIntegrationCard } from "@/components/integrations/TelegramIntegrationCard";
 import { ZaloIntegrationCard } from "@/components/integrations/ZaloIntegrationCard";
+import { WhatsAppIntegrationCard } from "@/components/integrations/WhatsAppIntegrationCard";
 import { ScheduleManager } from "@/components/schedules/ScheduleManager";
 import { toast as sonnerToast } from "sonner";
 import { formatToDisplay } from "@/utils/timestamp";
@@ -83,6 +84,7 @@ function inferSourceFromTitle(title: string): string {
   if (t.includes("appsflyer")) return "AppsFlyer";
   if (t.includes("firebase")) return "Firebase";
   if (t.includes("stripe")) return "Stripe";
+  if (t.includes("postgres") || t.includes("warehouse")) return "PostgreSQL";
   return "CSV";
 }
 
@@ -460,6 +462,7 @@ export default function WorkspacePage() {
     setStripeModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
+    setWarehouseModalOpen,
   } = useChatStore();
 
   const handleIntegrationClick = (connectorName: string) => {
@@ -485,6 +488,8 @@ export default function WorkspacePage() {
       setGoogleAdsModalOpen(true);
     } else if (connectorName === 'Firebase') {
       setFirebaseModalOpen(true);
+    } else if (connectorName === 'PostgreSQL') {
+      setWarehouseModalOpen(true);
     }
   };
 
@@ -565,10 +570,24 @@ export default function WorkspacePage() {
         ? { connected: true, info: "Account: Stripe" }
         : { connected: false };
 
-      setConnectorStatus(results);
-
       const overview = await integrationService.fetchConnectorsOverview();
-      setConnectorOverview(overview.success ? overview.connectors : []);
+      if (overview.success) {
+        setConnectorOverview(overview.connectors);
+        const postgres = overview.connectors.find((connector) => connector.connector_key === "postgres");
+        if (postgres?.connected) {
+          const tableCount = postgres.selected_entities?.length || 0;
+          results["PostgreSQL"] = {
+            connected: true,
+            info: tableCount > 0 ? `${tableCount} table${tableCount === 1 ? "" : "s"}` : "Account: PostgreSQL",
+          };
+        } else {
+          results["PostgreSQL"] = { connected: false };
+        }
+      } else {
+        setConnectorOverview([]);
+        results["PostgreSQL"] = { connected: false };
+      }
+      setConnectorStatus(results);
     } catch (e) {
       console.error("Failed to fetch connector statuses:", e);
       setConnectorOverview([]);
@@ -943,6 +962,7 @@ export default function WorkspacePage() {
       'google-sheets': setGoogleSheetsModalOpen,
       'google-ads': setGoogleAdsModalOpen,
       'firebase': setFirebaseModalOpen,
+      'postgres': setWarehouseModalOpen,
     };
 
     const openModal = CONNECTOR_MODAL_MAP[connectorParam];
@@ -956,7 +976,7 @@ export default function WorkspacePage() {
     const remaining = newParams.toString();
     const newUrl = `${window.location.pathname}${remaining ? '?' + remaining : ''}`;
     window.history.replaceState({}, '', newUrl);
-  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen]);
+  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setWarehouseModalOpen]);
 
   const isAesthetic = layoutStyle === "aesthetic" && activeTab === "new-chat";
   const showWorkspaceHeaderActions = activeTab === "new-chat";
@@ -1296,6 +1316,7 @@ export default function WorkspacePage() {
                     <SlackIntegrationCard />
                     <TelegramIntegrationCard />
                     <ZaloIntegrationCard />
+                    <WhatsAppIntegrationCard />
                   </div>
                 </div>
                 <Separator className="mb-6" />

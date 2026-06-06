@@ -917,6 +917,7 @@ function getDashboardSourceLabel(dashboardCard: NonNullable<Message["dashboardCa
   if (source.includes("tiktok") || filename.includes("tiktok")) return "TikTok Data";
   if (source.includes("appsflyer") || filename.includes("appsflyer")) return "AppsFlyer Data";
   if (source.includes("stripe") || filename.includes("stripe")) return "Stripe Data";
+  if (source.includes("postgres") || source.includes("warehouse") || filename.includes("postgres")) return "PostgreSQL Data";
   if (source.includes("meta") || filename.includes("meta_ads")) return "Meta Ads Data";
   return dashboardCard.sourceFileName.replace(/\.[^/.]+$/, "");
 }

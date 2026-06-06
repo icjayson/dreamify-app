@@ -278,6 +278,15 @@ async def _run_sync(
             end_date=None,
         )
 
+    elif provider == "warehouse":
+        from app.services.warehouse_service import warehouse_service
+
+        return warehouse_service.sync_scheduled_table(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+        )
+
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
@@ -288,6 +297,7 @@ _PROVIDER_LABELS: dict = {
     "tiktok": "TikTok Ads",
     "appsflyer": "AppsFlyer",
     "stripe": "Stripe",
+    "warehouse": "Warehouse",
 }
 
 

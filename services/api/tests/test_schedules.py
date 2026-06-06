@@ -231,6 +231,43 @@ class TestTriggerEndpoint:
         mock_sched.get_schedule.assert_called_once_with("u1", "s1")
         mock_execute.assert_awaited_once_with("s1")
 
+    def test_run_sync_dispatches_warehouse_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch('app.services.warehouse_service.warehouse_service') as mock_warehouse:
+            mock_warehouse.sync_scheduled_table.return_value = {
+                "success": True,
+                "row_count": 3,
+                "column_count": 2,
+                "asset": {"asset_id": "asset_1"},
+            }
+            result = asyncio.run(
+                _run_sync(
+                    provider="warehouse",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "connection_id": "conn_123",
+                        "schema": "public",
+                        "table": "orders",
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 3
+        mock_warehouse.sync_scheduled_table.assert_called_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "connection_id": "conn_123",
+                "schema": "public",
+                "table": "orders",
+            },
+        )
+
 
 # ── Schedules CRUD validation ─────────────────────────────────────────────────
 
@@ -285,6 +322,32 @@ class TestScheduleValidation:
     def test_stripe_defaults_to_charges(self):
         from app.api.route_modules.schedules import _normalize_connector_config
         assert _normalize_connector_config("stripe", {}) == {"report_type": "charges"}
+
+    def test_warehouse_config_normalizes_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "warehouse",
+            {
+                "connection_id": "conn_123",
+                "schema_name": "public",
+                "table_name": "orders",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["connector_key"] == "postgres"
+        assert cfg["schema"] == "public"
+        assert cfg["table"] == "orders"
+        assert cfg["entity_id"] == "conn_123:public.orders"
+        assert cfg["row_limit"] == 50000
+
+    def test_warehouse_config_requires_table_identity(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("warehouse", {"connection_id": "conn_123"})
 
     def test_invalid_frequency_rejected(self):
         from app.api.route_modules.schedules import _validate_create, CreateScheduleRequest

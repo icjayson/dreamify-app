@@ -1753,6 +1753,7 @@ class IntegrationService:
             "firebase": "firebase",
             "google_sheets": "google_sheets",
             "stripe": "stripe",
+            "postgres": "warehouse",
         }
         if connector_key not in mapping:
             raise HTTPException(status_code=404, detail=f"Unsupported connector: {connector_key}")
@@ -1768,6 +1769,7 @@ class IntegrationService:
             "firebase": "integration_firebase",
             "google_sheets": "integration_gsheets",
             "stripe": "integration_stripe",
+            "postgres": "warehouse_extract",
         }
         return mapping.get(connector_key, "")
 
@@ -1782,6 +1784,15 @@ class IntegrationService:
             return connector_config.get("app_id")
         if provider == "firebase":
             return connector_config.get("firebase_project_id")
+        if provider == "warehouse":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return entity_id
+            connection_id = connector_config.get("connection_id")
+            schema = connector_config.get("schema") or connector_config.get("schema_name")
+            table = connector_config.get("table") or connector_config.get("table_name")
+            if connection_id and schema and table:
+                return f"{connection_id}:{schema}.{table}"
         return None
 
     def _find_schedule_for_entity(
@@ -1850,6 +1861,26 @@ class IntegrationService:
                 file_name = connector_config.get("file_name") or account_name or str(file_id)
                 return [self._entity(str(file_id), str(file_name), "sheet")]
 
+        if provider == "warehouse":
+            entity_id = self._extract_entity_id_from_schedule(provider, connector_config)
+            schema = connector_config.get("schema") or connector_config.get("schema_name")
+            table = connector_config.get("table") or connector_config.get("table_name")
+            connector_key = connector_config.get("connector_key") or "postgres"
+            if entity_id and schema and table:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": f"{schema}.{table}",
+                        "type": "table",
+                        "account_name": account_name,
+                        "connection_id": str(connector_config.get("connection_id") or ""),
+                        "connector_key": str(connector_key),
+                        "database_type": str(connector_key),
+                        "schema_name": str(schema),
+                        "table_name": str(table),
+                    }
+                ]
+
         if provider == "stripe" and account_name:
             return [self._entity(account_name, account_name, "account")]
 
@@ -1914,6 +1945,7 @@ class IntegrationService:
             "firebase": [],
             "google_sheets": [],
             "stripe": [],
+            "postgres": [],
         }
 
         # Connection statuses
@@ -1927,6 +1959,8 @@ class IntegrationService:
         status_map["google_sheets"] = google_connected
         status_map["google_ads"] = google_connected
         status_map["firebase"] = google_connected
+        from app.services.warehouse_service import warehouse_service
+        status_map["postgres"] = bool(warehouse_service.list_connections(user_id, connector_key="postgres"))
 
         # Primary source: selected entities persisted at modal sync-time in DynamoDB.
         metadata_provider_map = {
@@ -1938,6 +1972,7 @@ class IntegrationService:
             "firebase": "firebase",
             "google_sheets": "google_sheets",
             "stripe": "stripe",
+            "postgres": "warehouse",
         }
         for connector_key, provider in metadata_provider_map.items():
             record = connected_accounts_repo.get_connection(user_id, provider) or {}
@@ -1956,6 +1991,7 @@ class IntegrationService:
             "google_ads": "google_ads",
             "firebase": "firebase",
             "google_sheets": "google_sheets",
+            "warehouse": "postgres",
         }
         for provider, schedules in schedules_by_provider.items():
             connector_key = provider_to_connector.get(provider)
@@ -1972,6 +2008,7 @@ class IntegrationService:
             {"connector_key": "appsflyer", "display_name": "AppsFlyer"},
             {"connector_key": "firebase", "display_name": "Firebase"},
             {"connector_key": "google_sheets", "display_name": "Google Sheets"},
+            {"connector_key": "postgres", "display_name": "PostgreSQL"},
             {"connector_key": "stripe", "display_name": "Stripe"},
         ]
 
@@ -2499,6 +2536,15 @@ class IntegrationService:
                     start_date=dates.get("start_date"),
                     end_date=dates.get("end_date"),
                 )
+            elif connector_key == "postgres":
+                from app.services.warehouse_service import warehouse_service
+
+                result = warehouse_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
             else:
                 raise HTTPException(status_code=404, detail=f"Unsupported connector: {connector_key}")
         except Exception as err:
@@ -2523,7 +2569,7 @@ class IntegrationService:
 
         # Tag freshly created asset with connector entity metadata for detail/history.
         asset = result.get("asset")
-        if asset:
+        if asset and connector_key != "postgres":
             stable_entity_name = self._pick_best_entity_name(
                 str(entity_id),
                 (existing_entity or {}).get("name"),

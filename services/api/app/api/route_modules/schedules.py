@@ -19,7 +19,7 @@ router = APIRouter(tags=["schedules"])
 # ── Request / Response models ──────────────────────────────────────────────────
 
 class CreateScheduleRequest(BaseModel):
-    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | warehouse
     connector_config: Dict[str, Any]
     project_id: str
     account_name: str = ""
@@ -47,7 +47,7 @@ class UpdateScheduleRequest(BaseModel):
     auto_refresh_prompt: Optional[str] = None
 
 
-_VALID_PROVIDERS = {"ga4", "meta_ads", "tiktok", "appsflyer", "stripe"}
+_VALID_PROVIDERS = {"ga4", "meta_ads", "tiktok", "appsflyer", "stripe", "warehouse"}
 _VALID_FREQUENCIES = {"daily", "weekly", "biweekly"}
 _VALID_DATE_PRESETS = {"last_7d", "last_14d", "last_30d", "last_90d"}
 _VALID_STRIPE_REPORT_TYPES = {"charges", "subscriptions", "customers"}
@@ -78,6 +78,26 @@ def _normalize_connector_config(provider: str, connector_config: Dict[str, Any])
         if report_type not in _VALID_STRIPE_REPORT_TYPES:
             raise HTTPException(400, "connector_config.report_type must be charges, subscriptions, or customers")
         cfg["report_type"] = report_type
+    if provider == "warehouse":
+        connection_id = str(cfg.get("connection_id") or "").strip()
+        schema_name = str(cfg.get("schema") or cfg.get("schema_name") or "").strip()
+        table_name = str(cfg.get("table") or cfg.get("table_name") or "").strip()
+        if not connection_id:
+            raise HTTPException(400, "connector_config.connection_id is required for warehouse schedules")
+        if not schema_name:
+            raise HTTPException(400, "connector_config.schema is required for warehouse schedules")
+        if not table_name:
+            raise HTTPException(400, "connector_config.table is required for warehouse schedules")
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["connector_key"] = str(cfg.get("connector_key") or "postgres")
+        cfg["connection_id"] = connection_id
+        cfg["schema"] = schema_name
+        cfg["table"] = table_name
+        cfg["entity_id"] = str(cfg.get("entity_id") or f"{connection_id}:{schema_name}.{table_name}")
+        cfg["row_limit"] = max(1, min(row_limit, 50000))
     return cfg
 
 

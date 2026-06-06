@@ -73,6 +73,12 @@ class ConnectorSelectedEntity(BaseModel):
     id: str
     name: str
     type: Optional[str] = None
+    account_name: Optional[str] = None
+    connection_id: Optional[str] = None
+    connector_key: Optional[str] = None
+    database_type: Optional[str] = None
+    schema_name: Optional[str] = None
+    table_name: Optional[str] = None
 
 
 class ConnectorOverviewItem(BaseModel):
@@ -97,6 +103,7 @@ class ConnectorEntityDetailResponse(BaseModel):
     latest_schedule: Optional[Dict[str, Any]] = None
     related_projects: List[Dict[str, Any]] = Field(default_factory=list)
     last_synced_at: Optional[str] = None
+    account_name: Optional[str] = None
 
 
 class ConnectorEntityRunItem(BaseModel):
@@ -282,6 +289,7 @@ async def get_connector_entity_detail(
             latest_schedule=result.get("latest_schedule"),
             related_projects=result.get("related_projects", []),
             last_synced_at=result.get("last_synced_at"),
+            account_name=result.get("account_name"),
         )
     except Exception as e:
         logger.error(f"Failed to fetch connector entity detail: {e}")

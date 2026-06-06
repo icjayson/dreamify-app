@@ -18,6 +18,8 @@ class WarehouseColumn(BaseModel):
     data_type: Optional[str] = None
     native_type: Optional[str] = None
     nullable: Optional[bool] = None
+    mode: Optional[str] = None
+    description: Optional[str] = None
     numeric_precision: Optional[int] = None
     numeric_scale: Optional[int] = None
     datetime_precision: Optional[int] = None
@@ -28,6 +30,7 @@ class WarehouseTable(BaseModel):
     schema: str
     name: str
     type: Optional[str] = None
+    row_count: Optional[int] = None
     columns: List[WarehouseColumn] = Field(default_factory=list)
 
 
@@ -41,6 +44,12 @@ class WarehouseSchemaSnapshot(BaseModel):
     schemas: List[WarehouseSchema] = Field(default_factory=list)
     table_count: int = 0
     schema_fingerprint: Optional[str] = None
+    project_id: Optional[str] = None
+    location: Optional[str] = None
+    account: Optional[str] = None
+    warehouse: Optional[str] = None
+    database: Optional[str] = None
+    role: Optional[str] = None
 
 
 class WarehouseConnectionResponse(BaseModel):
@@ -52,9 +61,21 @@ class WarehouseConnectionResponse(BaseModel):
     port: Optional[str] = None
     database: Optional[str] = None
     username: Optional[str] = None
+    account: Optional[str] = None
+    warehouse: Optional[str] = None
+    role: Optional[str] = None
     include_schemas: List[str] = Field(default_factory=list)
+    included_schemas: List[str] = Field(default_factory=list)
+    project_id: Optional[str] = None
+    location: Optional[str] = None
+    included_datasets: List[str] = Field(default_factory=list)
+    service_account_email: Optional[str] = None
+    max_billing_bytes: Optional[int] = None
+    max_assigned_bytes: Optional[int] = None
     source_timezone: str = "UTC"
-    schema_snapshot: WarehouseSchemaSnapshot = Field(default_factory=WarehouseSchemaSnapshot)
+    schema_snapshot: WarehouseSchemaSnapshot = Field(
+        default_factory=WarehouseSchemaSnapshot
+    )
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -66,10 +87,24 @@ class WarehouseConnectionsResponse(BaseModel):
 
 class WarehouseQuickConnectRequest(BaseModel):
     connector_key: str = "postgres"
-    connection_uri: str
+    connection_uri: str = ""
     display_name: str = ""
     include_schemas: List[str] = Field(default_factory=list)
     source_timezone: str = "UTC"
+    project_id: str = ""
+    location: str = ""
+    service_account_json: str = ""
+    included_datasets: List[str] = Field(default_factory=list)
+    max_billing_bytes: Optional[int] = None
+    account: str = ""
+    username: str = ""
+    private_key_pem: str = ""
+    private_key_passphrase: str = ""
+    warehouse: str = ""
+    database: str = ""
+    role: str = ""
+    included_schemas: List[str] = Field(default_factory=list)
+    max_assigned_bytes: Optional[int] = None
 
 
 class WarehouseTableRequest(BaseModel):
@@ -108,13 +143,18 @@ class WarehouseDeleteResponse(BaseModel):
     message: str
 
 
-@router.get("/integration/warehouse/connections", response_model=WarehouseConnectionsResponse)
+@router.get(
+    "/integration/warehouse/connections", response_model=WarehouseConnectionsResponse
+)
 async def list_warehouse_connections(user_id: str = Depends(require_user)):
     connections = warehouse_service.list_connections(user_id=user_id)
     return WarehouseConnectionsResponse(success=True, connections=connections)
 
 
-@router.post("/integration/warehouse/connections/quick-connect", response_model=WarehouseConnectionResponse)
+@router.post(
+    "/integration/warehouse/connections/quick-connect",
+    response_model=WarehouseConnectionResponse,
+)
 async def quick_connect_warehouse(
     request: WarehouseQuickConnectRequest,
     user_id: str = Depends(require_user),
@@ -126,6 +166,20 @@ async def quick_connect_warehouse(
         display_name=request.display_name,
         include_schemas=request.include_schemas,
         source_timezone=request.source_timezone,
+        project_id=request.project_id,
+        location=request.location,
+        service_account_json=request.service_account_json,
+        included_datasets=request.included_datasets or request.include_schemas,
+        max_billing_bytes=request.max_billing_bytes,
+        account=request.account,
+        username=request.username,
+        private_key_pem=request.private_key_pem,
+        private_key_passphrase=request.private_key_passphrase,
+        warehouse=request.warehouse,
+        database=request.database,
+        role=request.role,
+        included_schemas=request.included_schemas or request.include_schemas,
+        max_assigned_bytes=request.max_assigned_bytes,
     )
 
 
@@ -137,7 +191,9 @@ async def refresh_warehouse_schema(
     connection_id: str,
     user_id: str = Depends(require_user),
 ):
-    return warehouse_service.refresh_schema(user_id=user_id, connection_id=connection_id)
+    return warehouse_service.refresh_schema(
+        user_id=user_id, connection_id=connection_id
+    )
 
 
 @router.post(
@@ -202,4 +258,6 @@ async def delete_warehouse_connection(
     user_id: str = Depends(require_user),
 ):
     warehouse_service.remove_connection(user_id=user_id, connection_id=connection_id)
-    return WarehouseDeleteResponse(success=True, message="Warehouse connection deleted.")
+    return WarehouseDeleteResponse(
+        success=True, message="Warehouse connection deleted."
+    )

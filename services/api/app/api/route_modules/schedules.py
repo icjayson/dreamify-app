@@ -1,6 +1,7 @@
 """
 User-facing CRUD routes for data sync schedules.
 """
+
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +18,7 @@ router = APIRouter(tags=["schedules"])
 
 
 # ── Request / Response models ──────────────────────────────────────────────────
+
 
 class CreateScheduleRequest(BaseModel):
     provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | warehouse
@@ -51,57 +53,96 @@ _VALID_PROVIDERS = {"ga4", "meta_ads", "tiktok", "appsflyer", "stripe", "warehou
 _VALID_FREQUENCIES = {"daily", "weekly", "biweekly"}
 _VALID_DATE_PRESETS = {"last_7d", "last_14d", "last_30d", "last_90d"}
 _VALID_STRIPE_REPORT_TYPES = {"charges", "subscriptions", "customers"}
+_VALID_WAREHOUSE_CONNECTORS = {"postgres", "bigquery", "snowflake"}
 
 
 def _validate_create(req: CreateScheduleRequest) -> None:
     if req.provider not in _VALID_PROVIDERS:
-        raise HTTPException(400, f"Invalid provider. Must be one of: {', '.join(_VALID_PROVIDERS)}")
+        raise HTTPException(
+            400, f"Invalid provider. Must be one of: {', '.join(_VALID_PROVIDERS)}"
+        )
     if req.frequency not in _VALID_FREQUENCIES:
-        raise HTTPException(400, f"Invalid frequency. Must be one of: {', '.join(_VALID_FREQUENCIES)}")
+        raise HTTPException(
+            400, f"Invalid frequency. Must be one of: {', '.join(_VALID_FREQUENCIES)}"
+        )
     if req.date_range_preset not in _VALID_DATE_PRESETS:
-        raise HTTPException(400, f"Invalid date_range_preset. Must be one of: {', '.join(_VALID_DATE_PRESETS)}")
+        raise HTTPException(
+            400,
+            f"Invalid date_range_preset. Must be one of: {', '.join(_VALID_DATE_PRESETS)}",
+        )
     if not req.project_id.strip():
         raise HTTPException(400, "project_id is required")
     _normalize_connector_config(req.provider, req.connector_config)
 
 
-def _normalize_connector_config(provider: str, connector_config: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_connector_config(
+    provider: str, connector_config: Dict[str, Any]
+) -> Dict[str, Any]:
     cfg = dict(connector_config or {})
     if provider == "ga4" and not str(cfg.get("property_id") or "").strip():
-        raise HTTPException(400, "connector_config.property_id is required for GA4 schedules")
-    if provider in {"meta_ads", "tiktok"} and not str(cfg.get("ad_account_id") or "").strip():
-        raise HTTPException(400, "connector_config.ad_account_id is required for ad account schedules")
+        raise HTTPException(
+            400, "connector_config.property_id is required for GA4 schedules"
+        )
+    if (
+        provider in {"meta_ads", "tiktok"}
+        and not str(cfg.get("ad_account_id") or "").strip()
+    ):
+        raise HTTPException(
+            400, "connector_config.ad_account_id is required for ad account schedules"
+        )
     if provider == "appsflyer" and not str(cfg.get("app_id") or "").strip():
-        raise HTTPException(400, "connector_config.app_id is required for AppsFlyer schedules")
+        raise HTTPException(
+            400, "connector_config.app_id is required for AppsFlyer schedules"
+        )
     if provider == "stripe":
         report_type = str(cfg.get("report_type") or "charges").strip()
         if report_type not in _VALID_STRIPE_REPORT_TYPES:
-            raise HTTPException(400, "connector_config.report_type must be charges, subscriptions, or customers")
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be charges, subscriptions, or customers",
+            )
         cfg["report_type"] = report_type
     if provider == "warehouse":
         connection_id = str(cfg.get("connection_id") or "").strip()
         schema_name = str(cfg.get("schema") or cfg.get("schema_name") or "").strip()
         table_name = str(cfg.get("table") or cfg.get("table_name") or "").strip()
+        connector_key = str(cfg.get("connector_key") or "postgres").strip()
+        if connector_key not in _VALID_WAREHOUSE_CONNECTORS:
+            raise HTTPException(
+                400,
+                "connector_config.connector_key must be postgres, bigquery, or snowflake",
+            )
         if not connection_id:
-            raise HTTPException(400, "connector_config.connection_id is required for warehouse schedules")
+            raise HTTPException(
+                400,
+                "connector_config.connection_id is required for warehouse schedules",
+            )
         if not schema_name:
-            raise HTTPException(400, "connector_config.schema is required for warehouse schedules")
+            raise HTTPException(
+                400, "connector_config.schema is required for warehouse schedules"
+            )
         if not table_name:
-            raise HTTPException(400, "connector_config.table is required for warehouse schedules")
+            raise HTTPException(
+                400, "connector_config.table is required for warehouse schedules"
+            )
         try:
             row_limit = int(cfg.get("row_limit") or 5000)
         except (TypeError, ValueError):
             row_limit = 5000
-        cfg["connector_key"] = str(cfg.get("connector_key") or "postgres")
+        cfg["connector_key"] = connector_key
         cfg["connection_id"] = connection_id
         cfg["schema"] = schema_name
         cfg["table"] = table_name
-        cfg["entity_id"] = str(cfg.get("entity_id") or f"{connection_id}:{schema_name}.{table_name}")
+        cfg["entity_id"] = str(
+            cfg.get("entity_id") or f"{connection_id}:{schema_name}.{table_name}"
+        )
         cfg["row_limit"] = max(1, min(row_limit, 50000))
     return cfg
 
 
-def _apply_scheduler_state(record: Dict, status: str, error: str = "", rule_name: str = "") -> Dict:
+def _apply_scheduler_state(
+    record: Dict, status: str, error: str = "", rule_name: str = ""
+) -> Dict:
     updates: Dict[str, Any] = {
         "scheduler_status": status,
         "scheduler_error": error,
@@ -113,7 +154,9 @@ def _apply_scheduler_state(record: Dict, status: str, error: str = "", rule_name
     return record
 
 
-def _configure_eventbridge_schedule(record: Dict, frequency: str, hour_utc: int, day_of_week: int) -> Dict:
+def _configure_eventbridge_schedule(
+    record: Dict, frequency: str, hour_utc: int, day_of_week: int
+) -> Dict:
     if not scheduler_service.is_scheduler_configured():
         return _apply_scheduler_state(
             record,
@@ -135,6 +178,7 @@ def _configure_eventbridge_schedule(record: Dict, frequency: str, hour_utc: int,
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
+
 
 @router.post("/schedules")
 async def create_schedule(
@@ -160,13 +204,19 @@ async def create_schedule(
     if req.on_complete_actions is not None:
         optional_updates["on_complete_actions"] = req.on_complete_actions
     if req.auto_refresh_conversation_id is not None:
-        optional_updates["auto_refresh_conversation_id"] = req.auto_refresh_conversation_id
+        optional_updates["auto_refresh_conversation_id"] = (
+            req.auto_refresh_conversation_id
+        )
     if req.auto_refresh_prompt is not None:
         optional_updates["auto_refresh_prompt"] = req.auto_refresh_prompt
     if optional_updates:
-        schedules_repo.update_schedule(user_id, record["schedule_id"], **optional_updates)
+        schedules_repo.update_schedule(
+            user_id, record["schedule_id"], **optional_updates
+        )
         record.update(optional_updates)
-    return _configure_eventbridge_schedule(record, req.frequency, req.hour_utc, req.day_of_week)
+    return _configure_eventbridge_schedule(
+        record, req.frequency, req.hour_utc, req.day_of_week
+    )
 
 
 @router.get("/schedules")
@@ -205,12 +255,17 @@ async def update_schedule(
     # Validate fields when provided
     if "frequency" in updates and updates["frequency"] not in _VALID_FREQUENCIES:
         raise HTTPException(400, f"Invalid frequency")
-    if "date_range_preset" in updates and updates["date_range_preset"] not in _VALID_DATE_PRESETS:
+    if (
+        "date_range_preset" in updates
+        and updates["date_range_preset"] not in _VALID_DATE_PRESETS
+    ):
         raise HTTPException(400, "Invalid date_range_preset")
     if "project_id" in updates and not str(updates["project_id"]).strip():
         raise HTTPException(400, "project_id is required")
     if "connector_config" in updates:
-        updates["connector_config"] = _normalize_connector_config(existing["provider"], updates["connector_config"])
+        updates["connector_config"] = _normalize_connector_config(
+            existing["provider"], updates["connector_config"]
+        )
 
     # Update EventBridge if timing changed
     timing_changed = any(k in updates for k in ("frequency", "hour_utc", "day_of_week"))
@@ -243,7 +298,9 @@ async def update_schedule(
                 updates["scheduler_error"] = str(exc)
         else:
             updates["scheduler_status"] = "not_configured"
-            updates["scheduler_error"] = "EventBridge Scheduler role or Lambda target is not configured."
+            updates["scheduler_error"] = (
+                "EventBridge Scheduler role or Lambda target is not configured."
+            )
 
     return schedules_repo.update_schedule(user_id, schedule_id, **updates)
 

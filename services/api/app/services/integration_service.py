@@ -399,7 +399,11 @@ class IntegrationService:
         )
 
     async def fetch_google_sheet_data(
-        self, user_id: str, file_id: str, project_id: str, access_token: Optional[str] = None
+        self,
+        user_id: str,
+        file_id: str,
+        project_id: str,
+        access_token: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Fetch Google Sheet data via the Drive API and save it as a CSV asset."""
         if not access_token:
@@ -415,9 +419,9 @@ class IntegrationService:
                 meta_resp = await client.get(
                     f"https://www.googleapis.com/drive/v3/files/{file_id}",
                     params={
-                        "fields": "name", 
+                        "fields": "name",
                         "supportsAllDrives": "true",
-                        "includeItemsFromAllDrives": "true"
+                        "includeItemsFromAllDrives": "true",
                     },
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
@@ -437,10 +441,7 @@ class IntegrationService:
                 # Export first sheet as CSV via Drive API export endpoint
                 export_resp = await client.get(
                     f"https://www.googleapis.com/drive/v3/files/{file_id}/export",
-                    params={
-                        "mimeType": "text/csv", 
-                        "supportsAllDrives": "true"
-                    },
+                    params={"mimeType": "text/csv", "supportsAllDrives": "true"},
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
                 if export_resp.status_code == 403:
@@ -452,7 +453,9 @@ class IntegrationService:
 
             # Parse the CSV to get row/column counts
             try:
-                reader = csv.reader(io.StringIO(csv_content.decode("utf-8-sig"))) # Handle BOM if present
+                reader = csv.reader(
+                    io.StringIO(csv_content.decode("utf-8-sig"))
+                )  # Handle BOM if present
                 rows = list(reader)
             except UnicodeDecodeError:
                 # Fallback for other encodings if UTF-8 fails
@@ -503,7 +506,9 @@ class IntegrationService:
                 "column_count": column_count,
             }
         except httpx.HTTPStatusError as e:
-            error_msg = f"Google API error ({e.response.status_code}): {e.response.text}"
+            error_msg = (
+                f"Google API error ({e.response.status_code}): {e.response.text}"
+            )
             logger.error(f"Failed to fetch Google Sheet data: {error_msg}")
             raise Exception(error_msg)
         except Exception as e:
@@ -1754,9 +1759,13 @@ class IntegrationService:
             "google_sheets": "google_sheets",
             "stripe": "stripe",
             "postgres": "warehouse",
+            "bigquery": "warehouse",
+            "snowflake": "warehouse",
         }
         if connector_key not in mapping:
-            raise HTTPException(status_code=404, detail=f"Unsupported connector: {connector_key}")
+            raise HTTPException(
+                status_code=404, detail=f"Unsupported connector: {connector_key}"
+            )
         return mapping[connector_key]
 
     def _connector_asset_type(self, connector_key: str) -> str:
@@ -1770,10 +1779,14 @@ class IntegrationService:
             "google_sheets": "integration_gsheets",
             "stripe": "integration_stripe",
             "postgres": "warehouse_extract",
+            "bigquery": "warehouse_extract",
+            "snowflake": "warehouse_extract",
         }
         return mapping.get(connector_key, "")
 
-    def _extract_entity_id_from_schedule(self, provider: str, connector_config: Dict[str, Any]) -> Optional[str]:
+    def _extract_entity_id_from_schedule(
+        self, provider: str, connector_config: Dict[str, Any]
+    ) -> Optional[str]:
         if provider in {"meta_ads", "tiktok", "google_ads"}:
             return connector_config.get("ad_account_id")
         if provider == "ga4":
@@ -1789,7 +1802,9 @@ class IntegrationService:
             if entity_id:
                 return entity_id
             connection_id = connector_config.get("connection_id")
-            schema = connector_config.get("schema") or connector_config.get("schema_name")
+            schema = connector_config.get("schema") or connector_config.get(
+                "schema_name"
+            )
             table = connector_config.get("table") or connector_config.get("table_name")
             if connection_id and schema and table:
                 return f"{connection_id}:{schema}.{table}"
@@ -1802,16 +1817,24 @@ class IntegrationService:
         entity_id: str,
     ) -> Optional[Dict[str, Any]]:
         provider = self._connector_to_provider(connector_key)
-        schedules = sync_schedules_repo.list_active_schedules_by_provider(user_id).get(provider, [])
+        schedules = sync_schedules_repo.list_active_schedules_by_provider(user_id).get(
+            provider, []
+        )
         for schedule in schedules:
             config = schedule.get("connector_config") or {}
-            if str(self._extract_entity_id_from_schedule(provider, config) or "") == str(entity_id):
+            if str(
+                self._extract_entity_id_from_schedule(provider, config) or ""
+            ) == str(entity_id):
                 return schedule
         # Fallback: if there is any active schedule for connector, use latest as template.
         return schedules[0] if schedules else None
 
-    def _latest_asset_for_entity(self, user_id: str, connector_key: str, entity_id: str) -> Optional[Dict[str, Any]]:
-        assets = assets_repo.list_assets(user_id=user_id, asset_type=self._connector_asset_type(connector_key))
+    def _latest_asset_for_entity(
+        self, user_id: str, connector_key: str, entity_id: str
+    ) -> Optional[Dict[str, Any]]:
+        assets = assets_repo.list_assets(
+            user_id=user_id, asset_type=self._connector_asset_type(connector_key)
+        )
         entity_assets = [
             a
             for a in assets
@@ -1826,7 +1849,9 @@ class IntegrationService:
         assets.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return assets[0]
 
-    def _extract_selected_entities_from_schedule(self, schedule: Dict[str, Any]) -> List[Dict[str, str]]:
+    def _extract_selected_entities_from_schedule(
+        self, schedule: Dict[str, Any]
+    ) -> List[Dict[str, str]]:
         connector_config = schedule.get("connector_config") or {}
         provider = schedule.get("provider")
         account_name = (schedule.get("account_name") or "").strip()
@@ -1834,36 +1859,52 @@ class IntegrationService:
         if provider == "ga4":
             property_id = connector_config.get("property_id")
             if property_id:
-                property_name = connector_config.get("property_name") or account_name or f"Property {property_id}"
+                property_name = (
+                    connector_config.get("property_name")
+                    or account_name
+                    or f"Property {property_id}"
+                )
                 return [self._entity(str(property_id), str(property_name), "property")]
 
         if provider in {"meta_ads", "tiktok", "google_ads"}:
             ad_account_id = connector_config.get("ad_account_id")
             if ad_account_id:
                 ad_account_name = account_name or f"Account {ad_account_id}"
-                return [self._entity(str(ad_account_id), str(ad_account_name), "account")]
+                return [
+                    self._entity(str(ad_account_id), str(ad_account_name), "account")
+                ]
 
         if provider == "appsflyer":
             app_id = connector_config.get("app_id")
             if app_id:
-                app_name = connector_config.get("app_name") or account_name or str(app_id)
+                app_name = (
+                    connector_config.get("app_name") or account_name or str(app_id)
+                )
                 return [self._entity(str(app_id), str(app_name), "app")]
 
         if provider == "firebase":
             project_id = connector_config.get("firebase_project_id")
             if project_id:
-                project_name = connector_config.get("app_name") or account_name or str(project_id)
+                project_name = (
+                    connector_config.get("app_name") or account_name or str(project_id)
+                )
                 return [self._entity(str(project_id), str(project_name), "project")]
 
         if provider == "google_sheets":
             file_id = connector_config.get("file_id")
             if file_id:
-                file_name = connector_config.get("file_name") or account_name or str(file_id)
+                file_name = (
+                    connector_config.get("file_name") or account_name or str(file_id)
+                )
                 return [self._entity(str(file_id), str(file_name), "sheet")]
 
         if provider == "warehouse":
-            entity_id = self._extract_entity_id_from_schedule(provider, connector_config)
-            schema = connector_config.get("schema") or connector_config.get("schema_name")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            schema = connector_config.get("schema") or connector_config.get(
+                "schema_name"
+            )
             table = connector_config.get("table") or connector_config.get("table_name")
             connector_key = connector_config.get("connector_key") or "postgres"
             if entity_id and schema and table:
@@ -1873,7 +1914,9 @@ class IntegrationService:
                         "name": f"{schema}.{table}",
                         "type": "table",
                         "account_name": account_name,
-                        "connection_id": str(connector_config.get("connection_id") or ""),
+                        "connection_id": str(
+                            connector_config.get("connection_id") or ""
+                        ),
                         "connector_key": str(connector_key),
                         "database_type": str(connector_key),
                         "schema_name": str(schema),
@@ -1891,7 +1934,9 @@ class IntegrationService:
         index_by_id: Dict[str, int] = {}
 
         def _name_score(entity: Dict[str, str]) -> int:
-            return self._entity_name_score(str(entity.get("name", "")), str(entity.get("id", "")))
+            return self._entity_name_score(
+                str(entity.get("name", "")), str(entity.get("id", ""))
+            )
 
         for entity in entities:
             key = str(entity.get("id", ""))
@@ -1946,13 +1991,23 @@ class IntegrationService:
             "google_sheets": [],
             "stripe": [],
             "postgres": [],
+            "bigquery": [],
+            "snowflake": [],
         }
 
         # Connection statuses
-        status_map["meta_ads"] = bool(self.get_meta_connection_status(user_id).get("connected"))
-        status_map["tiktok_ads"] = bool(self.get_tiktok_connection_status(user_id).get("connected"))
-        status_map["appsflyer"] = bool((await self.get_appsflyer_connection_status(user_id)).get("connected"))
-        status_map["stripe"] = bool((await self.get_stripe_connection_status(user_id)).get("connected"))
+        status_map["meta_ads"] = bool(
+            self.get_meta_connection_status(user_id).get("connected")
+        )
+        status_map["tiktok_ads"] = bool(
+            self.get_tiktok_connection_status(user_id).get("connected")
+        )
+        status_map["appsflyer"] = bool(
+            (await self.get_appsflyer_connection_status(user_id)).get("connected")
+        )
+        status_map["stripe"] = bool(
+            (await self.get_stripe_connection_status(user_id)).get("connected")
+        )
 
         google_connected = bool(await self._get_google_access_token(user_id))
         status_map["ga4"] = google_connected
@@ -1960,7 +2015,16 @@ class IntegrationService:
         status_map["google_ads"] = google_connected
         status_map["firebase"] = google_connected
         from app.services.warehouse_service import warehouse_service
-        status_map["postgres"] = bool(warehouse_service.list_connections(user_id, connector_key="postgres"))
+
+        status_map["postgres"] = bool(
+            warehouse_service.list_connections(user_id, connector_key="postgres")
+        )
+        status_map["bigquery"] = bool(
+            warehouse_service.list_connections(user_id, connector_key="bigquery")
+        )
+        status_map["snowflake"] = bool(
+            warehouse_service.list_connections(user_id, connector_key="snowflake")
+        )
 
         # Primary source: selected entities persisted at modal sync-time in DynamoDB.
         metadata_provider_map = {
@@ -1972,7 +2036,6 @@ class IntegrationService:
             "firebase": "firebase",
             "google_sheets": "google_sheets",
             "stripe": "stripe",
-            "postgres": "warehouse",
         }
         for connector_key, provider in metadata_provider_map.items():
             record = connected_accounts_repo.get_connection(user_id, provider) or {}
@@ -1980,8 +2043,20 @@ class IntegrationService:
             if isinstance(entities, list):
                 selected_entities_map[connector_key].extend(entities)
 
+        warehouse_record = (
+            connected_accounts_repo.get_connection(user_id, "warehouse") or {}
+        )
+        warehouse_entities = warehouse_record.get("selected_entities", [])
+        if isinstance(warehouse_entities, list):
+            for entity in warehouse_entities:
+                entity_connector = str(entity.get("connector_key") or "postgres")
+                if entity_connector in {"postgres", "bigquery", "snowflake"}:
+                    selected_entities_map[entity_connector].append(entity)
+
         # Legacy fallback: infer previously selected entities from schedule connector_config.
-        schedules_by_provider = sync_schedules_repo.list_active_schedules_by_provider(user_id)
+        schedules_by_provider = sync_schedules_repo.list_active_schedules_by_provider(
+            user_id
+        )
         provider_to_connector = {
             "meta_ads": "meta_ads",
             "tiktok": "tiktok_ads",
@@ -1991,14 +2066,25 @@ class IntegrationService:
             "google_ads": "google_ads",
             "firebase": "firebase",
             "google_sheets": "google_sheets",
-            "warehouse": "postgres",
         }
         for provider, schedules in schedules_by_provider.items():
+            if provider == "warehouse":
+                for schedule in schedules:
+                    entities = self._extract_selected_entities_from_schedule(schedule)
+                    for entity in entities:
+                        entity_connector = str(
+                            entity.get("connector_key") or "postgres"
+                        )
+                        if entity_connector in {"postgres", "bigquery", "snowflake"}:
+                            selected_entities_map[entity_connector].append(entity)
+                continue
             connector_key = provider_to_connector.get(provider)
             if not connector_key:
                 continue
             for schedule in schedules:
-                selected_entities_map[connector_key].extend(self._extract_selected_entities_from_schedule(schedule))
+                selected_entities_map[connector_key].extend(
+                    self._extract_selected_entities_from_schedule(schedule)
+                )
 
         connectors = [
             {"connector_key": "meta_ads", "display_name": "Meta Ads"},
@@ -2009,6 +2095,8 @@ class IntegrationService:
             {"connector_key": "firebase", "display_name": "Firebase"},
             {"connector_key": "google_sheets", "display_name": "Google Sheets"},
             {"connector_key": "postgres", "display_name": "PostgreSQL"},
+            {"connector_key": "bigquery", "display_name": "BigQuery"},
+            {"connector_key": "snowflake", "display_name": "Snowflake"},
             {"connector_key": "stripe", "display_name": "Stripe"},
         ]
 
@@ -2020,7 +2108,9 @@ class IntegrationService:
                     "connector_key": key,
                     "display_name": connector["display_name"],
                     "connected": status_map.get(key, False),
-                    "selected_entities": self._unique_entities(selected_entities_map.get(key, [])),
+                    "selected_entities": self._unique_entities(
+                        selected_entities_map.get(key, [])
+                    ),
                 }
             )
 
@@ -2031,17 +2121,23 @@ class IntegrationService:
     ) -> Dict[str, Any]:
         provider = self._connector_to_provider(connector_key)
         connection = connected_accounts_repo.get_connection(user_id, provider) or {}
-        sync_version_name_map = (
-            (connection.get("sync_version_names") or {}).get(str(entity_id), {}) or {}
-        )
+        sync_version_name_map = (connection.get("sync_version_names") or {}).get(
+            str(entity_id), {}
+        ) or {}
         selected_entities = connection.get("selected_entities", []) or []
-        entity = next((e for e in selected_entities if str(e.get("id", "")) == str(entity_id)), None)
+        entity = next(
+            (e for e in selected_entities if str(e.get("id", "")) == str(entity_id)),
+            None,
+        )
         if not entity:
             # Fallback to schedule-derived selection
             schedule = self._find_schedule_for_entity(user_id, connector_key, entity_id)
             if schedule:
                 entities = self._extract_selected_entities_from_schedule(schedule)
-                entity = next((e for e in entities if str(e.get("id", "")) == str(entity_id)), None)
+                entity = next(
+                    (e for e in entities if str(e.get("id", "")) == str(entity_id)),
+                    None,
+                )
         if not entity:
             entity = {"id": str(entity_id), "name": str(entity_id), "type": "entity"}
 
@@ -2059,8 +2155,12 @@ class IntegrationService:
             account_name = (connection.get("account_name") or "").strip()
 
         related_projects = []
-        assets = assets_repo.list_assets(user_id=user_id, asset_type=self._connector_asset_type(connector_key))
-        entity_assets = [a for a in assets if str(a.get("connector_entity_id", "")) == str(entity_id)]
+        assets = assets_repo.list_assets(
+            user_id=user_id, asset_type=self._connector_asset_type(connector_key)
+        )
+        entity_assets = [
+            a for a in assets if str(a.get("connector_entity_id", "")) == str(entity_id)
+        ]
         entity_assets.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         project_latest_entity_asset = {}
         for asset in entity_assets:
@@ -2083,12 +2183,16 @@ class IntegrationService:
             sched = sync_schedules_repo.get_schedule(user_id, schedule_id)
             cfg: Dict[str, Any] = (sched or {}).get("connector_config") or {}
             snapshot = run.get("config_snapshot") or {}
-            run_entity_id = self._extract_entity_id_from_schedule(provider, cfg) or snapshot.get("entity_id")
+            run_entity_id = self._extract_entity_id_from_schedule(
+                provider, cfg
+            ) or snapshot.get("entity_id")
             if str(run_entity_id or "") != str(entity_id):
                 continue
             asset_id_to_run_id[run_asset_id] = str(run.get("run_id"))
 
-        def _resolve_sync_version_name_for_asset(asset_rec: Dict[str, Any]) -> Optional[str]:
+        def _resolve_sync_version_name_for_asset(
+            asset_rec: Dict[str, Any],
+        ) -> Optional[str]:
             """Resolve sync version name for an asset, following cloned_from_asset_id chain."""
             aid = str(asset_rec.get("asset_id") or "")
             if not aid:
@@ -2116,7 +2220,11 @@ class IntegrationService:
                 continue
             seen_projects.add(pid)
             project_ids.append(pid)
-        if latest_asset and latest_asset.get("project_id") and latest_asset.get("project_id") not in seen_projects:
+        if (
+            latest_asset
+            and latest_asset.get("project_id")
+            and latest_asset.get("project_id") not in seen_projects
+        ):
             project_ids.insert(0, latest_asset.get("project_id"))
 
         for pid in project_ids:
@@ -2138,7 +2246,9 @@ class IntegrationService:
                 or str(entity_id)
             )
             input_data_file_name = (
-                f"{entity_label} - {sync_version_name}" if sync_version_name else entity_label
+                f"{entity_label} - {sync_version_name}"
+                if sync_version_name
+                else entity_label
             )
 
             # ── Collect all dashboards across all conversations in this project ──
@@ -2152,18 +2262,30 @@ class IntegrationService:
                         continue
                     # Load the conversation from S3 to read its dashboards list
                     try:
-                        from utils.s3.conversations import load_conversation as _load_conv
-                        conv_data = _load_conv(convo.get("s3_bucket", ""), convo.get("s3_key", ""))
-                        dashboards_list = conv_data.get("dashboards", []) if conv_data else []
+                        from utils.s3.conversations import (
+                            load_conversation as _load_conv,
+                        )
+
+                        conv_data = _load_conv(
+                            convo.get("s3_bucket", ""), convo.get("s3_key", "")
+                        )
+                        dashboards_list = (
+                            conv_data.get("dashboards", []) if conv_data else []
+                        )
                         for dash in dashboards_list:
                             dash_id = dash.get("dashboard_id")
-                            dash_title = dash.get("title") or dash.get("dashboard_title")
+                            dash_title = dash.get("title") or dash.get(
+                                "dashboard_title"
+                            )
                             if dash_id:
-                                dashboard_cards.append({
-                                    "dashboard_id": dash_id,
-                                    "dashboard_title": dash_title or "Untitled dashboard",
-                                    "conversation_id": convo_id,
-                                })
+                                dashboard_cards.append(
+                                    {
+                                        "dashboard_id": dash_id,
+                                        "dashboard_title": dash_title
+                                        or "Untitled dashboard",
+                                        "conversation_id": convo_id,
+                                    }
+                                )
                     except Exception:
                         pass
 
@@ -2177,7 +2299,9 @@ class IntegrationService:
                             "project_created_at": project.get("created_at"),
                             "latest_dashboard_id": dash_card["dashboard_id"],
                             "dashboard_title": dash_card["dashboard_title"],
-                            "dashboard_preview_key": project.get("dashboard_preview_key"),
+                            "dashboard_preview_key": project.get(
+                                "dashboard_preview_key"
+                            ),
                             "conversation_id": dash_card.get("conversation_id"),
                             "input_data_file_name": input_data_file_name,
                             "sync_version_name": sync_version_name,
@@ -2200,15 +2324,25 @@ class IntegrationService:
 
         status_map = await self.fetch_connectors_overview(user_id)
         overview_item = next(
-            (item for item in status_map.get("connectors", []) if item.get("connector_key") == connector_key),
+            (
+                item
+                for item in status_map.get("connectors", [])
+                if item.get("connector_key") == connector_key
+            ),
             None,
         )
 
         return {
             "success": True,
             "connector_key": connector_key,
-            "display_name": overview_item.get("display_name") if overview_item else connector_key,
-            "connected": bool(overview_item.get("connected")) if overview_item else bool(connection),
+            "display_name": (
+                overview_item.get("display_name") if overview_item else connector_key
+            ),
+            "connected": (
+                bool(overview_item.get("connected"))
+                if overview_item
+                else bool(connection)
+            ),
             "entity": entity,
             "latest_asset": latest_asset,
             "latest_schedule": schedule,
@@ -2222,10 +2356,12 @@ class IntegrationService:
     ) -> Dict[str, Any]:
         provider = self._connector_to_provider(connector_key)
         connection = connected_accounts_repo.get_connection(user_id, provider) or {}
-        sync_version_name_map = (
-            (connection.get("sync_version_names") or {}).get(str(entity_id), {}) or {}
+        sync_version_name_map = (connection.get("sync_version_names") or {}).get(
+            str(entity_id), {}
+        ) or {}
+        runs, _ = sync_runs_repo.list_runs_for_user(
+            user_id=user_id, limit=max(limit, 100)
         )
-        runs, _ = sync_runs_repo.list_runs_for_user(user_id=user_id, limit=max(limit, 100))
         matched = []
         seen_asset_ids = set()
         for run in runs:
@@ -2239,7 +2375,9 @@ class IntegrationService:
             if schedule:
                 cfg = schedule.get("connector_config") or {}
             snapshot = run.get("config_snapshot") or {}
-            run_entity_id = self._extract_entity_id_from_schedule(provider, cfg) or snapshot.get("entity_id")
+            run_entity_id = self._extract_entity_id_from_schedule(
+                provider, cfg
+            ) or snapshot.get("entity_id")
             if str(run_entity_id or "") != str(entity_id):
                 continue
             asset = None
@@ -2259,8 +2397,12 @@ class IntegrationService:
                     "date_range_start": run.get("date_range_start"),
                     "date_range_end": run.get("date_range_end"),
                     "config_snapshot": snapshot,
-                    "sync_version_name": sync_version_name_map.get(str(run.get("run_id"))),
-                    "_s3_key": (asset or {}).get("s3_key"),  # internal: for s3_key dedup below
+                    "sync_version_name": sync_version_name_map.get(
+                        str(run.get("run_id"))
+                    ),
+                    "_s3_key": (asset or {}).get(
+                        "s3_key"
+                    ),  # internal: for s3_key dedup below
                 }
             )
             if run.get("asset_id"):
@@ -2268,11 +2410,16 @@ class IntegrationService:
             if len(matched) >= limit:
                 break
 
-        assets = assets_repo.list_assets(user_id=user_id, asset_type=self._connector_asset_type(connector_key))
+        assets = assets_repo.list_assets(
+            user_id=user_id, asset_type=self._connector_asset_type(connector_key)
+        )
         entity_assets = [
-            a for a in assets
+            a
+            for a in assets
             if str(a.get("connector_entity_id", "")) == str(entity_id)
-            and not a.get("cloned_from_asset_id")  # skip cloned copies created by "add to new project"
+            and not a.get(
+                "cloned_from_asset_id"
+            )  # skip cloned copies created by "add to new project"
         ]
         entity_assets.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         # Also deduplicate by s3_key to catch pre-existing cloned assets that
@@ -2307,7 +2454,8 @@ class IntegrationService:
                     "date_range_end": None,
                     "config_snapshot": {
                         "entity_id": str(entity_id),
-                        "entity_name": asset.get("connector_entity_name") or str(entity_id),
+                        "entity_name": asset.get("connector_entity_name")
+                        or str(entity_id),
                         "rows": asset.get("row_count"),
                         "columns": asset.get("column_count"),
                         "size_bytes": asset.get("size_bytes"),
@@ -2325,10 +2473,20 @@ class IntegrationService:
             reverse=False,
         )
         # Real runs newest first, synthetic asset-only entries always at bottom.
-        real_runs = [m for m in matched if not str(m.get("run_id", "")).startswith("asset-")]
-        asset_only_runs = [m for m in matched if str(m.get("run_id", "")).startswith("asset-")]
-        real_runs.sort(key=lambda item: item.get("completed_at") or item.get("triggered_at") or "", reverse=True)
-        asset_only_runs.sort(key=lambda item: item.get("completed_at") or item.get("triggered_at") or "", reverse=False)
+        real_runs = [
+            m for m in matched if not str(m.get("run_id", "")).startswith("asset-")
+        ]
+        asset_only_runs = [
+            m for m in matched if str(m.get("run_id", "")).startswith("asset-")
+        ]
+        real_runs.sort(
+            key=lambda item: item.get("completed_at") or item.get("triggered_at") or "",
+            reverse=True,
+        )
+        asset_only_runs.sort(
+            key=lambda item: item.get("completed_at") or item.get("triggered_at") or "",
+            reverse=False,
+        )
         matched = real_runs + asset_only_runs
         if len(matched) > limit:
             matched = matched[:limit]
@@ -2352,7 +2510,9 @@ class IntegrationService:
         )
         runs = history.get("runs", []) or []
         if not any(str(r.get("run_id", "")) == str(run_id) for r in runs):
-            raise HTTPException(status_code=404, detail="Sync run not found for this connector entity.")
+            raise HTTPException(
+                status_code=404, detail="Sync run not found for this connector entity."
+            )
         connected_accounts_repo.set_sync_version_name(
             user_id=user_id,
             provider=provider,
@@ -2360,7 +2520,11 @@ class IntegrationService:
             run_id=str(run_id),
             sync_version_name=sync_version_name,
         )
-        return {"success": True, "run_id": str(run_id), "sync_version_name": str(sync_version_name).strip()}
+        return {
+            "success": True,
+            "run_id": str(run_id),
+            "sync_version_name": str(sync_version_name).strip(),
+        }
 
     async def remove_connector_entity(
         self, user_id: str, connector_key: str, entity_id: str
@@ -2380,7 +2544,11 @@ class IntegrationService:
         end_date: Optional[str],
     ) -> Dict[str, Optional[str]]:
         if start_date and end_date:
-            return {"date_preset": "custom", "start_date": start_date, "end_date": end_date}
+            return {
+                "date_preset": "custom",
+                "start_date": start_date,
+                "end_date": end_date,
+            }
         return {
             "date_preset": date_preset or "last_30d",
             "start_date": start_date,
@@ -2398,7 +2566,9 @@ class IntegrationService:
         overrides = overrides or {}
         latest_asset = self._latest_asset_for_entity(user_id, connector_key, entity_id)
         if not schedule and not latest_asset:
-            raise HTTPException(status_code=400, detail="No saved connector config for this entity.")
+            raise HTTPException(
+                status_code=400, detail="No saved connector config for this entity."
+            )
 
         cfg = schedule.get("connector_config") if schedule else {}
         cfg = cfg or {}
@@ -2406,18 +2576,31 @@ class IntegrationService:
             (schedule or {}).get("project_id")
             or (latest_asset or {}).get("project_id")
             or projects_repo.create_project(
-                user_id=user_id, name="Untitled Project", description="Auto-created project"
+                user_id=user_id,
+                name="Untitled Project",
+                description="Auto-created project",
             ).get("project_id")
         )
-        date_preset = overrides.get("date_preset") or (schedule or {}).get("date_range_preset") or "last_30d"
+        date_preset = (
+            overrides.get("date_preset")
+            or (schedule or {}).get("date_range_preset")
+            or "last_30d"
+        )
         start_date = overrides.get("start_date")
         end_date = overrides.get("end_date")
-        dates = self._resolve_refresh_dates(date_preset=date_preset, start_date=start_date, end_date=end_date)
+        dates = self._resolve_refresh_dates(
+            date_preset=date_preset, start_date=start_date, end_date=end_date
+        )
         account_name = (schedule or {}).get("account_name") or ""
         resolved_cfg = {**cfg}
         prior_asset_name = (latest_asset or {}).get("connector_entity_name")
         prior_selected_name = ""
-        connection = connected_accounts_repo.get_connection(user_id, self._connector_to_provider(connector_key)) or {}
+        connection = (
+            connected_accounts_repo.get_connection(
+                user_id, self._connector_to_provider(connector_key)
+            )
+            or {}
+        )
         selected_entities = connection.get("selected_entities", []) or []
         existing_entity = next(
             (e for e in selected_entities if str(e.get("id", "")) == str(entity_id)),
@@ -2440,11 +2623,20 @@ class IntegrationService:
                 resolved_cfg["campaign_ids"] = overrides.get("campaign_ids")
             if overrides.get("adset_ids") is not None:
                 resolved_cfg["adset_ids"] = overrides.get("adset_ids")
-        if connector_key in {"tiktok_ads", "google_ads", "ga4", "appsflyer", "firebase", "stripe"}:
+        if connector_key in {
+            "tiktok_ads",
+            "google_ads",
+            "ga4",
+            "appsflyer",
+            "firebase",
+            "stripe",
+        }:
             # only date overrides are supported for these in refresh modal
             pass
 
-        schedule_id = (schedule or {}).get("schedule_id") or f"manual#{connector_key}#{entity_id}"
+        schedule_id = (schedule or {}).get(
+            "schedule_id"
+        ) or f"manual#{connector_key}#{entity_id}"
         run = sync_runs_repo.create_run(
             schedule_id=schedule_id,
             user_id=user_id,
@@ -2499,7 +2691,10 @@ class IntegrationService:
                     message = str(ga4_err)
                     if "Google OAuth token not found" in message:
                         raise HTTPException(status_code=401, detail=message)
-                    if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in message or "insufficient" in message.lower():
+                    if (
+                        "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in message
+                        or "insufficient" in message.lower()
+                    ):
                         raise HTTPException(status_code=403, detail=message)
                     raise
             elif connector_key == "google_sheets":
@@ -2521,11 +2716,15 @@ class IntegrationService:
             elif connector_key == "firebase":
                 result = await self.fetch_firebase_data(
                     user_id=user_id,
-                    firebase_project_id=str(cfg.get("firebase_project_id") or entity_id),
+                    firebase_project_id=str(
+                        cfg.get("firebase_project_id") or entity_id
+                    ),
                     project_id=project_id,
                     start_date=dates.get("start_date") or "30daysAgo",
                     end_date=dates.get("end_date") or "today",
-                    expected_app_name=cfg.get("app_name") or account_name or str(entity_id),
+                    expected_app_name=cfg.get("app_name")
+                    or account_name
+                    or str(entity_id),
                 )
             elif connector_key == "stripe":
                 result = await self.fetch_stripe_data(
@@ -2536,7 +2735,7 @@ class IntegrationService:
                     start_date=dates.get("start_date"),
                     end_date=dates.get("end_date"),
                 )
-            elif connector_key == "postgres":
+            elif connector_key in {"postgres", "bigquery", "snowflake"}:
                 from app.services.warehouse_service import warehouse_service
 
                 result = warehouse_service.sync_entity(
@@ -2546,7 +2745,9 @@ class IntegrationService:
                     overrides={**resolved_cfg, **overrides},
                 )
             else:
-                raise HTTPException(status_code=404, detail=f"Unsupported connector: {connector_key}")
+                raise HTTPException(
+                    status_code=404, detail=f"Unsupported connector: {connector_key}"
+                )
         except Exception as err:
             sync_runs_repo.complete_run(
                 schedule_id=schedule_id,
@@ -2569,7 +2770,7 @@ class IntegrationService:
 
         # Tag freshly created asset with connector entity metadata for detail/history.
         asset = result.get("asset")
-        if asset and connector_key != "postgres":
+        if asset and connector_key not in {"postgres", "bigquery", "snowflake"}:
             stable_entity_name = self._pick_best_entity_name(
                 str(entity_id),
                 (existing_entity or {}).get("name"),
@@ -2631,7 +2832,13 @@ class IntegrationService:
         return {"success": True, **result}
 
     async def add_connector_entity_to_new_project(
-        self, user_id: str, connector_key: str, entity_id: str, project_name: str, prompt: str, asset_id: Optional[str] = None
+        self,
+        user_id: str,
+        connector_key: str,
+        entity_id: str,
+        project_name: str,
+        prompt: str,
+        asset_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         source_asset = None
         if asset_id:
@@ -2644,11 +2851,18 @@ class IntegrationService:
             ):
                 source_asset = candidate
             else:
-                raise HTTPException(status_code=404, detail="Selected sync data version was not found.")
+                raise HTTPException(
+                    status_code=404, detail="Selected sync data version was not found."
+                )
         if not source_asset:
-            source_asset = self._latest_asset_for_entity(user_id, connector_key, entity_id)
+            source_asset = self._latest_asset_for_entity(
+                user_id, connector_key, entity_id
+            )
         if not source_asset:
-            raise HTTPException(status_code=404, detail="No synced asset found for this connector entity.")
+            raise HTTPException(
+                status_code=404,
+                detail="No synced asset found for this connector entity.",
+            )
         project = projects_repo.create_project(
             user_id=user_id,
             name=project_name or "Untitled Project",
@@ -2665,7 +2879,9 @@ class IntegrationService:
             metadata={
                 "connector_key": connector_key,
                 "connector_entity_id": str(entity_id),
-                "connector_entity_name": source_asset.get("connector_entity_name", str(entity_id)),
+                "connector_entity_name": source_asset.get(
+                    "connector_entity_name", str(entity_id)
+                ),
                 "cloned_from_asset_id": str(source_asset.get("asset_id", "")),
             },
         )
@@ -2677,25 +2893,33 @@ class IntegrationService:
         """Raise TokenExpiredError if the Meta token is missing or expired."""
         status = self.get_meta_connection_status(user_id)
         if not status.get("connected"):
-            raise TokenExpiredError("meta_ads", status.get("reason", "token missing or expired"))
+            raise TokenExpiredError(
+                "meta_ads", status.get("reason", "token missing or expired")
+            )
 
     def assert_tiktok_token_valid(self, user_id: str) -> None:
         """Raise TokenExpiredError if the TikTok token is missing or expired."""
         status = self.get_tiktok_connection_status(user_id)
         if not status.get("connected"):
-            raise TokenExpiredError("tiktok", status.get("reason", "token missing or expired"))
+            raise TokenExpiredError(
+                "tiktok", status.get("reason", "token missing or expired")
+            )
 
     def assert_stripe_token_valid(self, user_id: str) -> None:
         """Raise TokenExpiredError if no Stripe connection record exists."""
         record = connected_accounts_repo.get_connection(user_id, "stripe")
         if not record:
-            raise TokenExpiredError("stripe", "Stripe connection not found — please reconnect")
+            raise TokenExpiredError(
+                "stripe", "Stripe connection not found — please reconnect"
+            )
 
     def assert_appsflyer_token_valid(self, user_id: str) -> None:
         """Raise TokenExpiredError if no AppsFlyer token exists."""
         record = connected_accounts_repo.get_connection(user_id, "appsflyer")
         if not record:
-            raise TokenExpiredError("appsflyer", "AppsFlyer token missing — please reconnect")
+            raise TokenExpiredError(
+                "appsflyer", "AppsFlyer token missing — please reconnect"
+            )
 
     def _resolve_stripe_dates(
         self,
@@ -2739,7 +2963,9 @@ class IntegrationService:
                 from_d, to_d = today - timedelta(days=30), today - timedelta(days=1)
 
         gte = int(
-            datetime(from_d.year, from_d.month, from_d.day, tzinfo=timezone.utc).timestamp()
+            datetime(
+                from_d.year, from_d.month, from_d.day, tzinfo=timezone.utc
+            ).timestamp()
         )
         lte = int(
             datetime(
@@ -2752,15 +2978,29 @@ class IntegrationService:
         """Convert a Unix timestamp to a UTC datetime string."""
         if ts is None:
             return ""
-        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        return (
+            datetime.fromtimestamp(ts, tz=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
 
-    def _fetch_stripe_charges(self, platform_key: str, stripe_account: str, created_filter: dict):
+    def _fetch_stripe_charges(
+        self, platform_key: str, stripe_account: str, created_filter: dict
+    ):
         """Fetch charges for a connected account and return (rows, headers)."""
         import stripe as stripe_sdk
 
         headers = [
-            "id", "amount", "currency", "status", "created",
-            "customer", "description", "failure_code", "refunded", "card_brand",
+            "id",
+            "amount",
+            "currency",
+            "status",
+            "created",
+            "customer",
+            "description",
+            "failure_code",
+            "refunded",
+            "card_brand",
         ]
         rows = []
         try:
@@ -2776,29 +3016,40 @@ class IntegrationService:
                     card = getattr(pmd, "card", None)
                     if card:
                         card_brand = getattr(card, "brand", "") or ""
-                rows.append([
-                    ch.id,
-                    round(ch.amount / 100, 2),
-                    (ch.currency or "").upper(),
-                    ch.status or "",
-                    self._ts_to_str(ch.created),
-                    ch.customer or "",
-                    ch.description or "",
-                    ch.failure_code or "",
-                    ch.refunded,
-                    card_brand,
-                ])
+                rows.append(
+                    [
+                        ch.id,
+                        round(ch.amount / 100, 2),
+                        (ch.currency or "").upper(),
+                        ch.status or "",
+                        self._ts_to_str(ch.created),
+                        ch.customer or "",
+                        ch.description or "",
+                        ch.failure_code or "",
+                        ch.refunded,
+                        card_brand,
+                    ]
+                )
         except stripe_sdk.error.StripeError as e:
             raise HTTPException(status_code=500, detail=f"Stripe API error: {str(e)}")
         return rows, headers
 
-    def _fetch_stripe_subscriptions(self, platform_key: str, stripe_account: str, created_filter: dict):
+    def _fetch_stripe_subscriptions(
+        self, platform_key: str, stripe_account: str, created_filter: dict
+    ):
         """Fetch subscriptions for a connected account and return (rows, headers)."""
         import stripe as stripe_sdk
 
         headers = [
-            "id", "customer", "status", "plan_amount", "plan_interval",
-            "current_period_start", "current_period_end", "created", "canceled_at",
+            "id",
+            "customer",
+            "status",
+            "plan_amount",
+            "plan_interval",
+            "current_period_start",
+            "current_period_end",
+            "created",
+            "canceled_at",
         ]
         rows = []
         try:
@@ -2810,28 +3061,44 @@ class IntegrationService:
                 stripe_account=stripe_account,
             ).auto_paging_iter():
                 plan = getattr(sub, "plan", None)
-                plan_amount = round(plan.amount / 100, 2) if plan and plan.amount is not None else ""
+                plan_amount = (
+                    round(plan.amount / 100, 2)
+                    if plan and plan.amount is not None
+                    else ""
+                )
                 plan_interval = plan.interval if plan else ""
-                rows.append([
-                    sub.id,
-                    sub.customer or "",
-                    sub.status or "",
-                    plan_amount,
-                    plan_interval,
-                    self._ts_to_str(sub.current_period_start),
-                    self._ts_to_str(sub.current_period_end),
-                    self._ts_to_str(sub.created),
-                    self._ts_to_str(getattr(sub, "canceled_at", None)),
-                ])
+                rows.append(
+                    [
+                        sub.id,
+                        sub.customer or "",
+                        sub.status or "",
+                        plan_amount,
+                        plan_interval,
+                        self._ts_to_str(sub.current_period_start),
+                        self._ts_to_str(sub.current_period_end),
+                        self._ts_to_str(sub.created),
+                        self._ts_to_str(getattr(sub, "canceled_at", None)),
+                    ]
+                )
         except stripe_sdk.error.StripeError as e:
             raise HTTPException(status_code=500, detail=f"Stripe API error: {str(e)}")
         return rows, headers
 
-    def _fetch_stripe_customers(self, platform_key: str, stripe_account: str, created_filter: dict):
+    def _fetch_stripe_customers(
+        self, platform_key: str, stripe_account: str, created_filter: dict
+    ):
         """Fetch customers for a connected account and return (rows, headers)."""
         import stripe as stripe_sdk
 
-        headers = ["id", "email", "name", "created", "currency", "balance", "description"]
+        headers = [
+            "id",
+            "email",
+            "name",
+            "created",
+            "currency",
+            "balance",
+            "description",
+        ]
         rows = []
         try:
             for c in stripe_sdk.Customer.list(
@@ -2841,15 +3108,17 @@ class IntegrationService:
                 stripe_account=stripe_account,
             ).auto_paging_iter():
                 balance = c.balance if c.balance is not None else 0
-                rows.append([
-                    c.id,
-                    c.email or "",
-                    c.name or "",
-                    self._ts_to_str(c.created),
-                    c.currency or "",
-                    round(balance / 100, 2),
-                    c.description or "",
-                ])
+                rows.append(
+                    [
+                        c.id,
+                        c.email or "",
+                        c.name or "",
+                        self._ts_to_str(c.created),
+                        c.currency or "",
+                        round(balance / 100, 2),
+                        c.description or "",
+                    ]
+                )
         except stripe_sdk.error.StripeError as e:
             raise HTTPException(status_code=500, detail=f"Stripe API error: {str(e)}")
         return rows, headers
@@ -2873,18 +3142,28 @@ class IntegrationService:
         stripe_account = record["access_token"]
         platform_key = config.stripe.secret_key
 
-        from_d, to_d, gte, lte = self._resolve_stripe_dates(date_preset, start_date, end_date)
+        from_d, to_d, gte, lte = self._resolve_stripe_dates(
+            date_preset, start_date, end_date
+        )
         created_filter = {"gte": gte, "lte": lte}
 
         try:
             if report_type == "charges":
-                rows, headers = self._fetch_stripe_charges(platform_key, stripe_account, created_filter)
+                rows, headers = self._fetch_stripe_charges(
+                    platform_key, stripe_account, created_filter
+                )
             elif report_type == "subscriptions":
-                rows, headers = self._fetch_stripe_subscriptions(platform_key, stripe_account, created_filter)
+                rows, headers = self._fetch_stripe_subscriptions(
+                    platform_key, stripe_account, created_filter
+                )
             elif report_type == "customers":
-                rows, headers = self._fetch_stripe_customers(platform_key, stripe_account, created_filter)
+                rows, headers = self._fetch_stripe_customers(
+                    platform_key, stripe_account, created_filter
+                )
             else:
-                raise HTTPException(status_code=400, detail=f"Unknown report_type: {report_type}")
+                raise HTTPException(
+                    status_code=400, detail=f"Unknown report_type: {report_type}"
+                )
         except stripe_sdk.error.PermissionError:
             connected_accounts_repo.delete_connection(user_id, "stripe")
             raise HTTPException(
@@ -2930,36 +3209,40 @@ class IntegrationService:
         """Fetch Google Ads accounts using Clerk Token and return them with sourceType."""
         access_token = await self._get_google_access_token(user_id)
         if not access_token:
-            return {"success": False, "error": "Google account not connected or token expired.", "ad_accounts": []}
-            
+            return {
+                "success": False,
+                "error": "Google account not connected or token expired.",
+                "ad_accounts": [],
+            }
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                headers = {
-                    "Authorization": f"Bearer {access_token}"
-                }
+                headers = {"Authorization": f"Bearer {access_token}"}
                 # Check if we have developer token configured in yaml config
                 if config.google_ads and config.google_ads.developer_token:
                     headers["developer-token"] = config.google_ads.developer_token
-                    
+
                 resp = await client.get(
                     "https://googleads.googleapis.com/v23/customers:listAccessibleCustomers",
-                    headers=headers
+                    headers=headers,
                 )
-                
+
                 if resp.status_code == 200:
                     data = resp.json()
                     resource_names = data.get("resourceNames", [])
                     accounts = []
                     for c_name in resource_names:
                         customer_id = c_name.split("/")[-1]
-                        accounts.append({
-                            "id": customer_id,
-                            "name": f"Ad Account {customer_id}",
-                            "account_status": "UNKNOWN",
-                            "currency": "USD",
-                            "timezone_name": "UTC",
-                            "source_type": "standard",
-                        })
+                        accounts.append(
+                            {
+                                "id": customer_id,
+                                "name": f"Ad Account {customer_id}",
+                                "account_status": "UNKNOWN",
+                                "currency": "USD",
+                                "timezone_name": "UTC",
+                                "source_type": "standard",
+                            }
+                        )
                     return {"success": True, "ad_accounts": accounts}
                 else:
                     # Any non-200 from Google Ads (401 insufficient scope, 403 permission denied,
@@ -2974,23 +3257,35 @@ class IntegrationService:
             return {"success": False, "ad_accounts": [], "error": str(e)}
 
     async def fetch_google_ads_data(
-        self, user_id: str, ad_account_id: str, project_id: str, 
-        start_date: str, end_date: str, account_name: str
+        self,
+        user_id: str,
+        ad_account_id: str,
+        project_id: str,
+        start_date: str,
+        end_date: str,
+        account_name: str,
     ) -> Dict[str, Any]:
         """Fetch Google Ads Campaign data and save it as an asset."""
         # Mocking data generation
-        headers = ["Campaign ID", "Campaign Name", "Impressions", "Clicks", "Cost", "Conversions"]
+        headers = [
+            "Campaign ID",
+            "Campaign Name",
+            "Impressions",
+            "Clicks",
+            "Cost",
+            "Conversions",
+        ]
         rows = [
             ["1001", "Q3 Promo Campaign", "15000", "450", "300.50", "12"],
-            ["1002", "Always On Search", "32000", "1200", "850.00", "45"]
+            ["1002", "Always On Search", "32000", "1200", "850.00", "45"],
         ]
-        
+
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(headers)
         writer.writerows(rows)
         csv_content = output.getvalue().encode("utf-8")
-        
+
         asset_info = self._save_integration_asset(
             user_id=user_id,
             project_id=project_id,
@@ -2999,7 +3294,7 @@ class IntegrationService:
             asset_type="integration_google_ads",
             extension="csv",
             row_count=len(rows),
-            column_count=len(headers)
+            column_count=len(headers),
         )
         connected_accounts_repo.append_selected_entity(
             user_id=user_id,
@@ -3019,13 +3314,13 @@ class IntegrationService:
                 "connector_entity_name": account_name or f"Account {ad_account_id}",
             },
         )
-        
+
         return {
             "success": True,
             "message": "Google Ads data synced successfully",
             "asset": asset_info,
             "row_count": len(rows),
-            "column_count": len(headers)
+            "column_count": len(headers),
         }
 
     # ── Firebase ─────────────────────────────────────────────────────────────
@@ -3034,56 +3329,70 @@ class IntegrationService:
         """Fetch Firebase Projects using Clerk Token."""
         access_token = await self._get_google_access_token(user_id)
         if not access_token:
-            return {"success": False, "error": "Google account not connected or token expired.", "projects": []}
-            
+            return {
+                "success": False,
+                "error": "Google account not connected or token expired.",
+                "projects": [],
+            }
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     "https://firebase.googleapis.com/v1beta1/projects",
-                    headers={"Authorization": f"Bearer {access_token}"}
+                    headers={"Authorization": f"Bearer {access_token}"},
                 )
-                
+
                 projects = []
                 if resp.status_code == 200:
                     data = resp.json()
                     projects = data.get("results", [])
                 else:
-                    return {"success": False, "error": f"Firebase API Error: {resp.text}", "projects": []}
-                
+                    return {
+                        "success": False,
+                        "error": f"Firebase API Error: {resp.text}",
+                        "projects": [],
+                    }
+
                 transformed = [
                     {
                         "id": p.get("projectId"),
                         "name": p.get("displayName", p.get("projectId")),
-                        "source_type": "project"
+                        "source_type": "project",
                     }
                     for p in projects
                 ]
                 return {"success": True, "projects": transformed}
-                
+
         except Exception as e:
             logger.error(f"Failed to fetch Firebase projects: {e}")
             return {"success": False, "projects": [], "error": str(e)}
 
     async def fetch_firebase_data(
-        self, user_id: str, firebase_project_id: str, project_id: str, 
-        start_date: str, end_date: str, expected_app_name: str
+        self,
+        user_id: str,
+        firebase_project_id: str,
+        project_id: str,
+        start_date: str,
+        end_date: str,
+        expected_app_name: str,
     ) -> Dict[str, Any]:
         """Fetch Firebase Analytics data via GA4 representation and save as asset."""
         # Mocking Firebase Analytics data
         headers = ["Date", "Event Name", "Event Count", "Active Users"]
         rows = [
             ["2023-10-01", "app_open", "1500", "800"],
-            ["2023-10-01", "in_app_purchase", "45", "40"]
+            ["2023-10-01", "in_app_purchase", "45", "40"],
         ]
-        
+
         import io
         import csv
+
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(headers)
         writer.writerows(rows)
         csv_content = output.getvalue().encode("utf-8")
-        
+
         asset_info = self._save_integration_asset(
             user_id=user_id,
             project_id=project_id,
@@ -3092,7 +3401,7 @@ class IntegrationService:
             asset_type="integration_firebase",
             extension="csv",
             row_count=len(rows),
-            column_count=len(headers)
+            column_count=len(headers),
         )
         connected_accounts_repo.append_selected_entity(
             user_id=user_id,
@@ -3112,13 +3421,14 @@ class IntegrationService:
                 "connector_entity_name": expected_app_name or str(firebase_project_id),
             },
         )
-        
+
         return {
             "success": True,
             "message": "Firebase Analytics data synced successfully",
             "asset": asset_info,
             "row_count": len(rows),
-            "column_count": len(headers)
+            "column_count": len(headers),
         }
+
 
 integration_service = IntegrationService()

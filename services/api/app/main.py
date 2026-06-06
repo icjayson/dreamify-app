@@ -198,7 +198,14 @@ def create_app():
         logger.info("Notifications router registered successfully")
     except ImportError as e:
         logger.error(f"Failed to import Notifications router: {e}")
-    
+
+    try:
+        from app.api.route_modules.cms import router as cms_router
+        app.include_router(cms_router, prefix="/api/v1", tags=["cms"])
+        logger.info("CMS router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import CMS router: {e}")
+
     # Root endpoint
     @app.get("/", tags=["root"])
     async def root():

@@ -59,8 +59,6 @@ def require_admin(request: Request) -> dict:
     Ensures zero extra latency by avoiding Clerk API calls.
     """
     payload = clerk_auth_jwt(request)
-    import json
-    logger.info(f"DEBUG PAYLOAD: {json.dumps(payload, indent=2)}")
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(

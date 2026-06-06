@@ -21,6 +21,7 @@ class DynamoTables:
     sync_schedules: str = config.aws.dynamodb.SYNC_SCHEDULES_TABLE
     sync_runs: str = config.aws.dynamodb.SYNC_RUNS_TABLE
     notifications: str = config.aws.dynamodb.NOTIFICATIONS_TABLE
+    blog_posts: str = config.aws.dynamodb.BLOG_POSTS_TABLE
 
 
 tables = DynamoTables()

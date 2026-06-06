@@ -210,6 +210,37 @@ def get_table_specs() -> Dict[str, Dict]:
                 }
             ],
         },
+        tables.blog_posts: {
+            # Global blog: PK is post_id (uuid). slug_index for public detail
+            # lookups; listing_index (constant gsi_pk + created_at) returns every
+            # post — drafts included — ordered newest-first (status filtered in app).
+            "KeySchema": [
+                {"AttributeName": "post_id", "KeyType": "HASH"},
+            ],
+            "AttributeDefinitions": [
+                {"AttributeName": "post_id", "AttributeType": "S"},
+                {"AttributeName": "slug", "AttributeType": "S"},
+                {"AttributeName": "gsi_pk", "AttributeType": "S"},
+                {"AttributeName": "created_at", "AttributeType": "S"},
+            ],
+            "GlobalSecondaryIndexes": [
+                {
+                    "IndexName": "slug_index",
+                    "KeySchema": [
+                        {"AttributeName": "slug", "KeyType": "HASH"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                },
+                {
+                    "IndexName": "listing_index",
+                    "KeySchema": [
+                        {"AttributeName": "gsi_pk", "KeyType": "HASH"},
+                        {"AttributeName": "created_at", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                },
+            ],
+        },
     }
 
 

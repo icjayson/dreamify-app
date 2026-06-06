@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useTelegramIntegration } from "@/hooks/useTelegramIntegration";
+import { TelegramLogo } from "./ChatPlatformLogos";
 import { TelegramConnectModal } from "./TelegramConnectModal";
 
 export function TelegramIntegrationCard() {
@@ -92,13 +93,5 @@ export function TelegramIntegrationCard() {
         isConnected={workspace.connected}
       />
     </Card>
-  );
-}
-
-function TelegramLogo() {
-  return (
-    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="white" xmlns="http://www.w3.org/2000/svg">
-      <path d="M11.944 0A12 12 0 1 0 23.888 12 12 12 0 0 0 11.944 0zm5.95 7.674l-2.014 9.49c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.877.73z" />
-    </svg>
   );
 }

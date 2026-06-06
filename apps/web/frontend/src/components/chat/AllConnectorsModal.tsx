@@ -92,6 +92,8 @@ export default function AllConnectorsModal() {
       const overview = await integrationService.fetchConnectorsOverview();
       if (overview.success) {
         const postgres = overview.connectors.find((connector) => connector.connector_key === 'postgres');
+        const bigquery = overview.connectors.find((connector) => connector.connector_key === 'bigquery');
+        const snowflake = overview.connectors.find((connector) => connector.connector_key === 'snowflake');
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results['PostgreSQL'] = {
@@ -100,6 +102,24 @@ export default function AllConnectorsModal() {
           };
         } else {
           results['PostgreSQL'] = { connected: false };
+        }
+        if (bigquery?.connected) {
+          const tableCount = bigquery.selected_entities?.length || 0;
+          results['BigQuery'] = {
+            connected: true,
+            info: tableCount > 0 ? `${tableCount} table${tableCount === 1 ? '' : 's'}` : 'BigQuery',
+          };
+        } else {
+          results['BigQuery'] = { connected: false };
+        }
+        if (snowflake?.connected) {
+          const tableCount = snowflake.selected_entities?.length || 0;
+          results['Snowflake'] = {
+            connected: true,
+            info: tableCount > 0 ? `${tableCount} table${tableCount === 1 ? '' : 's'}` : 'Snowflake',
+          };
+        } else {
+          results['Snowflake'] = { connected: false };
         }
       }
 
@@ -126,7 +146,9 @@ export default function AllConnectorsModal() {
       else if (connectorName === 'Stripe') setStripeModalOpen(true);
       else if (connectorName === 'Google Ads') setGoogleAdsModalOpen(true);
       else if (connectorName === 'Firebase') setFirebaseModalOpen(true);
-      else if (connectorName === 'PostgreSQL') setWarehouseModalOpen(true);
+      else if (connectorName === 'PostgreSQL') setWarehouseModalOpen(true, 'postgres');
+      else if (connectorName === 'BigQuery') setWarehouseModalOpen(true, 'bigquery');
+      else if (connectorName === 'Snowflake') setWarehouseModalOpen(true, 'snowflake');
     }, 0);
   };
 

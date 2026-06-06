@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Copy, ExternalLink, Loader2 } from "lucide-react";
-import { WhatsAppLogo } from "./WhatsAppIntegrationCard";
+import { WhatsAppLogo } from "./ChatPlatformLogos";
 import {
   Dialog,
   DialogContent,

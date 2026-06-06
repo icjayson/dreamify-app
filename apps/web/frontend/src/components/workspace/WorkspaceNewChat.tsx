@@ -388,7 +388,9 @@ export default function WorkspaceNewChat() {
     if (connector.name === "Stripe") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setStripeModalOpen(true), 0); return; }
     if (connector.name === "Google Ads") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setGoogleAdsModalOpen(true), 0); return; }
     if (connector.name === "Firebase") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setFirebaseModalOpen(true), 0); return; }
-    if (connector.name === "PostgreSQL") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true), 0); return; }
+    if (connector.name === "PostgreSQL") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, "postgres"), 0); return; }
+    if (connector.name === "BigQuery") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, "bigquery"), 0); return; }
+    if (connector.name === "Snowflake") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, "snowflake"), 0); return; }
     if (connector.isActive) {
       setSelectedDataSource(connector.name);
       setDropdownOpen(false);

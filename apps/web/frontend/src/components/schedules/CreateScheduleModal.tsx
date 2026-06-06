@@ -80,6 +80,8 @@ const CONNECTOR_TO_PROVIDER: Record<string, ProviderKey> = {
   appsflyer: 'appsflyer',
   stripe: 'stripe',
   postgres: 'warehouse',
+  bigquery: 'warehouse',
+  snowflake: 'warehouse',
 };
 
 const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
@@ -201,8 +203,9 @@ async function fetchProviderEntities(provider: ProviderKey): Promise<ConnectorSe
   if (provider === 'warehouse') {
     const response = await integrationService.fetchConnectorsOverview();
     if (!response.success) throw new Error(response.error || 'Failed to load warehouse tables.');
-    const postgres = response.connectors.find((connector) => connector.connector_key === 'postgres');
-    return postgres?.selected_entities || [];
+    return response.connectors
+      .filter((connector) => ['postgres', 'bigquery', 'snowflake'].includes(connector.connector_key))
+      .flatMap((connector) => connector.selected_entities || []);
   }
 
   return STRIPE_REPORT_ENTITIES;
@@ -249,27 +252,42 @@ export function CreateScheduleModal({
   const hasDefaultConnectorConfig = Object.keys(defaultConnectorConfig).length > 0;
 
   const sourceOptions = useMemo(() => {
-    return modalConnectorOverview
-      .map((connector) => {
-        const mappedProvider = CONNECTOR_TO_PROVIDER[connector.connector_key];
-        if (!mappedProvider || !connector.connected) return null;
-        const connectorEntities = connector.selected_entities || [];
-        const entities = connector.connector_key === 'stripe' && connectorEntities.length === 0
-          ? STRIPE_REPORT_ENTITIES
-          : connectorEntities;
-        return {
-          connectorKey: connector.connector_key,
-          provider: mappedProvider,
-          label: connector.display_name,
-          entities,
+    const grouped = new Map<ProviderKey, {
+      connectorKey: string;
+      provider: ProviderKey;
+      label: string;
+      entities: ConnectorSelectedEntity[];
+    }>();
+
+    modalConnectorOverview.forEach((connector) => {
+      const mappedProvider = CONNECTOR_TO_PROVIDER[connector.connector_key];
+      if (!mappedProvider || !connector.connected) return;
+      const connectorEntities = connector.selected_entities || [];
+      const entities = connector.connector_key === 'stripe' && connectorEntities.length === 0
+        ? STRIPE_REPORT_ENTITIES
+        : connectorEntities;
+
+      if (mappedProvider === 'warehouse') {
+        const current = grouped.get('warehouse') || {
+          connectorKey: 'warehouse',
+          provider: 'warehouse',
+          label: 'Warehouse',
+          entities: [],
         };
-      })
-      .filter(Boolean) as Array<{
-        connectorKey: string;
-        provider: ProviderKey;
-        label: string;
-        entities: ConnectorSelectedEntity[];
-      }>;
+        current.entities = mergeEntities(current.entities, entities);
+        grouped.set('warehouse', current);
+        return;
+      }
+
+      grouped.set(mappedProvider, {
+        connectorKey: connector.connector_key,
+        provider: mappedProvider,
+        label: connector.display_name,
+        entities,
+      });
+    });
+
+    return Array.from(grouped.values());
   }, [modalConnectorOverview]);
 
   const selectedSource = sourceOptions.find((source) => source.provider === provider);
@@ -350,13 +368,25 @@ export function CreateScheduleModal({
         if (entities.length === 0) return;
 
         const connectorKey = PROVIDER_TO_CONNECTOR[provider];
-        setModalConnectorOverview((prev) =>
-          prev.map((connector) =>
+        setModalConnectorOverview((prev) => {
+          if (provider === 'warehouse') {
+            return prev.map((connector) => {
+              if (!['postgres', 'bigquery', 'snowflake'].includes(connector.connector_key)) return connector;
+              const connectorEntities = entities.filter((entity) =>
+                String(entity.connector_key || 'postgres') === connector.connector_key
+              );
+              return {
+                ...connector,
+                selected_entities: mergeEntities(connector.selected_entities || [], connectorEntities),
+              };
+            });
+          }
+          return prev.map((connector) =>
             connector.connector_key === connectorKey
               ? { ...connector, selected_entities: mergeEntities(connector.selected_entities || [], entities) }
               : connector
-          )
-        );
+          );
+        });
         setSelectedEntityId((current) => current || entities[0]?.id || '');
       })
       .catch((err) => {

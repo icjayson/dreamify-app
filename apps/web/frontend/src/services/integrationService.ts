@@ -139,12 +139,15 @@ export interface WarehouseColumn {
   data_type?: string;
   native_type?: string;
   nullable?: boolean;
+  mode?: string;
+  description?: string;
 }
 
 export interface WarehouseTable {
   schema: string;
   name: string;
   type?: string;
+  row_count?: number;
   columns: WarehouseColumn[];
 }
 
@@ -158,18 +161,36 @@ export interface WarehouseSchemaSnapshot {
   schemas: WarehouseSchema[];
   table_count: number;
   schema_fingerprint?: string;
+  project_id?: string;
+  location?: string;
+  account?: string;
+  warehouse?: string;
+  database?: string;
+  role?: string;
 }
+
+export type WarehouseConnectorKey = 'postgres' | 'bigquery' | 'snowflake';
 
 export interface WarehouseConnection {
   connection_id: string;
-  connector_key: 'postgres';
-  database_type: 'postgres';
+  connector_key: WarehouseConnectorKey;
+  database_type: WarehouseConnectorKey;
   display_name: string;
   host?: string;
   port?: string;
   database?: string;
   username?: string;
+  account?: string;
+  warehouse?: string;
+  role?: string;
   include_schemas: string[];
+  included_schemas?: string[];
+  project_id?: string;
+  location?: string;
+  included_datasets?: string[];
+  service_account_email?: string;
+  max_billing_bytes?: number;
+  max_assigned_bytes?: number;
   source_timezone: string;
   schema_snapshot: WarehouseSchemaSnapshot;
   created_at?: string;
@@ -183,11 +204,25 @@ export interface WarehouseConnectionsResponse {
 }
 
 export interface WarehouseQuickConnectRequest {
-  connector_key?: 'postgres';
-  connection_uri: string;
+  connector_key?: WarehouseConnectorKey;
+  connection_uri?: string;
   display_name?: string;
   include_schemas?: string[];
   source_timezone?: string;
+  project_id?: string;
+  location?: string;
+  service_account_json?: string;
+  included_datasets?: string[];
+  max_billing_bytes?: number;
+  account?: string;
+  username?: string;
+  private_key_pem?: string;
+  private_key_passphrase?: string;
+  warehouse?: string;
+  database?: string;
+  role?: string;
+  included_schemas?: string[];
+  max_assigned_bytes?: number;
 }
 
 export interface WarehouseSampleResponse {
@@ -222,13 +257,27 @@ class IntegrationService {
   async quickConnectWarehouse(payload: WarehouseQuickConnectRequest): Promise<WarehouseConnection> {
     const res = await api.post<WarehouseConnection>(`${this.baseUrl}/warehouse/connections/quick-connect`, {
       connector_key: payload.connector_key || 'postgres',
-      connection_uri: payload.connection_uri,
+      connection_uri: payload.connection_uri || '',
       display_name: payload.display_name || '',
       include_schemas: payload.include_schemas || [],
       source_timezone: payload.source_timezone || 'UTC',
+      project_id: payload.project_id || '',
+      location: payload.location || '',
+      service_account_json: payload.service_account_json || '',
+      included_datasets: payload.included_datasets || [],
+      max_billing_bytes: payload.max_billing_bytes,
+      account: payload.account || '',
+      username: payload.username || '',
+      private_key_pem: payload.private_key_pem || '',
+      private_key_passphrase: payload.private_key_passphrase || '',
+      warehouse: payload.warehouse || '',
+      database: payload.database || '',
+      role: payload.role || '',
+      included_schemas: payload.included_schemas || [],
+      max_assigned_bytes: payload.max_assigned_bytes,
     });
     if (res.success && res.data) return res.data;
-    throw new Error(res.error || 'Failed to connect PostgreSQL warehouse');
+    throw new Error(res.error || 'Failed to connect warehouse');
   }
 
   async fetchWarehouseConnections(): Promise<WarehouseConnectionsResponse> {

@@ -380,7 +380,7 @@ export default function ConnectorEntityDetailView(props: Props) {
         entityName,
       };
     }
-    if (connectorKey === "postgres") {
+    if (connectorKey === "postgres" || connectorKey === "bigquery" || connectorKey === "snowflake") {
       const entity = connectorDetail?.entity;
       const [connectionIdFromId, tablePath = ""] = entityId.split(":");
       const dotIndex = tablePath.indexOf(".");
@@ -392,7 +392,7 @@ export default function ConnectorEntityDetailView(props: Props) {
       return {
         provider: "warehouse" as ProviderKey,
         config: {
-          connector_key: "postgres",
+          connector_key: connectorKey,
           connection_id: connectionId,
           schema,
           table,

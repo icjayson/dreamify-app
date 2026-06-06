@@ -12,6 +12,7 @@ import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
 import PricingPage from "./pages/Pricing";
 import ProductDataConnectorsPage from "./pages/ProductDataConnectorsPage";
+import ProductWorkspaceAgentsPage from "./pages/ProductWorkspaceAgentsPage";
 import FinancePage from "./pages/Finance";
 import PrivacyPage from "./pages/Privacy";
 import TermsPage from "./pages/Terms";
@@ -136,6 +137,7 @@ const AppContent = () => {
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/product" element={<Navigate to="/product/data-connectors" replace />} />
         <Route path="/product/data-connectors" element={<ProductDataConnectorsPage />} />
+        <Route path="/product/workspace-agents" element={<ProductWorkspaceAgentsPage />} />
         <Route path="/finance" element={<FinancePage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />

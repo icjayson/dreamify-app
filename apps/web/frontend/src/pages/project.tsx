@@ -598,7 +598,9 @@ export default function ProjectPage() {
       'google-sheets': store.setGoogleSheetsModalOpen,
       'google-ads': store.setGoogleAdsModalOpen,
       'firebase': store.setFirebaseModalOpen,
-      'postgres': store.setWarehouseModalOpen,
+      'postgres': (open: boolean) => store.setWarehouseModalOpen(open, 'postgres'),
+      'bigquery': (open: boolean) => store.setWarehouseModalOpen(open, 'bigquery'),
+      'snowflake': (open: boolean) => store.setWarehouseModalOpen(open, 'snowflake'),
     };
 
     const openModal = CONNECTOR_MODAL_MAP[connectorParam];
@@ -631,7 +633,7 @@ export default function ProjectPage() {
       integration_tiktok: 'TikTok Ads',
       integration_appsflyer: 'AppsFlyer',
       integration_stripe: 'Stripe',
-      warehouse_extract: 'PostgreSQL',
+      warehouse_extract: 'Warehouse',
     };
 
     fileService.getAsset(analyzeAssetId).then((res) => {

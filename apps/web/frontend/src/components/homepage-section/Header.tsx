@@ -1,4 +1,4 @@
-import { LogIn, User as UserIcon, ChevronsUpDown, LogOut, PanelLeftOpen, Menu, Sparkles } from "lucide-react";
+import { Bot, ChevronDown, LogIn, User as UserIcon, ChevronsUpDown, LogOut, PanelLeftOpen, Menu, PlugZap, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, useUser, useClerk, UserProfile } from "@clerk/clerk-react";
@@ -17,10 +17,12 @@ const Header = () => {
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
   const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans" | "preferences">("pricing");
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const productMenuRef = useRef<HTMLDivElement>(null);
   const { user } = useUser();
   const { signOut } = useClerk();
   const [showProjectsBtn, setShowProjectsBtn] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [productMenuOpen, setProductMenuOpen] = useState(false);
   const { creditsRemaining } = useSubscription();
   const { resolvedTheme } = useTheme();
   const logoHorizon = resolvedTheme === 'dark' ? "/logo-horizon.png" : "/logo-horizon-dark.png";
@@ -79,6 +81,20 @@ const Header = () => {
   }, [userMenuOpen]);
 
   useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (productMenuRef.current && !productMenuRef.current.contains(event.target as Node)) {
+        setProductMenuOpen(false);
+      }
+    };
+    if (productMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [productMenuOpen]);
+
+  useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && userProfileOpen) {
         setUserProfileOpen(false);
@@ -97,6 +113,11 @@ const Header = () => {
   const avatarUrl = user?.imageUrl;
 
   const toggleUserMenu = () => setUserMenuOpen(prev => !prev);
+  const navigateToProduct = (path: string) => {
+    setProductMenuOpen(false);
+    setMobileNavOpen(false);
+    navigate(path);
+  };
   const handleManageAccount = () => {
     setUserMenuOpen(false);
     setUserProfileOpen(true);
@@ -220,12 +241,53 @@ const Header = () => {
               </button>
             </div>
             <nav className="hidden md:flex items-center space-x-4 ml-8">
-              <button
-                onClick={() => navigate("/product/data-connectors")}
-                className={navItemClass(isProductActive)}
-              >
-                Product
-              </button>
+              <div className="relative" ref={productMenuRef}>
+                <button
+                  onClick={() => setProductMenuOpen((prev) => !prev)}
+                  className={cn(navItemClass(isProductActive), "inline-flex items-center gap-1")}
+                  aria-expanded={productMenuOpen}
+                  aria-haspopup="menu"
+                >
+                  Product
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", productMenuOpen && "rotate-180")} />
+                </button>
+                <div
+                  className={cn(
+                    "absolute left-0 top-full z-50 mt-4 w-64 rounded-lg border border-border bg-muted/95 p-2 shadow-xl backdrop-blur-xl transition-all duration-150",
+                    productMenuOpen ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-2 opacity-0"
+                  )}
+                  role="menu"
+                >
+                  <button
+                    onClick={() => navigateToProduct("/product/data-connectors")}
+                    className={cn(
+                      "flex w-full items-start gap-3 rounded-md p-3 text-left transition-colors hover:bg-background",
+                      location.pathname === "/product/data-connectors" && "bg-primary/10"
+                    )}
+                    role="menuitem"
+                  >
+                    <PlugZap className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+                    <span>
+                      <span className="block text-sm font-semibold text-foreground">Data Connectors</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">Connect live sources for AI dashboards.</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => navigateToProduct("/product/workspace-agents")}
+                    className={cn(
+                      "flex w-full items-start gap-3 rounded-md p-3 text-left transition-colors hover:bg-background",
+                      location.pathname === "/product/workspace-agents" && "bg-primary/10"
+                    )}
+                    role="menuitem"
+                  >
+                    <Bot className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+                    <span>
+                      <span className="block text-sm font-semibold text-foreground">Workspace Agents</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">Ask and share insights in team chat.</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
               <button
                 onClick={() => navigate("/about")}
                 className={navItemClass(location.pathname === "/about")}
@@ -401,12 +463,23 @@ const Header = () => {
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <SheetContent side="left" className="md:hidden w-[60vw] max-w-xs bg-muted border-r border-border p-4 z-[300]" onOpenAutoFocus={(e) => e.preventDefault()}>
             <div className="space-y-2">
-              <button
-                onClick={() => { setMobileNavOpen(false); navigate('/product/data-connectors'); }}
-                className={mobileNavItemClass(isProductActive)}
-              >
-                Product
-              </button>
+              <div className="rounded-md border border-border/60 bg-background/40 p-2">
+                <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Product</p>
+                <button
+                  onClick={() => navigateToProduct('/product/data-connectors')}
+                  className={cn(mobileNavItemClass(location.pathname === "/product/data-connectors"), "flex items-center gap-2")}
+                >
+                  <PlugZap className="h-4 w-4 text-primary" />
+                  Data Connectors
+                </button>
+                <button
+                  onClick={() => navigateToProduct('/product/workspace-agents')}
+                  className={cn(mobileNavItemClass(location.pathname === "/product/workspace-agents"), "flex items-center gap-2")}
+                >
+                  <Bot className="h-4 w-4 text-primary" />
+                  Workspace Agents
+                </button>
+              </div>
               <button
                 onClick={() => { setMobileNavOpen(false); navigate('/about'); }}
                 className={mobileNavItemClass(location.pathname === "/about")}

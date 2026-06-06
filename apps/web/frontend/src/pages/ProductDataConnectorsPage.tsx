@@ -100,7 +100,9 @@ export default function ProductDataConnectorsPage() {
       stripe: () => setStripeModalOpen(true),
       google_ads: () => setGoogleAdsModalOpen(true),
       firebase: () => setFirebaseModalOpen(true),
-      postgres: () => setWarehouseModalOpen(true),
+      postgres: () => setWarehouseModalOpen(true, "postgres"),
+      bigquery: () => setWarehouseModalOpen(true, "bigquery"),
+      snowflake: () => setWarehouseModalOpen(true, "snowflake"),
     };
 
     if (!target) {

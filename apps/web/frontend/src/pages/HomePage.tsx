@@ -197,7 +197,9 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
       "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
-      "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" }
+      "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" },
+      "BigQuery": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
+      "Snowflake": { bg: "bg-cyan-600", border: "border-cyan-500", text: "text-white", hover: "hover:bg-cyan-700" }
     };
     return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
   };
@@ -602,7 +604,17 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     }
     if (connector.name === 'PostgreSQL') {
       setDropdownOpen(false);
-      setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true), 0);
+      setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, 'postgres'), 0);
+      return;
+    }
+    if (connector.name === 'BigQuery') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, 'bigquery'), 0);
+      return;
+    }
+    if (connector.name === 'Snowflake') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, 'snowflake'), 0);
       return;
     }
 

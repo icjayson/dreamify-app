@@ -22,7 +22,9 @@ export type ConnectorModalTarget =
   | "stripe"
   | "google_ads"
   | "firebase"
-  | "postgres";
+  | "postgres"
+  | "bigquery"
+  | "snowflake";
 
 export interface ConnectorItem {
   name: string;
@@ -176,6 +178,27 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "postgres",
   },
-  { name: "Snowflake",              icon: "/snowflake.png",                            category: "Operations & Database" },
+  {
+    name: "BigQuery",
+    icon: "/bigquery.svg",
+    isActive: true,
+    category: "Operations & Database",
+    connectorKey: "bigquery",
+    productDescription: "Connect BigQuery datasets with schema-aware bounded extracts.",
+    productCategory: "Databases",
+    showOnProductPage: true,
+    modalTarget: "bigquery",
+  },
+  {
+    name: "Snowflake",
+    icon: "/snowflake.png",
+    isActive: true,
+    category: "Operations & Database",
+    connectorKey: "snowflake",
+    productDescription: "Sync governed Snowflake tables with schema-aware bounded extracts.",
+    productCategory: "Databases",
+    showOnProductPage: true,
+    modalTarget: "snowflake",
+  },
   { name: "Oracle",                 icon: "/oracle.png",                               category: "Operations & Database" },
 ];

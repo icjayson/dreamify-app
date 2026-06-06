@@ -84,6 +84,8 @@ function inferSourceFromTitle(title: string): string {
   if (t.includes("appsflyer")) return "AppsFlyer";
   if (t.includes("firebase")) return "Firebase";
   if (t.includes("stripe")) return "Stripe";
+  if (t.includes("bigquery")) return "BigQuery";
+  if (t.includes("snowflake")) return "Snowflake";
   if (t.includes("postgres") || t.includes("warehouse")) return "PostgreSQL";
   return "CSV";
 }
@@ -489,7 +491,11 @@ export default function WorkspacePage() {
     } else if (connectorName === 'Firebase') {
       setFirebaseModalOpen(true);
     } else if (connectorName === 'PostgreSQL') {
-      setWarehouseModalOpen(true);
+      setWarehouseModalOpen(true, "postgres");
+    } else if (connectorName === 'BigQuery') {
+      setWarehouseModalOpen(true, "bigquery");
+    } else if (connectorName === 'Snowflake') {
+      setWarehouseModalOpen(true, "snowflake");
     }
   };
 
@@ -574,6 +580,8 @@ export default function WorkspacePage() {
       if (overview.success) {
         setConnectorOverview(overview.connectors);
         const postgres = overview.connectors.find((connector) => connector.connector_key === "postgres");
+        const bigquery = overview.connectors.find((connector) => connector.connector_key === "bigquery");
+        const snowflake = overview.connectors.find((connector) => connector.connector_key === "snowflake");
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results["PostgreSQL"] = {
@@ -583,9 +591,29 @@ export default function WorkspacePage() {
         } else {
           results["PostgreSQL"] = { connected: false };
         }
+        if (bigquery?.connected) {
+          const tableCount = bigquery.selected_entities?.length || 0;
+          results["BigQuery"] = {
+            connected: true,
+            info: tableCount > 0 ? `${tableCount} table${tableCount === 1 ? "" : "s"}` : "Account: BigQuery",
+          };
+        } else {
+          results["BigQuery"] = { connected: false };
+        }
+        if (snowflake?.connected) {
+          const tableCount = snowflake.selected_entities?.length || 0;
+          results["Snowflake"] = {
+            connected: true,
+            info: tableCount > 0 ? `${tableCount} table${tableCount === 1 ? "" : "s"}` : "Account: Snowflake",
+          };
+        } else {
+          results["Snowflake"] = { connected: false };
+        }
       } else {
         setConnectorOverview([]);
         results["PostgreSQL"] = { connected: false };
+        results["BigQuery"] = { connected: false };
+        results["Snowflake"] = { connected: false };
       }
       setConnectorStatus(results);
     } catch (e) {
@@ -962,7 +990,9 @@ export default function WorkspacePage() {
       'google-sheets': setGoogleSheetsModalOpen,
       'google-ads': setGoogleAdsModalOpen,
       'firebase': setFirebaseModalOpen,
-      'postgres': setWarehouseModalOpen,
+      'postgres': (open: boolean) => setWarehouseModalOpen(open, 'postgres'),
+      'bigquery': (open: boolean) => setWarehouseModalOpen(open, 'bigquery'),
+      'snowflake': (open: boolean) => setWarehouseModalOpen(open, 'snowflake'),
     };
 
     const openModal = CONNECTOR_MODAL_MAP[connectorParam];

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Database, Loader2, RefreshCw, Table2, Trash2 } from 'lucide-react';
+import { Cloud, Database, Loader2, RefreshCw, Snowflake, Table2, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   Select,
   SelectContent,
@@ -17,36 +19,64 @@ import { useChatStore } from '@/chat/useChatStore';
 import {
   integrationService,
   type WarehouseConnection,
+  type WarehouseConnectorKey,
   type WarehouseSampleResponse,
   type WarehouseTable,
 } from '@/services/integrationService';
+
+const WAREHOUSE_LABELS: Record<WarehouseConnectorKey, string> = {
+  postgres: 'PostgreSQL',
+  bigquery: 'BigQuery',
+  snowflake: 'Snowflake',
+};
 
 function tableKey(table: WarehouseTable): string {
   return `${table.schema}.${table.name}`;
 }
 
-function parseSchemaList(value: string): string[] {
+function parseList(value: string): string[] {
   return value
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
+function toPositiveNumber(value: string): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 export default function WarehouseIntegrationModal() {
   const { toast } = useToast();
   const {
     isWarehouseModalOpen: isOpen,
+    warehouseModalConnectorKey,
     setWarehouseModalOpen: setOpen,
     currentProjectId,
     addFiles,
   } = useChatStore();
 
+  const [connectorKey, setConnectorKey] = useState<WarehouseConnectorKey>(warehouseModalConnectorKey);
   const [connections, setConnections] = useState<WarehouseConnection[]>([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState('');
   const [selectedTableKey, setSelectedTableKey] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [connectionUri, setConnectionUri] = useState('');
   const [includeSchemas, setIncludeSchemas] = useState('');
+  const [bigQueryProjectId, setBigQueryProjectId] = useState('');
+  const [bigQueryLocation, setBigQueryLocation] = useState('US');
+  const [bigQueryServiceAccountJson, setBigQueryServiceAccountJson] = useState('');
+  const [includedDatasets, setIncludedDatasets] = useState('');
+  const [maxBillingBytes, setMaxBillingBytes] = useState('10737418240');
+  const [snowflakeAccount, setSnowflakeAccount] = useState('');
+  const [snowflakeUsername, setSnowflakeUsername] = useState('');
+  const [snowflakePrivateKeyPem, setSnowflakePrivateKeyPem] = useState('');
+  const [snowflakePrivateKeyPassphrase, setSnowflakePrivateKeyPassphrase] = useState('');
+  const [snowflakeWarehouse, setSnowflakeWarehouse] = useState('');
+  const [snowflakeDatabase, setSnowflakeDatabase] = useState('');
+  const [snowflakeRole, setSnowflakeRole] = useState('');
+  const [includedSchemas, setIncludedSchemas] = useState('');
+  const [maxAssignedBytes, setMaxAssignedBytes] = useState('10737418240');
   const [sourceTimezone, setSourceTimezone] = useState('UTC');
   const [rowLimit, setRowLimit] = useState('5000');
   const [selectedColumns, setSelectedColumns] = useState('');
@@ -57,24 +87,28 @@ export default function WarehouseIntegrationModal() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedConnection = connections.find((connection) => connection.connection_id === selectedConnectionId);
+  const connectorLabel = WAREHOUSE_LABELS[connectorKey];
+  const modeConnections = useMemo(
+    () => connections.filter((connection) => connection.connector_key === connectorKey),
+    [connections, connectorKey]
+  );
+  const selectedConnection = modeConnections.find((connection) => connection.connection_id === selectedConnectionId);
   const tables = useMemo(() => (
     selectedConnection?.schema_snapshot?.schemas.flatMap((schema) => schema.tables) || []
   ), [selectedConnection]);
   const selectedTable = tables.find((table) => tableKey(table) === selectedTableKey);
   const columnOptions = selectedTable?.columns || [];
+  const WarehouseIcon = connectorKey === 'bigquery' ? Cloud : connectorKey === 'snowflake' ? Snowflake : Database;
 
   const loadConnections = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await integrationService.fetchWarehouseConnections();
-      if (!response.success) throw new Error(response.error || 'Failed to load PostgreSQL connections.');
+      if (!response.success) throw new Error(response.error || 'Failed to load warehouse connections.');
       setConnections(response.connections);
-      const firstId = response.connections[0]?.connection_id || '';
-      setSelectedConnectionId((current) => current || firstId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load PostgreSQL connections.');
+      setError(err instanceof Error ? err.message : 'Failed to load warehouse connections.');
     } finally {
       setLoading(false);
     }
@@ -82,12 +116,20 @@ export default function WarehouseIntegrationModal() {
 
   useEffect(() => {
     if (isOpen) {
+      setConnectorKey(warehouseModalConnectorKey);
       void loadConnections();
     } else {
       setError(null);
       setSample(null);
     }
-  }, [isOpen]);
+  }, [isOpen, warehouseModalConnectorKey]);
+
+  useEffect(() => {
+    const currentStillVisible = modeConnections.some((connection) => connection.connection_id === selectedConnectionId);
+    if (!currentStillVisible) {
+      setSelectedConnectionId(modeConnections[0]?.connection_id || '');
+    }
+  }, [modeConnections, selectedConnectionId]);
 
   useEffect(() => {
     setSelectedTableKey(tables[0] ? tableKey(tables[0]) : '');
@@ -95,29 +137,90 @@ export default function WarehouseIntegrationModal() {
     setSample(null);
   }, [selectedConnectionId, tables]);
 
+  const handleModeChange = (value: string) => {
+    if (!value) return;
+    setConnectorKey(value as WarehouseConnectorKey);
+    setError(null);
+    setSample(null);
+  };
+
   const handleQuickConnect = async () => {
-    if (!connectionUri.trim()) {
+    if (connectorKey === 'postgres' && !connectionUri.trim()) {
       setError('Paste a PostgreSQL connection URI first.');
       return;
     }
+    if (connectorKey === 'bigquery') {
+      if (!bigQueryProjectId.trim()) {
+        setError('Enter a BigQuery project ID first.');
+        return;
+      }
+      if (!bigQueryLocation.trim()) {
+        setError('Enter the BigQuery location first.');
+        return;
+      }
+      if (!bigQueryServiceAccountJson.trim()) {
+        setError('Paste a BigQuery service account JSON key first.');
+        return;
+      }
+    }
+    if (connectorKey === 'snowflake') {
+      if (!snowflakeAccount.trim()) {
+        setError('Enter a Snowflake account identifier first.');
+        return;
+      }
+      if (!snowflakeUsername.trim()) {
+        setError('Enter a Snowflake username first.');
+        return;
+      }
+      if (!snowflakePrivateKeyPem.trim()) {
+        setError('Paste a Snowflake private key PEM first.');
+        return;
+      }
+      if (!snowflakeWarehouse.trim()) {
+        setError('Enter a Snowflake warehouse first.');
+        return;
+      }
+      if (!snowflakeDatabase.trim()) {
+        setError('Enter a Snowflake database first.');
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
     try {
       const connection = await integrationService.quickConnectWarehouse({
-        connector_key: 'postgres',
-        connection_uri: connectionUri.trim(),
+        connector_key: connectorKey,
+        connection_uri: connectorKey === 'postgres' ? connectionUri.trim() : '',
         display_name: displayName.trim(),
-        include_schemas: parseSchemaList(includeSchemas),
+        include_schemas: connectorKey === 'postgres' ? parseList(includeSchemas) : [],
+        included_datasets: connectorKey === 'bigquery' ? parseList(includedDatasets) : [],
+        project_id: connectorKey === 'bigquery' ? bigQueryProjectId.trim() : '',
+        location: connectorKey === 'bigquery' ? bigQueryLocation.trim() : '',
+        service_account_json: connectorKey === 'bigquery' ? bigQueryServiceAccountJson.trim() : '',
+        max_billing_bytes: connectorKey === 'bigquery' ? toPositiveNumber(maxBillingBytes) : undefined,
+        account: connectorKey === 'snowflake' ? snowflakeAccount.trim() : '',
+        username: connectorKey === 'snowflake' ? snowflakeUsername.trim() : '',
+        private_key_pem: connectorKey === 'snowflake' ? snowflakePrivateKeyPem.trim() : '',
+        private_key_passphrase: connectorKey === 'snowflake' ? snowflakePrivateKeyPassphrase.trim() : '',
+        warehouse: connectorKey === 'snowflake' ? snowflakeWarehouse.trim() : '',
+        database: connectorKey === 'snowflake' ? snowflakeDatabase.trim() : '',
+        role: connectorKey === 'snowflake' ? snowflakeRole.trim() : '',
+        included_schemas: connectorKey === 'snowflake' ? parseList(includedSchemas) : [],
+        max_assigned_bytes: connectorKey === 'snowflake' ? toPositiveNumber(maxAssignedBytes) : undefined,
         source_timezone: sourceTimezone.trim() || 'UTC',
       });
       const refreshed = await integrationService.refreshWarehouseSchema(connection.connection_id);
       setConnections((prev) => [refreshed, ...prev.filter((item) => item.connection_id !== refreshed.connection_id)]);
       setSelectedConnectionId(refreshed.connection_id);
       setConnectionUri('');
+      setBigQueryServiceAccountJson('');
+      setSnowflakePrivateKeyPem('');
+      setSnowflakePrivateKeyPassphrase('');
       setDisplayName('');
-      toast({ title: 'PostgreSQL connected', description: 'Schema is ready to browse.' });
+      toast({ title: `${connectorLabel} connected`, description: 'Schema is ready to browse.' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect PostgreSQL.');
+      setError(err instanceof Error ? err.message : `Failed to connect ${connectorLabel}.`);
     } finally {
       setLoading(false);
     }
@@ -143,7 +246,7 @@ export default function WarehouseIntegrationModal() {
     setSampling(true);
     setError(null);
     try {
-      const columns = parseSchemaList(selectedColumns);
+      const columns = parseList(selectedColumns);
       const result = await integrationService.sampleWarehouseTable(selectedConnectionId, {
         schema_name: selectedTable.schema,
         table_name: selectedTable.name,
@@ -164,7 +267,7 @@ export default function WarehouseIntegrationModal() {
     setSyncing(true);
     setError(null);
     try {
-      const columns = parseSchemaList(selectedColumns);
+      const columns = parseList(selectedColumns);
       const result = await integrationService.syncWarehouseTable(selectedConnectionId, {
         schema_name: selectedTable.schema,
         table_name: selectedTable.name,
@@ -183,13 +286,13 @@ export default function WarehouseIntegrationModal() {
         projectId: result.asset.project_id,
         rowCount: result.row_count,
         columnCount: result.column_count,
-        sourceType: 'PostgreSQL',
+        sourceType: connectorLabel,
         accountName: selectedConnection?.display_name,
         propertyName: `${selectedTable.schema}.${selectedTable.name}`,
       }]);
-      window.dispatchEvent(new CustomEvent('dreamify:connector-synced', { detail: { connector: 'PostgreSQL', at: Date.now() } }));
+      window.dispatchEvent(new CustomEvent('dreamify:connector-synced', { detail: { connector: connectorLabel, at: Date.now() } }));
       toast({ title: 'Warehouse extract synced', description: `${result.row_count ?? 0} rows added to Dreamify.` });
-      setOpen(false);
+      setOpen(false, connectorKey);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sync warehouse table.');
     } finally {
@@ -215,16 +318,33 @@ export default function WarehouseIntegrationModal() {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => setOpen(open, connectorKey)}>
       <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Database className="h-4 w-4" />
+              <WarehouseIcon className="h-4 w-4" />
             </div>
-            <DialogTitle>PostgreSQL Warehouse</DialogTitle>
+            <DialogTitle>{connectorLabel} Warehouse</DialogTitle>
           </div>
         </DialogHeader>
+
+        <ToggleGroup
+          type="single"
+          value={connectorKey}
+          onValueChange={handleModeChange}
+          className="w-full justify-start rounded-lg bg-muted/50 p-1"
+        >
+          <ToggleGroupItem value="postgres" aria-label="PostgreSQL warehouse" className="flex-1">
+            PostgreSQL
+          </ToggleGroupItem>
+          <ToggleGroupItem value="bigquery" aria-label="BigQuery warehouse" className="flex-1">
+            BigQuery
+          </ToggleGroupItem>
+          <ToggleGroupItem value="snowflake" aria-label="Snowflake warehouse" className="flex-1">
+            Snowflake
+          </ToggleGroupItem>
+        </ToggleGroup>
 
         <Tabs defaultValue="connect" className="mt-2">
           <TabsList className="grid w-full grid-cols-2">
@@ -243,25 +363,163 @@ export default function WarehouseIntegrationModal() {
                 <Input value={sourceTimezone} onChange={(e) => setSourceTimezone(e.target.value)} placeholder="UTC" />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Connection URI</Label>
-              <Input
-                value={connectionUri}
-                onChange={(e) => setConnectionUri(e.target.value)}
-                placeholder="postgresql://user:password@host:5432/database"
-                type="password"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Restrict schemas</Label>
-              <Input
-                value={includeSchemas}
-                onChange={(e) => setIncludeSchemas(e.target.value)}
-                placeholder="public, analytics"
-              />
-            </div>
+
+            {connectorKey === 'postgres' ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Connection URI</Label>
+                  <Input
+                    value={connectionUri}
+                    onChange={(e) => setConnectionUri(e.target.value)}
+                    placeholder="postgresql://user:password@host:5432/database"
+                    type="password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Restrict schemas</Label>
+                  <Input
+                    value={includeSchemas}
+                    onChange={(e) => setIncludeSchemas(e.target.value)}
+                    placeholder="public, analytics"
+                  />
+                </div>
+              </>
+            ) : connectorKey === 'bigquery' ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Project ID</Label>
+                    <Input
+                      value={bigQueryProjectId}
+                      onChange={(e) => setBigQueryProjectId(e.target.value)}
+                      placeholder="my-gcp-project"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Location</Label>
+                    <Input
+                      value={bigQueryLocation}
+                      onChange={(e) => setBigQueryLocation(e.target.value)}
+                      placeholder="US"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Service account JSON</Label>
+                  <Textarea
+                    value={bigQueryServiceAccountJson}
+                    onChange={(e) => setBigQueryServiceAccountJson(e.target.value)}
+                    placeholder='{"type":"service_account","project_id":"..."}'
+                    className="min-h-28 font-mono text-xs"
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Restrict datasets</Label>
+                    <Input
+                      value={includedDatasets}
+                      onChange={(e) => setIncludedDatasets(e.target.value)}
+                      placeholder="analytics, reporting"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Max billing bytes</Label>
+                    <Input
+                      value={maxBillingBytes}
+                      onChange={(e) => setMaxBillingBytes(e.target.value)}
+                      inputMode="numeric"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Account identifier</Label>
+                    <Input
+                      value={snowflakeAccount}
+                      onChange={(e) => setSnowflakeAccount(e.target.value)}
+                      placeholder="org-account or account.region"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Username</Label>
+                    <Input
+                      value={snowflakeUsername}
+                      onChange={(e) => setSnowflakeUsername(e.target.value)}
+                      placeholder="svc_dreamify"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Private key PEM</Label>
+                  <Textarea
+                    value={snowflakePrivateKeyPem}
+                    onChange={(e) => setSnowflakePrivateKeyPem(e.target.value)}
+                    placeholder="-----BEGIN PRIVATE KEY-----"
+                    className="min-h-28 font-mono text-xs"
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Private key passphrase</Label>
+                    <Input
+                      value={snowflakePrivateKeyPassphrase}
+                      onChange={(e) => setSnowflakePrivateKeyPassphrase(e.target.value)}
+                      type="password"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Role</Label>
+                    <Input
+                      value={snowflakeRole}
+                      onChange={(e) => setSnowflakeRole(e.target.value)}
+                      placeholder="REPORTER"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Warehouse</Label>
+                    <Input
+                      value={snowflakeWarehouse}
+                      onChange={(e) => setSnowflakeWarehouse(e.target.value)}
+                      placeholder="COMPUTE_WH"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Database</Label>
+                    <Input
+                      value={snowflakeDatabase}
+                      onChange={(e) => setSnowflakeDatabase(e.target.value)}
+                      placeholder="ANALYTICS"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Restrict schemas</Label>
+                    <Input
+                      value={includedSchemas}
+                      onChange={(e) => setIncludedSchemas(e.target.value)}
+                      placeholder="PUBLIC, REPORTING"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Max assigned bytes</Label>
+                    <Input
+                      value={maxAssignedBytes}
+                      onChange={(e) => setMaxAssignedBytes(e.target.value)}
+                      inputMode="numeric"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
             <Button onClick={handleQuickConnect} disabled={loading} className="w-full sm:w-auto">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WarehouseIcon className="mr-2 h-4 w-4" />}
               Connect and Refresh Schema
             </Button>
           </TabsContent>
@@ -270,18 +528,27 @@ export default function WarehouseIntegrationModal() {
             <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
               <div className="space-y-1.5">
                 <Label>Connection</Label>
-                <Select value={selectedConnectionId} onValueChange={setSelectedConnectionId} disabled={connections.length === 0}>
+                <Select value={selectedConnectionId} onValueChange={setSelectedConnectionId} disabled={modeConnections.length === 0}>
                   <SelectTrigger>
-                    <SelectValue placeholder={loading ? 'Loading...' : 'Choose a connection'} />
+                    <SelectValue placeholder={loading ? 'Loading...' : `Choose a ${connectorLabel} connection`} />
                   </SelectTrigger>
                   <SelectContent>
-                    {connections.map((connection) => (
+                    {modeConnections.map((connection) => (
                       <SelectItem key={connection.connection_id} value={connection.connection_id}>
                         {connection.display_name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedConnection && (
+                  <p className="text-xs text-muted-foreground">
+                    {connectorKey === 'bigquery'
+                      ? `${selectedConnection.project_id || selectedConnection.database || 'Project'} / ${selectedConnection.location || 'location'}`
+                      : connectorKey === 'snowflake'
+                        ? `${selectedConnection.account || selectedConnection.database || 'Account'} / ${selectedConnection.warehouse || 'warehouse'}`
+                        : `${selectedConnection.host || selectedConnection.database || 'Database'}`}
+                  </p>
+                )}
               </div>
               <Button variant="outline" onClick={handleRefreshSchema} disabled={!selectedConnectionId || refreshing}>
                 {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -343,7 +610,7 @@ export default function WarehouseIntegrationModal() {
             {sample && (
               <div className="overflow-hidden rounded-lg border border-border">
                 <div className="border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium">
-                  Preview · {sample.generated_sql}
+                  Preview: {sample.generated_sql}
                 </div>
                 <div className="max-h-64 overflow-auto">
                   <table className="w-full text-left text-xs">
@@ -370,9 +637,9 @@ export default function WarehouseIntegrationModal() {
               </div>
             )}
 
-            {!loading && connections.length === 0 && (
+            {!loading && modeConnections.length === 0 && (
               <p className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-                Connect PostgreSQL first, then refresh schema to browse tables.
+                Connect {connectorLabel} first, then refresh schema to browse tables.
               </p>
             )}
           </TabsContent>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Copy, Loader2 } from "lucide-react";
-import { ZaloLogo } from "./ZaloIntegrationCard";
+import { ZaloLogo } from "./ChatPlatformLogos";
 import {
   Dialog,
   DialogContent,

@@ -1,8 +1,6 @@
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { LogIn, User as UserIcon, Star, CreditCard, Bell, ChevronsUpDown, LogOut, PanelLeftOpen, Menu, Sparkles } from "lucide-react";
+import { LogIn, User as UserIcon, ChevronsUpDown, LogOut, PanelLeftOpen, Menu, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, useUser, useClerk, UserProfile } from "@clerk/clerk-react";
 import { dark } from "@clerk/themes";
 import { cn } from "@/lib/utils";
@@ -13,9 +11,9 @@ import { useTheme } from "@/hooks/useTheme";
 
 const Header = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userProfileOpen, setUserProfileOpen] = useState(false);
-  const [pricingOpen, setPricingOpen] = useState(false);
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
   const [accountCenterTab, setAccountCenterTab] = useState<"pricing" | "account" | "billing" | "notifications" | "plans" | "preferences">("pricing");
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -23,13 +21,26 @@ const Header = () => {
   const { signOut } = useClerk();
   const [showProjectsBtn, setShowProjectsBtn] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const { creditsRemaining, creditUsage } = useSubscription();
+  const { creditsRemaining } = useSubscription();
   const { resolvedTheme } = useTheme();
   const logoHorizon = resolvedTheme === 'dark' ? "/logo-horizon.png" : "/logo-horizon-dark.png";
   const logoWatermark = resolvedTheme === 'dark' ? "/logo-watermark.png" : "/logo-horizon-dark.png";
   const tierLimit = 1000;
   const hasCreditBalance = creditsRemaining !== null;
   const creditPct = tierLimit > 0 && hasCreditBalance ? creditsRemaining / tierLimit : 0;
+  const isProductActive = location.pathname.startsWith("/product");
+  const navItemClass = (active = false) => cn(
+    "relative text-sm font-medium transition-colors hover:text-accent hover:translate-y-[-2px]",
+    active
+      ? "text-primary after:absolute after:-bottom-2 after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-primary dark:text-white"
+      : "text-foreground dark:text-white",
+  );
+  const mobileNavItemClass = (active = false) => cn(
+    "w-full text-left px-3 py-2 rounded-md focus:outline-none text-sm transition-colors",
+    active
+      ? "bg-primary/10 text-primary"
+      : "hover:bg-black focus:bg-black",
+  );
 
   useEffect(() => {
     const handleOpen = () => setShowProjectsBtn(false);
@@ -210,8 +221,14 @@ const Header = () => {
             </div>
             <nav className="hidden md:flex items-center space-x-4 ml-8">
               <button
+                onClick={() => navigate("/product/data-connectors")}
+                className={navItemClass(isProductActive)}
+              >
+                Product
+              </button>
+              <button
                 onClick={() => navigate("/about")}
-                className="text-sm font-medium text-foreground dark:text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
+                className={navItemClass(location.pathname === "/about")}
               >
                 About Us
               </button>
@@ -219,13 +236,13 @@ const Header = () => {
                 href="https://discord.gg/GhFjdbgdxd"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-medium text-foreground dark:text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
+                className={navItemClass()}
               >
                 Community
               </a>
               <button
                 onClick={() => navigate("/pricing")}
-                className="text-sm font-medium text-foreground dark:text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
+                className={navItemClass(location.pathname === "/pricing")}
               >
                 Pricing
               </button>
@@ -233,7 +250,7 @@ const Header = () => {
                 href="/docs"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-medium text-foreground dark:text-white hover:text-accent hover:translate-y-[-2px] transition-colors"
+                className={navItemClass(location.pathname === "/docs")}
               >
                 Docs
               </a>
@@ -385,8 +402,14 @@ const Header = () => {
           <SheetContent side="left" className="md:hidden w-[60vw] max-w-xs bg-muted border-r border-border p-4 z-[300]" onOpenAutoFocus={(e) => e.preventDefault()}>
             <div className="space-y-2">
               <button
+                onClick={() => { setMobileNavOpen(false); navigate('/product/data-connectors'); }}
+                className={mobileNavItemClass(isProductActive)}
+              >
+                Product
+              </button>
+              <button
                 onClick={() => { setMobileNavOpen(false); navigate('/about'); }}
-                className="w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
+                className={mobileNavItemClass(location.pathname === "/about")}
               >
                 About
               </button>
@@ -395,13 +418,13 @@ const Header = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setMobileNavOpen(false)}
-                className="block w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
+                className={cn(mobileNavItemClass(), "block")}
               >
                 Community
               </a>
               <button
                 onClick={() => { setMobileNavOpen(false); navigate("/pricing"); }}
-                className="w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm"
+                className={mobileNavItemClass(location.pathname === "/pricing")}
               >
                 Pricing
               </button>
@@ -410,7 +433,7 @@ const Header = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setMobileNavOpen(false)}
-                className="w-full text-left px-3 py-2 rounded-md hover:bg-black focus:bg-black focus:outline-none text-sm block"
+                className={cn(mobileNavItemClass(location.pathname === "/docs"), "block")}
               >
                 Docs
               </a>

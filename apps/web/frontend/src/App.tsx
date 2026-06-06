@@ -11,6 +11,7 @@ import { useMetaPixel } from "./hooks/useMetaPixel";
 import Header from "./components/homepage-section/Header";
 import AboutPage from "./pages/About";
 import PricingPage from "./pages/Pricing";
+import ProductDataConnectorsPage from "./pages/ProductDataConnectorsPage";
 import FinancePage from "./pages/Finance";
 import PrivacyPage from "./pages/Privacy";
 import TermsPage from "./pages/Terms";
@@ -83,6 +84,7 @@ const AppContent = () => {
   const isHomePath = location.pathname === "/";
   const isAboutPath = location.pathname === "/about";
   const isPricingPath = location.pathname === "/pricing";
+  const isProductPath = location.pathname.startsWith("/product");
   const isFinancePath = location.pathname === "/finance";
   const isPrivacyPath = location.pathname === "/privacy";
   const isTermsPath = location.pathname === "/terms";
@@ -95,6 +97,7 @@ const AppContent = () => {
     location.pathname.startsWith("/admin") ||
     location.pathname.startsWith("/preview") ||
     location.pathname.startsWith("/templates") ||
+    location.pathname.startsWith("/product") ||
     location.pathname === "/feedback" ||
     location.pathname === "/docs" ||
     location.pathname === "/sso-callback" ||
@@ -106,6 +109,7 @@ const AppContent = () => {
     location.pathname === "/" ||
     location.pathname === "/about" ||
     location.pathname === "/pricing" ||
+    location.pathname.startsWith("/product") ||
     location.pathname === "/finance" ||
     location.pathname === "/privacy" ||
     location.pathname === "/terms" ||
@@ -125,11 +129,13 @@ const AppContent = () => {
 
   return (
     <>
-      {(isHomePath || isAboutPath || isPricingPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath && !isDocsPath && !isFeedbackPath)) && <Header />}
+      {(isHomePath || isAboutPath || isPricingPath || isProductPath || isFinancePath || (!isStarted && !isAuthPath && !isWorkspacePath && !isAdminPath && !isPreviewPath && !isPrivacyPath && !isTermsPath && !isDocsPath && !isFeedbackPath)) && <Header />}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/product" element={<Navigate to="/product/data-connectors" replace />} />
+        <Route path="/product/data-connectors" element={<ProductDataConnectorsPage />} />
         <Route path="/finance" element={<FinancePage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />

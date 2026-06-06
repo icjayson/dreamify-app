@@ -165,6 +165,13 @@ def create_app():
         logger.error(f"Failed to import Integration router: {e}")
 
     try:
+        from app.api.route_modules.warehouse import router as warehouse_router
+        app.include_router(warehouse_router, prefix="/api/v1")
+        logger.info("Warehouse router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Warehouse router: {e}")
+
+    try:
         from app.api.route_modules.chat_platform import router as chat_router
         app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
         logger.info("Chat platform router registered successfully")

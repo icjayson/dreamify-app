@@ -7,6 +7,7 @@ Schema:
 from datetime import datetime, timezone
 from typing import Dict, Optional, Any, List
 
+from boto3.dynamodb.conditions import Key  # type: ignore
 from utils.dynamodb.client import get_table
 from utils.dynamodb.tables import tables
 
@@ -46,6 +47,16 @@ def get_connection(user_id: str, provider: str) -> Optional[Dict]:
     return response.get("Item")
 
 
+def list_connections_by_prefix(user_id: str, provider_prefix: str) -> List[Dict]:
+    """List connection records whose provider sort key starts with provider_prefix."""
+    table = get_table(tables.connected_accounts)
+    response = table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id)
+        & Key("provider").begins_with(provider_prefix)
+    )
+    return response.get("Items", [])
+
+
 def delete_connection(user_id: str, provider: str) -> None:
     """Remove an OAuth connection record."""
     table = get_table(tables.connected_accounts)
@@ -62,11 +73,11 @@ def upsert_provider_metadata(user_id: str, provider: str, metadata: Dict[str, An
     now = _now_iso()
     existing = get_connection(user_id, provider) or {}
     item = {
+        **existing,
         "user_id": user_id,
         "provider": provider,
         "created_at": existing.get("created_at", now),
         "updated_at": now,
-        **existing,
         **metadata,
     }
     table.put_item(Item=item)
@@ -76,16 +87,24 @@ def upsert_provider_metadata(user_id: str, provider: str, metadata: Dict[str, An
 def append_selected_entity(
     user_id: str,
     provider: str,
-    entity: Dict[str, str],
+    entity: Dict[str, Any],
     max_items: int = 50,
 ) -> Dict:
     """Append a selected entity to provider metadata with simple dedupe by id+type."""
     existing = get_connection(user_id, provider) or {}
-    entities: List[Dict[str, str]] = list(existing.get("selected_entities", []))
+    entities: List[Dict[str, Any]] = list(existing.get("selected_entities", []))
     entity_id = str(entity.get("id", ""))
     entity_type = str(entity.get("type", ""))
     deduped = [e for e in entities if not (str(e.get("id", "")) == entity_id and str(e.get("type", "")) == entity_type)]
-    deduped.insert(0, {"id": entity_id, "name": str(entity.get("name", "")), "type": entity_type})
+    normalized = {
+        str(key): value
+        for key, value in entity.items()
+        if key and value is not None
+    }
+    normalized["id"] = entity_id
+    normalized["name"] = str(entity.get("name", ""))
+    normalized["type"] = entity_type
+    deduped.insert(0, normalized)
     return upsert_provider_metadata(
         user_id=user_id,
         provider=provider,

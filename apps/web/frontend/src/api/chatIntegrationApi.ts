@@ -36,6 +36,22 @@ export interface ZaloCodeResponse {
   expires_in: number;
 }
 
+export interface WhatsAppStatusResponse {
+  connected: boolean;
+  workspace_name?: string;
+  platform_workspace_id?: string;
+  project_id?: string;
+}
+
+export interface WhatsAppCodeResponse {
+  code: string;
+  bot_username: string;
+  phone_number: string;
+  deeplink: string;
+  qr_url: string;
+  expires_in: number;
+}
+
 export const chatIntegrationApi = {
   async getSlackStatus(): Promise<SlackStatusResponse> {
     const res = await api.get<SlackStatusResponse>("/api/v1/chat/slack/me");
@@ -82,6 +98,22 @@ export const chatIntegrationApi = {
   },
 
   async disconnectZalo(platformWorkspaceId: string): Promise<void> {
+    await api.delete(`/api/v1/chat/workspaces/${encodeURIComponent(platformWorkspaceId)}`);
+  },
+
+  async getWhatsAppStatus(): Promise<WhatsAppStatusResponse> {
+    const res = await api.get<WhatsAppStatusResponse>("/api/v1/chat/whatsapp/me");
+    if (res.success && res.data) return res.data;
+    return { connected: false };
+  },
+
+  async generateWhatsAppCode(): Promise<WhatsAppCodeResponse> {
+    const res = await api.post<WhatsAppCodeResponse>("/api/v1/chat/whatsapp/generate-code");
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || "Failed to generate WhatsApp code");
+  },
+
+  async disconnectWhatsApp(platformWorkspaceId: string): Promise<void> {
     await api.delete(`/api/v1/chat/workspaces/${encodeURIComponent(platformWorkspaceId)}`);
   },
 };

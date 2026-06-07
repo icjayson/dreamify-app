@@ -55,6 +55,8 @@ import MetaAdsIntegrationModal from "./components/chat/MetaAdsIntegrationModal";
 import TikTokIntegrationModal from "./components/chat/TikTokIntegrationModal";
 import AppsFlyerIntegrationModal from "./components/chat/AppsFlyerIntegrationModal";
 import StripeIntegrationModal from "./components/chat/StripeIntegrationModal";
+import HubSpotIntegrationModal from "./components/chat/HubSpotIntegrationModal";
+import SalesforceIntegrationModal from "./components/chat/SalesforceIntegrationModal";
 import GoogleAdsIntegrationModal from "./components/chat/GoogleAdsIntegrationModal";
 import FirebaseIntegrationModal from "./components/chat/FirebaseIntegrationModal";
 import WarehouseIntegrationModal from "./components/chat/WarehouseIntegrationModal";
@@ -253,6 +255,8 @@ const AppContent = () => {
       <TikTokIntegrationModal />
       <AppsFlyerIntegrationModal />
       <StripeIntegrationModal />
+      <HubSpotIntegrationModal />
+      <SalesforceIntegrationModal />
       <GoogleAdsIntegrationModal />
       <FirebaseIntegrationModal />
       <WarehouseIntegrationModal />

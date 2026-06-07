@@ -380,10 +380,45 @@ export default function ConnectorEntityDetailView(props: Props) {
         entityName,
       };
     }
-    if (connectorKey === "postgres" || connectorKey === "bigquery" || connectorKey === "snowflake") {
+    if (connectorKey === "hubspot") {
+      const [, reportTypeFromId = "sales_pipeline", pipelineFromId = "all", ownerFromId = "all"] = entityId.split(":");
+      return {
+        provider: "hubspot" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || connectorDetail?.entity?.report_type || reportTypeFromId),
+          pipeline_id: String(scheduleConfig.pipeline_id || connectorDetail?.entity?.pipeline_id || pipelineFromId),
+          owner_id: String(scheduleConfig.owner_id || connectorDetail?.entity?.owner_id || ownerFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_associations: scheduleConfig.include_associations ?? true,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "salesforce") {
+      const [, reportTypeFromId = "sales_pipeline", objectFromId = "all", ownerFromId = "all"] = entityId.split(":");
+      return {
+        provider: "salesforce" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || connectorDetail?.entity?.report_type || reportTypeFromId),
+          object_name: String(scheduleConfig.object_name || connectorDetail?.entity?.object_name || objectFromId),
+          owner_id: String(scheduleConfig.owner_id || connectorDetail?.entity?.owner_id || ownerFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "postgres" || connectorKey === "bigquery" || connectorKey === "snowflake" || connectorKey === "databricks") {
       const entity = connectorDetail?.entity;
       const [connectionIdFromId, tablePath = ""] = entityId.split(":");
-      const dotIndex = tablePath.indexOf(".");
+      const dotIndex = tablePath.lastIndexOf(".");
       const schemaFromId = dotIndex >= 0 ? tablePath.slice(0, dotIndex) : "";
       const tableFromId = dotIndex >= 0 ? tablePath.slice(dotIndex + 1) : tablePath;
       const connectionId = String(scheduleConfig.connection_id || entity?.connection_id || connectionIdFromId);
@@ -394,6 +429,7 @@ export default function ConnectorEntityDetailView(props: Props) {
         config: {
           connector_key: connectorKey,
           connection_id: connectionId,
+          catalog: String(scheduleConfig.catalog || entity?.catalog_name || ""),
           schema,
           table,
           entity_id: String(scheduleConfig.entity_id || entityId),

@@ -917,8 +917,11 @@ function getDashboardSourceLabel(dashboardCard: NonNullable<Message["dashboardCa
   if (source.includes("tiktok") || filename.includes("tiktok")) return "TikTok Data";
   if (source.includes("appsflyer") || filename.includes("appsflyer")) return "AppsFlyer Data";
   if (source.includes("stripe") || filename.includes("stripe")) return "Stripe Data";
+  if (source.includes("hubspot") || filename.includes("hubspot")) return "HubSpot Data";
+  if (source.includes("salesforce") || filename.includes("salesforce")) return "Salesforce Data";
   if (source.includes("bigquery") || filename.includes("bigquery")) return "BigQuery Data";
   if (source.includes("snowflake") || filename.includes("snowflake")) return "Snowflake Data";
+  if (source.includes("databricks") || filename.includes("databricks")) return "Databricks Data";
   if (source.includes("postgres") || source.includes("warehouse") || filename.includes("postgres")) return "PostgreSQL Data";
   if (source.includes("meta") || filename.includes("meta_ads")) return "Meta Ads Data";
   return dashboardCard.sourceFileName.replace(/\.[^/.]+$/, "");
@@ -1311,6 +1314,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setTikTokModalOpen,
     setAppsFlyerModalOpen,
     setStripeModalOpen,
+    setHubSpotModalOpen,
+    setSalesforceModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setAllConnectorsModalOpen,
@@ -2145,6 +2150,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       setTimeout(() => setStripeModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'HubSpot') {
+      setDropdownOpen(false);
+      setTimeout(() => setHubSpotModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Salesforce') {
+      setDropdownOpen(false);
+      setTimeout(() => setSalesforceModalOpen(true), 0);
+      return;
+    }
     if (connector.name === 'Google Ads') {
       setDropdownOpen(false);
       setTimeout(() => setGoogleAdsModalOpen(true), 0);
@@ -2194,9 +2209,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
       "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
+      "Salesforce": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
       "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" },
       "BigQuery": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
-      "Snowflake": { bg: "bg-cyan-600", border: "border-cyan-500", text: "text-white", hover: "hover:bg-cyan-700" }
+      "Snowflake": { bg: "bg-cyan-600", border: "border-cyan-500", text: "text-white", hover: "hover:bg-cyan-700" },
+      "Databricks": { bg: "bg-red-600", border: "border-red-500", text: "text-white", hover: "hover:bg-red-700" }
     };
     return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
   };

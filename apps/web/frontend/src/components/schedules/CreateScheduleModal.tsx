@@ -38,6 +38,8 @@ const PROVIDER_LABELS: Record<ProviderKey, string> = {
   tiktok: 'TikTok Ads',
   appsflyer: 'AppsFlyer',
   stripe: 'Stripe',
+  hubspot: 'HubSpot',
+  salesforce: 'Salesforce',
   warehouse: 'Warehouse',
 };
 
@@ -79,9 +81,12 @@ const CONNECTOR_TO_PROVIDER: Record<string, ProviderKey> = {
   tiktok_ads: 'tiktok',
   appsflyer: 'appsflyer',
   stripe: 'stripe',
+  hubspot: 'hubspot',
+  salesforce: 'salesforce',
   postgres: 'warehouse',
   bigquery: 'warehouse',
   snowflake: 'warehouse',
+  databricks: 'warehouse',
 };
 
 const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
@@ -90,6 +95,8 @@ const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
   tiktok: 'tiktok_ads',
   appsflyer: 'appsflyer',
   stripe: 'stripe',
+  hubspot: 'hubspot',
+  salesforce: 'salesforce',
   warehouse: 'postgres',
 };
 
@@ -99,11 +106,28 @@ const STRIPE_REPORT_ENTITIES: ConnectorSelectedEntity[] = [
   { id: 'customers', name: 'Customers', type: 'report' },
 ];
 
+const HUBSPOT_REPORT_ENTITIES: ConnectorSelectedEntity[] = [
+  { id: 'hubspot:sales_pipeline:all:all', name: 'Sales Pipeline', type: 'report', report_type: 'sales_pipeline', pipeline_id: 'all', owner_id: 'all' },
+  { id: 'hubspot:contacts:all:all', name: 'Contacts', type: 'report', report_type: 'contacts', pipeline_id: 'all', owner_id: 'all' },
+  { id: 'hubspot:companies:all:all', name: 'Companies', type: 'report', report_type: 'companies', pipeline_id: 'all', owner_id: 'all' },
+  { id: 'hubspot:activities:all:all', name: 'Activities', type: 'report', report_type: 'activities', pipeline_id: 'all', owner_id: 'all' },
+];
+
+const SALESFORCE_REPORT_ENTITIES: ConnectorSelectedEntity[] = [
+  { id: 'salesforce:sales_pipeline:all:all', name: 'Sales Pipeline', type: 'report', report_type: 'sales_pipeline', object_name: 'all', owner_id: 'all' },
+  { id: 'salesforce:leads:all:all', name: 'Leads', type: 'report', report_type: 'leads', object_name: 'all', owner_id: 'all' },
+  { id: 'salesforce:accounts_contacts:all:all', name: 'Accounts & Contacts', type: 'report', report_type: 'accounts_contacts', object_name: 'all', owner_id: 'all' },
+  { id: 'salesforce:activities:all:all', name: 'Activities', type: 'report', report_type: 'activities', object_name: 'all', owner_id: 'all' },
+  { id: 'salesforce:campaigns:all:all', name: 'Campaigns', type: 'report', report_type: 'campaigns', object_name: 'all', owner_id: 'all' },
+];
+
 function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unknown>) {
   if (provider === 'ga4') return String(config.property_id || '');
   if (provider === 'meta_ads' || provider === 'tiktok') return String(config.ad_account_id || '');
   if (provider === 'appsflyer') return String(config.app_id || '');
   if (provider === 'stripe') return String(config.report_type || 'charges');
+  if (provider === 'hubspot') return String(config.entity_id || `hubspot:${config.report_type || 'sales_pipeline'}:${config.pipeline_id || 'all'}:${config.owner_id || 'all'}`);
+  if (provider === 'salesforce') return String(config.entity_id || `salesforce:${config.report_type || 'sales_pipeline'}:${config.object_name || 'all'}:${config.owner_id || 'all'}`);
   if (provider === 'warehouse') {
     const entityId = String(config.entity_id || '');
     if (entityId) return entityId;
@@ -125,9 +149,32 @@ function buildConnectorConfig(provider: ProviderKey, entity: ConnectorSelectedEn
   if (provider === 'appsflyer') {
     return { app_id: entity.id, app_name: entity.name };
   }
+  if (provider === 'hubspot') {
+    const [, reportType = 'sales_pipeline', pipelineId = 'all', ownerId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      pipeline_id: entity.pipeline_id || pipelineId,
+      owner_id: entity.owner_id || ownerId,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_associations: true,
+    };
+  }
+  if (provider === 'salesforce') {
+    const [, reportType = 'sales_pipeline', objectName = 'all', ownerId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      object_name: entity.object_name || objectName,
+      owner_id: entity.owner_id || ownerId,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+    };
+  }
   if (provider === 'warehouse') {
     const [connectionIdFromId, tablePath = ''] = entity.id.split(':');
-    const dotIndex = tablePath.indexOf('.');
+    const dotIndex = tablePath.lastIndexOf('.');
     const schemaFromId = dotIndex >= 0 ? tablePath.slice(0, dotIndex) : '';
     const tableFromId = dotIndex >= 0 ? tablePath.slice(dotIndex + 1) : tablePath;
     const connectionId = entity.connection_id || connectionIdFromId;
@@ -204,8 +251,22 @@ async function fetchProviderEntities(provider: ProviderKey): Promise<ConnectorSe
     const response = await integrationService.fetchConnectorsOverview();
     if (!response.success) throw new Error(response.error || 'Failed to load warehouse tables.');
     return response.connectors
-      .filter((connector) => ['postgres', 'bigquery', 'snowflake'].includes(connector.connector_key))
+      .filter((connector) => ['postgres', 'bigquery', 'snowflake', 'databricks'].includes(connector.connector_key))
       .flatMap((connector) => connector.selected_entities || []);
+  }
+
+  if (provider === 'hubspot') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load HubSpot reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'hubspot');
+    return mergeEntities(connector?.selected_entities || [], HUBSPOT_REPORT_ENTITIES);
+  }
+
+  if (provider === 'salesforce') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Salesforce reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'salesforce');
+    return mergeEntities(connector?.selected_entities || [], SALESFORCE_REPORT_ENTITIES);
   }
 
   return STRIPE_REPORT_ENTITIES;
@@ -265,7 +326,11 @@ export function CreateScheduleModal({
       const connectorEntities = connector.selected_entities || [];
       const entities = connector.connector_key === 'stripe' && connectorEntities.length === 0
         ? STRIPE_REPORT_ENTITIES
-        : connectorEntities;
+        : connector.connector_key === 'hubspot' && connectorEntities.length === 0
+          ? HUBSPOT_REPORT_ENTITIES
+          : connector.connector_key === 'salesforce' && connectorEntities.length === 0
+            ? SALESFORCE_REPORT_ENTITIES
+          : connectorEntities;
 
       if (mappedProvider === 'warehouse') {
         const current = grouped.get('warehouse') || {
@@ -371,7 +436,7 @@ export function CreateScheduleModal({
         setModalConnectorOverview((prev) => {
           if (provider === 'warehouse') {
             return prev.map((connector) => {
-              if (!['postgres', 'bigquery', 'snowflake'].includes(connector.connector_key)) return connector;
+              if (!['postgres', 'bigquery', 'snowflake', 'databricks'].includes(connector.connector_key)) return connector;
               const connectorEntities = entities.filter((entity) =>
                 String(entity.connector_key || 'postgres') === connector.connector_key
               );

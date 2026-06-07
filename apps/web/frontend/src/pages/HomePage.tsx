@@ -197,9 +197,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
       "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
+      "Salesforce": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
       "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" },
       "BigQuery": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
-      "Snowflake": { bg: "bg-cyan-600", border: "border-cyan-500", text: "text-white", hover: "hover:bg-cyan-700" }
+      "Snowflake": { bg: "bg-cyan-600", border: "border-cyan-500", text: "text-white", hover: "hover:bg-cyan-700" },
+      "Databricks": { bg: "bg-red-600", border: "border-red-500", text: "text-white", hover: "hover:bg-red-700" }
     };
     return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
   };
@@ -592,6 +594,16 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       setTimeout(() => useChatStore.getState().setStripeModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'HubSpot') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setHubSpotModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Salesforce') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setSalesforceModalOpen(true), 0);
+      return;
+    }
     if (connector.name === 'Google Ads') {
       setDropdownOpen(false);
       setTimeout(() => useChatStore.getState().setGoogleAdsModalOpen(true), 0);
@@ -615,6 +627,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     if (connector.name === 'Snowflake') {
       setDropdownOpen(false);
       setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, 'snowflake'), 0);
+      return;
+    }
+    if (connector.name === 'Databricks') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, 'databricks'), 0);
       return;
     }
 

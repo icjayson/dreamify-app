@@ -28,6 +28,7 @@ const WAREHOUSE_LABELS: Record<WarehouseConnectorKey, string> = {
   postgres: 'PostgreSQL',
   bigquery: 'BigQuery',
   snowflake: 'Snowflake',
+  databricks: 'Databricks',
 };
 
 function tableKey(table: WarehouseTable): string {
@@ -77,6 +78,13 @@ export default function WarehouseIntegrationModal() {
   const [snowflakeRole, setSnowflakeRole] = useState('');
   const [includedSchemas, setIncludedSchemas] = useState('');
   const [maxAssignedBytes, setMaxAssignedBytes] = useState('10737418240');
+  const [databricksServerHostname, setDatabricksServerHostname] = useState('');
+  const [databricksHttpPath, setDatabricksHttpPath] = useState('');
+  const [databricksAccessToken, setDatabricksAccessToken] = useState('');
+  const [databricksCatalog, setDatabricksCatalog] = useState('');
+  const [databricksIncludedSchemas, setDatabricksIncludedSchemas] = useState('');
+  const [maxResultBytes, setMaxResultBytes] = useState('10737418240');
+  const [statementTimeoutSeconds, setStatementTimeoutSeconds] = useState('300');
   const [sourceTimezone, setSourceTimezone] = useState('UTC');
   const [rowLimit, setRowLimit] = useState('5000');
   const [selectedColumns, setSelectedColumns] = useState('');
@@ -185,6 +193,24 @@ export default function WarehouseIntegrationModal() {
         return;
       }
     }
+    if (connectorKey === 'databricks') {
+      if (!databricksServerHostname.trim()) {
+        setError('Enter a Databricks server hostname first.');
+        return;
+      }
+      if (!databricksHttpPath.trim()) {
+        setError('Enter a Databricks SQL Warehouse HTTP path first.');
+        return;
+      }
+      if (!databricksAccessToken.trim()) {
+        setError('Paste a Databricks access token first.');
+        return;
+      }
+      if (!databricksCatalog.trim()) {
+        setError('Enter a Databricks catalog first.');
+        return;
+      }
+    }
 
     setLoading(true);
     setError(null);
@@ -206,8 +232,14 @@ export default function WarehouseIntegrationModal() {
         warehouse: connectorKey === 'snowflake' ? snowflakeWarehouse.trim() : '',
         database: connectorKey === 'snowflake' ? snowflakeDatabase.trim() : '',
         role: connectorKey === 'snowflake' ? snowflakeRole.trim() : '',
-        included_schemas: connectorKey === 'snowflake' ? parseList(includedSchemas) : [],
         max_assigned_bytes: connectorKey === 'snowflake' ? toPositiveNumber(maxAssignedBytes) : undefined,
+        server_hostname: connectorKey === 'databricks' ? databricksServerHostname.trim() : '',
+        http_path: connectorKey === 'databricks' ? databricksHttpPath.trim() : '',
+        access_token: connectorKey === 'databricks' ? databricksAccessToken.trim() : '',
+        catalog: connectorKey === 'databricks' ? databricksCatalog.trim() : '',
+        included_schemas: connectorKey === 'databricks' ? parseList(databricksIncludedSchemas) : connectorKey === 'snowflake' ? parseList(includedSchemas) : [],
+        max_result_bytes: connectorKey === 'databricks' ? toPositiveNumber(maxResultBytes) : undefined,
+        statement_timeout_seconds: connectorKey === 'databricks' ? toPositiveNumber(statementTimeoutSeconds) : undefined,
         source_timezone: sourceTimezone.trim() || 'UTC',
       });
       const refreshed = await integrationService.refreshWarehouseSchema(connection.connection_id);
@@ -217,6 +249,7 @@ export default function WarehouseIntegrationModal() {
       setBigQueryServiceAccountJson('');
       setSnowflakePrivateKeyPem('');
       setSnowflakePrivateKeyPassphrase('');
+      setDatabricksAccessToken('');
       setDisplayName('');
       toast({ title: `${connectorLabel} connected`, description: 'Schema is ready to browse.' });
     } catch (err) {
@@ -335,14 +368,17 @@ export default function WarehouseIntegrationModal() {
           onValueChange={handleModeChange}
           className="w-full justify-start rounded-lg bg-muted/50 p-1"
         >
-          <ToggleGroupItem value="postgres" aria-label="PostgreSQL warehouse" className="flex-1">
+          <ToggleGroupItem value="postgres" aria-label="PostgreSQL warehouse" className="flex-1 text-xs sm:text-sm">
             PostgreSQL
           </ToggleGroupItem>
-          <ToggleGroupItem value="bigquery" aria-label="BigQuery warehouse" className="flex-1">
+          <ToggleGroupItem value="bigquery" aria-label="BigQuery warehouse" className="flex-1 text-xs sm:text-sm">
             BigQuery
           </ToggleGroupItem>
-          <ToggleGroupItem value="snowflake" aria-label="Snowflake warehouse" className="flex-1">
+          <ToggleGroupItem value="snowflake" aria-label="Snowflake warehouse" className="flex-1 text-xs sm:text-sm">
             Snowflake
+          </ToggleGroupItem>
+          <ToggleGroupItem value="databricks" aria-label="Databricks warehouse" className="flex-1 text-xs sm:text-sm">
+            Databricks
           </ToggleGroupItem>
         </ToggleGroup>
 
@@ -432,7 +468,7 @@ export default function WarehouseIntegrationModal() {
                   </div>
                 </div>
               </>
-            ) : (
+            ) : connectorKey === 'snowflake' ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
@@ -516,6 +552,71 @@ export default function WarehouseIntegrationModal() {
                   </div>
                 </div>
               </>
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Server hostname</Label>
+                    <Input
+                      value={databricksServerHostname}
+                      onChange={(e) => setDatabricksServerHostname(e.target.value)}
+                      placeholder="dbc-...cloud.databricks.com"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>HTTP path</Label>
+                    <Input
+                      value={databricksHttpPath}
+                      onChange={(e) => setDatabricksHttpPath(e.target.value)}
+                      placeholder="sql/1.0/warehouses/..."
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Catalog</Label>
+                    <Input
+                      value={databricksCatalog}
+                      onChange={(e) => setDatabricksCatalog(e.target.value)}
+                      placeholder="main"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Access token</Label>
+                    <Input
+                      value={databricksAccessToken}
+                      onChange={(e) => setDatabricksAccessToken(e.target.value)}
+                      type="password"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label>Restrict schemas</Label>
+                    <Input
+                      value={databricksIncludedSchemas}
+                      onChange={(e) => setDatabricksIncludedSchemas(e.target.value)}
+                      placeholder="analytics, reporting"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Max result bytes</Label>
+                    <Input
+                      value={maxResultBytes}
+                      onChange={(e) => setMaxResultBytes(e.target.value)}
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Timeout seconds</Label>
+                    <Input
+                      value={statementTimeoutSeconds}
+                      onChange={(e) => setStatementTimeoutSeconds(e.target.value)}
+                      inputMode="numeric"
+                    />
+                  </div>
+                </div>
+              </>
             )}
 
             <Button onClick={handleQuickConnect} disabled={loading} className="w-full sm:w-auto">
@@ -546,7 +647,9 @@ export default function WarehouseIntegrationModal() {
                       ? `${selectedConnection.project_id || selectedConnection.database || 'Project'} / ${selectedConnection.location || 'location'}`
                       : connectorKey === 'snowflake'
                         ? `${selectedConnection.account || selectedConnection.database || 'Account'} / ${selectedConnection.warehouse || 'warehouse'}`
-                        : `${selectedConnection.host || selectedConnection.database || 'Database'}`}
+                        : connectorKey === 'databricks'
+                          ? `${selectedConnection.server_hostname || 'Workspace'} / ${selectedConnection.catalog || selectedConnection.database || 'catalog'}`
+                          : `${selectedConnection.host || selectedConnection.database || 'Database'}`}
                   </p>
                 )}
               </div>

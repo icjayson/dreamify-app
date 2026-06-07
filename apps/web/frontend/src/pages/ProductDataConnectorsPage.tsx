@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Smartphone,
   Table2,
+  Users,
 } from "lucide-react";
 import { CONNECTORS, type ConnectorItem, type ConnectorModalTarget, type ProductConnectorCategory } from "@/constants/connectors";
 import { useChatStore } from "@/chat/useChatStore";
@@ -42,6 +43,7 @@ const CONNECTOR_FILTERS: { label: ConnectorFilter; Icon: ElementType }[] = [
   { label: "Analytics", Icon: BarChart3 },
   { label: "Spreadsheets", Icon: Table2 },
   { label: "Databases", Icon: Database },
+  { label: "Sales & CRM", Icon: Users },
   { label: "Finance", Icon: CreditCard },
   { label: "Mobile & Attribution", Icon: Smartphone },
 ];
@@ -103,6 +105,8 @@ export default function ProductDataConnectorsPage() {
     setTikTokModalOpen,
     setAppsFlyerModalOpen,
     setStripeModalOpen,
+    setHubSpotModalOpen,
+    setSalesforceModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -134,11 +138,14 @@ export default function ProductDataConnectorsPage() {
       tiktok_ads: () => setTikTokModalOpen(true),
       appsflyer: () => setAppsFlyerModalOpen(true),
       stripe: () => setStripeModalOpen(true),
+      hubspot: () => setHubSpotModalOpen(true),
+      salesforce: () => setSalesforceModalOpen(true),
       google_ads: () => setGoogleAdsModalOpen(true),
       firebase: () => setFirebaseModalOpen(true),
       postgres: () => setWarehouseModalOpen(true, "postgres"),
       bigquery: () => setWarehouseModalOpen(true, "bigquery"),
       snowflake: () => setWarehouseModalOpen(true, "snowflake"),
+      databricks: () => setWarehouseModalOpen(true, "databricks"),
     };
 
     if (!target) {
@@ -172,7 +179,7 @@ export default function ProductDataConnectorsPage() {
     <>
       <Seo
         title="Data Connectors — Dreamify | Live Connectors for AI Dashboards"
-        description="Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Google Sheets, PostgreSQL, BigQuery, and Snowflake to Dreamify. Live data into AI dashboards in minutes."
+        description="Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, HubSpot, Salesforce, Google Sheets, PostgreSQL, BigQuery, Snowflake, and Databricks to Dreamify. Live data into AI dashboards in minutes."
         canonical="https://app.dreamify.dev/product/data-connectors"
         jsonLd={[
           {

@@ -174,7 +174,7 @@ type DashboardDataForView = Record<string, unknown> & {
   template_id?: string | null;
 };
 
-type WarehouseConnectorKey = 'postgres' | 'bigquery' | 'snowflake';
+type WarehouseConnectorKey = 'postgres' | 'bigquery' | 'snowflake' | 'databricks';
 
 /** Result of Meta Ads sync API (used by Meta modal for empty-data hybrid flow) */
 export interface MetaAdsSyncResult {
@@ -368,6 +368,8 @@ interface ChatState {
   isTikTokModalOpen: boolean;
   isAppsFlyerModalOpen: boolean;
   isStripeModalOpen: boolean;
+  isHubSpotModalOpen: boolean;
+  isSalesforceModalOpen: boolean;
   isGoogleAdsModalOpen: boolean;
   isFirebaseModalOpen: boolean;
   isWarehouseModalOpen: boolean;
@@ -439,6 +441,8 @@ interface ChatState {
   setTikTokModalOpen: (open: boolean) => void;
   setAppsFlyerModalOpen: (open: boolean) => void;
   setStripeModalOpen: (open: boolean) => void;
+  setHubSpotModalOpen: (open: boolean) => void;
+  setSalesforceModalOpen: (open: boolean) => void;
   setGoogleAdsModalOpen: (open: boolean) => void;
   setFirebaseModalOpen: (open: boolean) => void;
   setWarehouseModalOpen: (open: boolean, connectorKey?: WarehouseConnectorKey) => void;
@@ -464,6 +468,8 @@ interface ChatState {
   syncTikTokAds: (adAccountId: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<TikTokAdsSyncResult>;
   syncAppsFlyer: (appId: string, appName: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<AppsFlyerSyncResult>;
   syncStripe: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
+  syncHubSpot: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, pipelineId?: string, ownerId?: string, rowLimit?: number, includeAssociations?: boolean) => Promise<HubSpotSyncResult>;
+  syncSalesforce: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, objectName?: string, ownerId?: string, rowLimit?: number) => Promise<SalesforceSyncResult>;
   syncGoogleAds: (adAccountId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<StripeSyncResult>;
   syncFirebase: (firebaseProjectId: string, projectName: string, projectId?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
 }
@@ -484,6 +490,28 @@ export interface StripeSyncResult {
   column_count: number;
   asset: import('@/services/fileService').AssetRecord;
   message?: string;
+}
+
+/** Result of HubSpot sync API */
+export interface HubSpotSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+}
+
+/** Result of Salesforce sync API */
+export interface SalesforceSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
 }
 
 export interface PendingAction {
@@ -954,6 +982,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isTikTokModalOpen: false,
   isAppsFlyerModalOpen: false,
   isStripeModalOpen: false,
+  isHubSpotModalOpen: false,
+  isSalesforceModalOpen: false,
   isGoogleAdsModalOpen: false,
   isFirebaseModalOpen: false,
   isWarehouseModalOpen: false,
@@ -1085,6 +1115,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setTikTokModalOpen: (open) => set({ isTikTokModalOpen: open }),
   setAppsFlyerModalOpen: (open) => set({ isAppsFlyerModalOpen: open }),
   setStripeModalOpen: (open) => set({ isStripeModalOpen: open }),
+  setHubSpotModalOpen: (open) => set({ isHubSpotModalOpen: open }),
+  setSalesforceModalOpen: (open) => set({ isSalesforceModalOpen: open }),
   setGoogleAdsModalOpen: (open) => set({ isGoogleAdsModalOpen: open }),
   setFirebaseModalOpen: (open) => set({ isFirebaseModalOpen: open }),
   setWarehouseModalOpen: (open, connectorKey) => set((state) => ({
@@ -1295,6 +1327,73 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync Stripe');
     } catch (err) {
       console.error('Sync Stripe error:', err);
+      throw err;
+    }
+  },
+
+  syncHubSpot: async (reportType, projectId, datePreset, startDate, endDate, pipelineId, ownerId, rowLimit, includeAssociations) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncHubSpot({
+        report_type: reportType,
+        ...(projectId && { project_id: projectId }),
+        date_preset: datePreset || 'last_30d',
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+        pipeline_id: pipelineId || 'all',
+        owner_id: ownerId || 'all',
+        row_limit: rowLimit || 5000,
+        include_associations: includeAssociations ?? true,
+      });
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('HubSpot');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync HubSpot');
+    } catch (err) {
+      console.error('Sync HubSpot error:', err);
+      throw err;
+    }
+  },
+
+  syncSalesforce: async (reportType, projectId, datePreset, startDate, endDate, objectName, ownerId, rowLimit) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncSalesforce({
+        report_type: reportType,
+        ...(projectId && { project_id: projectId }),
+        date_preset: datePreset || 'last_30d',
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+        object_name: objectName || 'all',
+        owner_id: ownerId || 'all',
+        row_limit: rowLimit || 5000,
+      });
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Salesforce');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Salesforce');
+    } catch (err) {
+      console.error('Sync Salesforce error:', err);
       throw err;
     }
   },

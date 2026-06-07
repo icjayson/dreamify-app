@@ -46,9 +46,12 @@ const CONNECTOR_ALIASES: Array<{
   { name: "Firebase", shortName: "Firebase", aliases: ["firebase", "integration_firebase"] },
   { name: "AppsFlyer", shortName: "AppsFlyer", aliases: ["appsflyer", "apps_flyer", "integration_appsflyer"] },
   { name: "Stripe", shortName: "Stripe", aliases: ["stripe", "integration_stripe"] },
+  { name: "HubSpot", shortName: "HubSpot", aliases: ["hubspot", "hub spot", "integration_hubspot"] },
+  { name: "Salesforce", shortName: "Salesforce", aliases: ["salesforce", "sales force", "salesforce_crm", "integration_salesforce"] },
   { name: "PostgreSQL", shortName: "Postgres", aliases: ["postgres", "postgresql", "warehouse", "warehouse_extract"] },
   { name: "BigQuery", shortName: "BigQuery", aliases: ["bigquery", "big query", "google bigquery"] },
   { name: "Snowflake", shortName: "Snowflake", aliases: ["snowflake", "snowflake warehouse"] },
+  { name: "Databricks", shortName: "Databricks", aliases: ["databricks", "delta lake", "unity catalog"] },
 ];
 
 function compact(value: string): string {

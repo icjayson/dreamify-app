@@ -1,5 +1,6 @@
 export type ConnectorCategory =
   | "Advertising Platform"
+  | "Sales & CRM"
   | "E-commerce"
   | "Analytics Platform"
   | "Payment & Finance"
@@ -10,6 +11,7 @@ export type ProductConnectorCategory =
   | "Analytics"
   | "Spreadsheets"
   | "Databases"
+  | "Sales & CRM"
   | "Finance"
   | "Mobile & Attribution";
 
@@ -20,11 +22,14 @@ export type ConnectorModalTarget =
   | "tiktok_ads"
   | "appsflyer"
   | "stripe"
+  | "hubspot"
+  | "salesforce"
   | "google_ads"
   | "firebase"
   | "postgres"
   | "bigquery"
-  | "snowflake";
+  | "snowflake"
+  | "databricks";
 
 export interface ConnectorItem {
   name: string;
@@ -48,6 +53,7 @@ export interface ConnectorItem {
 export const CONNECTOR_CATEGORIES: ConnectorCategory[] = [
   "Advertising Platform",
   "Analytics Platform",
+  "Sales & CRM",
   "Operations & Database",
   "Payment & Finance",
   "E-commerce",
@@ -142,6 +148,30 @@ export const CONNECTORS: ConnectorItem[] = [
   },
   { name: "PayPal",      icon: "/paypal.png",                  category: "Payment & Finance" },
 
+  // ── Sales & CRM ─────────────────────────────────────────────────────────────
+  {
+    name: "HubSpot",
+    icon: "/hubspot.png",
+    isActive: true,
+    category: "Sales & CRM",
+    connectorKey: "hubspot",
+    productDescription: "Analyze CRM pipeline, owners, contacts, companies, and activities.",
+    productCategory: "Sales & CRM",
+    showOnProductPage: true,
+    modalTarget: "hubspot",
+  },
+  {
+    name: "Salesforce",
+    icon: "/salesforce.svg",
+    isActive: true,
+    category: "Sales & CRM",
+    connectorKey: "salesforce",
+    productDescription: "Analyze Sales Cloud pipeline, leads, accounts, activities, and campaigns.",
+    productCategory: "Sales & CRM",
+    showOnProductPage: true,
+    modalTarget: "salesforce",
+  },
+
   // ── E-commerce ────────────────────────────────────────────────────────────────
   { name: "TikTok Shop Seller", icon: "/tiktokshop.png",  iconBg: "bg-black",    category: "E-commerce" },
   { name: "Shopee Seller",      icon: "/shopee.png",                             category: "E-commerce" },
@@ -166,7 +196,6 @@ export const CONNECTORS: ConnectorItem[] = [
   { name: "Notion",                 icon: "/notion.png",                               category: "Operations & Database" },
   { name: "Lark",                   icon: "/lark.png",                                 category: "Operations & Database" },
   { name: "Airtable",               icon: "/airtable.png",                             category: "Operations & Database" },
-  { name: "HubSpot",                icon: "/hubspot.png",                              category: "Operations & Database" },
   {
     name: "PostgreSQL",
     icon: "/PostgreSQL.png",
@@ -199,6 +228,18 @@ export const CONNECTORS: ConnectorItem[] = [
     productCategory: "Databases",
     showOnProductPage: true,
     modalTarget: "snowflake",
+  },
+  {
+    name: "Databricks",
+    icon: "/databricks.svg",
+    isActive: true,
+    category: "Operations & Database",
+    connectorKey: "databricks",
+    productDescription: "Connect Delta tables and Unity Catalog schemas through Databricks SQL Warehouses.",
+    productCategory: "Databases",
+    showOnProductPage: true,
+    modalTarget: "databricks",
+    iconBg: "bg-white",
   },
   { name: "Oracle",                 icon: "/oracle.png",                               category: "Operations & Database" },
 ];

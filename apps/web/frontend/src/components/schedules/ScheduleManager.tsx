@@ -20,6 +20,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   tiktok: 'TikTok Ads',
   appsflyer: 'AppsFlyer',
   stripe: 'Stripe',
+  hubspot: 'HubSpot',
+  salesforce: 'Salesforce',
   warehouse: 'Warehouse',
 };
 

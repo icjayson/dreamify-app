@@ -44,8 +44,14 @@ export interface ConnectorSelectedEntity {
   connection_id?: string;
   connector_key?: string;
   database_type?: string;
+  catalog_name?: string;
   schema_name?: string;
+  source_schema_name?: string;
   table_name?: string;
+  report_type?: string;
+  pipeline_id?: string;
+  object_name?: string;
+  owner_id?: string;
 }
 
 export interface ConnectorOverviewItem {
@@ -146,6 +152,8 @@ export interface WarehouseColumn {
 export interface WarehouseTable {
   schema: string;
   name: string;
+  catalog?: string;
+  source_schema?: string;
   type?: string;
   row_count?: number;
   columns: WarehouseColumn[];
@@ -153,6 +161,8 @@ export interface WarehouseTable {
 
 export interface WarehouseSchema {
   name: string;
+  catalog?: string;
+  source_schema?: string;
   tables: WarehouseTable[];
 }
 
@@ -167,9 +177,11 @@ export interface WarehouseSchemaSnapshot {
   warehouse?: string;
   database?: string;
   role?: string;
+  catalog?: string;
+  warehouse_id?: string;
 }
 
-export type WarehouseConnectorKey = 'postgres' | 'bigquery' | 'snowflake';
+export type WarehouseConnectorKey = 'postgres' | 'bigquery' | 'snowflake' | 'databricks';
 
 export interface WarehouseConnection {
   connection_id: string;
@@ -191,6 +203,12 @@ export interface WarehouseConnection {
   service_account_email?: string;
   max_billing_bytes?: number;
   max_assigned_bytes?: number;
+  server_hostname?: string;
+  http_path?: string;
+  catalog?: string;
+  warehouse_id?: string;
+  max_result_bytes?: number;
+  statement_timeout_seconds?: number;
   source_timezone: string;
   schema_snapshot: WarehouseSchemaSnapshot;
   created_at?: string;
@@ -223,6 +241,12 @@ export interface WarehouseQuickConnectRequest {
   role?: string;
   included_schemas?: string[];
   max_assigned_bytes?: number;
+  server_hostname?: string;
+  http_path?: string;
+  access_token?: string;
+  catalog?: string;
+  max_result_bytes?: number;
+  statement_timeout_seconds?: number;
 }
 
 export interface WarehouseSampleResponse {
@@ -275,6 +299,12 @@ class IntegrationService {
       role: payload.role || '',
       included_schemas: payload.included_schemas || [],
       max_assigned_bytes: payload.max_assigned_bytes,
+      server_hostname: payload.server_hostname || '',
+      http_path: payload.http_path || '',
+      access_token: payload.access_token || '',
+      catalog: payload.catalog || '',
+      max_result_bytes: payload.max_result_bytes,
+      statement_timeout_seconds: payload.statement_timeout_seconds,
     });
     if (res.success && res.data) return res.data;
     throw new Error(res.error || 'Failed to connect warehouse');
@@ -544,6 +574,14 @@ class IntegrationService {
     return '/api/v1/integration/stripe/oauth/start';
   }
 
+  getHubSpotOAuthStartUrl(): string {
+    return '/api/v1/integration/hubspot/oauth/start';
+  }
+
+  getSalesforceOAuthStartUrl(): string {
+    return '/api/v1/integration/salesforce/oauth/start';
+  }
+
   async getMetaConnectionStatus(): Promise<MetaConnectionStatusResponse> {
     try {
       const res = await api.get<MetaConnectionStatusResponse>(`${this.baseUrl}/meta/status`);
@@ -761,6 +799,106 @@ class IntegrationService {
     await api.delete(`${this.baseUrl}/stripe/disconnect`);
   }
 
+  async getHubSpotStatus(): Promise<HubSpotConnectionStatusResponse> {
+    try {
+      const res = await api.get<HubSpotConnectionStatusResponse>(`${this.baseUrl}/hubspot/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectHubSpot(): Promise<void> {
+    await api.delete(`${this.baseUrl}/hubspot/disconnect`);
+  }
+
+  async fetchHubSpotPipelines(): Promise<HubSpotPipelinesResponse> {
+    try {
+      const res = await api.get<HubSpotPipelinesResponse>(`${this.baseUrl}/hubspot/pipelines`);
+      if (res.success && res.data) return res.data;
+      return { success: false, pipelines: [], error: res.error || 'Failed to load HubSpot pipelines' };
+    } catch (error) {
+      return { success: false, pipelines: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchHubSpotOwners(): Promise<HubSpotOwnersResponse> {
+    try {
+      const res = await api.get<HubSpotOwnersResponse>(`${this.baseUrl}/hubspot/owners`);
+      if (res.success && res.data) return res.data;
+      return { success: false, owners: [], error: res.error || 'Failed to load HubSpot owners' };
+    } catch (error) {
+      return { success: false, owners: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncHubSpot(req: HubSpotSyncRequest): Promise<HubSpotSyncResponse> {
+    try {
+      const res = await api.post<HubSpotSyncResponse>(`${this.baseUrl}/hubspot/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync HubSpot data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getSalesforceStatus(): Promise<SalesforceConnectionStatusResponse> {
+    try {
+      const res = await api.get<SalesforceConnectionStatusResponse>(`${this.baseUrl}/salesforce/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectSalesforce(): Promise<void> {
+    await api.delete(`${this.baseUrl}/salesforce/disconnect`);
+  }
+
+  async fetchSalesforceObjects(): Promise<SalesforceObjectsResponse> {
+    try {
+      const res = await api.get<SalesforceObjectsResponse>(`${this.baseUrl}/salesforce/objects`);
+      if (res.success && res.data) return res.data;
+      return { success: false, objects: [], error: res.error || 'Failed to load Salesforce objects' };
+    } catch (error) {
+      return { success: false, objects: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchSalesforceFields(objectName: string): Promise<SalesforceFieldsResponse> {
+    try {
+      const res = await api.get<SalesforceFieldsResponse>(
+        `${this.baseUrl}/salesforce/fields?object_name=${encodeURIComponent(objectName)}`
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, fields: [], error: res.error || 'Failed to load Salesforce fields' };
+    } catch (error) {
+      return { success: false, fields: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchSalesforceOwners(): Promise<SalesforceOwnersResponse> {
+    try {
+      const res = await api.get<SalesforceOwnersResponse>(`${this.baseUrl}/salesforce/owners`);
+      if (res.success && res.data) return res.data;
+      return { success: false, owners: [], error: res.error || 'Failed to load Salesforce owners' };
+    } catch (error) {
+      return { success: false, owners: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncSalesforce(req: SalesforceSyncRequest): Promise<SalesforceSyncResponse> {
+    try {
+      const res = await api.post<SalesforceSyncResponse>(`${this.baseUrl}/salesforce/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Salesforce data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
   async fetchGoogleAdsAccounts(): Promise<GoogleAdsAccountsResponse> {
     try {
       const res = await api.get<GoogleAdsAccountsResponse>(`${this.baseUrl}/google-ads/accounts`);
@@ -945,6 +1083,139 @@ export interface StripeSyncResponse {
   asset?: AssetRecord;
   row_count?: number;
   column_count?: number;
+  error?: string;
+}
+
+export interface HubSpotConnectionStatusResponse {
+  connected: boolean;
+  portal_id?: string;
+  portal_domain?: string;
+  account_name?: string;
+}
+
+export interface HubSpotPipelineStage {
+  id: string;
+  label: string;
+  probability?: string | number | null;
+}
+
+export interface HubSpotPipeline {
+  id: string;
+  label: string;
+  stages: HubSpotPipelineStage[];
+}
+
+export interface HubSpotOwner {
+  id: string;
+  name: string;
+  email?: string;
+}
+
+export interface HubSpotPipelinesResponse {
+  success: boolean;
+  pipelines: HubSpotPipeline[];
+  error?: string;
+}
+
+export interface HubSpotOwnersResponse {
+  success: boolean;
+  owners: HubSpotOwner[];
+  error?: string;
+}
+
+export interface HubSpotSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  pipeline_id?: string;
+  owner_id?: string;
+  row_limit?: number;
+  include_associations?: boolean;
+}
+
+export interface HubSpotSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  error?: string;
+}
+
+export interface SalesforceConnectionStatusResponse {
+  connected: boolean;
+  org_id?: string;
+  instance_url?: string;
+  instance_domain?: string;
+  username?: string;
+  account_name?: string;
+}
+
+export interface SalesforceObject {
+  name: string;
+  label: string;
+  label_plural?: string;
+  queryable?: boolean;
+  custom?: boolean;
+}
+
+export interface SalesforceField {
+  name: string;
+  label: string;
+  type: string;
+  filterable?: boolean;
+  sortable?: boolean;
+  nillable?: boolean;
+  custom?: boolean;
+}
+
+export interface SalesforceOwner {
+  id: string;
+  name: string;
+  email?: string;
+}
+
+export interface SalesforceObjectsResponse {
+  success: boolean;
+  objects: SalesforceObject[];
+  error?: string;
+}
+
+export interface SalesforceFieldsResponse {
+  success: boolean;
+  fields: SalesforceField[];
+  error?: string;
+}
+
+export interface SalesforceOwnersResponse {
+  success: boolean;
+  owners: SalesforceOwner[];
+  error?: string;
+}
+
+export interface SalesforceSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  object_name?: string;
+  owner_id?: string;
+  row_limit?: number;
+}
+
+export interface SalesforceSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
   error?: string;
 }
 

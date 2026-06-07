@@ -24,6 +24,8 @@ export default function AllConnectorsModal() {
     setTikTokModalOpen,
     setAppsFlyerModalOpen,
     setStripeModalOpen,
+    setHubSpotModalOpen,
+    setSalesforceModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -89,11 +91,22 @@ export default function AllConnectorsModal() {
         ? { connected: true, info: 'Stripe' }
         : { connected: false };
 
+      const hubspotStatus = await integrationService.getHubSpotStatus();
+      results['HubSpot'] = hubspotStatus.connected
+        ? { connected: true, info: hubspotStatus.portal_domain || hubspotStatus.account_name || 'HubSpot' }
+        : { connected: false };
+
+      const salesforceStatus = await integrationService.getSalesforceStatus();
+      results['Salesforce'] = salesforceStatus.connected
+        ? { connected: true, info: salesforceStatus.account_name || salesforceStatus.instance_domain || 'Salesforce' }
+        : { connected: false };
+
       const overview = await integrationService.fetchConnectorsOverview();
       if (overview.success) {
         const postgres = overview.connectors.find((connector) => connector.connector_key === 'postgres');
         const bigquery = overview.connectors.find((connector) => connector.connector_key === 'bigquery');
         const snowflake = overview.connectors.find((connector) => connector.connector_key === 'snowflake');
+        const databricks = overview.connectors.find((connector) => connector.connector_key === 'databricks');
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results['PostgreSQL'] = {
@@ -121,6 +134,15 @@ export default function AllConnectorsModal() {
         } else {
           results['Snowflake'] = { connected: false };
         }
+        if (databricks?.connected) {
+          const tableCount = databricks.selected_entities?.length || 0;
+          results['Databricks'] = {
+            connected: true,
+            info: tableCount > 0 ? `${tableCount} table${tableCount === 1 ? '' : 's'}` : 'Databricks',
+          };
+        } else {
+          results['Databricks'] = { connected: false };
+        }
       }
 
       setConnectorStatus(results);
@@ -144,11 +166,14 @@ export default function AllConnectorsModal() {
       else if (connectorName === 'TikTok Ads') setTikTokModalOpen(true);
       else if (connectorName === 'AppsFlyer') setAppsFlyerModalOpen(true);
       else if (connectorName === 'Stripe') setStripeModalOpen(true);
+      else if (connectorName === 'HubSpot') setHubSpotModalOpen(true);
+      else if (connectorName === 'Salesforce') setSalesforceModalOpen(true);
       else if (connectorName === 'Google Ads') setGoogleAdsModalOpen(true);
       else if (connectorName === 'Firebase') setFirebaseModalOpen(true);
       else if (connectorName === 'PostgreSQL') setWarehouseModalOpen(true, 'postgres');
       else if (connectorName === 'BigQuery') setWarehouseModalOpen(true, 'bigquery');
       else if (connectorName === 'Snowflake') setWarehouseModalOpen(true, 'snowflake');
+      else if (connectorName === 'Databricks') setWarehouseModalOpen(true, 'databricks');
     }, 0);
   };
 

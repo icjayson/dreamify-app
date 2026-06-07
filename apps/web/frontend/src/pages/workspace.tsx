@@ -84,8 +84,11 @@ function inferSourceFromTitle(title: string): string {
   if (t.includes("appsflyer")) return "AppsFlyer";
   if (t.includes("firebase")) return "Firebase";
   if (t.includes("stripe")) return "Stripe";
+  if (t.includes("hubspot")) return "HubSpot";
+  if (t.includes("salesforce")) return "Salesforce";
   if (t.includes("bigquery")) return "BigQuery";
   if (t.includes("snowflake")) return "Snowflake";
+  if (t.includes("databricks")) return "Databricks";
   if (t.includes("postgres") || t.includes("warehouse")) return "PostgreSQL";
   return "CSV";
 }
@@ -105,6 +108,9 @@ const SOURCE_COLORS: Record<string, string> = {
   AppsFlyer: "bg-indigo-500/20 text-indigo-700 dark:text-indigo-300",
   Firebase: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300",
   Stripe: "bg-purple-500/20 text-purple-700 dark:text-purple-300",
+  HubSpot: "bg-orange-500/20 text-orange-700 dark:text-orange-300",
+  Salesforce: "bg-sky-500/20 text-sky-700 dark:text-sky-300",
+  Databricks: "bg-red-500/20 text-red-700 dark:text-red-300",
   CSV: "bg-foreground/10 text-foreground/60",
 };
 
@@ -116,7 +122,10 @@ const CONNECTOR_CARD_DESCRIPTIONS: Record<string, string> = {
   "Google Sheets": "Use spreadsheet data as a live source for dashboards.",
   "AppsFlyer": "Sync mobile attribution and install metrics.",
   "Stripe": "Sync subscription and payment metrics.",
+  "HubSpot": "Sync CRM pipeline, owners, contacts, and companies.",
+  "Salesforce": "Sync Sales Cloud pipeline, leads, accounts, and activities.",
   "Firebase": "Sync app analytics and product signals.",
+  "Databricks": "Sync Delta tables through Databricks SQL Warehouses.",
 };
 
 type Tab = "new-chat" | "projects" | "connectors" | "dashboards" | "schedules" | "files" | "settings" | "privacy" | "terms";
@@ -249,7 +258,7 @@ function WorkspaceDocsView({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function WorkspacePage() {
-  type MarketplaceTab = "all" | "analytics" | "advertising" | "operations" | "finance" | "e-commerce";
+  type MarketplaceTab = "all" | "analytics" | "advertising" | "sales" | "operations" | "finance" | "e-commerce";
   const routeParams = useParams<{ connectorKey?: string; entityId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as Tab | null;
@@ -462,6 +471,8 @@ export default function WorkspacePage() {
     setTikTokModalOpen,
     setAppsFlyerModalOpen,
     setStripeModalOpen,
+    setHubSpotModalOpen,
+    setSalesforceModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -486,6 +497,10 @@ export default function WorkspacePage() {
       setAppsFlyerModalOpen(true);
     } else if (connectorName === 'Stripe') {
       setStripeModalOpen(true);
+    } else if (connectorName === 'HubSpot') {
+      setHubSpotModalOpen(true);
+    } else if (connectorName === 'Salesforce') {
+      setSalesforceModalOpen(true);
     } else if (connectorName === 'Google Ads') {
       setGoogleAdsModalOpen(true);
     } else if (connectorName === 'Firebase') {
@@ -496,6 +511,8 @@ export default function WorkspacePage() {
       setWarehouseModalOpen(true, "bigquery");
     } else if (connectorName === 'Snowflake') {
       setWarehouseModalOpen(true, "snowflake");
+    } else if (connectorName === 'Databricks') {
+      setWarehouseModalOpen(true, "databricks");
     }
   };
 
@@ -576,12 +593,25 @@ export default function WorkspacePage() {
         ? { connected: true, info: "Account: Stripe" }
         : { connected: false };
 
+      const hubspotStatus = await integrationService.getHubSpotStatus();
+      results["HubSpot"] = hubspotStatus.connected
+        ? { connected: true, info: `Account: ${hubspotStatus.portal_domain || hubspotStatus.account_name || "HubSpot"}` }
+        : { connected: false };
+
+      const salesforceStatus = await integrationService.getSalesforceStatus();
+      results["Salesforce"] = salesforceStatus.connected
+        ? { connected: true, info: `Account: ${salesforceStatus.account_name || salesforceStatus.instance_domain || "Salesforce"}` }
+        : { connected: false };
+
       const overview = await integrationService.fetchConnectorsOverview();
       if (overview.success) {
         setConnectorOverview(overview.connectors);
         const postgres = overview.connectors.find((connector) => connector.connector_key === "postgres");
         const bigquery = overview.connectors.find((connector) => connector.connector_key === "bigquery");
         const snowflake = overview.connectors.find((connector) => connector.connector_key === "snowflake");
+        const databricks = overview.connectors.find((connector) => connector.connector_key === "databricks");
+        const hubspot = overview.connectors.find((connector) => connector.connector_key === "hubspot");
+        const salesforce = overview.connectors.find((connector) => connector.connector_key === "salesforce");
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results["PostgreSQL"] = {
@@ -609,11 +639,35 @@ export default function WorkspacePage() {
         } else {
           results["Snowflake"] = { connected: false };
         }
+        if (databricks?.connected) {
+          const tableCount = databricks.selected_entities?.length || 0;
+          results["Databricks"] = {
+            connected: true,
+            info: tableCount > 0 ? `${tableCount} table${tableCount === 1 ? "" : "s"}` : "Account: Databricks",
+          };
+        } else {
+          results["Databricks"] = { connected: false };
+        }
+        if (hubspot?.connected) {
+          const reportCount = hubspot.selected_entities?.length || 0;
+          results["HubSpot"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["HubSpot"]?.info || "Account: HubSpot",
+          };
+        }
+        if (salesforce?.connected) {
+          const reportCount = salesforce.selected_entities?.length || 0;
+          results["Salesforce"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Salesforce"]?.info || "Account: Salesforce",
+          };
+        }
       } else {
         setConnectorOverview([]);
         results["PostgreSQL"] = { connected: false };
         results["BigQuery"] = { connected: false };
         results["Snowflake"] = { connected: false };
+        results["Databricks"] = { connected: false };
       }
       setConnectorStatus(results);
     } catch (e) {
@@ -694,6 +748,7 @@ export default function WorkspacePage() {
     const tabCategoryMap: Record<Exclude<MarketplaceTab, "all">, string> = {
       analytics: "Analytics Platform",
       advertising: "Advertising Platform",
+      sales: "Sales & CRM",
       operations: "Operations & Database",
       finance: "Payment & Finance",
       "e-commerce": "E-commerce",
@@ -990,9 +1045,12 @@ export default function WorkspacePage() {
       'google-sheets': setGoogleSheetsModalOpen,
       'google-ads': setGoogleAdsModalOpen,
       'firebase': setFirebaseModalOpen,
+      'hubspot': setHubSpotModalOpen,
+      'salesforce': setSalesforceModalOpen,
       'postgres': (open: boolean) => setWarehouseModalOpen(open, 'postgres'),
       'bigquery': (open: boolean) => setWarehouseModalOpen(open, 'bigquery'),
       'snowflake': (open: boolean) => setWarehouseModalOpen(open, 'snowflake'),
+      'databricks': (open: boolean) => setWarehouseModalOpen(open, 'databricks'),
     };
 
     const openModal = CONNECTOR_MODAL_MAP[connectorParam];
@@ -1006,7 +1064,7 @@ export default function WorkspacePage() {
     const remaining = newParams.toString();
     const newUrl = `${window.location.pathname}${remaining ? '?' + remaining : ''}`;
     window.history.replaceState({}, '', newUrl);
-  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setWarehouseModalOpen]);
+  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setHubSpotModalOpen, setSalesforceModalOpen, setWarehouseModalOpen]);
 
   const isAesthetic = layoutStyle === "aesthetic" && activeTab === "new-chat";
   const showWorkspaceHeaderActions = activeTab === "new-chat";
@@ -1359,6 +1417,7 @@ export default function WorkspacePage() {
                       { key: "all", label: "All" },
                       { key: "analytics", label: "Analytics" },
                       { key: "advertising", label: "Advertising" },
+                      { key: "sales", label: "Sales & CRM" },
                       { key: "operations", label: "Operations" },
                       { key: "finance", label: "Finance" },
                       { key: "e-commerce", label: "E-Commerce" },

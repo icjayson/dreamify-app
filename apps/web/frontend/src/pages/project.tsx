@@ -598,9 +598,12 @@ export default function ProjectPage() {
       'google-sheets': store.setGoogleSheetsModalOpen,
       'google-ads': store.setGoogleAdsModalOpen,
       'firebase': store.setFirebaseModalOpen,
+      'hubspot': store.setHubSpotModalOpen,
+      'salesforce': store.setSalesforceModalOpen,
       'postgres': (open: boolean) => store.setWarehouseModalOpen(open, 'postgres'),
       'bigquery': (open: boolean) => store.setWarehouseModalOpen(open, 'bigquery'),
       'snowflake': (open: boolean) => store.setWarehouseModalOpen(open, 'snowflake'),
+      'databricks': (open: boolean) => store.setWarehouseModalOpen(open, 'databricks'),
     };
 
     const openModal = CONNECTOR_MODAL_MAP[connectorParam];
@@ -633,6 +636,8 @@ export default function ProjectPage() {
       integration_tiktok: 'TikTok Ads',
       integration_appsflyer: 'AppsFlyer',
       integration_stripe: 'Stripe',
+      integration_hubspot: 'HubSpot',
+      integration_salesforce: 'Salesforce',
       warehouse_extract: 'Warehouse',
     };
 

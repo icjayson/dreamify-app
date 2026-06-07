@@ -1,6 +1,6 @@
 import { api } from './api';
 
-export type ProviderKey = 'ga4' | 'meta_ads' | 'tiktok' | 'appsflyer' | 'stripe' | 'warehouse';
+export type ProviderKey = 'ga4' | 'meta_ads' | 'tiktok' | 'appsflyer' | 'stripe' | 'hubspot' | 'salesforce' | 'warehouse';
 export type FrequencyKey = 'daily' | 'weekly' | 'biweekly';
 export type DateRangePreset = 'last_7d' | 'last_14d' | 'last_30d' | 'last_90d';
 export type ScheduleStatus = 'active' | 'paused';

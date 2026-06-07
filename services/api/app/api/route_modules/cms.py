@@ -57,6 +57,7 @@ class BlogPostResponse(BaseModel):
     content_html: str = ""
     content_json: Optional[Dict[str, Any]] = None
     cover_image_url: Optional[str] = None
+    cover_image_alt: Optional[str] = None
     author: str = "Dreamify Team"
     persona: Optional[str] = None
     tags: List[str] = []
@@ -75,6 +76,7 @@ class BlogPostListItem(BaseModel):
     title: str
     description: str = ""
     cover_image_url: Optional[str] = None
+    cover_image_alt: Optional[str] = None
     author: str = "Dreamify Team"
     persona: Optional[str] = None
     tags: List[str] = []
@@ -93,6 +95,7 @@ class BlogPostUpsert(BaseModel):
     content_html: str = ""
     content_json: Optional[Dict[str, Any]] = None
     cover_image_url: Optional[str] = None
+    cover_image_alt: Optional[str] = None
     author: str = "Dreamify Team"
     persona: Optional[str] = None
     tags: List[str] = []
@@ -114,6 +117,7 @@ def _to_response(item: Dict) -> BlogPostResponse:
         content_html=item.get("content_html", "") or "",
         content_json=item.get("content_json") or None,
         cover_image_url=item.get("cover_image_url"),
+        cover_image_alt=item.get("cover_image_alt"),
         author=item.get("author") or "Dreamify Team",
         persona=item.get("persona"),
         tags=item.get("tags") or [],
@@ -210,6 +214,7 @@ async def admin_create_post(
         content_html=body.content_html,
         content_json=body.content_json,
         cover_image_url=body.cover_image_url,
+        cover_image_alt=body.cover_image_alt,
         author=body.author,
         persona=body.persona,
         tags=body.tags,
@@ -246,6 +251,7 @@ async def admin_update_post(
         content_html=body.content_html,
         content_json=body.content_json,
         cover_image_url=body.cover_image_url,
+        cover_image_alt=body.cover_image_alt,
         author=body.author,
         persona=body.persona,
         tags=body.tags,

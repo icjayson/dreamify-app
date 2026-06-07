@@ -34,6 +34,7 @@ def create_post(
     content_html: str = "",
     content_json: Optional[Dict] = None,
     cover_image_url: Optional[str] = None,
+    cover_image_alt: Optional[str] = None,
     author: str = "Dreamify Team",
     persona: Optional[str] = None,
     tags: Optional[List[str]] = None,
@@ -55,6 +56,7 @@ def create_post(
         "content_html": content_html or "",
         "content_json": content_json or {},
         "cover_image_url": cover_image_url,
+        "cover_image_alt": cover_image_alt,
         "author": author or "Dreamify Team",
         "persona": persona,
         "tags": tags or [],
@@ -113,8 +115,8 @@ def update_post(post_id: str, **fields) -> Optional[Dict]:
 
     allowed = {
         "slug", "title", "description", "content_html", "content_json",
-        "cover_image_url", "author", "persona", "tags", "target_keyword",
-        "status", "reading_minutes", "published_at", "featured",
+        "cover_image_url", "cover_image_alt", "author", "persona", "tags",
+        "target_keyword", "status", "reading_minutes", "published_at", "featured",
     }
     expr: List[str] = []
     names: Dict[str, str] = {}

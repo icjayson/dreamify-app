@@ -27,6 +27,7 @@ export default function BlogContent({ html, className }: BlogContentProps) {
         "prose prose-neutral dark:prose-invert max-w-none",
         "prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-12 prose-h2:mb-6 prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-4",
         "prose-a:text-primary prose-img:rounded-xl prose-img:my-6 prose-img:shadow-sm",
+        "prose-figure:my-6 [&_figure_img]:my-0 prose-figcaption:mt-2 prose-figcaption:text-center",
         "prose-p:leading-[1.5] prose-headings:leading-[1.5] prose-li:leading-[1.5] prose-blockquote:leading-[1.5] prose-p:my-0",
         className,
       )}

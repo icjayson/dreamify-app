@@ -1,7 +1,6 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useRef, useState } from "react";
 import {
@@ -11,14 +10,26 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cmsService } from "@/services/cmsService";
 import { useToast } from "@/hooks/use-toast";
+import { FigureImage } from "@/components/cms/figureImage";
 
 interface LinkPopover {
   open: boolean;
   top: number;
   left: number;
   value: string;
+}
+
+interface ImagePopover {
+  open: boolean;
+  top: number;
+  left: number;
+  mode: "insert" | "edit";
+  src: string;
+  alt: string;
+  caption: string;
 }
 
 interface RichTextEditorProps {
@@ -59,12 +70,13 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [linkPopover, setLinkPopover] = useState<LinkPopover>({ open: false, top: 0, left: 0, value: "" });
+  const [imagePopover, setImagePopover] = useState<ImagePopover>({ open: false, top: 0, left: 0, mode: "insert", src: "", alt: "", caption: "" });
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: false }),
       Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer" } }),
-      Image.configure({ HTMLAttributes: { class: "rounded-lg" } }),
+      FigureImage.configure({ HTMLAttributes: { class: "rounded-lg" } }),
       Placeholder.configure({ placeholder: "Write your post… use the toolbar to add headings, links, and images." }),
     ],
     content: content || "",
@@ -73,8 +85,27 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
         class:
           "prose prose-neutral dark:prose-invert max-w-none min-h-[360px] px-4 py-3 focus:outline-none " +
           "prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-12 prose-h2:mb-6 prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-4 " +
-          "prose-a:text-primary prose-img:rounded-xl prose-img:my-6 prose-img:shadow-sm " +
+          "prose-a:text-primary prose-img:rounded-xl prose-img:my-6 prose-img:shadow-sm prose-img:cursor-pointer " +
+          "prose-figure:my-6 [&_figure_img]:my-0 prose-figcaption:mt-2 prose-figcaption:text-center " +
           "prose-p:leading-[1.5] prose-headings:leading-[1.5] prose-li:leading-[1.5] prose-blockquote:leading-[1.5] prose-p:my-0",
+      },
+      // Click an existing image (incl. legacy images in old posts) to edit its
+      // alt text + caption. ProseMirror also selects the node, so applyImage's
+      // updateAttributes targets it.
+      handleClickOn: (view, _pos, node, nodePos) => {
+        if (node.type.name === "image") {
+          const coords = view.coordsAtPos(nodePos);
+          setImagePopover({
+            open: true,
+            top: coords.bottom + 6,
+            left: coords.left,
+            mode: "edit",
+            src: (node.attrs.src as string) ?? "",
+            alt: (node.attrs.alt as string) ?? "",
+            caption: (node.attrs.caption as string) ?? "",
+          });
+        }
+        return false;
       },
     },
     onUpdate: ({ editor }) => onChange(editor.getHTML(), editor.getJSON() as Record<string, unknown>),
@@ -116,7 +147,28 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
     setLinkPopover((p) => ({ ...p, open: false }));
   };
 
-  const handleImagePick = () => fileInputRef.current?.click();
+  const popoverCoords = () => {
+    const { from } = editor.state.selection;
+    const coords = editor.view.coordsAtPos(from);
+    return { top: coords.bottom + 6, left: coords.left };
+  };
+
+  // Image button: edit the selected image's alt/caption, or pick a file to insert.
+  const onImageButton = () => {
+    if (editor.isActive("image")) {
+      const attrs = editor.getAttributes("image");
+      setImagePopover({
+        open: true,
+        ...popoverCoords(),
+        mode: "edit",
+        src: attrs.src ?? "",
+        alt: attrs.alt ?? "",
+        caption: attrs.caption ?? "",
+      });
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
 
   const handleImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -125,7 +177,15 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
     setUploading(true);
     try {
       const url = await cmsService.uploadImage(file);
-      editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+      // Open the popover so the author can set alt text + caption before inserting.
+      setImagePopover({
+        open: true,
+        ...popoverCoords(),
+        mode: "insert",
+        src: url,
+        alt: file.name.replace(/\.[^.]+$/, ""),
+        caption: "",
+      });
     } catch (err) {
       toast({
         title: "Image upload failed",
@@ -135,6 +195,25 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
     } finally {
       setUploading(false);
     }
+  };
+
+  const applyImage = () => {
+    const alt = imagePopover.alt.trim() || null;
+    const caption = imagePopover.caption.trim() || null;
+    if (imagePopover.mode === "insert") {
+      editor.chain().focus().insertContent({
+        type: "image",
+        attrs: { src: imagePopover.src, alt, caption },
+      }).run();
+    } else {
+      editor.chain().focus().updateAttributes("image", { alt, caption }).run();
+    }
+    setImagePopover((p) => ({ ...p, open: false }));
+  };
+
+  const closeImagePopover = () => {
+    setImagePopover((p) => ({ ...p, open: false }));
+    editor.chain().focus().run();
   };
 
   return (
@@ -166,7 +245,7 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
         <ToolbarButton title="Link" active={editor.isActive("link")} onClick={openLinkPopover}>
           <LinkIcon className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton title="Insert image" disabled={uploading} onClick={handleImagePick}>
+        <ToolbarButton title="Image — insert, or edit alt text & caption" active={editor.isActive("image")} disabled={uploading} onClick={onImageButton}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
         </ToolbarButton>
         <span className="mx-1 h-5 w-px bg-border" />
@@ -220,6 +299,63 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
                 <Unlink className="h-4 w-4" />
               </button>
             )}
+          </div>
+        </>
+      )}
+
+      {imagePopover.open && (
+        <>
+          <div className="fixed inset-0 z-40" onMouseDown={closeImagePopover} />
+          <div
+            className="fixed z-50 w-80 rounded-lg border border-border bg-popover p-3 shadow-lg"
+            style={{ top: imagePopover.top, left: imagePopover.left }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-xs font-semibold text-foreground">
+              {imagePopover.mode === "insert" ? "Insert image" : "Edit image"}
+            </div>
+            {imagePopover.src && (
+              <img src={imagePopover.src} alt="" className="mb-3 max-h-28 w-full rounded-md object-cover" />
+            )}
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label htmlFor="img-alt" className="text-xs">Alt text (for SEO & accessibility)</Label>
+                <Input
+                  id="img-alt"
+                  autoFocus
+                  value={imagePopover.alt}
+                  onChange={(e) => setImagePopover((p) => ({ ...p, alt: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Escape") closeImagePopover(); }}
+                  placeholder="Describe the image"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="img-caption" className="text-xs">Caption (shown below the image)</Label>
+                <Input
+                  id="img-caption"
+                  value={imagePopover.caption}
+                  onChange={(e) => setImagePopover((p) => ({ ...p, caption: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyImage(); } if (e.key === "Escape") closeImagePopover(); }}
+                  placeholder="Optional caption"
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={closeImagePopover} className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={applyImage}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                <Check className="h-4 w-4" />
+                {imagePopover.mode === "insert" ? "Insert" : "Save"}
+              </button>
+            </div>
           </div>
         </>
       )}

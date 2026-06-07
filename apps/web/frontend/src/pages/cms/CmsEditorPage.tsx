@@ -27,6 +27,7 @@ interface FormState {
   tags: string;
   target_keyword: string;
   cover_image_url: string;
+  cover_image_alt: string;
   author: string;
   content_html: string;
   content_json: Record<string, unknown> | null;
@@ -35,7 +36,7 @@ interface FormState {
 
 const EMPTY: FormState = {
   title: "", slug: "", description: "", tags: "",
-  target_keyword: "", cover_image_url: "", author: "Dreamify Team",
+  target_keyword: "", cover_image_url: "", cover_image_alt: "", author: "Dreamify Team",
   content_html: "", content_json: null, status: "draft",
 };
 
@@ -69,6 +70,7 @@ export default function CmsEditorPage() {
         tags: (existing.tags ?? []).join(", "),
         target_keyword: existing.target_keyword ?? "",
         cover_image_url: existing.cover_image_url ?? "",
+        cover_image_alt: existing.cover_image_alt ?? "",
         author: existing.author ?? "Dreamify Team",
         content_html: existing.content_html,
         content_json: existing.content_json,
@@ -92,6 +94,7 @@ export default function CmsEditorPage() {
     content_html: form.content_html,
     content_json: form.content_json,
     cover_image_url: form.cover_image_url || null,
+    cover_image_alt: form.cover_image_alt.trim(),
     author: form.author.trim() || "Dreamify Team",
     persona: null,
     tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
@@ -255,6 +258,17 @@ export default function CmsEditorPage() {
                 </div>
                 <input ref={coverInputRef} type="file" accept="image/*" hidden onChange={handleCoverSelected} />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cover-alt">Cover alt text</Label>
+                <Input
+                  id="cover-alt"
+                  value={form.cover_image_alt}
+                  onChange={(e) => update({ cover_image_alt: e.target.value })}
+                  placeholder="Describe the cover image"
+                />
+                <p className="text-xs text-muted-foreground">Used for SEO & screen readers. Falls back to the title if empty.</p>
+              </div>
             </div>
 
             <div className="rounded-lg border border-border bg-background p-4 space-y-4">
@@ -330,7 +344,7 @@ export default function CmsEditorPage() {
 
               {form.cover_image_url && (
                 <div className="mt-8 overflow-hidden rounded-2xl border border-border/60">
-                  <img src={form.cover_image_url} alt={form.title} className="aspect-[16/9] w-full object-cover" />
+                  <img src={form.cover_image_url} alt={form.cover_image_alt || form.title} className="aspect-[16/9] w-full object-cover" />
                 </div>
               )}
 

@@ -9,6 +9,7 @@ export interface BlogPostUpsert {
   content_html: string;
   content_json?: Record<string, unknown> | null;
   cover_image_url?: string | null;
+  cover_image_alt?: string | null;
   author: string;
   persona?: string | null;
   tags: string[];

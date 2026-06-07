@@ -54,7 +54,7 @@ const RelatedCard = ({ post }: { post: BlogPostSummary }) => (
     <Card className="flex h-full flex-col overflow-hidden border-border/60 bg-background/70 backdrop-blur-md transition-all hover:border-primary/40 hover:shadow-lg">
       <div className="aspect-[16/9] overflow-hidden">
         {post.cover_image_url ? (
-          <img src={post.cover_image_url} alt={post.title} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />
+          <img src={post.cover_image_url} alt={post.cover_image_alt || post.title} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/15 via-primary/5 to-transparent">
             <BookOpen className="h-8 w-8 text-primary/40" />
@@ -134,6 +134,7 @@ export default function BlogPost() {
         canonical={canonical}
         ogType="article"
         ogImage={post.cover_image_url || undefined}
+        ogImageAlt={post.cover_image_alt || post.title}
         jsonLd={[
           {
             "@context": "https://schema.org",
@@ -194,7 +195,7 @@ export default function BlogPost() {
 
               {post.cover_image_url && (
                 <div className="mt-8 overflow-hidden rounded-2xl border border-border/60">
-                  <img src={post.cover_image_url} alt={post.title} className="aspect-[16/9] w-full object-cover" />
+                  <img src={post.cover_image_url} alt={post.cover_image_alt || post.title} className="aspect-[16/9] w-full object-cover" />
                 </div>
               )}
 

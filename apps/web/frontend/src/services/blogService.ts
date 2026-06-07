@@ -7,6 +7,7 @@ export interface BlogPostSummary {
   title: string;
   description: string;
   cover_image_url: string | null;
+  cover_image_alt: string | null;
   author: string;
   persona: string | null;
   tags: string[];

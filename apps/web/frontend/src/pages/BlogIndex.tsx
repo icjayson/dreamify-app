@@ -25,7 +25,7 @@ const CoverImage = ({ post, className }: { post: BlogPostSummary; className?: st
     return (
       <img
         src={post.cover_image_url}
-        alt={post.title}
+        alt={post.cover_image_alt || post.title}
         loading="lazy"
         className={cn("h-full w-full object-cover", className)}
       />

@@ -107,6 +107,8 @@ export default function ProductDataConnectorsPage() {
     setStripeModalOpen,
     setHubSpotModalOpen,
     setSalesforceModalOpen,
+    setPipedriveModalOpen,
+    setSupabaseModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -140,6 +142,8 @@ export default function ProductDataConnectorsPage() {
       stripe: () => setStripeModalOpen(true),
       hubspot: () => setHubSpotModalOpen(true),
       salesforce: () => setSalesforceModalOpen(true),
+      pipedrive: () => setPipedriveModalOpen(true),
+      supabase: () => setSupabaseModalOpen(true),
       google_ads: () => setGoogleAdsModalOpen(true),
       firebase: () => setFirebaseModalOpen(true),
       postgres: () => setWarehouseModalOpen(true, "postgres"),
@@ -179,7 +183,7 @@ export default function ProductDataConnectorsPage() {
     <>
       <Seo
         title="Data Connectors — Dreamify | Live Connectors for AI Dashboards"
-        description="Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, HubSpot, Salesforce, Google Sheets, PostgreSQL, BigQuery, Snowflake, and Databricks to Dreamify. Live data into AI dashboards in minutes."
+        description="Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase to Dreamify. Live data into AI dashboards in minutes."
         canonical="https://app.dreamify.dev/product/data-connectors"
         jsonLd={[
           {

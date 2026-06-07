@@ -4,6 +4,7 @@ import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService, type ProcessingResponse } from '@/services/processingService';
 import { streamWorkflow } from '@/services/workflowStreamService';
 import type { ConversationChatRequest, DashboardDataResponse } from '@/services/conversationService';
+import type { SupabaseSyncRequest } from '@/services/integrationService';
 import type { AnalysisStep, ChartChangeSummary, EditDataProvenance } from '@/types/chartEdit';
 import type { AssetRecord } from '@/services/fileService';
 import {
@@ -370,6 +371,8 @@ interface ChatState {
   isStripeModalOpen: boolean;
   isHubSpotModalOpen: boolean;
   isSalesforceModalOpen: boolean;
+  isPipedriveModalOpen: boolean;
+  isSupabaseModalOpen: boolean;
   isGoogleAdsModalOpen: boolean;
   isFirebaseModalOpen: boolean;
   isWarehouseModalOpen: boolean;
@@ -443,6 +446,8 @@ interface ChatState {
   setStripeModalOpen: (open: boolean) => void;
   setHubSpotModalOpen: (open: boolean) => void;
   setSalesforceModalOpen: (open: boolean) => void;
+  setPipedriveModalOpen: (open: boolean) => void;
+  setSupabaseModalOpen: (open: boolean) => void;
   setGoogleAdsModalOpen: (open: boolean) => void;
   setFirebaseModalOpen: (open: boolean) => void;
   setWarehouseModalOpen: (open: boolean, connectorKey?: WarehouseConnectorKey) => void;
@@ -470,6 +475,8 @@ interface ChatState {
   syncStripe: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
   syncHubSpot: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, pipelineId?: string, ownerId?: string, rowLimit?: number, includeAssociations?: boolean) => Promise<HubSpotSyncResult>;
   syncSalesforce: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, objectName?: string, ownerId?: string, rowLimit?: number) => Promise<SalesforceSyncResult>;
+  syncPipedrive: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, pipelineId?: string, ownerId?: string, rowLimit?: number) => Promise<PipedriveSyncResult>;
+  syncSupabase: (request: SupabaseSyncRequest) => Promise<SupabaseSyncResult>;
   syncGoogleAds: (adAccountId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<StripeSyncResult>;
   syncFirebase: (firebaseProjectId: string, projectName: string, projectId?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
 }
@@ -505,6 +512,28 @@ export interface HubSpotSyncResult {
 
 /** Result of Salesforce sync API */
 export interface SalesforceSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+}
+
+/** Result of Pipedrive sync API */
+export interface PipedriveSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+}
+
+/** Result of Supabase sync API */
+export interface SupabaseSyncResult {
   success: true;
   row_count: number;
   column_count: number;
@@ -984,6 +1013,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isStripeModalOpen: false,
   isHubSpotModalOpen: false,
   isSalesforceModalOpen: false,
+  isPipedriveModalOpen: false,
+  isSupabaseModalOpen: false,
   isGoogleAdsModalOpen: false,
   isFirebaseModalOpen: false,
   isWarehouseModalOpen: false,
@@ -1117,6 +1148,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setStripeModalOpen: (open) => set({ isStripeModalOpen: open }),
   setHubSpotModalOpen: (open) => set({ isHubSpotModalOpen: open }),
   setSalesforceModalOpen: (open) => set({ isSalesforceModalOpen: open }),
+  setPipedriveModalOpen: (open) => set({ isPipedriveModalOpen: open }),
+  setSupabaseModalOpen: (open) => set({ isSupabaseModalOpen: open }),
   setGoogleAdsModalOpen: (open) => set({ isGoogleAdsModalOpen: open }),
   setFirebaseModalOpen: (open) => set({ isFirebaseModalOpen: open }),
   setWarehouseModalOpen: (open, connectorKey) => set((state) => ({
@@ -1394,6 +1427,63 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync Salesforce');
     } catch (err) {
       console.error('Sync Salesforce error:', err);
+      throw err;
+    }
+  },
+
+  syncPipedrive: async (reportType, projectId, datePreset, startDate, endDate, pipelineId, ownerId, rowLimit) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncPipedrive({
+        report_type: reportType,
+        ...(projectId && { project_id: projectId }),
+        date_preset: datePreset || 'last_30d',
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+        pipeline_id: pipelineId || 'all',
+        owner_id: ownerId || 'all',
+        row_limit: rowLimit || 5000,
+      });
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Pipedrive');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Pipedrive');
+    } catch (err) {
+      console.error('Sync Pipedrive error:', err);
+      throw err;
+    }
+  },
+
+  syncSupabase: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncSupabase(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Supabase');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Supabase data');
+    } catch (err) {
+      console.error('Sync Supabase error:', err);
       throw err;
     }
   },

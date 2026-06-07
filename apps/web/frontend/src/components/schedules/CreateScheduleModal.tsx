@@ -40,6 +40,8 @@ const PROVIDER_LABELS: Record<ProviderKey, string> = {
   stripe: 'Stripe',
   hubspot: 'HubSpot',
   salesforce: 'Salesforce',
+  pipedrive: 'Pipedrive',
+  supabase: 'Supabase',
   warehouse: 'Warehouse',
 };
 
@@ -83,6 +85,8 @@ const CONNECTOR_TO_PROVIDER: Record<string, ProviderKey> = {
   stripe: 'stripe',
   hubspot: 'hubspot',
   salesforce: 'salesforce',
+  pipedrive: 'pipedrive',
+  supabase: 'supabase',
   postgres: 'warehouse',
   bigquery: 'warehouse',
   snowflake: 'warehouse',
@@ -97,6 +101,8 @@ const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
   stripe: 'stripe',
   hubspot: 'hubspot',
   salesforce: 'salesforce',
+  pipedrive: 'pipedrive',
+  supabase: 'supabase',
   warehouse: 'postgres',
 };
 
@@ -121,6 +127,14 @@ const SALESFORCE_REPORT_ENTITIES: ConnectorSelectedEntity[] = [
   { id: 'salesforce:campaigns:all:all', name: 'Campaigns', type: 'report', report_type: 'campaigns', object_name: 'all', owner_id: 'all' },
 ];
 
+const PIPEDRIVE_REPORT_ENTITIES: ConnectorSelectedEntity[] = [
+  { id: 'pipedrive:sales_pipeline:all:all', name: 'Sales Pipeline', type: 'report', report_type: 'sales_pipeline', pipeline_id: 'all', owner_id: 'all' },
+  { id: 'pipedrive:leads:all:all', name: 'Leads', type: 'report', report_type: 'leads', pipeline_id: 'all', owner_id: 'all' },
+  { id: 'pipedrive:contacts_organizations:all:all', name: 'Contacts & Organizations', type: 'report', report_type: 'contacts_organizations', pipeline_id: 'all', owner_id: 'all' },
+  { id: 'pipedrive:activities:all:all', name: 'Activities', type: 'report', report_type: 'activities', pipeline_id: 'all', owner_id: 'all' },
+  { id: 'pipedrive:products:all:all', name: 'Products', type: 'report', report_type: 'products', pipeline_id: 'all', owner_id: 'all' },
+];
+
 function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unknown>) {
   if (provider === 'ga4') return String(config.property_id || '');
   if (provider === 'meta_ads' || provider === 'tiktok') return String(config.ad_account_id || '');
@@ -128,6 +142,19 @@ function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unk
   if (provider === 'stripe') return String(config.report_type || 'charges');
   if (provider === 'hubspot') return String(config.entity_id || `hubspot:${config.report_type || 'sales_pipeline'}:${config.pipeline_id || 'all'}:${config.owner_id || 'all'}`);
   if (provider === 'salesforce') return String(config.entity_id || `salesforce:${config.report_type || 'sales_pipeline'}:${config.object_name || 'all'}:${config.owner_id || 'all'}`);
+  if (provider === 'pipedrive') return String(config.entity_id || `pipedrive:${config.report_type || 'sales_pipeline'}:${config.pipeline_id || 'all'}:${config.owner_id || 'all'}`);
+  if (provider === 'supabase') {
+    const entityId = String(config.entity_id || '');
+    if (entityId) return entityId;
+    const connectionId = String(config.connection_id || '');
+    const syncMode = String(config.sync_mode || 'bounded_table_snapshot');
+    if (!connectionId) return '';
+    if (syncMode === 'app_profile') return `supabase:${connectionId}:storage:${config.bucket || 'all'}`;
+    if (syncMode === 'profile_only') return `supabase:${connectionId}:profile`;
+    const schema = String(config.schema || config.schema_name || '');
+    const table = String(config.table || config.table_name || '');
+    return schema && table ? `supabase:${connectionId}:table:${schema}.${table}` : '';
+  }
   if (provider === 'warehouse') {
     const entityId = String(config.entity_id || '');
     if (entityId) return entityId;
@@ -167,6 +194,34 @@ function buildConnectorConfig(provider: ProviderKey, entity: ConnectorSelectedEn
       report_type: entity.report_type || reportType,
       object_name: entity.object_name || objectName,
       owner_id: entity.owner_id || ownerId,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+    };
+  }
+  if (provider === 'pipedrive') {
+    const [, reportType = 'sales_pipeline', pipelineId = 'all', ownerId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      pipeline_id: entity.pipeline_id || pipelineId,
+      owner_id: entity.owner_id || ownerId,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+    };
+  }
+  if (provider === 'supabase') {
+    const [, connectionIdFromId = '', kindFromId = '', pathFromId = ''] = entity.id.split(':');
+    const dotIndex = pathFromId.lastIndexOf('.');
+    const schemaFromId = dotIndex >= 0 ? pathFromId.slice(0, dotIndex) : '';
+    const tableFromId = dotIndex >= 0 ? pathFromId.slice(dotIndex + 1) : '';
+    const syncMode = entity.sync_mode || (kindFromId === 'profile' ? 'profile_only' : kindFromId === 'storage' || kindFromId === 'auth_users' ? 'app_profile' : 'bounded_table_snapshot');
+    return {
+      connection_id: entity.connection_id || connectionIdFromId,
+      sync_mode: syncMode,
+      schema: entity.schema_name || schemaFromId,
+      table: entity.table_name || tableFromId,
+      bucket: entity.bucket || (kindFromId === 'storage' ? pathFromId : 'all'),
       entity_id: entity.id,
       entity_name: entity.name,
       row_limit: 5000,
@@ -269,6 +324,20 @@ async function fetchProviderEntities(provider: ProviderKey): Promise<ConnectorSe
     return mergeEntities(connector?.selected_entities || [], SALESFORCE_REPORT_ENTITIES);
   }
 
+  if (provider === 'pipedrive') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Pipedrive reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'pipedrive');
+    return mergeEntities(connector?.selected_entities || [], PIPEDRIVE_REPORT_ENTITIES);
+  }
+
+  if (provider === 'supabase') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Supabase entities.');
+    const connector = response.connectors.find((item) => item.connector_key === 'supabase');
+    return connector?.selected_entities || [];
+  }
+
   return STRIPE_REPORT_ENTITIES;
 }
 
@@ -330,6 +399,8 @@ export function CreateScheduleModal({
           ? HUBSPOT_REPORT_ENTITIES
           : connector.connector_key === 'salesforce' && connectorEntities.length === 0
             ? SALESFORCE_REPORT_ENTITIES
+            : connector.connector_key === 'pipedrive' && connectorEntities.length === 0
+              ? PIPEDRIVE_REPORT_ENTITIES
           : connectorEntities;
 
       if (mappedProvider === 'warehouse') {

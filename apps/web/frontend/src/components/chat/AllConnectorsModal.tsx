@@ -26,6 +26,8 @@ export default function AllConnectorsModal() {
     setStripeModalOpen,
     setHubSpotModalOpen,
     setSalesforceModalOpen,
+    setPipedriveModalOpen,
+    setSupabaseModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -101,12 +103,23 @@ export default function AllConnectorsModal() {
         ? { connected: true, info: salesforceStatus.account_name || salesforceStatus.instance_domain || 'Salesforce' }
         : { connected: false };
 
+      const pipedriveStatus = await integrationService.getPipedriveStatus();
+      results['Pipedrive'] = pipedriveStatus.connected
+        ? { connected: true, info: pipedriveStatus.account_name || pipedriveStatus.company_domain || 'Pipedrive' }
+        : { connected: false };
+
+      const supabaseStatus = await integrationService.getSupabaseStatus();
+      results['Supabase'] = supabaseStatus.connected
+        ? { connected: true, info: `${supabaseStatus.connection_count || 0} connection${supabaseStatus.connection_count === 1 ? '' : 's'}` }
+        : { connected: false };
+
       const overview = await integrationService.fetchConnectorsOverview();
       if (overview.success) {
         const postgres = overview.connectors.find((connector) => connector.connector_key === 'postgres');
         const bigquery = overview.connectors.find((connector) => connector.connector_key === 'bigquery');
         const snowflake = overview.connectors.find((connector) => connector.connector_key === 'snowflake');
         const databricks = overview.connectors.find((connector) => connector.connector_key === 'databricks');
+        const supabase = overview.connectors.find((connector) => connector.connector_key === 'supabase');
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results['PostgreSQL'] = {
@@ -143,6 +156,13 @@ export default function AllConnectorsModal() {
         } else {
           results['Databricks'] = { connected: false };
         }
+        if (supabase?.connected) {
+          const entityCount = supabase.selected_entities?.length || 0;
+          results['Supabase'] = {
+            connected: true,
+            info: entityCount > 0 ? `${entityCount} item${entityCount === 1 ? '' : 's'}` : results['Supabase']?.info || 'Supabase',
+          };
+        }
       }
 
       setConnectorStatus(results);
@@ -168,6 +188,8 @@ export default function AllConnectorsModal() {
       else if (connectorName === 'Stripe') setStripeModalOpen(true);
       else if (connectorName === 'HubSpot') setHubSpotModalOpen(true);
       else if (connectorName === 'Salesforce') setSalesforceModalOpen(true);
+      else if (connectorName === 'Pipedrive') setPipedriveModalOpen(true);
+      else if (connectorName === 'Supabase') setSupabaseModalOpen(true);
       else if (connectorName === 'Google Ads') setGoogleAdsModalOpen(true);
       else if (connectorName === 'Firebase') setFirebaseModalOpen(true);
       else if (connectorName === 'PostgreSQL') setWarehouseModalOpen(true, 'postgres');

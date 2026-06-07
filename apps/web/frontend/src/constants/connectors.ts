@@ -24,6 +24,8 @@ export type ConnectorModalTarget =
   | "stripe"
   | "hubspot"
   | "salesforce"
+  | "pipedrive"
+  | "supabase"
   | "google_ads"
   | "firebase"
   | "postgres"
@@ -171,6 +173,18 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "salesforce",
   },
+  {
+    name: "Pipedrive",
+    icon: "/pipedrive.svg",
+    isActive: true,
+    category: "Sales & CRM",
+    connectorKey: "pipedrive",
+    productDescription: "Analyze deal stages, leads, contacts, activities, products, and owner performance.",
+    productCategory: "Sales & CRM",
+    showOnProductPage: true,
+    modalTarget: "pipedrive",
+    iconBg: "bg-white",
+  },
 
   // ── E-commerce ────────────────────────────────────────────────────────────────
   { name: "TikTok Shop Seller", icon: "/tiktokshop.png",  iconBg: "bg-black",    category: "E-commerce" },
@@ -240,6 +254,18 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "databricks",
     iconBg: "bg-white",
+  },
+  {
+    name: "Supabase",
+    icon: "/supabase.svg",
+    isActive: true,
+    category: "Operations & Database",
+    connectorKey: "supabase",
+    productDescription: "Connect Supabase projects with schema, RLS, Auth, Storage, and bounded table extracts.",
+    productCategory: "Databases",
+    showOnProductPage: true,
+    modalTarget: "supabase",
+    iconBg: "bg-[#051f1a]",
   },
   { name: "Oracle",                 icon: "/oracle.png",                               category: "Operations & Database" },
 ];

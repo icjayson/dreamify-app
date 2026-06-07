@@ -198,6 +198,8 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
       "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
       "Salesforce": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
+      "Pipedrive": { bg: "bg-emerald-700", border: "border-emerald-600", text: "text-white", hover: "hover:bg-emerald-800" },
+      "Supabase": { bg: "bg-teal-700", border: "border-teal-600", text: "text-white", hover: "hover:bg-teal-800" },
       "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" },
       "BigQuery": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
       "Snowflake": { bg: "bg-cyan-600", border: "border-cyan-500", text: "text-white", hover: "hover:bg-cyan-700" },
@@ -602,6 +604,16 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     if (connector.name === 'Salesforce') {
       setDropdownOpen(false);
       setTimeout(() => useChatStore.getState().setSalesforceModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Pipedrive') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setPipedriveModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Supabase') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setSupabaseModalOpen(true), 0);
       return;
     }
     if (connector.name === 'Google Ads') {

@@ -415,6 +415,51 @@ export default function ConnectorEntityDetailView(props: Props) {
         entityName,
       };
     }
+    if (connectorKey === "pipedrive") {
+      const [, reportTypeFromId = "sales_pipeline", pipelineFromId = "all", ownerFromId = "all"] = entityId.split(":");
+      return {
+        provider: "pipedrive" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || connectorDetail?.entity?.report_type || reportTypeFromId),
+          pipeline_id: String(scheduleConfig.pipeline_id || connectorDetail?.entity?.pipeline_id || pipelineFromId),
+          owner_id: String(scheduleConfig.owner_id || connectorDetail?.entity?.owner_id || ownerFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "supabase") {
+      const entity = connectorDetail?.entity;
+      const [, connectionIdFromId = "", kindFromId = "", pathFromId = ""] = entityId.split(":");
+      const dotIndex = pathFromId.lastIndexOf(".");
+      const schemaFromId = dotIndex >= 0 ? pathFromId.slice(0, dotIndex) : "";
+      const tableFromId = dotIndex >= 0 ? pathFromId.slice(dotIndex + 1) : "";
+      const syncMode = String(
+        scheduleConfig.sync_mode ||
+        entity?.sync_mode ||
+        (kindFromId === "profile" ? "profile_only" : kindFromId === "storage" || kindFromId === "auth_users" ? "app_profile" : "bounded_table_snapshot")
+      );
+      return {
+        provider: "supabase" as ProviderKey,
+        config: {
+          connection_id: String(scheduleConfig.connection_id || entity?.connection_id || connectionIdFromId),
+          sync_mode: syncMode,
+          schema: String(scheduleConfig.schema || entity?.schema_name || schemaFromId),
+          table: String(scheduleConfig.table || entity?.table_name || tableFromId),
+          bucket: String(scheduleConfig.bucket || entity?.bucket || (kindFromId === "storage" ? pathFromId : "all")),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
     if (connectorKey === "postgres" || connectorKey === "bigquery" || connectorKey === "snowflake" || connectorKey === "databricks") {
       const entity = connectorDetail?.entity;
       const [connectionIdFromId, tablePath = ""] = entityId.split(":");

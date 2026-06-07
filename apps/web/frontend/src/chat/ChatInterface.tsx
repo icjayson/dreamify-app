@@ -919,6 +919,8 @@ function getDashboardSourceLabel(dashboardCard: NonNullable<Message["dashboardCa
   if (source.includes("stripe") || filename.includes("stripe")) return "Stripe Data";
   if (source.includes("hubspot") || filename.includes("hubspot")) return "HubSpot Data";
   if (source.includes("salesforce") || filename.includes("salesforce")) return "Salesforce Data";
+  if (source.includes("pipedrive") || filename.includes("pipedrive")) return "Pipedrive Data";
+  if (source.includes("supabase") || filename.includes("supabase")) return "Supabase Data";
   if (source.includes("bigquery") || filename.includes("bigquery")) return "BigQuery Data";
   if (source.includes("snowflake") || filename.includes("snowflake")) return "Snowflake Data";
   if (source.includes("databricks") || filename.includes("databricks")) return "Databricks Data";
@@ -1316,6 +1318,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setStripeModalOpen,
     setHubSpotModalOpen,
     setSalesforceModalOpen,
+    setPipedriveModalOpen,
+    setSupabaseModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setAllConnectorsModalOpen,
@@ -2160,6 +2164,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       setTimeout(() => setSalesforceModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'Pipedrive') {
+      setDropdownOpen(false);
+      setTimeout(() => setPipedriveModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Supabase') {
+      setDropdownOpen(false);
+      setTimeout(() => setSupabaseModalOpen(true), 0);
+      return;
+    }
     if (connector.name === 'Google Ads') {
       setDropdownOpen(false);
       setTimeout(() => setGoogleAdsModalOpen(true), 0);
@@ -2210,6 +2224,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
       "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
       "Salesforce": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
+      "Pipedrive": { bg: "bg-emerald-700", border: "border-emerald-600", text: "text-white", hover: "hover:bg-emerald-800" },
+      "Supabase": { bg: "bg-teal-700", border: "border-teal-600", text: "text-white", hover: "hover:bg-teal-800" },
       "PostgreSQL": { bg: "bg-blue-700", border: "border-blue-600", text: "text-white", hover: "hover:bg-blue-800" },
       "BigQuery": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
       "Snowflake": { bg: "bg-cyan-600", border: "border-cyan-500", text: "text-white", hover: "hover:bg-cyan-700" },

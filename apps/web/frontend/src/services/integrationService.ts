@@ -52,6 +52,9 @@ export interface ConnectorSelectedEntity {
   pipeline_id?: string;
   object_name?: string;
   owner_id?: string;
+  project_ref?: string;
+  sync_mode?: string;
+  bucket?: string;
 }
 
 export interface ConnectorOverviewItem {
@@ -263,6 +266,142 @@ export interface WarehouseSyncRequest {
   columns?: string[];
   project_id?: string;
   row_limit?: number;
+}
+
+export type SupabaseSyncMode = 'profile_only' | 'bounded_table_snapshot' | 'aggregated_result' | 'app_profile';
+
+export interface SupabaseColumn {
+  name: string;
+  ordinal_position?: number;
+  data_type?: string;
+  native_type?: string;
+  nullable?: boolean;
+  possible_pii?: boolean;
+}
+
+export interface SupabaseTable {
+  schema: string;
+  name: string;
+  type?: string;
+  row_estimate?: number;
+  rls_enabled?: boolean;
+  policy_count?: number;
+  grant_count?: number;
+  index_count?: number;
+  primary_key_columns?: string[];
+  columns: SupabaseColumn[];
+}
+
+export interface SupabaseSchema {
+  name: string;
+  tables: SupabaseTable[];
+}
+
+export interface SupabaseSchemaSnapshot {
+  refreshed_at?: string;
+  schemas?: SupabaseSchema[];
+  table_count?: number;
+  schema_fingerprint?: string;
+}
+
+export interface SupabaseConnectionStatusResponse {
+  connected: boolean;
+  oauth_connected?: boolean;
+  connection_count?: number;
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface SupabaseProject {
+  ref: string;
+  name: string;
+  region?: string;
+  status?: string;
+  organization_id?: string;
+}
+
+export interface SupabaseProjectsResponse {
+  success: boolean;
+  projects: SupabaseProject[];
+  error?: string;
+}
+
+export interface SupabaseConnection {
+  connection_id: string;
+  connector_key: 'supabase';
+  database_type: 'supabase';
+  display_name?: string;
+  project_ref: string;
+  project_name?: string;
+  organization_id?: string;
+  connection_mode?: string;
+  host?: string;
+  port?: string;
+  database?: string;
+  username?: string;
+  include_schemas: string[];
+  source_timezone: string;
+  max_export_bytes?: number;
+  credential_risk?: 'read_only' | 'admin_role' | string;
+  schema_snapshot?: SupabaseSchemaSnapshot;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SupabaseConnectionsResponse {
+  success: boolean;
+  connections: SupabaseConnection[];
+  error?: string;
+}
+
+export interface SupabaseConnectionCreateRequest {
+  project_ref: string;
+  project_name?: string;
+  organization_id?: string;
+  connection_uri?: string;
+  db_password?: string;
+  display_name?: string;
+  include_schemas?: string[];
+  include_system_schemas?: boolean;
+  source_timezone?: string;
+  service_role_key?: string;
+  max_export_bytes?: number;
+}
+
+export interface SupabaseSampleResponse {
+  success: boolean;
+  columns: string[];
+  rows: unknown[][];
+  generated_sql: string;
+  error?: string;
+}
+
+export interface SupabaseSyncRequest {
+  connection_id: string;
+  sync_mode?: SupabaseSyncMode;
+  project_id?: string;
+  schema_name?: string;
+  table_name?: string;
+  columns?: string[];
+  row_limit?: number;
+  max_bytes?: number;
+  date_filter_column?: string;
+  start_date?: string;
+  end_date?: string;
+  group_by_columns?: string[];
+  metric_columns?: string[];
+  bucket?: string;
+}
+
+export interface SupabaseSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  error?: string;
 }
 
 class IntegrationService {
@@ -582,6 +721,14 @@ class IntegrationService {
     return '/api/v1/integration/salesforce/oauth/start';
   }
 
+  getPipedriveOAuthStartUrl(): string {
+    return '/api/v1/integration/pipedrive/oauth/start';
+  }
+
+  getSupabaseOAuthStartUrl(): string {
+    return '/api/v1/integration/supabase/oauth/start';
+  }
+
   async getMetaConnectionStatus(): Promise<MetaConnectionStatusResponse> {
     try {
       const res = await api.get<MetaConnectionStatusResponse>(`${this.baseUrl}/meta/status`);
@@ -899,6 +1046,137 @@ class IntegrationService {
     }
   }
 
+  async getPipedriveStatus(): Promise<PipedriveConnectionStatusResponse> {
+    try {
+      const res = await api.get<PipedriveConnectionStatusResponse>(`${this.baseUrl}/pipedrive/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectPipedrive(): Promise<void> {
+    await api.delete(`${this.baseUrl}/pipedrive/disconnect`);
+  }
+
+  async fetchPipedrivePipelines(): Promise<PipedrivePipelinesResponse> {
+    try {
+      const res = await api.get<PipedrivePipelinesResponse>(`${this.baseUrl}/pipedrive/pipelines`);
+      if (res.success && res.data) return res.data;
+      return { success: false, pipelines: [], error: res.error || 'Failed to load Pipedrive pipelines' };
+    } catch (error) {
+      return { success: false, pipelines: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchPipedriveUsers(): Promise<PipedriveUsersResponse> {
+    try {
+      const res = await api.get<PipedriveUsersResponse>(`${this.baseUrl}/pipedrive/users`);
+      if (res.success && res.data) return res.data;
+      return { success: false, users: [], error: res.error || 'Failed to load Pipedrive users' };
+    } catch (error) {
+      return { success: false, users: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchPipedriveFields(objectName: string): Promise<PipedriveFieldsResponse> {
+    try {
+      const res = await api.get<PipedriveFieldsResponse>(
+        `${this.baseUrl}/pipedrive/fields?object_name=${encodeURIComponent(objectName)}`
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, fields: [], error: res.error || 'Failed to load Pipedrive fields' };
+    } catch (error) {
+      return { success: false, fields: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncPipedrive(req: PipedriveSyncRequest): Promise<PipedriveSyncResponse> {
+    try {
+      const res = await api.post<PipedriveSyncResponse>(`${this.baseUrl}/pipedrive/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Pipedrive data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getSupabaseStatus(): Promise<SupabaseConnectionStatusResponse> {
+    try {
+      const res = await api.get<SupabaseConnectionStatusResponse>(`${this.baseUrl}/supabase/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false, oauth_connected: false, connection_count: 0 };
+    } catch {
+      return { connected: false, oauth_connected: false, connection_count: 0 };
+    }
+  }
+
+  async disconnectSupabase(): Promise<void> {
+    await api.delete(`${this.baseUrl}/supabase/disconnect`);
+  }
+
+  async fetchSupabaseProjects(): Promise<SupabaseProjectsResponse> {
+    try {
+      const res = await api.get<SupabaseProjectsResponse>(`${this.baseUrl}/supabase/projects`);
+      if (res.success && res.data) return res.data;
+      return { success: false, projects: [], error: res.error || 'Failed to load Supabase projects' };
+    } catch (error) {
+      return { success: false, projects: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async fetchSupabaseConnections(): Promise<SupabaseConnectionsResponse> {
+    try {
+      const res = await api.get<SupabaseConnectionsResponse>(`${this.baseUrl}/supabase/connections`);
+      if (res.success && res.data) return res.data;
+      return { success: false, connections: [], error: res.error || 'Failed to load Supabase connections' };
+    } catch (error) {
+      return { success: false, connections: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async createSupabaseConnection(payload: SupabaseConnectionCreateRequest): Promise<SupabaseConnection> {
+    const res = await api.post<SupabaseConnection>(`${this.baseUrl}/supabase/connections`, payload);
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || 'Failed to connect Supabase database');
+  }
+
+  async refreshSupabaseSchema(connectionId: string): Promise<SupabaseConnection> {
+    const res = await api.post<SupabaseConnection>(
+      `${this.baseUrl}/supabase/connections/${encodeURIComponent(connectionId)}/schema/refresh`,
+      {}
+    );
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || 'Failed to refresh Supabase schema');
+  }
+
+  async sampleSupabaseTable(
+    connectionId: string,
+    payload: { schema_name: string; table_name: string; columns?: string[]; limit?: number }
+  ): Promise<SupabaseSampleResponse> {
+    try {
+      const res = await api.post<SupabaseSampleResponse>(
+        `${this.baseUrl}/supabase/connections/${encodeURIComponent(connectionId)}/tables/sample`,
+        payload
+      );
+      if (res.success && res.data) return res.data;
+      return { success: false, columns: [], rows: [], generated_sql: '', error: res.error || 'Failed to sample Supabase table' };
+    } catch (error) {
+      return { success: false, columns: [], rows: [], generated_sql: '', error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncSupabase(req: SupabaseSyncRequest): Promise<SupabaseSyncResponse> {
+    try {
+      const res = await api.post<SupabaseSyncResponse>(`${this.baseUrl}/supabase/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Supabase data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
   async fetchGoogleAdsAccounts(): Promise<GoogleAdsAccountsResponse> {
     try {
       const res = await api.get<GoogleAdsAccountsResponse>(`${this.baseUrl}/google-ads/accounts`);
@@ -1209,6 +1487,82 @@ export interface SalesforceSyncRequest {
 }
 
 export interface SalesforceSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  error?: string;
+}
+
+export interface PipedriveConnectionStatusResponse {
+  connected: boolean;
+  company_id?: string;
+  company_domain?: string;
+  company_name?: string;
+  user_email?: string;
+  account_name?: string;
+}
+
+export interface PipedrivePipelineStage {
+  id: string;
+  label: string;
+  probability?: string | number | null;
+}
+
+export interface PipedrivePipeline {
+  id: string;
+  label: string;
+  stages: PipedrivePipelineStage[];
+}
+
+export interface PipedriveUser {
+  id: string;
+  name: string;
+  email?: string;
+  active?: boolean;
+}
+
+export interface PipedriveField {
+  key: string;
+  name: string;
+  field_type: string;
+  custom?: boolean;
+  options?: unknown[];
+}
+
+export interface PipedrivePipelinesResponse {
+  success: boolean;
+  pipelines: PipedrivePipeline[];
+  error?: string;
+}
+
+export interface PipedriveUsersResponse {
+  success: boolean;
+  users: PipedriveUser[];
+  error?: string;
+}
+
+export interface PipedriveFieldsResponse {
+  success: boolean;
+  fields: PipedriveField[];
+  error?: string;
+}
+
+export interface PipedriveSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  pipeline_id?: string;
+  owner_id?: string;
+  row_limit?: number;
+}
+
+export interface PipedriveSyncResponse {
   success: boolean;
   message?: string;
   asset?: AssetRecord;

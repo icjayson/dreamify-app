@@ -57,6 +57,8 @@ import AppsFlyerIntegrationModal from "./components/chat/AppsFlyerIntegrationMod
 import StripeIntegrationModal from "./components/chat/StripeIntegrationModal";
 import HubSpotIntegrationModal from "./components/chat/HubSpotIntegrationModal";
 import SalesforceIntegrationModal from "./components/chat/SalesforceIntegrationModal";
+import PipedriveIntegrationModal from "./components/chat/PipedriveIntegrationModal";
+import SupabaseIntegrationModal from "./components/chat/SupabaseIntegrationModal";
 import GoogleAdsIntegrationModal from "./components/chat/GoogleAdsIntegrationModal";
 import FirebaseIntegrationModal from "./components/chat/FirebaseIntegrationModal";
 import WarehouseIntegrationModal from "./components/chat/WarehouseIntegrationModal";
@@ -257,6 +259,8 @@ const AppContent = () => {
       <StripeIntegrationModal />
       <HubSpotIntegrationModal />
       <SalesforceIntegrationModal />
+      <PipedriveIntegrationModal />
+      <SupabaseIntegrationModal />
       <GoogleAdsIntegrationModal />
       <FirebaseIntegrationModal />
       <WarehouseIntegrationModal />

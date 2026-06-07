@@ -86,6 +86,8 @@ function inferSourceFromTitle(title: string): string {
   if (t.includes("stripe")) return "Stripe";
   if (t.includes("hubspot")) return "HubSpot";
   if (t.includes("salesforce")) return "Salesforce";
+  if (t.includes("pipedrive")) return "Pipedrive";
+  if (t.includes("supabase")) return "Supabase";
   if (t.includes("bigquery")) return "BigQuery";
   if (t.includes("snowflake")) return "Snowflake";
   if (t.includes("databricks")) return "Databricks";
@@ -110,6 +112,8 @@ const SOURCE_COLORS: Record<string, string> = {
   Stripe: "bg-purple-500/20 text-purple-700 dark:text-purple-300",
   HubSpot: "bg-orange-500/20 text-orange-700 dark:text-orange-300",
   Salesforce: "bg-sky-500/20 text-sky-700 dark:text-sky-300",
+  Pipedrive: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+  Supabase: "bg-teal-500/20 text-teal-700 dark:text-teal-300",
   Databricks: "bg-red-500/20 text-red-700 dark:text-red-300",
   CSV: "bg-foreground/10 text-foreground/60",
 };
@@ -124,6 +128,8 @@ const CONNECTOR_CARD_DESCRIPTIONS: Record<string, string> = {
   "Stripe": "Sync subscription and payment metrics.",
   "HubSpot": "Sync CRM pipeline, owners, contacts, and companies.",
   "Salesforce": "Sync Sales Cloud pipeline, leads, accounts, and activities.",
+  "Pipedrive": "Sync deal stages, leads, contacts, activities, and products.",
+  "Supabase": "Sync app database tables, schema, Auth, and Storage context.",
   "Firebase": "Sync app analytics and product signals.",
   "Databricks": "Sync Delta tables through Databricks SQL Warehouses.",
 };
@@ -473,6 +479,8 @@ export default function WorkspacePage() {
     setStripeModalOpen,
     setHubSpotModalOpen,
     setSalesforceModalOpen,
+    setPipedriveModalOpen,
+    setSupabaseModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -501,6 +509,10 @@ export default function WorkspacePage() {
       setHubSpotModalOpen(true);
     } else if (connectorName === 'Salesforce') {
       setSalesforceModalOpen(true);
+    } else if (connectorName === 'Pipedrive') {
+      setPipedriveModalOpen(true);
+    } else if (connectorName === 'Supabase') {
+      setSupabaseModalOpen(true);
     } else if (connectorName === 'Google Ads') {
       setGoogleAdsModalOpen(true);
     } else if (connectorName === 'Firebase') {
@@ -603,6 +615,16 @@ export default function WorkspacePage() {
         ? { connected: true, info: `Account: ${salesforceStatus.account_name || salesforceStatus.instance_domain || "Salesforce"}` }
         : { connected: false };
 
+      const pipedriveStatus = await integrationService.getPipedriveStatus();
+      results["Pipedrive"] = pipedriveStatus.connected
+        ? { connected: true, info: `Account: ${pipedriveStatus.account_name || pipedriveStatus.company_domain || "Pipedrive"}` }
+        : { connected: false };
+
+      const supabaseStatus = await integrationService.getSupabaseStatus();
+      results["Supabase"] = supabaseStatus.connected
+        ? { connected: true, info: `${supabaseStatus.connection_count || 0} connection${supabaseStatus.connection_count === 1 ? "" : "s"}` }
+        : { connected: false };
+
       const overview = await integrationService.fetchConnectorsOverview();
       if (overview.success) {
         setConnectorOverview(overview.connectors);
@@ -612,6 +634,8 @@ export default function WorkspacePage() {
         const databricks = overview.connectors.find((connector) => connector.connector_key === "databricks");
         const hubspot = overview.connectors.find((connector) => connector.connector_key === "hubspot");
         const salesforce = overview.connectors.find((connector) => connector.connector_key === "salesforce");
+        const pipedrive = overview.connectors.find((connector) => connector.connector_key === "pipedrive");
+        const supabase = overview.connectors.find((connector) => connector.connector_key === "supabase");
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results["PostgreSQL"] = {
@@ -662,12 +686,27 @@ export default function WorkspacePage() {
             info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Salesforce"]?.info || "Account: Salesforce",
           };
         }
+        if (pipedrive?.connected) {
+          const reportCount = pipedrive.selected_entities?.length || 0;
+          results["Pipedrive"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Pipedrive"]?.info || "Account: Pipedrive",
+          };
+        }
+        if (supabase?.connected) {
+          const entityCount = supabase.selected_entities?.length || 0;
+          results["Supabase"] = {
+            connected: true,
+            info: entityCount > 0 ? `${entityCount} item${entityCount === 1 ? "" : "s"}` : results["Supabase"]?.info || "Account: Supabase",
+          };
+        }
       } else {
         setConnectorOverview([]);
         results["PostgreSQL"] = { connected: false };
         results["BigQuery"] = { connected: false };
         results["Snowflake"] = { connected: false };
         results["Databricks"] = { connected: false };
+        results["Supabase"] = { connected: false };
       }
       setConnectorStatus(results);
     } catch (e) {
@@ -1047,6 +1086,8 @@ export default function WorkspacePage() {
       'firebase': setFirebaseModalOpen,
       'hubspot': setHubSpotModalOpen,
       'salesforce': setSalesforceModalOpen,
+      'pipedrive': setPipedriveModalOpen,
+      'supabase': setSupabaseModalOpen,
       'postgres': (open: boolean) => setWarehouseModalOpen(open, 'postgres'),
       'bigquery': (open: boolean) => setWarehouseModalOpen(open, 'bigquery'),
       'snowflake': (open: boolean) => setWarehouseModalOpen(open, 'snowflake'),
@@ -1064,7 +1105,7 @@ export default function WorkspacePage() {
     const remaining = newParams.toString();
     const newUrl = `${window.location.pathname}${remaining ? '?' + remaining : ''}`;
     window.history.replaceState({}, '', newUrl);
-  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setHubSpotModalOpen, setSalesforceModalOpen, setWarehouseModalOpen]);
+  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setHubSpotModalOpen, setSalesforceModalOpen, setPipedriveModalOpen, setSupabaseModalOpen, setWarehouseModalOpen]);
 
   const isAesthetic = layoutStyle === "aesthetic" && activeTab === "new-chat";
   const showWorkspaceHeaderActions = activeTab === "new-chat";

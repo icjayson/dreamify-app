@@ -600,6 +600,8 @@ export default function ProjectPage() {
       'firebase': store.setFirebaseModalOpen,
       'hubspot': store.setHubSpotModalOpen,
       'salesforce': store.setSalesforceModalOpen,
+      'pipedrive': store.setPipedriveModalOpen,
+      'supabase': store.setSupabaseModalOpen,
       'postgres': (open: boolean) => store.setWarehouseModalOpen(open, 'postgres'),
       'bigquery': (open: boolean) => store.setWarehouseModalOpen(open, 'bigquery'),
       'snowflake': (open: boolean) => store.setWarehouseModalOpen(open, 'snowflake'),
@@ -638,6 +640,8 @@ export default function ProjectPage() {
       integration_stripe: 'Stripe',
       integration_hubspot: 'HubSpot',
       integration_salesforce: 'Salesforce',
+      integration_pipedrive: 'Pipedrive',
+      integration_supabase: 'Supabase',
       warehouse_extract: 'Warehouse',
     };
 

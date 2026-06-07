@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Clock, BookOpen } from "lucide-react";
 import Seo from "@/components/seo/Seo";
 import { FooterSection } from "@/components/homepage-section/footer-section";
@@ -48,15 +49,53 @@ const MetaRow = ({ post }: { post: BlogPostSummary }) => (
   </div>
 );
 
+type SortOption = "latest" | "oldest" | "az";
+
+const SORT_OPTIONS: [SortOption, string][] = [
+  ["latest", "Latest"],
+  ["oldest", "Oldest"],
+  ["az", "A–Z"],
+];
+
+const postTime = (p: BlogPostSummary): number => {
+  const v = p.published_at || p.created_at;
+  const t = v ? Date.parse(v) : 0;
+  return Number.isNaN(t) ? 0 : t;
+};
+
+const sortPosts = (posts: BlogPostSummary[], by: SortOption): BlogPostSummary[] => {
+  const arr = [...posts];
+  if (by === "az") return arr.sort((a, b) => a.title.localeCompare(b.title));
+  if (by === "oldest") return arr.sort((a, b) => postTime(a) - postTime(b));
+  return arr.sort((a, b) => postTime(b) - postTime(a)); // latest
+};
+
+const STALE_TIME = 5 * 60 * 1000; // 5 min — blog content rarely changes within a session
+
 export default function BlogIndex() {
   const { resolvedTheme } = useTheme();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["blog-posts"],
     queryFn: () => blogService.listPosts(),
+    staleTime: STALE_TIME,
   });
 
+  // Warm the cache for a post the moment the user hovers its card, so the
+  // detail page renders instantly instead of waiting on a fetch after the click.
+  const prefetchPost = (slug: string) =>
+    queryClient.prefetchQuery({
+      queryKey: ["blog-post", slug],
+      queryFn: () => blogService.getPost(slug),
+      staleTime: STALE_TIME,
+    });
+
+  const [sortBy, setSortBy] = useState<SortOption>("latest");
+
   const posts = data ?? [];
-  const [featured, ...rest] = posts;
+  // The admin-flagged post is the hero; fall back to the latest if none is set.
+  const featured = posts.find((p) => p.featured) ?? posts[0];
+  const rest = sortPosts(posts.filter((p) => p.slug !== featured?.slug), sortBy);
 
   return (
     <>
@@ -117,12 +156,12 @@ export default function BlogIndex() {
                 <>
                   {/* Featured */}
                   {featured && (
-                    <Link to={`/blog/${featured.slug}`} className="group mb-10 block">
-                      <Card className="grid overflow-hidden border-border/60 bg-background/70 backdrop-blur-md transition-all hover:border-primary/40 hover:shadow-lg md:grid-cols-2">
-                        <div className="aspect-[16/10] overflow-hidden md:aspect-auto">
+                    <Link to={`/blog/${featured.slug}`} onMouseEnter={() => prefetchPost(featured.slug)} className="group mb-10 block">
+                      <Card className="grid overflow-hidden border-border/60 bg-background/70 backdrop-blur-md transition-all hover:border-primary/40 hover:shadow-lg md:grid-cols-2 md:items-center">
+                        <div className="aspect-[16/9] overflow-hidden rounded-lg">
                           <CoverImage post={featured} className="transition-transform duration-300 group-hover:scale-[1.03]" />
                         </div>
-                        <div className="flex flex-col justify-center gap-3 p-6 sm:p-8">
+                        <div className="flex flex-col justify-center gap-3 p-4 sm:p-6">
                           {featured.tags.length > 0 && (
                             <div className="flex flex-wrap items-center gap-2">
                               {featured.tags.slice(0, 2).map((t) => (
@@ -142,11 +181,33 @@ export default function BlogIndex() {
                     </Link>
                   )}
 
+                  {/* Sort control */}
+                  {rest.length > 0 && (
+                    <div className="mb-5 flex items-center justify-end gap-2">
+                      <span className="text-sm text-muted-foreground">Sort:</span>
+                      <div className="inline-flex rounded-md border border-border/60 bg-background/70 p-0.5 backdrop-blur-md">
+                        {SORT_OPTIONS.map(([val, label]) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setSortBy(val)}
+                            className={cn(
+                              "rounded px-3 py-1 text-sm font-medium transition-colors",
+                              sortBy === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Grid */}
                   {rest.length > 0 && (
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                       {rest.map((post) => (
-                        <Link key={post.slug} to={`/blog/${post.slug}`} className="group block">
+                        <Link key={post.slug} to={`/blog/${post.slug}`} onMouseEnter={() => prefetchPost(post.slug)} className="group block">
                           <Card className="flex h-full flex-col overflow-hidden border-border/60 bg-background/70 backdrop-blur-md transition-all hover:border-primary/40 hover:shadow-lg">
                             <div className="aspect-[16/9] overflow-hidden">
                               <CoverImage post={post} className="transition-transform duration-300 group-hover:scale-[1.04]" />

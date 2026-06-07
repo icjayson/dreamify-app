@@ -76,11 +76,13 @@ export default function BlogPost() {
     queryKey: ["blog-post", slug],
     queryFn: () => blogService.getPost(slug!),
     enabled: !!slug,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: allPosts } = useQuery({
     queryKey: ["blog-posts"],
     queryFn: () => blogService.listPosts(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const [tocOpen, setTocOpen] = useState(true);
@@ -190,10 +192,16 @@ export default function BlogPost() {
                 </span>
               </div>
 
-              {/* Table of contents — sits in the hero, under the meta cluster.
-                  Expandable, default open. */}
+              {post.cover_image_url && (
+                <div className="mt-8 overflow-hidden rounded-2xl border border-border/60">
+                  <img src={post.cover_image_url} alt={post.title} className="aspect-[16/9] w-full object-cover" />
+                </div>
+              )}
+
+              {/* Table of contents — sits below the hero banner (cover image),
+                  right above the body. Expandable, default open. */}
               {toc.length > 0 && (
-                <div className="mt-6 overflow-hidden rounded-xl border border-border/60 bg-muted/40">
+                <div className="mt-10 overflow-hidden rounded-xl border border-border/60 bg-muted/40">
                   <button
                     type="button"
                     onClick={() => setTocOpen((o) => !o)}
@@ -223,12 +231,6 @@ export default function BlogPost() {
                       </ul>
                     </nav>
                   )}
-                </div>
-              )}
-
-              {post.cover_image_url && (
-                <div className="mt-8 overflow-hidden rounded-2xl border border-border/60">
-                  <img src={post.cover_image_url} alt={post.title} className="aspect-[16/9] w-full object-cover" />
                 </div>
               )}
 

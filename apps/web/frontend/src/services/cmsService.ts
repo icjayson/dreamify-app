@@ -59,6 +59,13 @@ export const cmsService = {
     if (!res.success) throw new Error(res.error || "Failed to delete post");
   },
 
+  /** Mark this post as the single featured post shown in the /blog hero. */
+  async setFeatured(postId: string): Promise<BlogPost> {
+    const res = await api.patch<BlogPost>(`${API_ENDPOINTS.CMS_POSTS}/${postId}/feature`);
+    if (!res.success || !res.data) throw new Error(res.error || "Failed to set featured");
+    return res.data;
+  },
+
   /** Upload an image, returning a stable absolute URL for use as an <img> src. */
   async uploadImage(file: File): Promise<string> {
     const res = await api.uploadFile<AssetUploadResponse>(API_ENDPOINTS.CMS_ASSETS, file);

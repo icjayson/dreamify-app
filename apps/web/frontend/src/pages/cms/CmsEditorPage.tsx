@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ImagePlus, Loader2, Save, Trash2, ExternalLink } from "lucide-react";
+import { ArrowLeft, ImagePlus, Loader2, Save, Trash2, ExternalLink, Eye, X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { slugify } from "@/utils/slugify";
 import RichTextEditor from "@/components/cms/RichTextEditor";
+import BlogContent from "@/components/blog/BlogContent";
 import { cmsService, type BlogPostUpsert } from "@/services/cmsService";
+
+const estimateReadingMinutes = (html: string): number => {
+  const words = html.replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+};
 
 interface FormState {
   title: string;
@@ -41,6 +48,7 @@ export default function CmsEditorPage() {
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [editorKey, setEditorKey] = useState(0); // remount editor once content loads
   const slugEditedRef = useRef(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -174,6 +182,10 @@ export default function CmsEditorPage() {
                 Delete
               </Button>
             )}
+            <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)} className="gap-2">
+              <Eye className="h-4 w-4" />
+              Preview
+            </Button>
             <Button variant="outline" size="sm" disabled={!canSave} onClick={() => saveMutation.mutate("draft")} className="gap-2">
               {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save draft
@@ -257,7 +269,7 @@ export default function CmsEditorPage() {
               <div className="space-y-2">
                 <Label htmlFor="keyword">Target keywords (SEO)</Label>
                 <Input id="keyword" value={form.target_keyword} onChange={(e) => update({ target_keyword: e.target.value })} placeholder="marketing dashboard, no-code analytics, sme reporting" />
-                <p className="text-xs text-muted-foreground">Separate multiple keywords with commas.</p>
+                <p className="text-xs text-muted-foreground">Separate multiple keywords with commas. Remember to include 'dashboard, AI data visualization, AI data analytics, data AI' and other keywords if needed</p>
               </div>
             </div>
 
@@ -271,6 +283,68 @@ export default function CmsEditorPage() {
           </div>
         </div>
       </div>
+
+      {/* Full-screen preview overlay — renders the post exactly as it appears on
+          /blog (reuses BlogContent + the hero markup from BlogPost). */}
+      {previewOpen && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-background">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 px-6 py-3 backdrop-blur">
+            <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Eye className="h-4 w-4 text-primary" />
+              Preview — how this looks on /blog
+            </span>
+            <Button variant="ghost" size="sm" onClick={() => setPreviewOpen(false)} className="gap-2">
+              <X className="h-4 w-4" />
+              Close
+            </Button>
+          </div>
+
+          <article className="px-5 pb-16 pt-10 sm:px-8">
+            <div className="mx-auto max-w-3xl">
+              {(() => {
+                const tags = form.tags.split(",").map((t) => t.trim()).filter(Boolean);
+                return tags.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {tags.map((t) => (
+                      <Badge key={t} variant="outline">{t}</Badge>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+
+              <h1 className="mt-4 text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl">
+                {form.title || "Untitled post"}
+              </h1>
+              {form.description && (
+                <p className="mt-4 text-lg leading-8 text-muted-foreground">{form.description}</p>
+              )}
+
+              <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{form.author || "Dreamify Team"}</span>
+                <span aria-hidden>·</span>
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  {estimateReadingMinutes(form.content_html)} min read
+                </span>
+              </div>
+
+              {form.cover_image_url && (
+                <div className="mt-8 overflow-hidden rounded-2xl border border-border/60">
+                  <img src={form.cover_image_url} alt={form.title} className="aspect-[16/9] w-full object-cover" />
+                </div>
+              )}
+
+              <div className="mt-10">
+                {form.content_html ? (
+                  <BlogContent html={form.content_html} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nothing in the body yet.</p>
+                )}
+              </div>
+            </div>
+          </article>
+        </div>
+      )}
     </div>
   );
 }

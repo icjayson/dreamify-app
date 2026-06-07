@@ -71,7 +71,10 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
     editorProps: {
       attributes: {
         class:
-          "prose prose-neutral dark:prose-invert max-w-none min-h-[360px] px-4 py-3 focus:outline-none",
+          "prose prose-neutral dark:prose-invert max-w-none min-h-[360px] px-4 py-3 focus:outline-none " +
+          "prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-12 prose-h2:mb-6 prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-4 " +
+          "prose-a:text-primary prose-img:rounded-xl prose-img:my-6 prose-img:shadow-sm " +
+          "prose-p:leading-[1.5] prose-headings:leading-[1.5] prose-li:leading-[1.5] prose-blockquote:leading-[1.5] prose-p:my-0",
       },
     },
     onUpdate: ({ editor }) => onChange(editor.getHTML(), editor.getJSON() as Record<string, unknown>),
@@ -136,7 +139,7 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
 
   return (
     <div className="rounded-lg border border-border bg-background">
-      <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-1.5">
+      <div className="sticky top-[60px] z-10 flex flex-wrap items-center gap-1 rounded-t-lg border-b border-border bg-background px-2 py-1.5">
         <ToolbarButton title="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="h-4 w-4" />
         </ToolbarButton>

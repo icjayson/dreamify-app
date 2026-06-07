@@ -25,8 +25,9 @@ export default function BlogContent({ html, className }: BlogContentProps) {
     <div
       className={cn(
         "prose prose-neutral dark:prose-invert max-w-none",
-        "prose-headings:font-semibold prose-h2:text-2xl prose-h3:text-xl",
-        "prose-a:text-primary prose-img:rounded-xl prose-img:shadow-sm",
+        "prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-12 prose-h2:mb-6 prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-4",
+        "prose-a:text-primary prose-img:rounded-xl prose-img:my-6 prose-img:shadow-sm",
+        "prose-p:leading-[1.5] prose-headings:leading-[1.5] prose-li:leading-[1.5] prose-blockquote:leading-[1.5] prose-p:my-0",
         className,
       )}
       dangerouslySetInnerHTML={{ __html: clean }}

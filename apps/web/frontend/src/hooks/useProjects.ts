@@ -18,7 +18,6 @@ type RefreshOptions = {
     dedupe?: boolean;
 };
 
-const RECENT_PROJECTS_LIMIT = 10;
 const PROJECTS_STALE_MS = 60_000;
 
 let cachedUserId: string | null = null;
@@ -40,7 +39,9 @@ const mapProject = (project: ProjectRecord): Project => ({
     created_at: project.created_at,
 });
 
-const mapRecentProjects = (projects: ProjectRecord[]): Project[] => (
+// Map + sort ALL of the user's projects newest-first. No cap — the workspace
+// sidebar shows the full list and scrolls.
+const mapProjects = (projects: ProjectRecord[]): Project[] => (
     projects
         .map(mapProject)
         .sort((a, b) => {
@@ -48,7 +49,6 @@ const mapRecentProjects = (projects: ProjectRecord[]): Project[] => (
             const second = parseDate(a.updated_at || a.created_at);
             return first - second;
         })
-        .slice(0, RECENT_PROJECTS_LIMIT)
 );
 
 const getCachedProjects = (userId: string | null) => (
@@ -121,11 +121,11 @@ export const useProjects = () => {
             setIsLoading(true);
         }
 
-        const request = projectService.listRecentProjects(RECENT_PROJECTS_LIMIT).then((response) => {
+        const request = projectService.listProjects().then((response) => {
             if (!response.success) {
-                throw new Error(response.error || "Failed to fetch recent projects");
+                throw new Error(response.error || "Failed to fetch projects");
             }
-            const mappedProjects = mapRecentProjects(response.projects);
+            const mappedProjects = mapProjects(response.projects);
             setProjectCache(userId, mappedProjects);
             return mappedProjects;
         });

@@ -118,6 +118,23 @@
     })();
   </script>
 
+  <!-- Visually hide the crawlable seed content so users never see an unstyled
+       flash (FOUC) before React mounts. Uses the accessibility "visually hidden"
+       (clip) pattern — NOT display:none — so the text stays in the DOM and is
+       still read by non-JS crawlers. React replaces #root on mount, so this
+       never affects the real app (which has no #seo-seed). -->
+  <style>
+    #seo-seed {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+
   <!-- Per-route head fallback: runs before React boots so social card scrapers
        (Slack, WhatsApp, Discord, Facebook) and any non-JS crawler hitting a deep
        link get per-route title + description. Prerendered HTML supersedes this
@@ -225,22 +242,26 @@
       src="https://www.facebook.com/tr?id=2094625934601821&ev=PageView&noscript=1" />
   </noscript>
   <div id="root">
-    <!-- Crawlable seed content for non-JS bots (Bingbot, GPTBot, ClaudeBot, PerplexityBot). React replaces this on hydration. -->
-    <header>
-      <a href="/">Dreamify</a> ·
-      <a href="/about">About</a> ·
-      <a href="/pricing">Pricing</a> ·
-      <a href="/landingpage">Product</a> ·
-      <a href="/docs">Docs</a>
-    </header>
-    <main>
-      <h1>AI Data Visualization. Dashboards in Minutes, Not Days.</h1>
-      <p>Dreamify is an AI Data Visualization platform that turns raw business data into decision-ready dashboards in
-        minutes. Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Google Sheets, and
-        PostgreSQL. No formulas. No BI setup.</p>
-      <h2>For Marketers, Sellers, and Founders</h2>
-      <p>Built for non-technical teams at SMEs who need answers from data without a data team.</p>
-    </main>
+    <!-- Crawlable seed content for non-JS bots (Bingbot, GPTBot, ClaudeBot, PerplexityBot).
+         Visually hidden via #seo-seed (see <style> in head) to avoid a FOUC flash;
+         React replaces all of #root on hydration. -->
+    <div id="seo-seed">
+      <header>
+        <a href="/">Dreamify</a> ·
+        <a href="/about">About</a> ·
+        <a href="/pricing">Pricing</a> ·
+        <a href="/landingpage">Product</a> ·
+        <a href="/docs">Docs</a>
+      </header>
+      <main>
+        <h1>AI Data Visualization. Dashboards in Minutes, Not Days.</h1>
+        <p>Dreamify is an AI Data Visualization platform that turns raw business data into decision-ready dashboards in
+          minutes. Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Google Sheets, and
+          PostgreSQL. No formulas. No BI setup.</p>
+        <h2>For Marketers, Sellers, and Founders</h2>
+        <p>Built for non-technical teams at SMEs who need answers from data without a data team.</p>
+      </main>
+    </div>
   </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>

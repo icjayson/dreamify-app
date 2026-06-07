@@ -13,6 +13,7 @@ export interface BlogPostSummary {
   status: "draft" | "published";
   reading_minutes: number;
   published_at: string | null;
+  featured: boolean;
   created_at: string | null;
   updated_at: string | null;
 }

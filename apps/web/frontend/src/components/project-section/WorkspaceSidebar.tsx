@@ -230,7 +230,7 @@ export default function WorkspaceSidebar({
           ) : projects.length === 0 ? (
             <div className="workspace-sidebar__muted-text text-muted-foreground text-xs px-2">No projects yet</div>
           ) : (
-            projects.slice(0, 10).map((item) => (
+            projects.map((item) => (
               <div
                 key={item.id}
                 className="workspace-sidebar__recent-item group relative w-full rounded-md hover:bg-foreground/5 transition-colors"

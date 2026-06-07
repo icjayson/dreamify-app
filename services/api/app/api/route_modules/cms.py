@@ -64,6 +64,7 @@ class BlogPostResponse(BaseModel):
     status: str = "draft"
     reading_minutes: int = 1
     published_at: Optional[str] = None
+    featured: bool = False
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -80,6 +81,7 @@ class BlogPostListItem(BaseModel):
     status: str = "draft"
     reading_minutes: int = 1
     published_at: Optional[str] = None
+    featured: bool = False
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -119,6 +121,7 @@ def _to_response(item: Dict) -> BlogPostResponse:
         status=item.get("status", "draft"),
         reading_minutes=int(item.get("reading_minutes") or 1),
         published_at=item.get("published_at"),
+        featured=bool(item.get("featured")),
         created_at=item.get("created_at"),
         updated_at=item.get("updated_at"),
     )
@@ -260,6 +263,15 @@ async def admin_delete_post(post_id: str, _: dict = Depends(require_admin)) -> d
         raise HTTPException(status_code=404, detail="Post not found")
     blog_repo.delete_post(post_id)
     return {"success": True}
+
+
+@router.patch("/admin/blog/posts/{post_id}/feature", response_model=BlogPostResponse)
+async def admin_set_featured(post_id: str, _: dict = Depends(require_admin)) -> BlogPostResponse:
+    """Mark this post as the single featured post shown in the /blog hero."""
+    if not blog_repo.get_post(post_id):
+        raise HTTPException(status_code=404, detail="Post not found")
+    updated = blog_repo.set_featured(post_id)
+    return _to_response(updated)
 
 
 @router.post("/admin/blog/assets", response_model=AssetUploadResponse)

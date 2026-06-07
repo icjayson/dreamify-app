@@ -41,6 +41,7 @@ def create_post(
     status: str = "draft",
     reading_minutes: int = 1,
     published_at: Optional[str] = None,
+    featured: bool = False,
     post_id: Optional[str] = None,
 ) -> Dict:
     table = get_table(tables.blog_posts)
@@ -61,6 +62,7 @@ def create_post(
         "status": status,
         "reading_minutes": reading_minutes,
         "published_at": published_at if status == "published" else None,
+        "featured": featured,
         "created_at": now,
         "updated_at": now,
     }
@@ -112,7 +114,7 @@ def update_post(post_id: str, **fields) -> Optional[Dict]:
     allowed = {
         "slug", "title", "description", "content_html", "content_json",
         "cover_image_url", "author", "persona", "tags", "target_keyword",
-        "status", "reading_minutes", "published_at",
+        "status", "reading_minutes", "published_at", "featured",
     }
     expr: List[str] = []
     names: Dict[str, str] = {}
@@ -139,6 +141,17 @@ def update_post(post_id: str, **fields) -> Optional[Dict]:
         ReturnValues="ALL_NEW",
     )
     return resp.get("Attributes")
+
+
+def set_featured(post_id: str) -> Optional[Dict]:
+    """Mark one post as the featured post and clear the flag on all others
+    (single-featured model used by the /blog hero)."""
+    for p in list_all():
+        pid = p["post_id"]
+        is_target = pid == post_id
+        if bool(p.get("featured")) != is_target:
+            update_post(pid, featured=is_target)
+    return get_post(post_id)
 
 
 def delete_post(post_id: str) -> None:

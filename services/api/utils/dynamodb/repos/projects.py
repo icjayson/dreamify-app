@@ -51,12 +51,25 @@ def create_project(
 
 
 def list_projects(user_id: str) -> List[Dict]:
+    """Return ALL of a user's projects, newest-first.
+
+    Paginates through DynamoDB (a single query returns at most 1MB), then sorts
+    by updated_at/created_at so callers like the workspace sidebar get a true
+    recent-first list rather than project_id (UUID) order.
+    """
     table = get_table(tables.projects)
-    resp = table.query(
-        KeyConditionExpression=Key("user_id").eq(user_id),
-        ScanIndexForward=False,
-    )
-    return resp.get("Items", [])
+    items: List[Dict] = []
+    last_key = None
+    while True:
+        kwargs: Dict = {"KeyConditionExpression": Key("user_id").eq(user_id)}
+        if last_key:
+            kwargs["ExclusiveStartKey"] = last_key
+        resp = table.query(**kwargs)
+        items.extend(resp.get("Items", []))
+        last_key = resp.get("LastEvaluatedKey")
+        if not last_key:
+            break
+    return _sort_recent_projects(items)
 
 
 def _project_timestamp(item: Dict) -> float:

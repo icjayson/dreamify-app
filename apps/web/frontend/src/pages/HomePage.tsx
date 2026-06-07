@@ -616,6 +616,11 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       setTimeout(() => useChatStore.getState().setSupabaseModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'Shopify') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setShopifyModalOpen(true), 0);
+      return;
+    }
     if (connector.name === 'Google Ads') {
       setDropdownOpen(false);
       setTimeout(() => useChatStore.getState().setGoogleAdsModalOpen(true), 0);

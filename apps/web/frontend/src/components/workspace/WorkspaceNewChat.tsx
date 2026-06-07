@@ -390,6 +390,7 @@ export default function WorkspaceNewChat() {
     if (connector.name === "Salesforce") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setSalesforceModalOpen(true), 0); return; }
     if (connector.name === "Pipedrive") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setPipedriveModalOpen(true), 0); return; }
     if (connector.name === "Supabase") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setSupabaseModalOpen(true), 0); return; }
+    if (connector.name === "Shopify") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setShopifyModalOpen(true), 0); return; }
     if (connector.name === "Google Ads") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setGoogleAdsModalOpen(true), 0); return; }
     if (connector.name === "Firebase") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setFirebaseModalOpen(true), 0); return; }
     if (connector.name === "PostgreSQL") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, "postgres"), 0); return; }
@@ -416,6 +417,7 @@ export default function WorkspaceNewChat() {
       "TikTok Ads": { bg: "bg-zinc-900", border: "border-zinc-800", text: "text-white", hover: "hover:bg-black" },
       Stripe: { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       Supabase: { bg: "bg-teal-700", border: "border-teal-600", text: "text-white", hover: "hover:bg-teal-800" },
+      Shopify: { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
     };
     return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
   };

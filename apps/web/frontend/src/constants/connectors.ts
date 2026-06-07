@@ -12,6 +12,7 @@ export type ProductConnectorCategory =
   | "Spreadsheets"
   | "Databases"
   | "Sales & CRM"
+  | "Ecommerce"
   | "Finance"
   | "Mobile & Attribution";
 
@@ -26,6 +27,7 @@ export type ConnectorModalTarget =
   | "salesforce"
   | "pipedrive"
   | "supabase"
+  | "shopify"
   | "google_ads"
   | "firebase"
   | "postgres"
@@ -190,7 +192,18 @@ export const CONNECTORS: ConnectorItem[] = [
   { name: "TikTok Shop Seller", icon: "/tiktokshop.png",  iconBg: "bg-black",    category: "E-commerce" },
   { name: "Shopee Seller",      icon: "/shopee.png",                             category: "E-commerce" },
   { name: "Lazada Seller",      icon: "/lazada.png",                             category: "E-commerce" },
-  { name: "Shopify",            icon: "/shopify.png",                            category: "E-commerce" },
+  {
+    name: "Shopify",
+    icon: "/shopify.png",
+    isActive: true,
+    category: "E-commerce",
+    connectorKey: "shopify",
+    productDescription: "Analyze orders, customers, products, inventory, discounts, and ecommerce revenue.",
+    productCategory: "Ecommerce",
+    showOnProductPage: true,
+    modalTarget: "shopify",
+    iconBg: "bg-white",
+  },
   { name: "WooCommerce",        icon: "/woocommerce.png",                        category: "E-commerce" },
   { name: "Amazon Seller",      icon: "/amazon-seller.png",                      category: "E-commerce" },
 

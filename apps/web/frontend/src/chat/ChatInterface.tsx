@@ -921,6 +921,7 @@ function getDashboardSourceLabel(dashboardCard: NonNullable<Message["dashboardCa
   if (source.includes("salesforce") || filename.includes("salesforce")) return "Salesforce Data";
   if (source.includes("pipedrive") || filename.includes("pipedrive")) return "Pipedrive Data";
   if (source.includes("supabase") || filename.includes("supabase")) return "Supabase Data";
+  if (source.includes("shopify") || filename.includes("shopify")) return "Shopify Data";
   if (source.includes("bigquery") || filename.includes("bigquery")) return "BigQuery Data";
   if (source.includes("snowflake") || filename.includes("snowflake")) return "Snowflake Data";
   if (source.includes("databricks") || filename.includes("databricks")) return "Databricks Data";
@@ -1320,6 +1321,7 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setSalesforceModalOpen,
     setPipedriveModalOpen,
     setSupabaseModalOpen,
+    setShopifyModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setAllConnectorsModalOpen,
@@ -2172,6 +2174,11 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     if (connector.name === 'Supabase') {
       setDropdownOpen(false);
       setTimeout(() => setSupabaseModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Shopify') {
+      setDropdownOpen(false);
+      setTimeout(() => setShopifyModalOpen(true), 0);
       return;
     }
     if (connector.name === 'Google Ads') {

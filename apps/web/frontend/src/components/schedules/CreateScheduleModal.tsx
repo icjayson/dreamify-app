@@ -42,6 +42,7 @@ const PROVIDER_LABELS: Record<ProviderKey, string> = {
   salesforce: 'Salesforce',
   pipedrive: 'Pipedrive',
   supabase: 'Supabase',
+  shopify: 'Shopify',
   warehouse: 'Warehouse',
 };
 
@@ -87,6 +88,7 @@ const CONNECTOR_TO_PROVIDER: Record<string, ProviderKey> = {
   salesforce: 'salesforce',
   pipedrive: 'pipedrive',
   supabase: 'supabase',
+  shopify: 'shopify',
   postgres: 'warehouse',
   bigquery: 'warehouse',
   snowflake: 'warehouse',
@@ -103,6 +105,7 @@ const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
   salesforce: 'salesforce',
   pipedrive: 'pipedrive',
   supabase: 'supabase',
+  shopify: 'shopify',
   warehouse: 'postgres',
 };
 
@@ -135,6 +138,19 @@ const PIPEDRIVE_REPORT_ENTITIES: ConnectorSelectedEntity[] = [
   { id: 'pipedrive:products:all:all', name: 'Products', type: 'report', report_type: 'products', pipeline_id: 'all', owner_id: 'all' },
 ];
 
+function buildShopifyReportEntities(shopDomain: string): ConnectorSelectedEntity[] {
+  const domain = shopDomain.trim();
+  if (!domain) return [];
+  return [
+    { id: `shopify:sales_overview:${domain}:orders`, name: 'Sales Overview', type: 'report', report_type: 'sales_overview', shop_domain: domain, resource: 'orders' },
+    { id: `shopify:orders:${domain}:orders`, name: 'Orders', type: 'report', report_type: 'orders', shop_domain: domain, resource: 'orders' },
+    { id: `shopify:products:${domain}:products`, name: 'Products', type: 'report', report_type: 'products', shop_domain: domain, resource: 'products' },
+    { id: `shopify:customers:${domain}:customers`, name: 'Customers', type: 'report', report_type: 'customers', shop_domain: domain, resource: 'customers' },
+    { id: `shopify:inventory:${domain}:inventory`, name: 'Inventory', type: 'report', report_type: 'inventory', shop_domain: domain, resource: 'inventory' },
+    { id: `shopify:discounts:${domain}:discounts`, name: 'Discounts', type: 'report', report_type: 'discounts', shop_domain: domain, resource: 'discounts' },
+  ];
+}
+
 function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unknown>) {
   if (provider === 'ga4') return String(config.property_id || '');
   if (provider === 'meta_ads' || provider === 'tiktok') return String(config.ad_account_id || '');
@@ -143,6 +159,7 @@ function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unk
   if (provider === 'hubspot') return String(config.entity_id || `hubspot:${config.report_type || 'sales_pipeline'}:${config.pipeline_id || 'all'}:${config.owner_id || 'all'}`);
   if (provider === 'salesforce') return String(config.entity_id || `salesforce:${config.report_type || 'sales_pipeline'}:${config.object_name || 'all'}:${config.owner_id || 'all'}`);
   if (provider === 'pipedrive') return String(config.entity_id || `pipedrive:${config.report_type || 'sales_pipeline'}:${config.pipeline_id || 'all'}:${config.owner_id || 'all'}`);
+  if (provider === 'shopify') return String(config.entity_id || `shopify:${config.report_type || 'sales_overview'}:${config.shop_domain || ''}:${config.resource || 'all'}`);
   if (provider === 'supabase') {
     const entityId = String(config.entity_id || '');
     if (entityId) return entityId;
@@ -208,6 +225,18 @@ function buildConnectorConfig(provider: ProviderKey, entity: ConnectorSelectedEn
       entity_id: entity.id,
       entity_name: entity.name,
       row_limit: 5000,
+    };
+  }
+  if (provider === 'shopify') {
+    const [, reportType = 'sales_overview', shopDomain = '', resource = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      shop_domain: entity.shop_domain || shopDomain,
+      resource: entity.resource || resource,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
     };
   }
   if (provider === 'supabase') {
@@ -331,6 +360,17 @@ async function fetchProviderEntities(provider: ProviderKey): Promise<ConnectorSe
     return mergeEntities(connector?.selected_entities || [], PIPEDRIVE_REPORT_ENTITIES);
   }
 
+  if (provider === 'shopify') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Shopify reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'shopify');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getShopifyStatus();
+    if (!status.connected || !status.shop_domain) return [];
+    return buildShopifyReportEntities(status.shop_domain);
+  }
+
   if (provider === 'supabase') {
     const response = await integrationService.fetchConnectorsOverview();
     if (!response.success) throw new Error(response.error || 'Failed to load Supabase entities.');
@@ -393,6 +433,10 @@ export function CreateScheduleModal({
       const mappedProvider = CONNECTOR_TO_PROVIDER[connector.connector_key];
       if (!mappedProvider || !connector.connected) return;
       const connectorEntities = connector.selected_entities || [];
+      const shopDomain =
+        String(connector.account_name || '').includes('.myshopify.com')
+          ? String(connector.account_name)
+          : '';
       const entities = connector.connector_key === 'stripe' && connectorEntities.length === 0
         ? STRIPE_REPORT_ENTITIES
         : connector.connector_key === 'hubspot' && connectorEntities.length === 0
@@ -401,7 +445,9 @@ export function CreateScheduleModal({
             ? SALESFORCE_REPORT_ENTITIES
             : connector.connector_key === 'pipedrive' && connectorEntities.length === 0
               ? PIPEDRIVE_REPORT_ENTITIES
-          : connectorEntities;
+              : connector.connector_key === 'shopify' && connectorEntities.length === 0
+                ? buildShopifyReportEntities(shopDomain)
+                : connectorEntities;
 
       if (mappedProvider === 'warehouse') {
         const current = grouped.get('warehouse') || {

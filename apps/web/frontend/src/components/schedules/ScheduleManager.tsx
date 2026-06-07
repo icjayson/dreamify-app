@@ -24,6 +24,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   salesforce: 'Salesforce',
   pipedrive: 'Pipedrive',
   supabase: 'Supabase',
+  shopify: 'Shopify',
   warehouse: 'Warehouse',
 };
 

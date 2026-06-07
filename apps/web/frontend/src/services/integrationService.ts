@@ -55,6 +55,8 @@ export interface ConnectorSelectedEntity {
   project_ref?: string;
   sync_mode?: string;
   bucket?: string;
+  shop_domain?: string;
+  resource?: string;
 }
 
 export interface ConnectorOverviewItem {
@@ -62,6 +64,7 @@ export interface ConnectorOverviewItem {
   display_name: string;
   connected: boolean;
   selected_entities: ConnectorSelectedEntity[];
+  account_name?: string;
 }
 
 export interface ConnectorsOverviewResponse {
@@ -404,6 +407,58 @@ export interface SupabaseSyncResponse {
   error?: string;
 }
 
+export interface ShopifyConnectionStatusResponse {
+  connected: boolean;
+  shop_id?: string;
+  shop_domain?: string;
+  shop_name?: string;
+  shop_url?: string;
+  currency?: string;
+  timezone?: string;
+  account_name?: string;
+  scopes?: string[];
+  read_all_orders_enabled?: boolean;
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface ShopifyResource {
+  report_type: string;
+  label: string;
+  resource: string;
+  default?: boolean;
+}
+
+export interface ShopifyResourcesResponse {
+  success: boolean;
+  resources: ShopifyResource[];
+  error?: string;
+}
+
+export interface ShopifySyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+  resource?: string;
+}
+
+export interface ShopifySyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
 class IntegrationService {
   private baseUrl = '/api/v1/integration';
 
@@ -727,6 +782,10 @@ class IntegrationService {
 
   getSupabaseOAuthStartUrl(): string {
     return '/api/v1/integration/supabase/oauth/start';
+  }
+
+  getShopifyOAuthStartUrl(shop: string): string {
+    return `/api/v1/integration/shopify/oauth/start?shop=${encodeURIComponent(shop)}`;
   }
 
   async getMetaConnectionStatus(): Promise<MetaConnectionStatusResponse> {
@@ -1172,6 +1231,40 @@ class IntegrationService {
       const res = await api.post<SupabaseSyncResponse>(`${this.baseUrl}/supabase/sync`, req);
       if (res.success && res.data) return res.data;
       return { success: false, error: res.error || 'Failed to sync Supabase data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getShopifyStatus(): Promise<ShopifyConnectionStatusResponse> {
+    try {
+      const res = await api.get<ShopifyConnectionStatusResponse>(`${this.baseUrl}/shopify/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectShopify(): Promise<void> {
+    await api.delete(`${this.baseUrl}/shopify/disconnect`);
+  }
+
+  async fetchShopifyResources(): Promise<ShopifyResourcesResponse> {
+    try {
+      const res = await api.get<ShopifyResourcesResponse>(`${this.baseUrl}/shopify/resources`);
+      if (res.success && res.data) return res.data;
+      return { success: false, resources: [], error: res.error || 'Failed to load Shopify resources' };
+    } catch (error) {
+      return { success: false, resources: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async syncShopify(req: ShopifySyncRequest): Promise<ShopifySyncResponse> {
+    try {
+      const res = await api.post<ShopifySyncResponse>(`${this.baseUrl}/shopify/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Shopify data' };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }

@@ -602,6 +602,7 @@ export default function ProjectPage() {
       'salesforce': store.setSalesforceModalOpen,
       'pipedrive': store.setPipedriveModalOpen,
       'supabase': store.setSupabaseModalOpen,
+      'shopify': store.setShopifyModalOpen,
       'postgres': (open: boolean) => store.setWarehouseModalOpen(open, 'postgres'),
       'bigquery': (open: boolean) => store.setWarehouseModalOpen(open, 'bigquery'),
       'snowflake': (open: boolean) => store.setWarehouseModalOpen(open, 'snowflake'),
@@ -642,6 +643,7 @@ export default function ProjectPage() {
       integration_salesforce: 'Salesforce',
       integration_pipedrive: 'Pipedrive',
       integration_supabase: 'Supabase',
+      integration_shopify: 'Shopify',
       warehouse_extract: 'Warehouse',
     };
 

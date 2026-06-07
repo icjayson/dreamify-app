@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  ShoppingBag,
   Smartphone,
   Table2,
   Users,
@@ -44,6 +45,7 @@ const CONNECTOR_FILTERS: { label: ConnectorFilter; Icon: ElementType }[] = [
   { label: "Spreadsheets", Icon: Table2 },
   { label: "Databases", Icon: Database },
   { label: "Sales & CRM", Icon: Users },
+  { label: "Ecommerce", Icon: ShoppingBag },
   { label: "Finance", Icon: CreditCard },
   { label: "Mobile & Attribution", Icon: Smartphone },
 ];
@@ -61,12 +63,12 @@ const DATA_CONNECTORS_FAQ: { question: string; answer: string }[] = [
   {
     question: "What are data connectors?",
     answer:
-      "A data connector is a live, authenticated link between Dreamify and one of your business systems — your ad accounts, analytics, payment processor, spreadsheets, or warehouse. Once connected, Dreamify reads the source on a schedule, joins the data with everything else you've connected, and uses it to generate AI dashboards on demand. No SQL, no data modeling, no manual exports.\n\nDreamify ships native connectors for the platforms marketers, founders, and operators actually use: Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Google Sheets, PostgreSQL, BigQuery, and Snowflake. Each connector is read-only by default and uses OAuth or scoped credentials for security.",
+      "A data connector is a live, authenticated link between Dreamify and one of your business systems — your ad accounts, analytics, payment processor, ecommerce store, spreadsheets, or warehouse. Once connected, Dreamify reads the source on a schedule, joins the data with everything else you've connected, and uses it to generate AI dashboards on demand. No SQL, no data modeling, no manual exports.\n\nDreamify ships native connectors for the platforms marketers, founders, and operators actually use: Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Shopify, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase. Each connector is read-only by default and uses OAuth or scoped credentials for security.",
   },
   {
     question: "Which data sources does Dreamify connect to?",
     answer:
-      "Native connectors today include Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Google Sheets, PostgreSQL, BigQuery, and Snowflake. More are added on a rolling basis based on the connector requests teams submit.",
+      "Native connectors today include Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Shopify, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase. More are added on a rolling basis based on the connector requests teams submit.",
   },
   {
     question: "Do I need to write SQL or build a data model?",
@@ -109,6 +111,7 @@ export default function ProductDataConnectorsPage() {
     setSalesforceModalOpen,
     setPipedriveModalOpen,
     setSupabaseModalOpen,
+    setShopifyModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -144,6 +147,7 @@ export default function ProductDataConnectorsPage() {
       salesforce: () => setSalesforceModalOpen(true),
       pipedrive: () => setPipedriveModalOpen(true),
       supabase: () => setSupabaseModalOpen(true),
+      shopify: () => setShopifyModalOpen(true),
       google_ads: () => setGoogleAdsModalOpen(true),
       firebase: () => setFirebaseModalOpen(true),
       postgres: () => setWarehouseModalOpen(true, "postgres"),
@@ -183,7 +187,7 @@ export default function ProductDataConnectorsPage() {
     <>
       <Seo
         title="Data Connectors — Dreamify | Live Connectors for AI Dashboards"
-        description="Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase to Dreamify. Live data into AI dashboards in minutes."
+        description="Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, Shopify, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase to Dreamify. Live data into AI dashboards in minutes."
         canonical="https://app.dreamify.dev/product/data-connectors"
         jsonLd={[
           {

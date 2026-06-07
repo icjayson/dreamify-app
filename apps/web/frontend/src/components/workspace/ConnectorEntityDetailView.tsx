@@ -460,6 +460,25 @@ export default function ConnectorEntityDetailView(props: Props) {
         entityName,
       };
     }
+    if (connectorKey === "shopify") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "sales_overview", shopDomainFromId = "", resourceFromId = "all"] = entityId.split(":");
+      return {
+        provider: "shopify" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          shop_domain: String(scheduleConfig.shop_domain || entity?.shop_domain || shopDomainFromId),
+          resource: String(scheduleConfig.resource || entity?.resource || resourceFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: scheduleConfig.include_pii ?? false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
     if (connectorKey === "postgres" || connectorKey === "bigquery" || connectorKey === "snowflake" || connectorKey === "databricks") {
       const entity = connectorDetail?.entity;
       const [connectionIdFromId, tablePath = ""] = entityId.split(":");

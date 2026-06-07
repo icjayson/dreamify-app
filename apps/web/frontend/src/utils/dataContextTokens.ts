@@ -50,6 +50,7 @@ const CONNECTOR_ALIASES: Array<{
   { name: "Salesforce", shortName: "Salesforce", aliases: ["salesforce", "sales force", "salesforce_crm", "integration_salesforce"] },
   { name: "Pipedrive", shortName: "Pipedrive", aliases: ["pipedrive", "pipe drive", "pipedrive_crm", "integration_pipedrive"] },
   { name: "Supabase", shortName: "Supabase", aliases: ["supabase", "supa base", "supabase_db", "integration_supabase"] },
+  { name: "Shopify", shortName: "Shopify", aliases: ["shopify", "shopify_commerce", "integration_shopify"] },
   { name: "PostgreSQL", shortName: "Postgres", aliases: ["postgres", "postgresql", "warehouse", "warehouse_extract"] },
   { name: "BigQuery", shortName: "BigQuery", aliases: ["bigquery", "big query", "google bigquery"] },
   { name: "Snowflake", shortName: "Snowflake", aliases: ["snowflake", "snowflake warehouse"] },

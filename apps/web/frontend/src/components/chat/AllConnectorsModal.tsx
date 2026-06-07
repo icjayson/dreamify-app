@@ -28,6 +28,7 @@ export default function AllConnectorsModal() {
     setSalesforceModalOpen,
     setPipedriveModalOpen,
     setSupabaseModalOpen,
+    setShopifyModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -113,6 +114,11 @@ export default function AllConnectorsModal() {
         ? { connected: true, info: `${supabaseStatus.connection_count || 0} connection${supabaseStatus.connection_count === 1 ? '' : 's'}` }
         : { connected: false };
 
+      const shopifyStatus = await integrationService.getShopifyStatus();
+      results['Shopify'] = shopifyStatus.connected
+        ? { connected: true, info: shopifyStatus.shop_domain || shopifyStatus.shop_name || 'Shopify' }
+        : { connected: false };
+
       const overview = await integrationService.fetchConnectorsOverview();
       if (overview.success) {
         const postgres = overview.connectors.find((connector) => connector.connector_key === 'postgres');
@@ -120,6 +126,7 @@ export default function AllConnectorsModal() {
         const snowflake = overview.connectors.find((connector) => connector.connector_key === 'snowflake');
         const databricks = overview.connectors.find((connector) => connector.connector_key === 'databricks');
         const supabase = overview.connectors.find((connector) => connector.connector_key === 'supabase');
+        const shopify = overview.connectors.find((connector) => connector.connector_key === 'shopify');
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results['PostgreSQL'] = {
@@ -163,6 +170,13 @@ export default function AllConnectorsModal() {
             info: entityCount > 0 ? `${entityCount} item${entityCount === 1 ? '' : 's'}` : results['Supabase']?.info || 'Supabase',
           };
         }
+        if (shopify?.connected) {
+          const reportCount = shopify.selected_entities?.length || 0;
+          results['Shopify'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Shopify']?.info || 'Shopify',
+          };
+        }
       }
 
       setConnectorStatus(results);
@@ -190,6 +204,7 @@ export default function AllConnectorsModal() {
       else if (connectorName === 'Salesforce') setSalesforceModalOpen(true);
       else if (connectorName === 'Pipedrive') setPipedriveModalOpen(true);
       else if (connectorName === 'Supabase') setSupabaseModalOpen(true);
+      else if (connectorName === 'Shopify') setShopifyModalOpen(true);
       else if (connectorName === 'Google Ads') setGoogleAdsModalOpen(true);
       else if (connectorName === 'Firebase') setFirebaseModalOpen(true);
       else if (connectorName === 'PostgreSQL') setWarehouseModalOpen(true, 'postgres');

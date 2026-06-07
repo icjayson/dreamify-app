@@ -4,7 +4,7 @@ import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService, type ProcessingResponse } from '@/services/processingService';
 import { streamWorkflow } from '@/services/workflowStreamService';
 import type { ConversationChatRequest, DashboardDataResponse } from '@/services/conversationService';
-import type { SupabaseSyncRequest } from '@/services/integrationService';
+import type { ShopifySyncRequest, SupabaseSyncRequest } from '@/services/integrationService';
 import type { AnalysisStep, ChartChangeSummary, EditDataProvenance } from '@/types/chartEdit';
 import type { AssetRecord } from '@/services/fileService';
 import {
@@ -372,6 +372,7 @@ interface ChatState {
   isHubSpotModalOpen: boolean;
   isSalesforceModalOpen: boolean;
   isPipedriveModalOpen: boolean;
+  isShopifyModalOpen: boolean;
   isSupabaseModalOpen: boolean;
   isGoogleAdsModalOpen: boolean;
   isFirebaseModalOpen: boolean;
@@ -447,6 +448,7 @@ interface ChatState {
   setHubSpotModalOpen: (open: boolean) => void;
   setSalesforceModalOpen: (open: boolean) => void;
   setPipedriveModalOpen: (open: boolean) => void;
+  setShopifyModalOpen: (open: boolean) => void;
   setSupabaseModalOpen: (open: boolean) => void;
   setGoogleAdsModalOpen: (open: boolean) => void;
   setFirebaseModalOpen: (open: boolean) => void;
@@ -476,6 +478,7 @@ interface ChatState {
   syncHubSpot: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, pipelineId?: string, ownerId?: string, rowLimit?: number, includeAssociations?: boolean) => Promise<HubSpotSyncResult>;
   syncSalesforce: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, objectName?: string, ownerId?: string, rowLimit?: number) => Promise<SalesforceSyncResult>;
   syncPipedrive: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, pipelineId?: string, ownerId?: string, rowLimit?: number) => Promise<PipedriveSyncResult>;
+  syncShopify: (request: ShopifySyncRequest) => Promise<ShopifySyncResult>;
   syncSupabase: (request: SupabaseSyncRequest) => Promise<SupabaseSyncResult>;
   syncGoogleAds: (adAccountId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<StripeSyncResult>;
   syncFirebase: (firebaseProjectId: string, projectName: string, projectId?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
@@ -530,6 +533,18 @@ export interface PipedriveSyncResult {
   message?: string;
   entity_id?: string;
   truncated?: boolean;
+}
+
+/** Result of Shopify sync API */
+export interface ShopifySyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
 }
 
 /** Result of Supabase sync API */
@@ -1014,6 +1029,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isHubSpotModalOpen: false,
   isSalesforceModalOpen: false,
   isPipedriveModalOpen: false,
+  isShopifyModalOpen: false,
   isSupabaseModalOpen: false,
   isGoogleAdsModalOpen: false,
   isFirebaseModalOpen: false,
@@ -1149,6 +1165,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setHubSpotModalOpen: (open) => set({ isHubSpotModalOpen: open }),
   setSalesforceModalOpen: (open) => set({ isSalesforceModalOpen: open }),
   setPipedriveModalOpen: (open) => set({ isPipedriveModalOpen: open }),
+  setShopifyModalOpen: (open) => set({ isShopifyModalOpen: open }),
   setSupabaseModalOpen: (open) => set({ isSupabaseModalOpen: open }),
   setGoogleAdsModalOpen: (open) => set({ isGoogleAdsModalOpen: open }),
   setFirebaseModalOpen: (open) => set({ isFirebaseModalOpen: open }),
@@ -1460,6 +1477,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync Pipedrive');
     } catch (err) {
       console.error('Sync Pipedrive error:', err);
+      throw err;
+    }
+  },
+
+  syncShopify: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncShopify(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Shopify');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Shopify data');
+    } catch (err) {
+      console.error('Sync Shopify error:', err);
       throw err;
     }
   },

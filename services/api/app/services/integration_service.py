@@ -2,6 +2,7 @@ import io
 import csv
 import uuid
 import json
+import base64
 import logging
 import time
 import asyncio
@@ -138,6 +139,55 @@ class IntegrationService:
         return connected_accounts_repo.upsert_provider_metadata(
             user_id=user_id,
             provider="salesforce",
+            metadata={**preserved, **metadata},
+        )
+
+    def _pipedrive_stored_token(
+        self, record: Dict[str, Any], token_key: str
+    ) -> Optional[str]:
+        encrypted = record.get(f"encrypted_{token_key}")
+        if encrypted:
+            try:
+                return _decrypt_secret(str(encrypted))
+            except Exception as exc:
+                logger.warning("Failed to decrypt Pipedrive %s: %s", token_key, exc)
+                raise HTTPException(
+                    status_code=401,
+                    detail="Pipedrive token could not be decrypted. Please reconnect.",
+                )
+        token = record.get(token_key)
+        return str(token) if token else None
+
+    def _pipedrive_token_metadata(
+        self, access_token: str, refresh_token: str
+    ) -> Dict[str, str]:
+        return {
+            "encrypted_access_token": _encrypt_secret(access_token),
+            "encrypted_refresh_token": _encrypt_secret(refresh_token),
+        }
+
+    def _save_pipedrive_metadata(
+        self, user_id: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        existing = connected_accounts_repo.get_connection(user_id, "pipedrive") or {}
+        preserved = {
+            key: value
+            for key, value in existing.items()
+            if key
+            not in {
+                "access_token",
+                "refresh_token",
+                "encrypted_access_token",
+                "encrypted_refresh_token",
+                "user_id",
+                "provider",
+                "updated_at",
+            }
+        }
+        connected_accounts_repo.delete_connection(user_id, "pipedrive")
+        return connected_accounts_repo.upsert_provider_metadata(
+            user_id=user_id,
+            provider="pipedrive",
             metadata={**preserved, **metadata},
         )
 
@@ -2487,6 +2537,373 @@ class IntegrationService:
             if row.get("Id")
         ]
 
+    # ── Pipedrive CRM & Sales Pipeline ───────────────────────────────────────
+
+    def _pipedrive_config(self) -> Dict[str, str]:
+        pipedrive_cfg = getattr(config, "pipedrive", None)
+        return {
+            "client_id": (
+                getattr(pipedrive_cfg, "client_id", "") if pipedrive_cfg else ""
+            )
+            or os.environ.get("PIPEDRIVE_CLIENT_ID", ""),
+            "client_secret": (
+                getattr(pipedrive_cfg, "client_secret", "") if pipedrive_cfg else ""
+            )
+            or os.environ.get("PIPEDRIVE_CLIENT_SECRET", ""),
+            "redirect_uri": (
+                getattr(pipedrive_cfg, "redirect_uri", "") if pipedrive_cfg else ""
+            )
+            or os.environ.get("PIPEDRIVE_REDIRECT_URI", ""),
+            "oauth_base_url": (
+                getattr(pipedrive_cfg, "oauth_base_url", "") if pipedrive_cfg else ""
+            )
+            or os.environ.get(
+                "PIPEDRIVE_OAUTH_BASE_URL", "https://oauth.pipedrive.com/oauth"
+            ),
+            "api_base_url": (
+                getattr(pipedrive_cfg, "api_base_url", "") if pipedrive_cfg else ""
+            )
+            or os.environ.get(
+                "PIPEDRIVE_API_BASE_URL", "https://api.pipedrive.com/api/v1"
+            ),
+        }
+
+    def _make_pipedrive_state(self, user_id: str) -> str:
+        ts = int(datetime.now(timezone.utc).timestamp())
+        payload = f"{user_id}:{ts}"
+        sig = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        return f"{payload}:{sig}"
+
+    def _verify_pipedrive_state(self, state: str) -> str:
+        parts = state.split(":")
+        if len(parts) != 3:
+            raise ValueError("Invalid state format")
+        user_id, ts_str, sig = parts
+        payload = f"{user_id}:{ts_str}"
+        expected = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            raise ValueError("Invalid state signature")
+        if int(datetime.now(timezone.utc).timestamp()) - int(ts_str) > 600:
+            raise ValueError("State token expired")
+        return user_id
+
+    def _pipedrive_basic_auth_header(self, client_id: str, client_secret: str) -> str:
+        raw = f"{client_id}:{client_secret}".encode("utf-8")
+        return f"Basic {base64.b64encode(raw).decode('ascii')}"
+
+    def get_pipedrive_oauth_url(self, user_id: str) -> str:
+        pipedrive = self._pipedrive_config()
+        if not pipedrive["client_id"] or not pipedrive["redirect_uri"]:
+            raise ValueError(
+                "Pipedrive OAuth client_id or redirect_uri is not configured."
+            )
+        params = urlencode(
+            {
+                "client_id": pipedrive["client_id"],
+                "redirect_uri": pipedrive["redirect_uri"],
+                "state": self._make_pipedrive_state(user_id),
+            }
+        )
+        return f"{pipedrive['oauth_base_url'].rstrip('/')}/authorize?{params}"
+
+    async def handle_pipedrive_oauth_callback(self, code: str, state: str) -> None:
+        user_id = self._verify_pipedrive_state(state)
+        pipedrive = self._pipedrive_config()
+        if not pipedrive["client_id"] or not pipedrive["client_secret"]:
+            raise ValueError("Pipedrive OAuth client credentials are not configured.")
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            token_resp = await client.post(
+                f"{pipedrive['oauth_base_url'].rstrip('/')}/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "redirect_uri": pipedrive["redirect_uri"],
+                    "code": code,
+                },
+                headers={
+                    "Authorization": self._pipedrive_basic_auth_header(
+                        pipedrive["client_id"], pipedrive["client_secret"]
+                    ),
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
+        if token_resp.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Pipedrive OAuth token exchange failed: {token_resp.text}",
+            )
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+        if not access_token or not refresh_token:
+            raise HTTPException(
+                status_code=400,
+                detail="Pipedrive OAuth response did not include tokens.",
+            )
+        expires_in = int(token_data.get("expires_in") or 3599)
+        api_base_url = self._pipedrive_api_base_url(
+            token_data.get("api_domain"), pipedrive["api_base_url"]
+        )
+        account_metadata = await self._fetch_pipedrive_account_metadata(
+            access_token=str(access_token), api_base_url=api_base_url
+        )
+        self._save_pipedrive_metadata(
+            user_id=user_id,
+            metadata={
+                **self._pipedrive_token_metadata(str(access_token), str(refresh_token)),
+                "expires_at": (
+                    datetime.now(timezone.utc)
+                    + timedelta(seconds=max(60, expires_in - 60))
+                ).isoformat(),
+                "api_base_url": api_base_url,
+                **account_metadata,
+            },
+        )
+
+    def _pipedrive_api_base_url(
+        self, api_domain: Optional[str], fallback_api_base_url: str
+    ) -> str:
+        domain = str(api_domain or "").rstrip("/")
+        if domain:
+            return f"{domain}/api/v1"
+        return str(fallback_api_base_url or "https://api.pipedrive.com/api/v1").rstrip(
+            "/"
+        )
+
+    async def _fetch_pipedrive_account_metadata(
+        self, access_token: str, api_base_url: str
+    ) -> Dict[str, Any]:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{api_base_url.rstrip('/')}/users/me",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+            if resp.status_code != 200:
+                return {}
+            data = resp.json().get("data") or {}
+            api_domain = api_base_url.replace("/api/v1", "")
+            company_domain = str(data.get("company_domain") or "")
+            return {
+                "company_id": str(data.get("company_id") or ""),
+                "company_name": str(data.get("company_name") or ""),
+                "company_domain": company_domain
+                or api_domain.replace("https://", "").replace("http://", ""),
+                "pipedrive_user_id": str(data.get("id") or ""),
+                "user_email": str(data.get("email") or ""),
+                "account_name": str(data.get("company_name") or "")
+                or company_domain
+                or "Pipedrive",
+            }
+        except Exception:
+            return {}
+
+    async def _get_pipedrive_access_token(self, user_id: str) -> str:
+        record = connected_accounts_repo.get_connection(user_id, "pipedrive")
+        if not record:
+            raise HTTPException(status_code=401, detail="Pipedrive not connected.")
+        access_token = self._pipedrive_stored_token(record, "access_token")
+        refresh_token = self._pipedrive_stored_token(record, "refresh_token")
+        expires_at_raw = record.get("expires_at")
+        if access_token and expires_at_raw:
+            try:
+                expires_at = datetime.fromisoformat(
+                    str(expires_at_raw).replace("Z", "+00:00")
+                )
+                if datetime.now(timezone.utc) < expires_at:
+                    return str(access_token)
+            except Exception:
+                pass
+        if not refresh_token:
+            raise HTTPException(
+                status_code=401, detail="Pipedrive token expired. Please reconnect."
+            )
+        return await self._refresh_pipedrive_access_token(user_id, record)
+
+    async def _refresh_pipedrive_access_token(
+        self, user_id: str, record: Dict[str, Any]
+    ) -> str:
+        pipedrive = self._pipedrive_config()
+        refresh_token = self._pipedrive_stored_token(record, "refresh_token")
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                f"{pipedrive['oauth_base_url'].rstrip('/')}/token",
+                data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+                headers={
+                    "Authorization": self._pipedrive_basic_auth_header(
+                        pipedrive["client_id"], pipedrive["client_secret"]
+                    ),
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
+        if resp.status_code != 200:
+            connected_accounts_repo.delete_connection(user_id, "pipedrive")
+            raise HTTPException(
+                status_code=401,
+                detail="Pipedrive token refresh failed. Please reconnect.",
+            )
+        data = resp.json()
+        access_token = data.get("access_token")
+        next_refresh_token = data.get("refresh_token") or refresh_token
+        if not access_token or not next_refresh_token:
+            raise HTTPException(
+                status_code=401,
+                detail="Pipedrive token refresh response was incomplete. Please reconnect.",
+            )
+        expires_in = int(data.get("expires_in") or 3599)
+        metadata = {
+            **self._pipedrive_token_metadata(
+                str(access_token), str(next_refresh_token)
+            ),
+            "expires_at": (
+                datetime.now(timezone.utc) + timedelta(seconds=max(60, expires_in - 60))
+            ).isoformat(),
+        }
+        if data.get("api_domain"):
+            metadata["api_base_url"] = self._pipedrive_api_base_url(
+                data.get("api_domain"), str(record.get("api_base_url") or "")
+            )
+        self._save_pipedrive_metadata(user_id=user_id, metadata=metadata)
+        return str(access_token)
+
+    async def _pipedrive_context(self, user_id: str) -> Dict[str, Any]:
+        token = await self._get_pipedrive_access_token(user_id)
+        record = connected_accounts_repo.get_connection(user_id, "pipedrive") or {}
+        api_base_url = str(
+            record.get("api_base_url") or self._pipedrive_config()["api_base_url"]
+        ).rstrip("/")
+        return {
+            "access_token": token,
+            "api_base_url": api_base_url,
+            "company_id": record.get("company_id"),
+            "company_domain": record.get("company_domain"),
+            "company_name": record.get("company_name"),
+            "account_name": record.get("account_name") or "Pipedrive",
+        }
+
+    async def get_pipedrive_connection_status(self, user_id: str) -> Dict[str, Any]:
+        record = connected_accounts_repo.get_connection(user_id, "pipedrive")
+        if not record:
+            return {"connected": False}
+        return {
+            "connected": bool(
+                record.get("encrypted_access_token")
+                or record.get("encrypted_refresh_token")
+                or record.get("access_token")
+                or record.get("refresh_token")
+            ),
+            "company_id": record.get("company_id"),
+            "company_domain": record.get("company_domain"),
+            "company_name": record.get("company_name"),
+            "user_email": record.get("user_email"),
+            "account_name": record.get("account_name") or "Pipedrive",
+        }
+
+    async def disconnect_pipedrive(self, user_id: str) -> None:
+        connected_accounts_repo.delete_connection(user_id, "pipedrive")
+
+    async def _pipedrive_request(
+        self,
+        ctx: Dict[str, Any],
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        method: str = "GET",
+        json_body: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        url = f"{str(ctx['api_base_url']).rstrip('/')}/{endpoint.lstrip('/')}"
+        headers = {"Authorization": f"Bearer {ctx['access_token']}"}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for attempt in range(3):
+                resp = await client.request(
+                    method, url, params=params, json=json_body, headers=headers
+                )
+                if resp.status_code == 429 and attempt < 2:
+                    retry_after = float(resp.headers.get("Retry-After") or 0)
+                    await asyncio.sleep(min(retry_after or 0.5 * (attempt + 1), 2.0))
+                    continue
+                if resp.status_code == 401:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Pipedrive access revoked. Please reconnect.",
+                    )
+                if resp.status_code == 429:
+                    raise HTTPException(
+                        status_code=429,
+                        detail="Pipedrive rate limit reached. Please retry later.",
+                    )
+                resp.raise_for_status()
+                return resp.json()
+        return {"success": False, "data": []}
+
+    async def fetch_pipedrive_pipelines(self, user_id: str) -> List[Dict[str, Any]]:
+        ctx = await self._pipedrive_context(user_id)
+        pipelines_data = await self._pipedrive_request(ctx, "pipelines")
+        stages_data = await self._pipedrive_request(ctx, "stages")
+        stages_by_pipeline: Dict[str, List[Dict[str, Any]]] = {}
+        for stage in stages_data.get("data") or []:
+            pipeline_id = str(stage.get("pipeline_id") or "")
+            stages_by_pipeline.setdefault(pipeline_id, []).append(
+                {
+                    "id": str(stage.get("id") or ""),
+                    "label": str(stage.get("name") or stage.get("id") or ""),
+                    "probability": stage.get("deal_probability"),
+                }
+            )
+        return [
+            {
+                "id": str(pipeline.get("id") or ""),
+                "label": str(pipeline.get("name") or pipeline.get("id") or ""),
+                "stages": stages_by_pipeline.get(str(pipeline.get("id") or ""), []),
+            }
+            for pipeline in pipelines_data.get("data") or []
+            if pipeline.get("id")
+        ]
+
+    async def fetch_pipedrive_users(self, user_id: str) -> List[Dict[str, Any]]:
+        ctx = await self._pipedrive_context(user_id)
+        page = await self._pipedrive_request(ctx, "users", params={"limit": 500})
+        return [
+            {
+                "id": str(user.get("id") or ""),
+                "name": str(user.get("name") or user.get("email") or user.get("id")),
+                "email": str(user.get("email") or ""),
+                "active": bool(user.get("active_flag", True)),
+            }
+            for user in page.get("data") or []
+            if user.get("id")
+        ]
+
+    async def fetch_pipedrive_fields(
+        self, user_id: str, object_name: str
+    ) -> List[Dict[str, Any]]:
+        object_key = self._pipedrive_validate_object_name(object_name)
+        ctx = await self._pipedrive_context(user_id)
+        endpoint = {
+            "deal": "dealFields",
+            "lead": "leadFields",
+            "person": "personFields",
+            "organization": "organizationFields",
+            "activity": "activityFields",
+            "product": "productFields",
+        }[object_key]
+        page = await self._pipedrive_request(ctx, endpoint, params={"limit": 500})
+        return [
+            {
+                "key": str(field.get("key") or field.get("id") or ""),
+                "name": str(field.get("name") or field.get("key") or ""),
+                "field_type": str(field.get("field_type") or field.get("type") or ""),
+                "custom": not bool(field.get("mandatory_flag", False))
+                and str(field.get("key") or "").startswith(str(field.get("id") or "")),
+                "options": field.get("options") or [],
+            }
+            for field in page.get("data") or []
+            if field.get("key") or field.get("id")
+        ]
+
     def _hubspot_report_label(
         self, report_type: str, pipeline_id: str = "all", owner_id: str = "all"
     ) -> str:
@@ -2519,6 +2936,8 @@ class IntegrationService:
             "stripe": "stripe",
             "hubspot": "hubspot",
             "salesforce": "salesforce",
+            "pipedrive": "pipedrive",
+            "supabase": "supabase",
             "postgres": "warehouse",
             "bigquery": "warehouse",
             "snowflake": "warehouse",
@@ -2542,6 +2961,8 @@ class IntegrationService:
             "stripe": "integration_stripe",
             "hubspot": "integration_hubspot",
             "salesforce": "integration_salesforce",
+            "pipedrive": "integration_pipedrive",
+            "supabase": "integration_supabase",
             "postgres": "warehouse_extract",
             "bigquery": "warehouse_extract",
             "snowflake": "warehouse_extract",
@@ -2578,6 +2999,31 @@ class IntegrationService:
             object_name = connector_config.get("object_name") or "all"
             owner_id = connector_config.get("owner_id") or "all"
             return f"salesforce:{report_type}:{object_name}:{owner_id}"
+        if provider == "pipedrive":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "sales_pipeline"
+            pipeline_id = connector_config.get("pipeline_id") or "all"
+            owner_id = connector_config.get("owner_id") or "all"
+            return f"pipedrive:{report_type}:{pipeline_id}:{owner_id}"
+        if provider == "supabase":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            connection_id = connector_config.get("connection_id")
+            sync_mode = connector_config.get("sync_mode") or "bounded_table_snapshot"
+            schema = connector_config.get("schema") or connector_config.get(
+                "schema_name"
+            )
+            table = connector_config.get("table") or connector_config.get("table_name")
+            bucket = connector_config.get("bucket") or "all"
+            if connection_id and sync_mode == "app_profile":
+                return f"supabase:{connection_id}:storage:{bucket}"
+            if connection_id and sync_mode == "profile_only":
+                return f"supabase:{connection_id}:profile"
+            if connection_id and schema and table:
+                return f"supabase:{connection_id}:table:{schema}.{table}"
         if provider == "warehouse":
             entity_id = connector_config.get("entity_id")
             if entity_id:
@@ -2758,6 +3204,67 @@ class IntegrationService:
                     }
                 ]
 
+        if provider == "pipedrive":
+            report_type = str(connector_config.get("report_type") or "sales_pipeline")
+            pipeline_id = str(connector_config.get("pipeline_id") or "all")
+            owner_id = str(connector_config.get("owner_id") or "all")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or self._pipedrive_report_label(report_type, pipeline_id, owner_id)
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "report_type": report_type,
+                        "pipeline_id": pipeline_id,
+                        "owner_id": owner_id,
+                    }
+                ]
+
+        if provider == "supabase":
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            sync_mode = str(
+                connector_config.get("sync_mode") or "bounded_table_snapshot"
+            )
+            schema = connector_config.get("schema") or connector_config.get(
+                "schema_name"
+            )
+            table = connector_config.get("table") or connector_config.get("table_name")
+            connection_id = str(connector_config.get("connection_id") or "")
+            entity_name = connector_config.get("entity_name")
+            if not entity_name:
+                if schema and table:
+                    entity_name = f"{schema}.{table}"
+                elif sync_mode == "app_profile":
+                    entity_name = "App Profile"
+                else:
+                    entity_name = "Schema Profile"
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "table" if schema and table else "profile",
+                        "account_name": account_name,
+                        "connection_id": connection_id,
+                        "connector_key": "supabase",
+                        "database_type": "supabase",
+                        "schema_name": str(schema or ""),
+                        "table_name": str(table or ""),
+                        "sync_mode": sync_mode,
+                    }
+                ]
+
         return []
 
     def _unique_entities(self, entities: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -2823,6 +3330,8 @@ class IntegrationService:
             "stripe": [],
             "hubspot": [],
             "salesforce": [],
+            "pipedrive": [],
+            "supabase": [],
             "postgres": [],
             "bigquery": [],
             "snowflake": [],
@@ -2847,6 +3356,14 @@ class IntegrationService:
         )
         status_map["salesforce"] = bool(
             (await self.get_salesforce_connection_status(user_id)).get("connected")
+        )
+        status_map["pipedrive"] = bool(
+            (await self.get_pipedrive_connection_status(user_id)).get("connected")
+        )
+        from app.services.supabase_service import supabase_service
+
+        status_map["supabase"] = bool(
+            (await supabase_service.get_connection_status(user_id)).get("connected")
         )
 
         google_connected = bool(await self._get_google_access_token(user_id))
@@ -2881,6 +3398,8 @@ class IntegrationService:
             "stripe": "stripe",
             "hubspot": "hubspot",
             "salesforce": "salesforce",
+            "pipedrive": "pipedrive",
+            "supabase": "supabase",
         }
         for connector_key, provider in metadata_provider_map.items():
             record = connected_accounts_repo.get_connection(user_id, provider) or {}
@@ -2915,6 +3434,8 @@ class IntegrationService:
             "stripe": "stripe",
             "hubspot": "hubspot",
             "salesforce": "salesforce",
+            "pipedrive": "pipedrive",
+            "supabase": "supabase",
             "google_ads": "google_ads",
             "firebase": "firebase",
             "google_sheets": "google_sheets",
@@ -2953,6 +3474,8 @@ class IntegrationService:
             {"connector_key": "google_sheets", "display_name": "Google Sheets"},
             {"connector_key": "hubspot", "display_name": "HubSpot"},
             {"connector_key": "salesforce", "display_name": "Salesforce"},
+            {"connector_key": "pipedrive", "display_name": "Pipedrive"},
+            {"connector_key": "supabase", "display_name": "Supabase"},
             {"connector_key": "postgres", "display_name": "PostgreSQL"},
             {"connector_key": "bigquery", "display_name": "BigQuery"},
             {"connector_key": "snowflake", "display_name": "Snowflake"},
@@ -3492,6 +4015,8 @@ class IntegrationService:
             "stripe",
             "hubspot",
             "salesforce",
+            "pipedrive",
+            "supabase",
         }:
             # only date overrides are supported for these in refresh modal
             pass
@@ -3622,6 +4147,27 @@ class IntegrationService:
                     owner_id=str(cfg.get("owner_id") or "all"),
                     row_limit=int(cfg.get("row_limit") or 5000),
                 )
+            elif connector_key == "pipedrive":
+                result = await self.fetch_pipedrive_data(
+                    user_id=user_id,
+                    report_type=str(cfg.get("report_type") or "sales_pipeline"),
+                    project_id=project_id,
+                    date_preset=dates.get("date_preset"),
+                    start_date=dates.get("start_date"),
+                    end_date=dates.get("end_date"),
+                    pipeline_id=str(cfg.get("pipeline_id") or "all"),
+                    owner_id=str(cfg.get("owner_id") or "all"),
+                    row_limit=int(cfg.get("row_limit") or 5000),
+                )
+            elif connector_key == "supabase":
+                from app.services.supabase_service import supabase_service
+
+                result = supabase_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
             elif connector_key in {"postgres", "bigquery", "snowflake", "databricks"}:
                 from app.services.warehouse_service import warehouse_service
 
@@ -3662,6 +4208,7 @@ class IntegrationService:
             "bigquery",
             "snowflake",
             "databricks",
+            "supabase",
         }:
             stable_entity_name = self._pick_best_entity_name(
                 str(entity_id),
@@ -4610,6 +5157,544 @@ class IntegrationService:
             "truncated": bool(query_result.get("truncated")),
         }
 
+    def _pipedrive_validate_object_name(self, object_name: str) -> str:
+        object_key = str(object_name or "").strip().lower()
+        mapping = {
+            "deal": "deal",
+            "deals": "deal",
+            "lead": "lead",
+            "leads": "lead",
+            "person": "person",
+            "persons": "person",
+            "contact": "person",
+            "contacts": "person",
+            "organization": "organization",
+            "organizations": "organization",
+            "activity": "activity",
+            "activities": "activity",
+            "product": "product",
+            "products": "product",
+        }
+        if object_key not in mapping:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Pipedrive object_name. Must be deal, lead, person, organization, activity, or product.",
+            )
+        return mapping[object_key]
+
+    def _pipedrive_report_label(
+        self, report_type: str, pipeline_id: str = "all", owner_id: str = "all"
+    ) -> str:
+        labels = {
+            "sales_pipeline": "Sales Pipeline",
+            "leads": "Leads",
+            "contacts_organizations": "Contacts & Organizations",
+            "activities": "Activities",
+            "products": "Products",
+        }
+        base = labels.get(report_type, report_type.replace("_", " ").title())
+        filters = []
+        if pipeline_id and pipeline_id != "all":
+            filters.append(f"Pipeline {pipeline_id}")
+        if owner_id and owner_id != "all":
+            filters.append(f"Owner {owner_id}")
+        return f"{base} ({', '.join(filters)})" if filters else base
+
+    def _pipedrive_report_spec(self, report_type: str) -> Dict[str, Any]:
+        specs = {
+            "sales_pipeline": {
+                "endpoint": "deals/collection",
+                "field_object": "deal",
+                "date_field": "update_time",
+                "owner_fields": ["user_id", "user_id.id"],
+                "pipeline_field": "pipeline_id",
+                "cursor": True,
+                "fields": [
+                    "id",
+                    "title",
+                    "value",
+                    "currency",
+                    "status",
+                    "probability",
+                    "weighted_value",
+                    "pipeline_id",
+                    "stage_id",
+                    "user_id",
+                    "person_id",
+                    "org_id",
+                    "add_time",
+                    "update_time",
+                    "close_time",
+                    "won_time",
+                    "lost_time",
+                    "expected_close_date",
+                    "next_activity_date",
+                    "next_activity_subject",
+                    "last_activity_date",
+                    "last_activity_subject",
+                    "source_name",
+                    "channel",
+                    "channel_id",
+                ],
+            },
+            "leads": {
+                "endpoint": "leads",
+                "field_object": "lead",
+                "date_field": "update_time",
+                "owner_fields": ["owner_id", "owner_id.id"],
+                "cursor": False,
+                "fields": [
+                    "id",
+                    "title",
+                    "value",
+                    "currency",
+                    "owner_id",
+                    "creator_id",
+                    "person_id",
+                    "organization_id",
+                    "source_name",
+                    "is_archived",
+                    "add_time",
+                    "update_time",
+                    "expected_close_date",
+                ],
+            },
+            "contacts_organizations": {
+                "endpoint": "persons/collection",
+                "field_object": "person",
+                "date_field": "update_time",
+                "owner_fields": ["owner_id", "owner_id.id"],
+                "cursor": True,
+                "fields": [
+                    "id",
+                    "name",
+                    "email",
+                    "phone",
+                    "owner_id",
+                    "org_id",
+                    "add_time",
+                    "update_time",
+                ],
+            },
+            "activities": {
+                "endpoint": "activities/collection",
+                "field_object": "activity",
+                "date_field": "update_time",
+                "owner_fields": ["user_id", "user_id.id"],
+                "cursor": True,
+                "fields": [
+                    "id",
+                    "subject",
+                    "type",
+                    "done",
+                    "user_id",
+                    "person_id",
+                    "org_id",
+                    "deal_id",
+                    "due_date",
+                    "due_time",
+                    "duration",
+                    "add_time",
+                    "update_time",
+                ],
+            },
+            "products": {
+                "endpoint": "products",
+                "field_object": "product",
+                "date_field": "update_time",
+                "owner_fields": ["owner_id", "owner_id.id"],
+                "cursor": False,
+                "fields": [
+                    "id",
+                    "name",
+                    "code",
+                    "unit",
+                    "tax",
+                    "active_flag",
+                    "visible_to",
+                    "owner_id",
+                    "add_time",
+                    "update_time",
+                    "prices",
+                ],
+            },
+        }
+        if report_type not in specs:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid report_type. Must be sales_pipeline, leads, contacts_organizations, activities, or products.",
+            )
+        return specs[report_type]
+
+    def _flatten_pipedrive_record(
+        self, record: Dict[str, Any], prefix: str = ""
+    ) -> Dict[str, Any]:
+        flat: Dict[str, Any] = {}
+        for key, value in (record or {}).items():
+            out_key = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(value, dict):
+                flat.update(self._flatten_pipedrive_record(value, out_key))
+            elif isinstance(value, list):
+                flat[out_key] = json.dumps(value, ensure_ascii=False)
+            else:
+                flat[out_key] = value if value is not None else ""
+        return flat
+
+    def _pipedrive_first(self, record: Dict[str, Any], *keys: str) -> Any:
+        for key in keys:
+            value = record.get(key)
+            if value not in (None, ""):
+                return value
+        return ""
+
+    def _pipedrive_parse_datetime(self, value: Any) -> Optional[datetime]:
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        normalized = raw.replace("Z", "+00:00").replace(" ", "T")
+        if len(normalized) == 10:
+            normalized = f"{normalized}T00:00:00"
+        try:
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except ValueError:
+            return None
+
+    def _pipedrive_record_matches_filters(
+        self,
+        record: Dict[str, Any],
+        spec: Dict[str, Any],
+        date_window: Dict[str, str],
+        pipeline_id: str,
+        owner_id: str,
+    ) -> bool:
+        parsed = self._pipedrive_parse_datetime(record.get(spec["date_field"]))
+        if parsed:
+            start = self._pipedrive_parse_datetime(date_window["from_iso"])
+            end = self._pipedrive_parse_datetime(date_window["to_iso"])
+            if start and parsed < start:
+                return False
+            if end and parsed > end:
+                return False
+        if pipeline_id != "all":
+            value = str(
+                self._pipedrive_first(
+                    record,
+                    spec.get("pipeline_field", "pipeline_id"),
+                    f"{spec.get('pipeline_field', 'pipeline_id')}.id",
+                )
+            )
+            if value != str(pipeline_id):
+                return False
+        if owner_id != "all":
+            owner_values = {
+                str(record.get(field) or "")
+                for field in spec.get("owner_fields", [])
+                if record.get(field) not in (None, "")
+            }
+            if str(owner_id) not in owner_values:
+                return False
+        return True
+
+    def _pipedrive_safe_float(self, value: Any) -> Optional[float]:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _pipedrive_weighted_value(self, value: Any, probability: Any) -> str:
+        value_f = self._pipedrive_safe_float(value)
+        probability_f = self._pipedrive_safe_float(probability)
+        if value_f is None or probability_f is None:
+            return ""
+        if probability_f > 1:
+            probability_f = probability_f / 100
+        return f"{value_f * probability_f:.2f}"
+
+    def _enrich_pipedrive_row(
+        self,
+        row: Dict[str, Any],
+        report_type: str,
+        pipeline_labels: Dict[str, str],
+        stage_labels: Dict[str, str],
+        stage_probabilities: Dict[str, Any],
+        owner_labels: Dict[str, str],
+    ) -> Dict[str, Any]:
+        owner_value = str(
+            self._pipedrive_first(
+                row, "user_id", "user_id.id", "owner_id", "owner_id.id"
+            )
+        )
+        row["owner_name"] = owner_labels.get(owner_value, owner_value)
+        if report_type == "sales_pipeline":
+            pipeline_value = str(
+                self._pipedrive_first(row, "pipeline_id", "pipeline_id.id")
+            )
+            stage_value = str(self._pipedrive_first(row, "stage_id", "stage_id.id"))
+            probability = row.get("probability") or stage_probabilities.get(stage_value)
+            row["pipeline_label"] = pipeline_labels.get(pipeline_value, pipeline_value)
+            row["stage_label"] = stage_labels.get(stage_value, stage_value)
+            row["stage_probability"] = probability or ""
+            row["weighted_value"] = row.get(
+                "weighted_value"
+            ) or self._pipedrive_weighted_value(row.get("value"), probability)
+            row["organization_name"] = self._pipedrive_first(
+                row, "org_id.name", "organization_id.name"
+            )
+            row["person_name"] = self._pipedrive_first(row, "person_id.name")
+        return row
+
+    async def _pipedrive_get_paginated(
+        self,
+        ctx: Dict[str, Any],
+        spec: Dict[str, Any],
+        base_params: Dict[str, Any],
+        row_limit: int,
+        date_window: Dict[str, str],
+        pipeline_id: str,
+        owner_id: str,
+        report_type: str,
+        labels: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        rows: List[Dict[str, Any]] = []
+        cursor: Optional[str] = None
+        start = 0
+        has_more = False
+        endpoint = str(spec["endpoint"])
+        for _ in range(100):
+            params = dict(base_params)
+            params["limit"] = min(500, max(1, row_limit + 1 - len(rows)))
+            if spec.get("cursor"):
+                if cursor:
+                    params["cursor"] = cursor
+            else:
+                params["start"] = start
+            page = await self._pipedrive_request(ctx, endpoint, params=params)
+            records = page.get("data") or []
+            if isinstance(records, dict) and isinstance(records.get("items"), list):
+                records = records.get("items") or []
+            for record in records:
+                row = self._flatten_pipedrive_record(record)
+                if not self._pipedrive_record_matches_filters(
+                    row, spec, date_window, pipeline_id, owner_id
+                ):
+                    continue
+                rows.append(
+                    self._enrich_pipedrive_row(
+                        row,
+                        report_type,
+                        labels["pipelines"],
+                        labels["stages"],
+                        labels["stage_probabilities"],
+                        labels["owners"],
+                    )
+                )
+                if len(rows) > row_limit:
+                    return {"rows": rows[:row_limit], "truncated": True}
+            additional = page.get("additional_data") or {}
+            pagination = additional.get("pagination") or {}
+            cursor = additional.get("next_cursor") or pagination.get("next_cursor")
+            if spec.get("cursor"):
+                has_more = bool(cursor)
+            else:
+                has_more = bool(pagination.get("more_items_in_collection"))
+                start = int(pagination.get("next_start") or start + len(records))
+            if not has_more or not records:
+                break
+        return {
+            "rows": rows[:row_limit],
+            "truncated": has_more or len(rows) > row_limit,
+        }
+
+    async def fetch_pipedrive_data(
+        self,
+        user_id: str,
+        report_type: str,
+        project_id: str,
+        date_preset: Optional[str] = "last_30d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        pipeline_id: str = "all",
+        owner_id: str = "all",
+        row_limit: int = 5000,
+    ) -> Dict[str, Any]:
+        """Fetch Pipedrive CRM data and save a flattened CSV asset."""
+        spec = self._pipedrive_report_spec(report_type)
+        try:
+            row_limit = int(row_limit or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        row_limit = max(1, min(row_limit, 10000))
+        date_window = self._resolve_hubspot_dates(date_preset, start_date, end_date)
+        pipeline_filter = str(pipeline_id or "all").strip() or "all"
+        owner_filter = str(owner_id or "all").strip() or "all"
+        ctx = await self._pipedrive_context(user_id)
+
+        pipelines = await self.fetch_pipedrive_pipelines(user_id)
+        users = await self.fetch_pipedrive_users(user_id)
+        pipeline_labels = {"all": "All pipelines"}
+        stage_labels: Dict[str, str] = {}
+        stage_probabilities: Dict[str, Any] = {}
+        for pipeline in pipelines:
+            pipeline_labels[str(pipeline.get("id"))] = str(pipeline.get("label") or "")
+            for stage in pipeline.get("stages", []):
+                stage_id = str(stage.get("id") or "")
+                stage_labels[stage_id] = str(stage.get("label") or stage_id)
+                stage_probabilities[stage_id] = stage.get("probability")
+        owner_labels = {"all": "All owners"}
+        for user in users:
+            owner_labels[str(user.get("id"))] = str(
+                user.get("name") or user.get("email") or user.get("id")
+            )
+
+        base_params: Dict[str, Any] = {}
+        if report_type == "sales_pipeline" and pipeline_filter != "all":
+            base_params["pipeline_id"] = pipeline_filter
+        if owner_filter != "all":
+            owner_param = (
+                "user_id"
+                if report_type in {"sales_pipeline", "activities"}
+                else "owner_id"
+            )
+            base_params[owner_param] = owner_filter
+
+        query_result = await self._pipedrive_get_paginated(
+            ctx=ctx,
+            spec=spec,
+            base_params=base_params,
+            row_limit=row_limit,
+            date_window=date_window,
+            pipeline_id=pipeline_filter,
+            owner_id=owner_filter,
+            report_type=report_type,
+            labels={
+                "pipelines": pipeline_labels,
+                "stages": stage_labels,
+                "stage_probabilities": stage_probabilities,
+                "owners": owner_labels,
+            },
+        )
+        rows: List[Dict[str, Any]] = query_result["rows"]
+        headers = list(rows[0].keys()) if rows else list(spec["fields"])
+        for header in [
+            "owner_name",
+            "pipeline_label",
+            "stage_label",
+            "stage_probability",
+        ]:
+            if report_type == "sales_pipeline" and header not in headers:
+                headers.append(header)
+
+        custom_field_labels: Dict[str, str] = {}
+        try:
+            for field in await self.fetch_pipedrive_fields(
+                user_id, spec["field_object"]
+            ):
+                custom_field_labels[str(field.get("key") or "")] = str(
+                    field.get("name") or field.get("key") or ""
+                )
+        except Exception:
+            custom_field_labels = {}
+
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+        csv_bytes = output.getvalue().encode("utf-8")
+
+        entity_id = f"pipedrive:{report_type}:{pipeline_filter}:{owner_filter}"
+        entity_name = self._pipedrive_report_label(
+            report_type, pipeline_filter, owner_filter
+        )
+        filename = (
+            f"pipedrive_{report_type}_{date_window['from']}_{date_window['to']}.csv"
+        )
+        asset = self._save_integration_asset(
+            user_id=user_id,
+            project_id=project_id,
+            file_content=csv_bytes,
+            filename=filename,
+            asset_type="integration_pipedrive",
+            extension="csv",
+            row_count=len(rows),
+            column_count=len(headers),
+        )
+
+        connection = connected_accounts_repo.get_connection(user_id, "pipedrive") or {}
+        manifest = {
+            "source_type": "pipedrive",
+            "company_id": connection.get("company_id"),
+            "company_domain": connection.get("company_domain"),
+            "company_name": connection.get("company_name"),
+            "report_type": report_type,
+            "entity_id": entity_id,
+            "pipeline_id": pipeline_filter,
+            "owner_id": owner_filter,
+            "date_preset": date_preset or "last_30d",
+            "start_date": date_window["from"],
+            "end_date": date_window["to"],
+            "selected_fields": spec["fields"],
+            "row_limit": row_limit,
+            "row_count": len(rows),
+            "column_schema": headers,
+            "truncated": bool(query_result.get("truncated")),
+            "api_endpoints_used": [spec["endpoint"]],
+            "query_summary": {
+                "endpoint": spec["endpoint"],
+                "api_params": base_params,
+                "date_field": spec["date_field"],
+            },
+            "checksum": compute_sha256_checksum(csv_bytes),
+            "schema_fingerprint": hashlib.sha256(
+                json.dumps(headers, sort_keys=True).encode("utf-8")
+            ).hexdigest(),
+            "custom_field_label_mapping": custom_field_labels,
+        }
+        connected_accounts_repo.append_selected_entity(
+            user_id=user_id,
+            provider="pipedrive",
+            entity={
+                "id": entity_id,
+                "name": entity_name,
+                "type": "report",
+                "account_name": connection.get("account_name") or "Pipedrive",
+                "report_type": report_type,
+                "pipeline_id": pipeline_filter,
+                "owner_id": owner_filter,
+            },
+        )
+        assets_repo.update_asset_metadata(
+            user_id=user_id,
+            asset_id=asset.get("asset_id"),
+            metadata={
+                "connector_key": "pipedrive",
+                "connector_entity_id": entity_id,
+                "connector_entity_name": entity_name,
+                "pipedrive_report_type": report_type,
+                "pipedrive_manifest": manifest,
+            },
+        )
+        asset.update(
+            {
+                "connector_key": "pipedrive",
+                "connector_entity_id": entity_id,
+                "connector_entity_name": entity_name,
+                "pipedrive_report_type": report_type,
+                "pipedrive_manifest": manifest,
+            }
+        )
+        return {
+            "success": True,
+            "asset": asset,
+            "row_count": len(rows),
+            "column_count": len(headers),
+            "message": f"Successfully synced {len(rows)} rows from Pipedrive ({entity_name}).",
+            "entity_id": entity_id,
+            "truncated": bool(query_result.get("truncated")),
+        }
+
     # ── Scheduled sync token guards ───────────────────────────────────────────
 
     def assert_meta_token_valid(self, user_id: str) -> None:
@@ -4668,6 +5753,19 @@ class IntegrationService:
         ):
             raise TokenExpiredError(
                 "salesforce", "Salesforce connection missing — please reconnect"
+            )
+
+    def assert_pipedrive_token_valid(self, user_id: str) -> None:
+        """Raise TokenExpiredError if no Pipedrive token exists."""
+        record = connected_accounts_repo.get_connection(user_id, "pipedrive")
+        if not record or not (
+            record.get("encrypted_access_token")
+            or record.get("encrypted_refresh_token")
+            or record.get("access_token")
+            or record.get("refresh_token")
+        ):
+            raise TokenExpiredError(
+                "pipedrive", "Pipedrive connection missing — please reconnect"
             )
 
     def _resolve_stripe_dates(

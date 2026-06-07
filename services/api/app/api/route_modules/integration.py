@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_user
 from app.services.integration_service import integration_service
+from app.services.supabase_service import supabase_service
 from app.api.route_modules.user import AssetResponse, _map_asset, _ensure_project
 
 router = APIRouter(
@@ -85,6 +86,8 @@ class ConnectorSelectedEntity(BaseModel):
     pipeline_id: Optional[str] = None
     object_name: Optional[str] = None
     owner_id: Optional[str] = None
+    sync_mode: Optional[str] = None
+    project_ref: Optional[str] = None
 
 
 class ConnectorOverviewItem(BaseModel):
@@ -1691,6 +1694,550 @@ async def salesforce_sync(
     except Exception as e:
         logger.error(f"Salesforce sync error: {e}")
         return SalesforceSyncResponse(success=False, error=str(e))
+
+
+# ── Pipedrive CRM & Sales Pipeline ────────────────────────────────────────────
+
+_PIPEDRIVE_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "pipedrive_oauth"
+).replace("META_OAUTH_SUCCESS", "PIPEDRIVE_OAUTH_SUCCESS")
+
+_PIPEDRIVE_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "pipedrive_oauth"
+).replace("META_OAUTH_ERROR", "PIPEDRIVE_OAUTH_ERROR")
+
+
+class PipedrivePipelineStage(BaseModel):
+    id: str
+    label: str
+    probability: Optional[Any] = None
+
+
+class PipedrivePipeline(BaseModel):
+    id: str
+    label: str
+    stages: List[PipedrivePipelineStage] = Field(default_factory=list)
+
+
+class PipedriveUser(BaseModel):
+    id: str
+    name: str
+    email: Optional[str] = None
+    active: bool = True
+
+
+class PipedriveField(BaseModel):
+    key: str
+    name: str
+    field_type: str
+    custom: bool = False
+    options: List[Any] = Field(default_factory=list)
+
+
+class PipedrivePipelinesResponse(BaseModel):
+    success: bool
+    pipelines: List[PipedrivePipeline] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class PipedriveUsersResponse(BaseModel):
+    success: bool
+    users: List[PipedriveUser] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class PipedriveFieldsResponse(BaseModel):
+    success: bool
+    fields: List[PipedriveField] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class PipedriveSyncRequest(BaseModel):
+    report_type: str = "sales_pipeline"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    pipeline_id: str = "all"
+    owner_id: str = "all"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+
+
+class PipedriveSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/pipedrive/oauth/start")
+async def pipedrive_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+):
+    """Redirect the popup to the Pipedrive OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _PIPEDRIVE_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _PIPEDRIVE_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+    try:
+        url = integration_service.get_pipedrive_oauth_url(user_id)
+        return RedirectResponse(url=url)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/pipedrive/oauth/callback", response_class=HTMLResponse)
+async def pipedrive_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Pipedrive redirects here after authorization."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_PIPEDRIVE_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await integration_service.handle_pipedrive_oauth_callback(
+            code=code, state=state
+        )
+        return HTMLResponse(_PIPEDRIVE_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Pipedrive OAuth callback error: {e}")
+        return HTMLResponse(_PIPEDRIVE_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/pipedrive/status")
+async def pipedrive_status(user_id: str = Depends(require_user)):
+    """Return whether the authenticated user has a connected Pipedrive company."""
+    try:
+        return await integration_service.get_pipedrive_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Pipedrive status error: {e}")
+        return {"connected": False}
+
+
+@router.delete("/integration/pipedrive/disconnect")
+async def pipedrive_disconnect(user_id: str = Depends(require_user)):
+    """Remove the stored Pipedrive connection for the authenticated user."""
+    try:
+        await integration_service.disconnect_pipedrive(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Pipedrive disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/pipedrive/pipelines", response_model=PipedrivePipelinesResponse
+)
+async def pipedrive_pipelines(user_id: str = Depends(require_user)):
+    try:
+        pipelines = await integration_service.fetch_pipedrive_pipelines(user_id)
+        return PipedrivePipelinesResponse(success=True, pipelines=pipelines)
+    except HTTPException as e:
+        return PipedrivePipelinesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Pipedrive pipelines error: {e}")
+        return PipedrivePipelinesResponse(success=False, error=str(e))
+
+
+@router.get("/integration/pipedrive/users", response_model=PipedriveUsersResponse)
+async def pipedrive_users(user_id: str = Depends(require_user)):
+    try:
+        users = await integration_service.fetch_pipedrive_users(user_id)
+        return PipedriveUsersResponse(success=True, users=users)
+    except HTTPException as e:
+        return PipedriveUsersResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Pipedrive users error: {e}")
+        return PipedriveUsersResponse(success=False, error=str(e))
+
+
+@router.get("/integration/pipedrive/fields", response_model=PipedriveFieldsResponse)
+async def pipedrive_fields(
+    object_name: str = Query(...),
+    user_id: str = Depends(require_user),
+):
+    try:
+        fields = await integration_service.fetch_pipedrive_fields(user_id, object_name)
+        return PipedriveFieldsResponse(success=True, fields=fields)
+    except HTTPException as e:
+        return PipedriveFieldsResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Pipedrive fields error: {e}")
+        return PipedriveFieldsResponse(success=False, error=str(e))
+
+
+@router.post("/integration/pipedrive/sync", response_model=PipedriveSyncResponse)
+async def pipedrive_sync(
+    request: PipedriveSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        if request.report_type not in (
+            "sales_pipeline",
+            "leads",
+            "contacts_organizations",
+            "activities",
+            "products",
+        ):
+            return PipedriveSyncResponse(
+                success=False,
+                error="Invalid report_type. Must be sales_pipeline, leads, contacts_organizations, activities, or products.",
+            )
+        project = _ensure_project(user_id, request.project_id)
+        result = await integration_service.fetch_pipedrive_data(
+            user_id=user_id,
+            report_type=request.report_type,
+            project_id=project["project_id"],
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            pipeline_id=request.pipeline_id or "all",
+            owner_id=request.owner_id or "all",
+            row_limit=request.row_limit,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return PipedriveSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+        )
+    except HTTPException as e:
+        return PipedriveSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Pipedrive sync error: {e}")
+        return PipedriveSyncResponse(success=False, error=str(e))
+
+
+# ── Supabase Application Database ────────────────────────────────────────────
+
+_SUPABASE_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "supabase_oauth"
+).replace("META_OAUTH_SUCCESS", "SUPABASE_OAUTH_SUCCESS")
+
+_SUPABASE_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "supabase_oauth"
+).replace("META_OAUTH_ERROR", "SUPABASE_OAUTH_ERROR")
+
+
+class SupabaseProject(BaseModel):
+    ref: str
+    name: str
+    region: Optional[str] = None
+    status: Optional[str] = None
+    organization_id: Optional[str] = None
+
+
+class SupabaseProjectsResponse(BaseModel):
+    success: bool
+    projects: List[SupabaseProject] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class SupabaseConnectionResponse(BaseModel):
+    connection_id: str
+    connector_key: str = "supabase"
+    database_type: str = "supabase"
+    display_name: Optional[str] = None
+    project_ref: str
+    project_name: Optional[str] = None
+    organization_id: Optional[str] = None
+    connection_mode: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[str] = None
+    database: Optional[str] = None
+    username: Optional[str] = None
+    include_schemas: List[str] = Field(default_factory=list)
+    source_timezone: str = "UTC"
+    max_export_bytes: Optional[int] = None
+    credential_risk: Optional[str] = None
+    schema_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class SupabaseConnectionsResponse(BaseModel):
+    success: bool
+    connections: List[SupabaseConnectionResponse] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class SupabaseConnectionCreateRequest(BaseModel):
+    project_ref: str
+    project_name: str = ""
+    organization_id: str = ""
+    connection_uri: str = ""
+    db_password: str = ""
+    display_name: str = ""
+    include_schemas: List[str] = Field(default_factory=lambda: ["public"])
+    include_system_schemas: bool = False
+    source_timezone: str = "UTC"
+    service_role_key: str = ""
+    max_export_bytes: Optional[int] = None
+
+
+class SupabaseSampleRequest(BaseModel):
+    schema_name: str
+    table_name: str
+    columns: List[str] = Field(default_factory=list)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class SupabaseSampleResponse(BaseModel):
+    success: bool
+    columns: List[str] = Field(default_factory=list)
+    rows: List[List[Any]] = Field(default_factory=list)
+    generated_sql: str = ""
+    error: Optional[str] = None
+
+
+class SupabaseSyncRequest(BaseModel):
+    connection_id: str
+    sync_mode: str = "bounded_table_snapshot"
+    project_id: Optional[str] = None
+    schema_name: str = ""
+    table_name: str = ""
+    columns: List[str] = Field(default_factory=list)
+    row_limit: int = Field(default=5000, ge=1, le=50000)
+    max_bytes: Optional[int] = None
+    date_filter_column: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    group_by_columns: List[str] = Field(default_factory=list)
+    metric_columns: List[str] = Field(default_factory=list)
+    bucket: str = "all"
+
+
+class SupabaseSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/supabase/oauth/start")
+async def supabase_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+):
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _SUPABASE_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _SUPABASE_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+    try:
+        return RedirectResponse(url=supabase_service.get_oauth_url(user_id))
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/supabase/oauth/callback", response_class=HTMLResponse)
+async def supabase_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_SUPABASE_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await supabase_service.handle_oauth_callback(code=code, state=state)
+        return HTMLResponse(_SUPABASE_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Supabase OAuth callback error: {e}")
+        return HTMLResponse(_SUPABASE_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/supabase/status")
+async def supabase_status(user_id: str = Depends(require_user)):
+    try:
+        return await supabase_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Supabase status error: {e}")
+        return {"connected": False, "oauth_connected": False, "connection_count": 0}
+
+
+@router.delete("/integration/supabase/disconnect")
+async def supabase_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await supabase_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Supabase disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/supabase/projects", response_model=SupabaseProjectsResponse)
+async def supabase_projects(user_id: str = Depends(require_user)):
+    try:
+        projects = await supabase_service.list_projects(user_id)
+        return SupabaseProjectsResponse(success=True, projects=projects)
+    except HTTPException as e:
+        return SupabaseProjectsResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Supabase projects error: {e}")
+        return SupabaseProjectsResponse(success=False, error=str(e))
+
+
+@router.get(
+    "/integration/supabase/connections", response_model=SupabaseConnectionsResponse
+)
+async def supabase_connections(user_id: str = Depends(require_user)):
+    try:
+        return SupabaseConnectionsResponse(
+            success=True,
+            connections=supabase_service.list_connections(user_id),
+        )
+    except Exception as e:
+        logger.error(f"Supabase connections error: {e}")
+        return SupabaseConnectionsResponse(success=False, error=str(e))
+
+
+@router.post(
+    "/integration/supabase/connections", response_model=SupabaseConnectionResponse
+)
+async def supabase_create_connection(
+    request: SupabaseConnectionCreateRequest,
+    user_id: str = Depends(require_user),
+):
+    return supabase_service.create_connection(
+        user_id=user_id,
+        project_ref=request.project_ref,
+        project_name=request.project_name,
+        organization_id=request.organization_id,
+        connection_uri=request.connection_uri,
+        db_password=request.db_password,
+        display_name=request.display_name,
+        include_schemas=request.include_schemas,
+        include_system_schemas=request.include_system_schemas,
+        source_timezone=request.source_timezone,
+        service_role_key=request.service_role_key,
+        max_export_bytes=request.max_export_bytes,
+    )
+
+
+@router.post(
+    "/integration/supabase/connections/{connection_id}/schema/refresh",
+    response_model=SupabaseConnectionResponse,
+)
+async def supabase_refresh_schema(
+    connection_id: str,
+    user_id: str = Depends(require_user),
+):
+    return supabase_service.refresh_schema(user_id=user_id, connection_id=connection_id)
+
+
+@router.post(
+    "/integration/supabase/connections/{connection_id}/tables/sample",
+    response_model=SupabaseSampleResponse,
+)
+async def supabase_sample_table(
+    connection_id: str,
+    request: SupabaseSampleRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        sample = supabase_service.sample_table(
+            user_id=user_id,
+            connection_id=connection_id,
+            schema_name=request.schema_name,
+            table_name=request.table_name,
+            columns=request.columns,
+            limit=request.limit,
+        )
+        return SupabaseSampleResponse(success=True, **sample)
+    except HTTPException as e:
+        return SupabaseSampleResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Supabase sample error: {e}")
+        return SupabaseSampleResponse(success=False, error=str(e))
+
+
+@router.post("/integration/supabase/sync", response_model=SupabaseSyncResponse)
+async def supabase_sync(
+    request: SupabaseSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        if request.sync_mode not in (
+            "profile_only",
+            "bounded_table_snapshot",
+            "aggregated_result",
+            "app_profile",
+        ):
+            return SupabaseSyncResponse(success=False, error="Invalid sync_mode.")
+        project = _ensure_project(user_id, request.project_id)
+        result = supabase_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            connection_id=request.connection_id,
+            sync_mode=request.sync_mode,
+            schema_name=request.schema_name,
+            table_name=request.table_name,
+            columns=request.columns,
+            row_limit=request.row_limit,
+            max_bytes=request.max_bytes,
+            date_filter_column=request.date_filter_column,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            group_by_columns=request.group_by_columns,
+            metric_columns=request.metric_columns,
+            bucket=request.bucket,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return SupabaseSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result.get("row_count"),
+            column_count=result.get("column_count"),
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+        )
+    except HTTPException as e:
+        return SupabaseSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Supabase sync error: {e}")
+        return SupabaseSyncResponse(success=False, error=str(e))
 
 
 # ── Google Ads ───────────────────────────────────────────────────────────────

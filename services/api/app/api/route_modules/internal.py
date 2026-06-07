@@ -329,6 +329,29 @@ async def _run_sync(
             row_limit=int(connector_config.get("row_limit") or 5000),
         )
 
+    elif provider == "pipedrive":
+        integration_service.assert_pipedrive_token_valid(user_id)
+        return await integration_service.fetch_pipedrive_data(
+            user_id=user_id,
+            report_type=connector_config.get("report_type", "sales_pipeline"),
+            project_id=project_id,
+            date_preset=date_range_preset,
+            start_date=start_date,
+            end_date=end_date,
+            pipeline_id=connector_config.get("pipeline_id", "all"),
+            owner_id=connector_config.get("owner_id", "all"),
+            row_limit=int(connector_config.get("row_limit") or 5000),
+        )
+
+    elif provider == "supabase":
+        from app.services.supabase_service import supabase_service
+
+        return supabase_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+        )
+
     elif provider == "warehouse":
         from app.services.warehouse_service import warehouse_service
 
@@ -350,6 +373,8 @@ _PROVIDER_LABELS: dict = {
     "stripe": "Stripe",
     "hubspot": "HubSpot",
     "salesforce": "Salesforce",
+    "pipedrive": "Pipedrive",
+    "supabase": "Supabase",
     "warehouse": "Warehouse",
 }
 

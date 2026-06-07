@@ -415,6 +415,52 @@ class TestTriggerEndpoint:
             row_limit=2500,
         )
 
+    def test_run_sync_dispatches_pipedrive_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.integration_service.integration_service"
+        ) as mock_service:
+            mock_service.assert_pipedrive_token_valid = MagicMock()
+            mock_service.fetch_pipedrive_data = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 6,
+                    "column_count": 10,
+                    "asset": {"asset_id": "asset_pipedrive"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="pipedrive",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "sales_pipeline",
+                        "pipeline_id": "10",
+                        "owner_id": "42",
+                        "row_limit": 2500,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 6
+        mock_service.assert_pipedrive_token_valid.assert_called_once_with("u1")
+        mock_service.fetch_pipedrive_data.assert_awaited_once_with(
+            user_id="u1",
+            report_type="sales_pipeline",
+            project_id="p1",
+            date_preset="last_30d",
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            pipeline_id="10",
+            owner_id="42",
+            row_limit=2500,
+        )
+
 
 # ── Schedules CRUD validation ─────────────────────────────────────────────────
 
@@ -535,6 +581,81 @@ class TestScheduleValidation:
 
         with pytest.raises(HTTPException):
             _normalize_connector_config("salesforce", {"report_type": "tickets"})
+
+    def test_pipedrive_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "pipedrive",
+            {
+                "report_type": "sales_pipeline",
+                "pipeline_id": "10",
+                "owner_id": "42",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "sales_pipeline"
+        assert cfg["pipeline_id"] == "10"
+        assert cfg["owner_id"] == "42"
+        assert cfg["entity_id"] == "pipedrive:sales_pipeline:10:42"
+        assert cfg["row_limit"] == 10000
+
+    def test_pipedrive_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("pipedrive", {"report_type": "tickets"})
+
+    def test_supabase_config_normalizes_table_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "supabase",
+            {
+                "connection_id": "conn_123",
+                "sync_mode": "bounded_table_snapshot",
+                "schema_name": "public",
+                "table_name": "profiles",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["connection_id"] == "conn_123"
+        assert cfg["sync_mode"] == "bounded_table_snapshot"
+        assert cfg["schema"] == "public"
+        assert cfg["table"] == "profiles"
+        assert cfg["entity_id"] == "supabase:conn_123:table:public.profiles"
+        assert cfg["row_limit"] == 50000
+
+    def test_supabase_config_accepts_app_profile_entity(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "supabase",
+            {
+                "connection_id": "conn_123",
+                "sync_mode": "app_profile",
+                "bucket": "all",
+            },
+        )
+
+        assert cfg["entity_id"] == "supabase:conn_123:storage:all"
+        assert cfg["entity_name"] == "Supabase App Profile"
+
+    def test_supabase_config_rejects_invalid_sync_mode(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "supabase",
+                {
+                    "connection_id": "conn_123",
+                    "sync_mode": "raw_sql",
+                },
+            )
 
     def test_warehouse_config_normalizes_entity_and_caps_rows(self):
         from app.api.route_modules.schedules import _normalize_connector_config
@@ -663,3 +784,45 @@ class TestScheduleValidation:
             date_range_preset="last_30d",
         )
         _validate_create(req)  # Should not raise
+
+
+def test_run_sync_dispatches_supabase_provider():
+    from app.api.route_modules.internal import _run_sync
+
+    with patch("app.services.supabase_service.supabase_service") as mock_supabase:
+        mock_supabase.sync_scheduled_entity.return_value = {
+            "success": True,
+            "row_count": 2,
+            "column_count": 3,
+            "asset": {"asset_id": "asset_1"},
+        }
+        result = asyncio.run(
+            _run_sync(
+                provider="supabase",
+                user_id="u1",
+                project_id="p1",
+                connector_config={
+                    "connection_id": "conn_123",
+                    "sync_mode": "bounded_table_snapshot",
+                    "schema": "public",
+                    "table": "profiles",
+                    "entity_id": "supabase:conn_123:table:public.profiles",
+                },
+                start_date="2026-01-01",
+                end_date="2026-01-31",
+                date_range_preset="last_30d",
+            )
+        )
+
+    assert result["row_count"] == 2
+    mock_supabase.sync_scheduled_entity.assert_called_once_with(
+        user_id="u1",
+        project_id="p1",
+        connector_config={
+            "connection_id": "conn_123",
+            "sync_mode": "bounded_table_snapshot",
+            "schema": "public",
+            "table": "profiles",
+            "entity_id": "supabase:conn_123:table:public.profiles",
+        },
+    )

@@ -1656,6 +1656,8 @@ _PROVIDER_LABELS_SLACK: Dict[str, str] = {
     "stripe": "Stripe",
     "hubspot": "HubSpot",
     "salesforce": "Salesforce",
+    "pipedrive": "Pipedrive",
+    "supabase": "Supabase",
 }
 
 SYNC_ANALYSIS_PROMPT = (

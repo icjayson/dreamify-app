@@ -250,6 +250,10 @@ def _detect_source_label(contents: List[Dict[str, Any]]) -> str:
         return "HubSpot"
     if "salesforce" in raw:
         return "Salesforce"
+    if "pipedrive" in raw:
+        return "Pipedrive"
+    if "supabase" in raw:
+        return "Supabase"
     return "CSV"
 
 
@@ -288,8 +292,10 @@ def _infer_project_topic(prompt: str, source_label: str, filename_topic: str) ->
         return "Campaign Performance"
     if source_label == "Stripe":
         return "Revenue Overview"
-    if source_label in {"HubSpot", "Salesforce"}:
+    if source_label in {"HubSpot", "Salesforce", "Pipedrive"}:
         return "Sales Pipeline"
+    if source_label == "Supabase":
+        return "Product Analytics"
     if source_label == "Firebase":
         return "Product Analytics"
     if source_label == "AppsFlyer":

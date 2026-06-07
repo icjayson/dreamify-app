@@ -21,7 +21,7 @@ router = APIRouter(tags=["schedules"])
 
 
 class CreateScheduleRequest(BaseModel):
-    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | warehouse
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | supabase | warehouse
     connector_config: Dict[str, Any]
     project_id: str
     account_name: str = ""
@@ -57,6 +57,8 @@ _VALID_PROVIDERS = {
     "stripe",
     "hubspot",
     "salesforce",
+    "pipedrive",
+    "supabase",
     "warehouse",
 }
 _VALID_FREQUENCIES = {"daily", "weekly", "biweekly"}
@@ -74,6 +76,19 @@ _VALID_SALESFORCE_REPORT_TYPES = {
     "accounts_contacts",
     "activities",
     "campaigns",
+}
+_VALID_PIPEDRIVE_REPORT_TYPES = {
+    "sales_pipeline",
+    "leads",
+    "contacts_organizations",
+    "activities",
+    "products",
+}
+_VALID_SUPABASE_SYNC_MODES = {
+    "profile_only",
+    "bounded_table_snapshot",
+    "aggregated_result",
+    "app_profile",
 }
 _VALID_WAREHOUSE_CONNECTORS = {"postgres", "bigquery", "snowflake", "databricks"}
 
@@ -171,6 +186,105 @@ def _normalize_connector_config(
         )
         cfg["entity_name"] = str(
             cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "pipedrive":
+        report_type = str(cfg.get("report_type") or "sales_pipeline").strip()
+        if report_type not in _VALID_PIPEDRIVE_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_pipeline, leads, contacts_organizations, activities, or products",
+            )
+        pipeline_id = str(cfg.get("pipeline_id") or "all").strip() or "all"
+        owner_id = str(cfg.get("owner_id") or "all").strip() or "all"
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["pipeline_id"] = pipeline_id
+        cfg["owner_id"] = owner_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["entity_id"] = str(
+            cfg.get("entity_id") or f"pipedrive:{report_type}:{pipeline_id}:{owner_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "supabase":
+        connection_id = str(cfg.get("connection_id") or "").strip()
+        sync_mode = str(cfg.get("sync_mode") or "bounded_table_snapshot").strip()
+        schema_name = str(cfg.get("schema") or cfg.get("schema_name") or "").strip()
+        table_name = str(cfg.get("table") or cfg.get("table_name") or "").strip()
+        bucket = str(cfg.get("bucket") or "all").strip() or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id and (not connection_id or not sync_mode):
+            parts = entity_id.split(":")
+            if len(parts) >= 3 and parts[0] == "supabase":
+                connection_id = connection_id or parts[1]
+                if parts[2] == "table" and len(parts) == 4:
+                    sync_mode = sync_mode or "bounded_table_snapshot"
+                    if not schema_name or not table_name:
+                        table_path = parts[3]
+                        if "." in table_path:
+                            schema_from_id, table_from_id = table_path.rsplit(".", 1)
+                            schema_name = schema_name or schema_from_id
+                            table_name = table_name or table_from_id
+                elif parts[2] in {"auth_users", "storage"}:
+                    sync_mode = "app_profile"
+                    if parts[2] == "storage" and len(parts) == 4:
+                        bucket = parts[3] or "all"
+                elif parts[2] == "profile":
+                    sync_mode = "profile_only"
+        if sync_mode not in _VALID_SUPABASE_SYNC_MODES:
+            raise HTTPException(
+                400,
+                "connector_config.sync_mode must be profile_only, bounded_table_snapshot, aggregated_result, or app_profile",
+            )
+        if not connection_id:
+            raise HTTPException(
+                400,
+                "connector_config.connection_id is required for Supabase schedules",
+            )
+        if sync_mode in {"bounded_table_snapshot", "aggregated_result"}:
+            if not schema_name:
+                raise HTTPException(
+                    400,
+                    "connector_config.schema is required for Supabase table schedules",
+                )
+            if not table_name:
+                raise HTTPException(
+                    400,
+                    "connector_config.table is required for Supabase table schedules",
+                )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["connection_id"] = connection_id
+        cfg["sync_mode"] = sync_mode
+        cfg["schema"] = schema_name
+        cfg["table"] = table_name
+        cfg["bucket"] = bucket
+        cfg["row_limit"] = max(1, min(row_limit, 50000))
+        if not entity_id:
+            if sync_mode == "app_profile":
+                entity_id = f"supabase:{connection_id}:storage:{bucket}"
+            elif sync_mode == "profile_only":
+                entity_id = f"supabase:{connection_id}:profile"
+            else:
+                entity_id = f"supabase:{connection_id}:table:{schema_name}.{table_name}"
+        cfg["entity_id"] = entity_id
+        cfg["entity_name"] = str(
+            cfg.get("entity_name")
+            or (
+                f"{schema_name}.{table_name}"
+                if schema_name and table_name
+                else (
+                    "Supabase App Profile"
+                    if sync_mode == "app_profile"
+                    else "Supabase Schema Profile"
+                )
+            )
         )
     if provider == "warehouse":
         connection_id = str(cfg.get("connection_id") or "").strip()

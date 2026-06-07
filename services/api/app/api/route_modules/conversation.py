@@ -54,7 +54,8 @@ def _is_billable_workflow_result(workflow_status: Optional[Dict[str, Any]]) -> b
 # Override via env vars without code changes: DREAMIFY_PRO_MODEL / DREAMIFY_FAST_MODEL
 MODEL_ID_MAP = {
     "pro": os.environ.get("DREAMIFY_PRO_MODEL", "gpt-5.4-mini"),
-    "fast": os.environ.get("DREAMIFY_FAST_MODEL", "deepseek-v4-flash"),}
+    "fast": os.environ.get("DREAMIFY_FAST_MODEL", "deepseek-v4-flash"),
+}
 
 VALID_THEME_IDS = {
     "default",
@@ -245,6 +246,10 @@ def _detect_source_label(contents: List[Dict[str, Any]]) -> str:
         return "AppsFlyer"
     if "stripe" in raw:
         return "Stripe"
+    if "hubspot" in raw:
+        return "HubSpot"
+    if "salesforce" in raw:
+        return "Salesforce"
     return "CSV"
 
 
@@ -273,6 +278,8 @@ def _infer_project_topic(prompt: str, source_label: str, filename_topic: str) ->
         return "Acquisition Overview"
     if re.search(r"\b(subscription|payment|stripe|mrr|arr|invoice)\b", prompt_l):
         return "Revenue Overview"
+    if re.search(r"\b(pipeline|deal|crm|opportunity|owner|forecast)\b", prompt_l):
+        return "Sales Pipeline"
     if re.search(r"\b(retention|churn|cohort|lifetime|ltv)\b", prompt_l):
         return "Retention Analysis"
     if source_label == "GA4":
@@ -281,6 +288,8 @@ def _infer_project_topic(prompt: str, source_label: str, filename_topic: str) ->
         return "Campaign Performance"
     if source_label == "Stripe":
         return "Revenue Overview"
+    if source_label in {"HubSpot", "Salesforce"}:
+        return "Sales Pipeline"
     if source_label == "Firebase":
         return "Product Analytics"
     if source_label == "AppsFlyer":
@@ -474,8 +483,16 @@ def _project_asset_summaries(user_id: str, project_id: str) -> List[Dict[str, An
                 "filename": asset.get("filename") or "",
                 "extension": asset.get("extension") or "",
                 "asset_type": asset.get("asset_type") or "",
-                "row_count": int(asset["row_count"]) if asset.get("row_count") is not None else None,
-                "column_count": int(asset["column_count"]) if asset.get("column_count") is not None else None,
+                "row_count": (
+                    int(asset["row_count"])
+                    if asset.get("row_count") is not None
+                    else None
+                ),
+                "column_count": (
+                    int(asset["column_count"])
+                    if asset.get("column_count") is not None
+                    else None
+                ),
                 "status": asset.get("status"),
             }
         )

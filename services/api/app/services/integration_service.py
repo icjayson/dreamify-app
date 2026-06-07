@@ -7,6 +7,7 @@ import time
 import asyncio
 import hashlib
 import hmac
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlencode
@@ -25,6 +26,7 @@ from utils.dynamodb.repos import sync_runs as sync_runs_repo
 from utils.dynamodb.repos import sync_schedules as sync_schedules_repo
 from utils.s3.client import compute_sha256_checksum, upload_bytes
 from utils.s3.paths import build_asset_key
+from app.services.warehouse_service import _decrypt_secret, _encrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,104 @@ class TokenExpiredError(Exception):
 class IntegrationService:
     def __init__(self):
         self.clerk = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
+
+    def _hubspot_stored_token(
+        self, record: Dict[str, Any], token_key: str
+    ) -> Optional[str]:
+        encrypted = record.get(f"encrypted_{token_key}")
+        if encrypted:
+            try:
+                return _decrypt_secret(str(encrypted))
+            except Exception as exc:
+                logger.warning("Failed to decrypt HubSpot %s: %s", token_key, exc)
+                raise HTTPException(
+                    status_code=401,
+                    detail="HubSpot token could not be decrypted. Please reconnect.",
+                )
+        token = record.get(token_key)
+        return str(token) if token else None
+
+    def _hubspot_token_metadata(
+        self, access_token: str, refresh_token: str
+    ) -> Dict[str, str]:
+        return {
+            "encrypted_access_token": _encrypt_secret(access_token),
+            "encrypted_refresh_token": _encrypt_secret(refresh_token),
+        }
+
+    def _save_hubspot_metadata(
+        self, user_id: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        existing = connected_accounts_repo.get_connection(user_id, "hubspot") or {}
+        preserved = {
+            key: value
+            for key, value in existing.items()
+            if key
+            not in {
+                "access_token",
+                "refresh_token",
+                "encrypted_access_token",
+                "encrypted_refresh_token",
+                "user_id",
+                "provider",
+                "updated_at",
+            }
+        }
+        connected_accounts_repo.delete_connection(user_id, "hubspot")
+        return connected_accounts_repo.upsert_provider_metadata(
+            user_id=user_id,
+            provider="hubspot",
+            metadata={**preserved, **metadata},
+        )
+
+    def _salesforce_stored_token(
+        self, record: Dict[str, Any], token_key: str
+    ) -> Optional[str]:
+        encrypted = record.get(f"encrypted_{token_key}")
+        if encrypted:
+            try:
+                return _decrypt_secret(str(encrypted))
+            except Exception as exc:
+                logger.warning("Failed to decrypt Salesforce %s: %s", token_key, exc)
+                raise HTTPException(
+                    status_code=401,
+                    detail="Salesforce token could not be decrypted. Please reconnect.",
+                )
+        token = record.get(token_key)
+        return str(token) if token else None
+
+    def _salesforce_token_metadata(
+        self, access_token: str, refresh_token: str
+    ) -> Dict[str, str]:
+        return {
+            "encrypted_access_token": _encrypt_secret(access_token),
+            "encrypted_refresh_token": _encrypt_secret(refresh_token),
+        }
+
+    def _save_salesforce_metadata(
+        self, user_id: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        existing = connected_accounts_repo.get_connection(user_id, "salesforce") or {}
+        preserved = {
+            key: value
+            for key, value in existing.items()
+            if key
+            not in {
+                "access_token",
+                "refresh_token",
+                "encrypted_access_token",
+                "encrypted_refresh_token",
+                "user_id",
+                "provider",
+                "updated_at",
+            }
+        }
+        connected_accounts_repo.delete_connection(user_id, "salesforce")
+        return connected_accounts_repo.upsert_provider_metadata(
+            user_id=user_id,
+            provider="salesforce",
+            metadata={**preserved, **metadata},
+        )
 
     async def _get_google_access_token(self, user_id: str) -> Optional[str]:
         """Fetch the Google OAuth access token from Clerk for a given user."""
@@ -1745,6 +1845,665 @@ class IntegrationService:
         record = connected_accounts_repo.get_connection(user_id, "stripe")
         return {"connected": record is not None}
 
+    # ── HubSpot CRM & Sales ──────────────────────────────────────────────────
+
+    def _hubspot_config(self) -> Dict[str, Any]:
+        """Resolve HubSpot OAuth config from config.yaml or environment."""
+        hubspot_cfg = getattr(config, "hubspot", None)
+        scopes = (
+            list(getattr(hubspot_cfg, "scopes", []) or [])
+            if hubspot_cfg
+            else [
+                "crm.objects.contacts.read",
+                "crm.objects.companies.read",
+                "crm.objects.deals.read",
+                "crm.objects.owners.read",
+            ]
+        )
+        return {
+            "client_id": (getattr(hubspot_cfg, "client_id", "") if hubspot_cfg else "")
+            or os.environ.get("HUBSPOT_CLIENT_ID", ""),
+            "client_secret": (
+                getattr(hubspot_cfg, "client_secret", "") if hubspot_cfg else ""
+            )
+            or os.environ.get("HUBSPOT_CLIENT_SECRET", ""),
+            "redirect_uri": (
+                getattr(hubspot_cfg, "redirect_uri", "") if hubspot_cfg else ""
+            )
+            or os.environ.get("HUBSPOT_REDIRECT_URI", ""),
+            "scopes": scopes,
+        }
+
+    def _make_hubspot_state(self, user_id: str) -> str:
+        ts = int(datetime.now(timezone.utc).timestamp())
+        payload = f"{user_id}:{ts}"
+        sig = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        return f"{payload}:{sig}"
+
+    def _verify_hubspot_state(self, state: str) -> str:
+        parts = state.split(":")
+        if len(parts) != 3:
+            raise ValueError("Invalid state format")
+        user_id, ts_str, sig = parts
+        payload = f"{user_id}:{ts_str}"
+        expected = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            raise ValueError("Invalid state signature")
+        if int(datetime.now(timezone.utc).timestamp()) - int(ts_str) > 600:
+            raise ValueError("State token expired")
+        return user_id
+
+    def get_hubspot_oauth_url(self, user_id: str) -> str:
+        hubspot = self._hubspot_config()
+        if not hubspot["client_id"] or not hubspot["redirect_uri"]:
+            raise ValueError(
+                "HubSpot OAuth client_id or redirect_uri is not configured."
+            )
+        params = urlencode(
+            {
+                "client_id": hubspot["client_id"],
+                "redirect_uri": hubspot["redirect_uri"],
+                "scope": " ".join(hubspot["scopes"]),
+                "state": self._make_hubspot_state(user_id),
+            }
+        )
+        return f"https://app.hubspot.com/oauth/authorize?{params}"
+
+    async def handle_hubspot_oauth_callback(self, code: str, state: str) -> None:
+        """Exchange HubSpot authorization code and persist token metadata."""
+        user_id = self._verify_hubspot_state(state)
+        hubspot = self._hubspot_config()
+        if not hubspot["client_id"] or not hubspot["client_secret"]:
+            raise ValueError("HubSpot OAuth client credentials are not configured.")
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            token_resp = await client.post(
+                "https://api.hubapi.com/oauth/v1/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "client_id": hubspot["client_id"],
+                    "client_secret": hubspot["client_secret"],
+                    "redirect_uri": hubspot["redirect_uri"],
+                    "code": code,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+        if token_resp.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"HubSpot OAuth token exchange failed: {token_resp.text}",
+            )
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+        if not access_token or not refresh_token:
+            raise HTTPException(
+                status_code=400, detail="HubSpot OAuth response did not include tokens."
+            )
+
+        expires_in = int(token_data.get("expires_in") or 1800)
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=max(60, expires_in - 60))
+        ).isoformat()
+        account_metadata = await self._fetch_hubspot_account_metadata(access_token)
+        self._save_hubspot_metadata(
+            user_id=user_id,
+            metadata={
+                **self._hubspot_token_metadata(access_token, refresh_token),
+                "expires_at": expires_at,
+                **account_metadata,
+            },
+        )
+
+    async def _fetch_hubspot_account_metadata(
+        self, access_token: str
+    ) -> Dict[str, Any]:
+        """Fetch portal metadata for display/status without exposing tokens."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://api.hubapi.com/oauth/v1/access-tokens/{access_token}"
+                )
+            if resp.status_code != 200:
+                return {}
+            data = resp.json()
+            portal_id = str(data.get("hub_id") or data.get("portalId") or "")
+            portal_domain = str(data.get("hub_domain") or data.get("hubDomain") or "")
+            return {
+                "portal_id": portal_id,
+                "portal_domain": portal_domain,
+                "account_name": portal_domain
+                or (f"HubSpot {portal_id}" if portal_id else "HubSpot"),
+            }
+        except Exception:
+            return {}
+
+    async def _get_hubspot_access_token(self, user_id: str) -> str:
+        record = connected_accounts_repo.get_connection(user_id, "hubspot")
+        if not record:
+            raise HTTPException(status_code=401, detail="HubSpot not connected.")
+        access_token = self._hubspot_stored_token(record, "access_token")
+        refresh_token = self._hubspot_stored_token(record, "refresh_token")
+        expires_at_raw = record.get("expires_at")
+        if access_token and expires_at_raw:
+            try:
+                expires_at = datetime.fromisoformat(
+                    str(expires_at_raw).replace("Z", "+00:00")
+                )
+                if datetime.now(timezone.utc) < expires_at:
+                    return str(access_token)
+            except Exception:
+                pass
+        if not refresh_token:
+            raise HTTPException(
+                status_code=401, detail="HubSpot token expired. Please reconnect."
+            )
+        return await self._refresh_hubspot_access_token(user_id, record)
+
+    async def _refresh_hubspot_access_token(
+        self, user_id: str, record: Dict[str, Any]
+    ) -> str:
+        hubspot = self._hubspot_config()
+        refresh_token = self._hubspot_stored_token(record, "refresh_token")
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                "https://api.hubapi.com/oauth/v1/token",
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": hubspot["client_id"],
+                    "client_secret": hubspot["client_secret"],
+                    "refresh_token": refresh_token,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        if resp.status_code != 200:
+            connected_accounts_repo.delete_connection(user_id, "hubspot")
+            raise HTTPException(
+                status_code=401,
+                detail="HubSpot token refresh failed. Please reconnect.",
+            )
+        data = resp.json()
+        access_token = data.get("access_token")
+        next_refresh_token = data.get("refresh_token") or refresh_token
+        if not access_token or not next_refresh_token:
+            raise HTTPException(
+                status_code=401,
+                detail="HubSpot token refresh response was incomplete. Please reconnect.",
+            )
+        expires_in = int(data.get("expires_in") or 1800)
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=max(60, expires_in - 60))
+        ).isoformat()
+        self._save_hubspot_metadata(
+            user_id=user_id,
+            metadata={
+                **self._hubspot_token_metadata(
+                    str(access_token), str(next_refresh_token)
+                ),
+                "expires_at": expires_at,
+            },
+        )
+        return str(access_token)
+
+    async def get_hubspot_connection_status(self, user_id: str) -> Dict[str, Any]:
+        record = connected_accounts_repo.get_connection(user_id, "hubspot")
+        if not record:
+            return {"connected": False}
+        return {
+            "connected": bool(
+                record.get("encrypted_access_token")
+                or record.get("encrypted_refresh_token")
+                or record.get("access_token")
+                or record.get("refresh_token")
+            ),
+            "portal_id": record.get("portal_id"),
+            "portal_domain": record.get("portal_domain"),
+            "account_name": record.get("account_name") or "HubSpot",
+        }
+
+    async def disconnect_hubspot(self, user_id: str) -> None:
+        connected_accounts_repo.delete_connection(user_id, "hubspot")
+
+    async def fetch_hubspot_pipelines(self, user_id: str) -> List[Dict[str, Any]]:
+        token = await self._get_hubspot_access_token(user_id)
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                "https://api.hubapi.com/crm/v3/pipelines/deals",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if resp.status_code == 401:
+            connected_accounts_repo.delete_connection(user_id, "hubspot")
+            raise HTTPException(status_code=401, detail="HubSpot access revoked.")
+        resp.raise_for_status()
+        return [
+            {
+                "id": str(p.get("id") or ""),
+                "label": p.get("label") or p.get("id") or "",
+                "stages": [
+                    {
+                        "id": str(stage.get("id") or ""),
+                        "label": stage.get("label") or stage.get("id") or "",
+                        "probability": (stage.get("metadata") or {}).get("probability"),
+                    }
+                    for stage in p.get("stages", [])
+                ],
+            }
+            for p in resp.json().get("results", [])
+        ]
+
+    async def fetch_hubspot_owners(self, user_id: str) -> List[Dict[str, Any]]:
+        token = await self._get_hubspot_access_token(user_id)
+        owners: List[Dict[str, Any]] = []
+        after: Optional[str] = None
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            while True:
+                params = {"limit": 100}
+                if after:
+                    params["after"] = after
+                resp = await client.get(
+                    "https://api.hubapi.com/crm/v3/owners/",
+                    params=params,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                if resp.status_code == 401:
+                    connected_accounts_repo.delete_connection(user_id, "hubspot")
+                    raise HTTPException(
+                        status_code=401, detail="HubSpot access revoked."
+                    )
+                resp.raise_for_status()
+                data = resp.json()
+                for owner in data.get("results", []):
+                    first = owner.get("firstName") or ""
+                    last = owner.get("lastName") or ""
+                    name = (
+                        f"{first} {last}".strip()
+                        or owner.get("email")
+                        or owner.get("id")
+                    )
+                    owners.append(
+                        {
+                            "id": str(owner.get("id") or ""),
+                            "email": owner.get("email") or "",
+                            "name": name,
+                        }
+                    )
+                after = (data.get("paging") or {}).get("next", {}).get("after")
+                if not after:
+                    break
+        return owners
+
+    # ── Salesforce CRM & Sales Cloud ─────────────────────────────────────────
+
+    def _salesforce_config(self) -> Dict[str, Any]:
+        """Resolve Salesforce OAuth config from config.yaml or environment."""
+        salesforce_cfg = getattr(config, "salesforce", None)
+        scopes = (
+            list(getattr(salesforce_cfg, "scopes", []) or [])
+            if salesforce_cfg
+            else ["refresh_token", "api"]
+        )
+        return {
+            "client_id": (
+                getattr(salesforce_cfg, "client_id", "") if salesforce_cfg else ""
+            )
+            or os.environ.get("SALESFORCE_CLIENT_ID", ""),
+            "client_secret": (
+                getattr(salesforce_cfg, "client_secret", "") if salesforce_cfg else ""
+            )
+            or os.environ.get("SALESFORCE_CLIENT_SECRET", ""),
+            "redirect_uri": (
+                getattr(salesforce_cfg, "redirect_uri", "") if salesforce_cfg else ""
+            )
+            or os.environ.get("SALESFORCE_REDIRECT_URI", ""),
+            "login_base_url": (
+                getattr(salesforce_cfg, "login_base_url", "") if salesforce_cfg else ""
+            )
+            or os.environ.get(
+                "SALESFORCE_LOGIN_BASE_URL", "https://login.salesforce.com"
+            ),
+            "api_version": (
+                getattr(salesforce_cfg, "api_version", "") if salesforce_cfg else ""
+            )
+            or os.environ.get("SALESFORCE_API_VERSION", "v60.0"),
+            "scopes": scopes,
+        }
+
+    def _make_salesforce_state(self, user_id: str) -> str:
+        ts = int(datetime.now(timezone.utc).timestamp())
+        payload = f"{user_id}:{ts}"
+        sig = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        return f"{payload}:{sig}"
+
+    def _verify_salesforce_state(self, state: str) -> str:
+        parts = state.split(":")
+        if len(parts) != 3:
+            raise ValueError("Invalid state format")
+        user_id, ts_str, sig = parts
+        payload = f"{user_id}:{ts_str}"
+        expected = hmac.new(
+            config.app.secret_key.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            raise ValueError("Invalid state signature")
+        if int(datetime.now(timezone.utc).timestamp()) - int(ts_str) > 600:
+            raise ValueError("State token expired")
+        return user_id
+
+    def get_salesforce_oauth_url(self, user_id: str) -> str:
+        salesforce = self._salesforce_config()
+        if not salesforce["client_id"] or not salesforce["redirect_uri"]:
+            raise ValueError(
+                "Salesforce OAuth client_id or redirect_uri is not configured."
+            )
+        params = urlencode(
+            {
+                "response_type": "code",
+                "client_id": salesforce["client_id"],
+                "redirect_uri": salesforce["redirect_uri"],
+                "scope": " ".join(salesforce["scopes"]),
+                "state": self._make_salesforce_state(user_id),
+            }
+        )
+        return f"{salesforce['login_base_url'].rstrip('/')}/services/oauth2/authorize?{params}"
+
+    async def handle_salesforce_oauth_callback(self, code: str, state: str) -> None:
+        """Exchange Salesforce authorization code and persist token metadata."""
+        user_id = self._verify_salesforce_state(state)
+        salesforce = self._salesforce_config()
+        if not salesforce["client_id"] or not salesforce["client_secret"]:
+            raise ValueError("Salesforce OAuth client credentials are not configured.")
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            token_resp = await client.post(
+                f"{salesforce['login_base_url'].rstrip('/')}/services/oauth2/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "client_id": salesforce["client_id"],
+                    "client_secret": salesforce["client_secret"],
+                    "redirect_uri": salesforce["redirect_uri"],
+                    "code": code,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+        if token_resp.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Salesforce OAuth token exchange failed: {token_resp.text}",
+            )
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+        instance_url = str(token_data.get("instance_url") or "").rstrip("/")
+        if not access_token or not refresh_token or not instance_url:
+            raise HTTPException(
+                status_code=400,
+                detail="Salesforce OAuth response did not include tokens and instance_url.",
+            )
+
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=55)).isoformat()
+        account_metadata = await self._fetch_salesforce_account_metadata(
+            access_token=access_token,
+            instance_url=instance_url,
+            id_url=token_data.get("id"),
+        )
+        self._save_salesforce_metadata(
+            user_id=user_id,
+            metadata={
+                **self._salesforce_token_metadata(access_token, refresh_token),
+                "expires_at": expires_at,
+                "instance_url": instance_url,
+                "api_version": salesforce["api_version"],
+                **account_metadata,
+            },
+        )
+
+    async def _fetch_salesforce_account_metadata(
+        self,
+        access_token: str,
+        instance_url: str,
+        id_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Fetch org/user metadata for display/status without exposing tokens."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                if id_url:
+                    resp = await client.get(
+                        str(id_url),
+                        headers={"Authorization": f"Bearer {access_token}"},
+                    )
+                else:
+                    resp = await client.get(
+                        f"{instance_url}/services/oauth2/userinfo",
+                        headers={"Authorization": f"Bearer {access_token}"},
+                    )
+            if resp.status_code != 200:
+                return {}
+            data = resp.json()
+            org_id = str(
+                data.get("organization_id")
+                or data.get("organizationId")
+                or data.get("org_id")
+                or ""
+            )
+            username = str(data.get("username") or data.get("preferred_username") or "")
+            display_name = str(data.get("display_name") or data.get("name") or "")
+            domain = instance_url.replace("https://", "").replace("http://", "")
+            return {
+                "org_id": org_id,
+                "username": username,
+                "instance_domain": domain,
+                "account_name": display_name or username or domain or "Salesforce",
+            }
+        except Exception:
+            return {}
+
+    async def _get_salesforce_access_token(self, user_id: str) -> str:
+        record = connected_accounts_repo.get_connection(user_id, "salesforce")
+        if not record:
+            raise HTTPException(status_code=401, detail="Salesforce not connected.")
+        access_token = self._salesforce_stored_token(record, "access_token")
+        refresh_token = self._salesforce_stored_token(record, "refresh_token")
+        expires_at_raw = record.get("expires_at")
+        if access_token and expires_at_raw:
+            try:
+                expires_at = datetime.fromisoformat(
+                    str(expires_at_raw).replace("Z", "+00:00")
+                )
+                if datetime.now(timezone.utc) < expires_at:
+                    return str(access_token)
+            except Exception:
+                pass
+        if not refresh_token:
+            raise HTTPException(
+                status_code=401, detail="Salesforce token expired. Please reconnect."
+            )
+        return await self._refresh_salesforce_access_token(user_id, record)
+
+    async def _refresh_salesforce_access_token(
+        self, user_id: str, record: Dict[str, Any]
+    ) -> str:
+        salesforce = self._salesforce_config()
+        refresh_token = self._salesforce_stored_token(record, "refresh_token")
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                f"{salesforce['login_base_url'].rstrip('/')}/services/oauth2/token",
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": salesforce["client_id"],
+                    "client_secret": salesforce["client_secret"],
+                    "refresh_token": refresh_token,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        if resp.status_code != 200:
+            connected_accounts_repo.delete_connection(user_id, "salesforce")
+            raise HTTPException(
+                status_code=401,
+                detail="Salesforce token refresh failed. Please reconnect.",
+            )
+        data = resp.json()
+        access_token = data.get("access_token")
+        next_refresh_token = data.get("refresh_token") or refresh_token
+        if not access_token or not next_refresh_token:
+            raise HTTPException(
+                status_code=401,
+                detail="Salesforce token refresh response was incomplete. Please reconnect.",
+            )
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=55)).isoformat()
+        metadata: Dict[str, Any] = {
+            **self._salesforce_token_metadata(
+                str(access_token), str(next_refresh_token)
+            ),
+            "expires_at": expires_at,
+        }
+        if data.get("instance_url"):
+            metadata["instance_url"] = str(data.get("instance_url")).rstrip("/")
+        self._save_salesforce_metadata(user_id=user_id, metadata=metadata)
+        return str(access_token)
+
+    async def _salesforce_context(self, user_id: str) -> Dict[str, Any]:
+        token = await self._get_salesforce_access_token(user_id)
+        record = connected_accounts_repo.get_connection(user_id, "salesforce") or {}
+        instance_url = str(record.get("instance_url") or "").rstrip("/")
+        if not instance_url:
+            raise HTTPException(
+                status_code=401,
+                detail="Salesforce instance URL missing. Please reconnect.",
+            )
+        return {
+            "access_token": token,
+            "instance_url": instance_url,
+            "api_version": str(
+                record.get("api_version") or self._salesforce_config()["api_version"]
+            ),
+            "org_id": record.get("org_id"),
+            "instance_domain": record.get("instance_domain"),
+            "account_name": record.get("account_name") or "Salesforce",
+        }
+
+    async def get_salesforce_connection_status(self, user_id: str) -> Dict[str, Any]:
+        record = connected_accounts_repo.get_connection(user_id, "salesforce")
+        if not record:
+            return {"connected": False}
+        return {
+            "connected": bool(
+                record.get("encrypted_access_token")
+                or record.get("encrypted_refresh_token")
+                or record.get("access_token")
+                or record.get("refresh_token")
+            ),
+            "org_id": record.get("org_id"),
+            "instance_url": record.get("instance_url"),
+            "instance_domain": record.get("instance_domain"),
+            "username": record.get("username"),
+            "account_name": record.get("account_name") or "Salesforce",
+        }
+
+    async def disconnect_salesforce(self, user_id: str) -> None:
+        connected_accounts_repo.delete_connection(user_id, "salesforce")
+
+    async def fetch_salesforce_objects(self, user_id: str) -> List[Dict[str, Any]]:
+        ctx = await self._salesforce_context(user_id)
+        url = f"{ctx['instance_url']}/services/data/{ctx['api_version']}/sobjects"
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                url, headers={"Authorization": f"Bearer {ctx['access_token']}"}
+            )
+        if resp.status_code == 401:
+            connected_accounts_repo.delete_connection(user_id, "salesforce")
+            raise HTTPException(status_code=401, detail="Salesforce access revoked.")
+        resp.raise_for_status()
+        objects = []
+        for item in resp.json().get("sobjects", []):
+            if not item.get("queryable"):
+                continue
+            objects.append(
+                {
+                    "name": str(item.get("name") or ""),
+                    "label": item.get("label") or item.get("name") or "",
+                    "label_plural": item.get("labelPlural") or "",
+                    "queryable": bool(item.get("queryable")),
+                    "custom": bool(item.get("custom")),
+                }
+            )
+        return objects
+
+    async def fetch_salesforce_fields(
+        self, user_id: str, object_name: str
+    ) -> List[Dict[str, Any]]:
+        clean_object = self._salesforce_validate_object_name(object_name)
+        ctx = await self._salesforce_context(user_id)
+        url = (
+            f"{ctx['instance_url']}/services/data/{ctx['api_version']}"
+            f"/sobjects/{clean_object}/describe"
+        )
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                url, headers={"Authorization": f"Bearer {ctx['access_token']}"}
+            )
+        if resp.status_code == 401:
+            connected_accounts_repo.delete_connection(user_id, "salesforce")
+            raise HTTPException(status_code=401, detail="Salesforce access revoked.")
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="Salesforce object not found.")
+        resp.raise_for_status()
+        fields = []
+        for field in resp.json().get("fields", []):
+            fields.append(
+                {
+                    "name": str(field.get("name") or ""),
+                    "label": field.get("label") or field.get("name") or "",
+                    "type": field.get("type") or "",
+                    "filterable": bool(field.get("filterable")),
+                    "sortable": bool(field.get("sortable")),
+                    "nillable": bool(field.get("nillable")),
+                    "custom": bool(field.get("custom")),
+                }
+            )
+        return fields
+
+    async def fetch_salesforce_owners(self, user_id: str) -> List[Dict[str, Any]]:
+        ctx = await self._salesforce_context(user_id)
+        soql = (
+            "SELECT Id, Name, Email, IsActive FROM User "
+            "WHERE IsActive = true ORDER BY Name LIMIT 500"
+        )
+        page = await self._salesforce_rest_query(ctx, soql)
+        return [
+            {
+                "id": str(row.get("Id") or ""),
+                "name": str(row.get("Name") or row.get("Email") or row.get("Id") or ""),
+                "email": row.get("Email") or "",
+            }
+            for row in page.get("records", [])
+            if row.get("Id")
+        ]
+
+    def _hubspot_report_label(
+        self, report_type: str, pipeline_id: str = "all", owner_id: str = "all"
+    ) -> str:
+        labels = {
+            "sales_pipeline": "Sales Pipeline",
+            "contacts": "Contacts",
+            "companies": "Companies",
+            "activities": "Activities",
+        }
+        base = labels.get(report_type, report_type.replace("_", " ").title())
+        filters = []
+        if pipeline_id and pipeline_id != "all":
+            filters.append(f"Pipeline {pipeline_id}")
+        if owner_id and owner_id != "all":
+            filters.append(f"Owner {owner_id}")
+        return f"{base} ({', '.join(filters)})" if filters else base
+
     def _entity(self, entity_id: str, name: str, entity_type: str) -> Dict[str, str]:
         return {"id": str(entity_id), "name": str(name), "type": entity_type}
 
@@ -1758,9 +2517,12 @@ class IntegrationService:
             "firebase": "firebase",
             "google_sheets": "google_sheets",
             "stripe": "stripe",
+            "hubspot": "hubspot",
+            "salesforce": "salesforce",
             "postgres": "warehouse",
             "bigquery": "warehouse",
             "snowflake": "warehouse",
+            "databricks": "warehouse",
         }
         if connector_key not in mapping:
             raise HTTPException(
@@ -1778,9 +2540,12 @@ class IntegrationService:
             "firebase": "integration_firebase",
             "google_sheets": "integration_gsheets",
             "stripe": "integration_stripe",
+            "hubspot": "integration_hubspot",
+            "salesforce": "integration_salesforce",
             "postgres": "warehouse_extract",
             "bigquery": "warehouse_extract",
             "snowflake": "warehouse_extract",
+            "databricks": "warehouse_extract",
         }
         return mapping.get(connector_key, "")
 
@@ -1797,6 +2562,22 @@ class IntegrationService:
             return connector_config.get("app_id")
         if provider == "firebase":
             return connector_config.get("firebase_project_id")
+        if provider == "hubspot":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "sales_pipeline"
+            pipeline_id = connector_config.get("pipeline_id") or "all"
+            owner_id = connector_config.get("owner_id") or "all"
+            return f"hubspot:{report_type}:{pipeline_id}:{owner_id}"
+        if provider == "salesforce":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "sales_pipeline"
+            object_name = connector_config.get("object_name") or "all"
+            owner_id = connector_config.get("owner_id") or "all"
+            return f"salesforce:{report_type}:{object_name}:{owner_id}"
         if provider == "warehouse":
             entity_id = connector_config.get("entity_id")
             if entity_id:
@@ -1927,6 +2708,56 @@ class IntegrationService:
         if provider == "stripe" and account_name:
             return [self._entity(account_name, account_name, "account")]
 
+        if provider == "hubspot":
+            report_type = str(connector_config.get("report_type") or "sales_pipeline")
+            pipeline_id = str(connector_config.get("pipeline_id") or "all")
+            owner_id = str(connector_config.get("owner_id") or "all")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or self._hubspot_report_label(report_type, pipeline_id, owner_id)
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "report_type": report_type,
+                        "pipeline_id": pipeline_id,
+                        "owner_id": owner_id,
+                    }
+                ]
+
+        if provider == "salesforce":
+            report_type = str(connector_config.get("report_type") or "sales_pipeline")
+            object_name = str(connector_config.get("object_name") or "all")
+            owner_id = str(connector_config.get("owner_id") or "all")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or self._salesforce_report_label(report_type, object_name, owner_id)
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "report_type": report_type,
+                        "object_name": object_name,
+                        "owner_id": owner_id,
+                    }
+                ]
+
         return []
 
     def _unique_entities(self, entities: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -1990,9 +2821,12 @@ class IntegrationService:
             "firebase": [],
             "google_sheets": [],
             "stripe": [],
+            "hubspot": [],
+            "salesforce": [],
             "postgres": [],
             "bigquery": [],
             "snowflake": [],
+            "databricks": [],
         }
 
         # Connection statuses
@@ -2007,6 +2841,12 @@ class IntegrationService:
         )
         status_map["stripe"] = bool(
             (await self.get_stripe_connection_status(user_id)).get("connected")
+        )
+        status_map["hubspot"] = bool(
+            (await self.get_hubspot_connection_status(user_id)).get("connected")
+        )
+        status_map["salesforce"] = bool(
+            (await self.get_salesforce_connection_status(user_id)).get("connected")
         )
 
         google_connected = bool(await self._get_google_access_token(user_id))
@@ -2025,6 +2865,9 @@ class IntegrationService:
         status_map["snowflake"] = bool(
             warehouse_service.list_connections(user_id, connector_key="snowflake")
         )
+        status_map["databricks"] = bool(
+            warehouse_service.list_connections(user_id, connector_key="databricks")
+        )
 
         # Primary source: selected entities persisted at modal sync-time in DynamoDB.
         metadata_provider_map = {
@@ -2036,6 +2879,8 @@ class IntegrationService:
             "firebase": "firebase",
             "google_sheets": "google_sheets",
             "stripe": "stripe",
+            "hubspot": "hubspot",
+            "salesforce": "salesforce",
         }
         for connector_key, provider in metadata_provider_map.items():
             record = connected_accounts_repo.get_connection(user_id, provider) or {}
@@ -2050,7 +2895,12 @@ class IntegrationService:
         if isinstance(warehouse_entities, list):
             for entity in warehouse_entities:
                 entity_connector = str(entity.get("connector_key") or "postgres")
-                if entity_connector in {"postgres", "bigquery", "snowflake"}:
+                if entity_connector in {
+                    "postgres",
+                    "bigquery",
+                    "snowflake",
+                    "databricks",
+                }:
                     selected_entities_map[entity_connector].append(entity)
 
         # Legacy fallback: infer previously selected entities from schedule connector_config.
@@ -2063,6 +2913,8 @@ class IntegrationService:
             "ga4": "ga4",
             "appsflyer": "appsflyer",
             "stripe": "stripe",
+            "hubspot": "hubspot",
+            "salesforce": "salesforce",
             "google_ads": "google_ads",
             "firebase": "firebase",
             "google_sheets": "google_sheets",
@@ -2075,7 +2927,12 @@ class IntegrationService:
                         entity_connector = str(
                             entity.get("connector_key") or "postgres"
                         )
-                        if entity_connector in {"postgres", "bigquery", "snowflake"}:
+                        if entity_connector in {
+                            "postgres",
+                            "bigquery",
+                            "snowflake",
+                            "databricks",
+                        }:
                             selected_entities_map[entity_connector].append(entity)
                 continue
             connector_key = provider_to_connector.get(provider)
@@ -2094,9 +2951,12 @@ class IntegrationService:
             {"connector_key": "appsflyer", "display_name": "AppsFlyer"},
             {"connector_key": "firebase", "display_name": "Firebase"},
             {"connector_key": "google_sheets", "display_name": "Google Sheets"},
+            {"connector_key": "hubspot", "display_name": "HubSpot"},
+            {"connector_key": "salesforce", "display_name": "Salesforce"},
             {"connector_key": "postgres", "display_name": "PostgreSQL"},
             {"connector_key": "bigquery", "display_name": "BigQuery"},
             {"connector_key": "snowflake", "display_name": "Snowflake"},
+            {"connector_key": "databricks", "display_name": "Databricks"},
             {"connector_key": "stripe", "display_name": "Stripe"},
         ]
 
@@ -2630,6 +3490,8 @@ class IntegrationService:
             "appsflyer",
             "firebase",
             "stripe",
+            "hubspot",
+            "salesforce",
         }:
             # only date overrides are supported for these in refresh modal
             pass
@@ -2735,7 +3597,32 @@ class IntegrationService:
                     start_date=dates.get("start_date"),
                     end_date=dates.get("end_date"),
                 )
-            elif connector_key in {"postgres", "bigquery", "snowflake"}:
+            elif connector_key == "hubspot":
+                result = await self.fetch_hubspot_data(
+                    user_id=user_id,
+                    report_type=str(cfg.get("report_type") or "sales_pipeline"),
+                    project_id=project_id,
+                    date_preset=dates.get("date_preset"),
+                    start_date=dates.get("start_date"),
+                    end_date=dates.get("end_date"),
+                    pipeline_id=str(cfg.get("pipeline_id") or "all"),
+                    owner_id=str(cfg.get("owner_id") or "all"),
+                    row_limit=int(cfg.get("row_limit") or 5000),
+                    include_associations=bool(cfg.get("include_associations", True)),
+                )
+            elif connector_key == "salesforce":
+                result = await self.fetch_salesforce_data(
+                    user_id=user_id,
+                    report_type=str(cfg.get("report_type") or "sales_pipeline"),
+                    project_id=project_id,
+                    date_preset=dates.get("date_preset"),
+                    start_date=dates.get("start_date"),
+                    end_date=dates.get("end_date"),
+                    object_name=str(cfg.get("object_name") or "all"),
+                    owner_id=str(cfg.get("owner_id") or "all"),
+                    row_limit=int(cfg.get("row_limit") or 5000),
+                )
+            elif connector_key in {"postgres", "bigquery", "snowflake", "databricks"}:
                 from app.services.warehouse_service import warehouse_service
 
                 result = warehouse_service.sync_entity(
@@ -2770,7 +3657,12 @@ class IntegrationService:
 
         # Tag freshly created asset with connector entity metadata for detail/history.
         asset = result.get("asset")
-        if asset and connector_key not in {"postgres", "bigquery", "snowflake"}:
+        if asset and connector_key not in {
+            "postgres",
+            "bigquery",
+            "snowflake",
+            "databricks",
+        }:
             stable_entity_name = self._pick_best_entity_name(
                 str(entity_id),
                 (existing_entity or {}).get("name"),
@@ -2887,6 +3779,837 @@ class IntegrationService:
         )
         return {"success": True, "project": project, "asset": cloned, "prompt": prompt}
 
+    def _resolve_hubspot_dates(
+        self,
+        date_preset: Optional[str],
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ) -> Dict[str, str]:
+        from_d, to_d, _, _ = self._resolve_stripe_dates(
+            date_preset, start_date, end_date
+        )
+        return {
+            "from": from_d.strftime("%Y-%m-%d"),
+            "to": to_d.strftime("%Y-%m-%d"),
+            "from_iso": datetime(
+                from_d.year, from_d.month, from_d.day, tzinfo=timezone.utc
+            )
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "to_iso": datetime(
+                to_d.year, to_d.month, to_d.day, 23, 59, 59, tzinfo=timezone.utc
+            )
+            .isoformat()
+            .replace("+00:00", "Z"),
+        }
+
+    def _hubspot_report_spec(self, report_type: str) -> Dict[str, Any]:
+        specs = {
+            "sales_pipeline": {
+                "object_type": "deals",
+                "date_property": "hs_lastmodifieddate",
+                "properties": [
+                    "dealname",
+                    "amount",
+                    "deal_currency_code",
+                    "dealstage",
+                    "pipeline",
+                    "hubspot_owner_id",
+                    "createdate",
+                    "hs_lastmodifieddate",
+                    "closedate",
+                    "hs_deal_stage_probability",
+                ],
+            },
+            "contacts": {
+                "object_type": "contacts",
+                "date_property": "lastmodifieddate",
+                "properties": [
+                    "firstname",
+                    "lastname",
+                    "email",
+                    "company",
+                    "phone",
+                    "lifecyclestage",
+                    "hubspot_owner_id",
+                    "createdate",
+                    "lastmodifieddate",
+                ],
+            },
+            "companies": {
+                "object_type": "companies",
+                "date_property": "hs_lastmodifieddate",
+                "properties": [
+                    "name",
+                    "domain",
+                    "industry",
+                    "city",
+                    "country",
+                    "hubspot_owner_id",
+                    "createdate",
+                    "hs_lastmodifieddate",
+                ],
+            },
+            "activities": {
+                "object_type": "tasks",
+                "date_property": "hs_lastmodifieddate",
+                "properties": [
+                    "hs_task_subject",
+                    "hs_task_status",
+                    "hs_task_priority",
+                    "hs_timestamp",
+                    "hubspot_owner_id",
+                    "hs_createdate",
+                    "hs_lastmodifieddate",
+                ],
+            },
+        }
+        if report_type not in specs:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid report_type. Must be sales_pipeline, contacts, companies, or activities.",
+            )
+        return specs[report_type]
+
+    def _build_hubspot_search_payload(
+        self,
+        report_type: str,
+        spec: Dict[str, Any],
+        date_window: Dict[str, str],
+        pipeline_id: str,
+        owner_id: str,
+        page_limit: int,
+        after: Optional[str],
+    ) -> Dict[str, Any]:
+        filters: List[Dict[str, str]] = [
+            {
+                "propertyName": spec["date_property"],
+                "operator": "BETWEEN",
+                "value": date_window["from_iso"],
+                "highValue": date_window["to_iso"],
+            }
+        ]
+        if report_type == "sales_pipeline" and pipeline_id != "all":
+            filters.append(
+                {
+                    "propertyName": "pipeline",
+                    "operator": "EQ",
+                    "value": pipeline_id,
+                }
+            )
+        if owner_id != "all":
+            filters.append(
+                {
+                    "propertyName": "hubspot_owner_id",
+                    "operator": "EQ",
+                    "value": owner_id,
+                }
+            )
+        payload: Dict[str, Any] = {
+            "limit": page_limit,
+            "properties": spec["properties"],
+            "filterGroups": [{"filters": filters}],
+        }
+        if after:
+            payload["after"] = after
+        return payload
+
+    async def _hubspot_search_objects(
+        self,
+        access_token: str,
+        object_type: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for attempt in range(3):
+                resp = await client.post(
+                    f"https://api.hubapi.com/crm/v3/objects/{object_type}/search",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                if resp.status_code == 429 and attempt < 2:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+                    continue
+                if resp.status_code == 401:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="HubSpot access revoked. Please reconnect.",
+                    )
+                resp.raise_for_status()
+                return resp.json()
+        return {"results": []}
+
+    async def _fetch_hubspot_association_summary(
+        self, access_token: str, deal_id: str
+    ) -> Dict[str, str]:
+        summary: Dict[str, str] = {}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for assoc_type in ("companies", "contacts"):
+                try:
+                    assoc_resp = await client.get(
+                        f"https://api.hubapi.com/crm/v4/objects/deals/{deal_id}/associations/{assoc_type}",
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        params={"limit": 10},
+                    )
+                    if assoc_resp.status_code != 200:
+                        continue
+                    ids = [
+                        str(item.get("toObjectId") or "")
+                        for item in assoc_resp.json().get("results", [])
+                        if item.get("toObjectId")
+                    ]
+                    summary[f"associated_{assoc_type}_ids"] = ",".join(ids)
+                except Exception:
+                    continue
+        return summary
+
+    def _hubspot_safe_float(self, value: Any) -> Optional[float]:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _hubspot_format_weighted_amount(self, amount: Any, probability: Any) -> str:
+        amount_f = self._hubspot_safe_float(amount)
+        prob_f = self._hubspot_safe_float(probability)
+        if amount_f is None or prob_f is None:
+            return ""
+        if prob_f > 1:
+            prob_f = prob_f / 100
+        return f"{amount_f * prob_f:.2f}"
+
+    async def fetch_hubspot_data(
+        self,
+        user_id: str,
+        report_type: str,
+        project_id: str,
+        date_preset: Optional[str] = "last_30d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        pipeline_id: str = "all",
+        owner_id: str = "all",
+        row_limit: int = 5000,
+        include_associations: bool = True,
+    ) -> Dict[str, Any]:
+        """Fetch HubSpot CRM data and save a flattened CSV asset."""
+        spec = self._hubspot_report_spec(report_type)
+        try:
+            row_limit = int(row_limit or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        row_limit = max(1, min(row_limit, 10000))
+        access_token = await self._get_hubspot_access_token(user_id)
+        date_window = self._resolve_hubspot_dates(date_preset, start_date, end_date)
+
+        pipelines = await self.fetch_hubspot_pipelines(user_id)
+        owners = await self.fetch_hubspot_owners(user_id)
+        stage_labels: Dict[str, str] = {}
+        stage_probabilities: Dict[str, Any] = {}
+        pipeline_labels = {"all": "All pipelines"}
+        for pipeline in pipelines:
+            pipeline_labels[str(pipeline.get("id"))] = str(pipeline.get("label") or "")
+            for stage in pipeline.get("stages", []):
+                stage_id = str(stage.get("id") or "")
+                stage_labels[stage_id] = str(stage.get("label") or stage_id)
+                stage_probabilities[stage_id] = stage.get("probability")
+        owner_labels = {"all": "All owners"}
+        for owner in owners:
+            owner_labels[str(owner.get("id"))] = str(
+                owner.get("name") or owner.get("email") or owner.get("id")
+            )
+
+        rows: List[Dict[str, Any]] = []
+        after: Optional[str] = None
+        truncated = False
+        while len(rows) < row_limit:
+            page_limit = min(200, row_limit - len(rows))
+            payload = self._build_hubspot_search_payload(
+                report_type=report_type,
+                spec=spec,
+                date_window=date_window,
+                pipeline_id=pipeline_id,
+                owner_id=owner_id,
+                page_limit=page_limit,
+                after=after,
+            )
+            page = await self._hubspot_search_objects(
+                access_token=access_token,
+                object_type=spec["object_type"],
+                payload=payload,
+            )
+            objects = page.get("results", []) or []
+            for obj in objects:
+                props = obj.get("properties") or {}
+                row: Dict[str, Any] = {"id": obj.get("id", "")}
+                for prop in spec["properties"]:
+                    row[prop] = props.get(prop, "")
+                owner_value = str(row.get("hubspot_owner_id") or "")
+                row["owner_name"] = owner_labels.get(owner_value, owner_value)
+                if report_type == "sales_pipeline":
+                    stage_id = str(row.get("dealstage") or "")
+                    pipeline_value = str(row.get("pipeline") or "")
+                    probability = row.get(
+                        "hs_deal_stage_probability"
+                    ) or stage_probabilities.get(stage_id)
+                    row["pipeline_label"] = pipeline_labels.get(
+                        pipeline_value, pipeline_value
+                    )
+                    row["stage_label"] = stage_labels.get(stage_id, stage_id)
+                    row["stage_probability"] = probability or ""
+                    row["weighted_amount"] = self._hubspot_format_weighted_amount(
+                        row.get("amount"), probability
+                    )
+                    if include_associations:
+                        row.update(
+                            await self._fetch_hubspot_association_summary(
+                                access_token, str(obj.get("id") or "")
+                            )
+                        )
+                rows.append(row)
+                if len(rows) >= row_limit:
+                    break
+            after = (page.get("paging") or {}).get("next", {}).get("after")
+            if not after:
+                break
+        if after:
+            truncated = True
+
+        headers = list(rows[0].keys()) if rows else ["id", *spec["properties"]]
+        if report_type == "sales_pipeline":
+            for header in [
+                "owner_name",
+                "pipeline_label",
+                "stage_label",
+                "stage_probability",
+                "weighted_amount",
+                "associated_companies_ids",
+                "associated_contacts_ids",
+            ]:
+                if header not in headers:
+                    headers.append(header)
+        elif "owner_name" not in headers:
+            headers.append("owner_name")
+
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+        csv_bytes = output.getvalue().encode("utf-8")
+
+        entity_id = f"hubspot:{report_type}:{pipeline_id or 'all'}:{owner_id or 'all'}"
+        entity_name = self._hubspot_report_label(report_type, pipeline_id, owner_id)
+        filename = (
+            f"hubspot_{report_type}_{date_window['from']}_{date_window['to']}.csv"
+        )
+        asset = self._save_integration_asset(
+            user_id=user_id,
+            project_id=project_id,
+            file_content=csv_bytes,
+            filename=filename,
+            asset_type="integration_hubspot",
+            extension="csv",
+            row_count=len(rows),
+            column_count=len(headers),
+        )
+
+        connection = connected_accounts_repo.get_connection(user_id, "hubspot") or {}
+        manifest = {
+            "source_type": "hubspot",
+            "portal_id": connection.get("portal_id"),
+            "portal_domain": connection.get("portal_domain"),
+            "report_type": report_type,
+            "entity_id": entity_id,
+            "pipeline_id": pipeline_id or "all",
+            "owner_id": owner_id or "all",
+            "date_preset": date_preset or "last_30d",
+            "start_date": date_window["from"],
+            "end_date": date_window["to"],
+            "requested_properties": spec["properties"],
+            "row_limit": row_limit,
+            "row_count": len(rows),
+            "column_schema": headers,
+            "truncated": truncated,
+            "query_summary": {
+                "object_type": spec["object_type"],
+                "date_property": spec["date_property"],
+            },
+            "schema_fingerprint": hashlib.sha256(
+                json.dumps(headers, sort_keys=True).encode("utf-8")
+            ).hexdigest(),
+        }
+        connected_accounts_repo.append_selected_entity(
+            user_id=user_id,
+            provider="hubspot",
+            entity={
+                "id": entity_id,
+                "name": entity_name,
+                "type": "report",
+                "account_name": connection.get("account_name") or "HubSpot",
+                "report_type": report_type,
+                "pipeline_id": pipeline_id or "all",
+                "owner_id": owner_id or "all",
+            },
+        )
+        assets_repo.update_asset_metadata(
+            user_id=user_id,
+            asset_id=asset.get("asset_id"),
+            metadata={
+                "connector_key": "hubspot",
+                "connector_entity_id": entity_id,
+                "connector_entity_name": entity_name,
+                "hubspot_report_type": report_type,
+                "hubspot_manifest": manifest,
+            },
+        )
+        asset.update(
+            {
+                "connector_key": "hubspot",
+                "connector_entity_id": entity_id,
+                "connector_entity_name": entity_name,
+                "hubspot_report_type": report_type,
+                "hubspot_manifest": manifest,
+            }
+        )
+        return {
+            "success": True,
+            "asset": asset,
+            "row_count": len(rows),
+            "column_count": len(headers),
+            "message": f"Successfully synced {len(rows)} rows from HubSpot ({entity_name}).",
+            "entity_id": entity_id,
+            "truncated": truncated,
+        }
+
+    def _salesforce_validate_object_name(self, object_name: str) -> str:
+        clean = str(object_name or "").strip()
+        if not clean or not clean.replace("_", "").isalnum():
+            raise HTTPException(
+                status_code=400, detail="Invalid Salesforce object name."
+            )
+        return clean
+
+    def _salesforce_escape_literal(self, value: Any) -> str:
+        return str(value).replace("\\", "\\\\").replace("'", "\\'")
+
+    def _salesforce_report_label(
+        self, report_type: str, object_name: str = "all", owner_id: str = "all"
+    ) -> str:
+        labels = {
+            "sales_pipeline": "Sales Pipeline",
+            "leads": "Leads",
+            "accounts_contacts": "Accounts & Contacts",
+            "activities": "Activities",
+            "campaigns": "Campaigns",
+        }
+        base = labels.get(report_type, report_type.replace("_", " ").title())
+        filters = []
+        if object_name and object_name != "all":
+            filters.append(object_name)
+        if owner_id and owner_id != "all":
+            filters.append(f"Owner {owner_id}")
+        return f"{base} ({', '.join(filters)})" if filters else base
+
+    def _salesforce_report_spec(self, report_type: str) -> Dict[str, Any]:
+        specs = {
+            "sales_pipeline": {
+                "primary_object": "Opportunity",
+                "date_field": "LastModifiedDate",
+                "owner_field": "OwnerId",
+                "fields": [
+                    "Id",
+                    "Name",
+                    "Amount",
+                    "CurrencyIsoCode",
+                    "StageName",
+                    "Probability",
+                    "ForecastCategoryName",
+                    "Type",
+                    "LeadSource",
+                    "CloseDate",
+                    "CreatedDate",
+                    "LastModifiedDate",
+                    "OwnerId",
+                    "Owner.Name",
+                    "AccountId",
+                    "Account.Name",
+                    "CampaignId",
+                    "Campaign.Name",
+                ],
+            },
+            "leads": {
+                "primary_object": "Lead",
+                "date_field": "LastModifiedDate",
+                "owner_field": "OwnerId",
+                "fields": [
+                    "Id",
+                    "Name",
+                    "Company",
+                    "Status",
+                    "Rating",
+                    "LeadSource",
+                    "Email",
+                    "Phone",
+                    "CreatedDate",
+                    "LastModifiedDate",
+                    "OwnerId",
+                    "Owner.Name",
+                    "ConvertedDate",
+                    "ConvertedAccountId",
+                    "ConvertedOpportunityId",
+                ],
+            },
+            "accounts_contacts": {
+                "primary_object": "Contact",
+                "date_field": "LastModifiedDate",
+                "owner_field": "OwnerId",
+                "fields": [
+                    "Id",
+                    "Name",
+                    "Email",
+                    "Phone",
+                    "Title",
+                    "CreatedDate",
+                    "LastModifiedDate",
+                    "OwnerId",
+                    "Owner.Name",
+                    "AccountId",
+                    "Account.Name",
+                    "Account.Industry",
+                    "Account.Type",
+                    "Account.BillingCountry",
+                ],
+            },
+            "activities": {
+                "primary_object": "Task",
+                "date_field": "LastModifiedDate",
+                "owner_field": "OwnerId",
+                "fields": [
+                    "Id",
+                    "Subject",
+                    "Status",
+                    "Priority",
+                    "ActivityDate",
+                    "Type",
+                    "CallDurationInSeconds",
+                    "CreatedDate",
+                    "LastModifiedDate",
+                    "OwnerId",
+                    "Owner.Name",
+                    "WhoId",
+                    "WhatId",
+                ],
+            },
+            "campaigns": {
+                "primary_object": "Campaign",
+                "date_field": "LastModifiedDate",
+                "owner_field": "OwnerId",
+                "fields": [
+                    "Id",
+                    "Name",
+                    "Status",
+                    "Type",
+                    "StartDate",
+                    "EndDate",
+                    "ExpectedRevenue",
+                    "BudgetedCost",
+                    "ActualCost",
+                    "NumberOfLeads",
+                    "NumberOfConvertedLeads",
+                    "NumberOfContacts",
+                    "NumberOfResponses",
+                    "CreatedDate",
+                    "LastModifiedDate",
+                    "OwnerId",
+                    "Owner.Name",
+                ],
+            },
+        }
+        if report_type not in specs:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid report_type. Must be sales_pipeline, leads, accounts_contacts, activities, or campaigns.",
+            )
+        return specs[report_type]
+
+    def _build_salesforce_soql(
+        self,
+        report_type: str,
+        spec: Dict[str, Any],
+        date_window: Dict[str, str],
+        owner_id: str,
+        row_limit: int,
+        object_name: str = "all",
+    ) -> str:
+        primary_object = spec["primary_object"]
+        if object_name and object_name != "all":
+            clean_object = self._salesforce_validate_object_name(object_name)
+            if clean_object != primary_object:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{report_type} supports object_name=all or {primary_object}.",
+                )
+        fields = list(spec["fields"])
+        date_field = spec["date_field"]
+        where = [
+            f"{date_field} >= {date_window['from_iso']}",
+            f"{date_field} <= {date_window['to_iso']}",
+        ]
+        if owner_id and owner_id != "all":
+            where.append(
+                f"{spec['owner_field']} = '{self._salesforce_escape_literal(owner_id)}'"
+            )
+        return (
+            f"SELECT {', '.join(fields)} FROM {primary_object} "
+            f"WHERE {' AND '.join(where)} ORDER BY {date_field} DESC LIMIT {row_limit + 1}"
+        )
+
+    def _flatten_salesforce_record(
+        self, record: Dict[str, Any], prefix: str = ""
+    ) -> Dict[str, Any]:
+        flat: Dict[str, Any] = {}
+        for key, value in (record or {}).items():
+            if key == "attributes":
+                continue
+            out_key = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                flat.update(self._flatten_salesforce_record(value, out_key))
+            else:
+                flat[out_key] = value if value is not None else ""
+        return flat
+
+    async def _salesforce_rest_query(
+        self, ctx: Dict[str, Any], soql: str
+    ) -> Dict[str, Any]:
+        url = f"{ctx['instance_url']}/services/data/{ctx['api_version']}/query"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                params={"q": soql},
+                headers={"Authorization": f"Bearer {ctx['access_token']}"},
+            )
+        if resp.status_code == 401:
+            raise HTTPException(
+                status_code=401, detail="Salesforce access revoked. Please reconnect."
+            )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def _salesforce_rest_query_all(
+        self, ctx: Dict[str, Any], soql: str, row_limit: int
+    ) -> Dict[str, Any]:
+        rows: List[Dict[str, Any]] = []
+        page = await self._salesforce_rest_query(ctx, soql)
+        next_url = page.get("nextRecordsUrl")
+        while True:
+            for record in page.get("records", []):
+                rows.append(self._flatten_salesforce_record(record))
+                if len(rows) > row_limit:
+                    return {
+                        "rows": rows[:row_limit],
+                        "truncated": True,
+                        "api_mode": "rest",
+                    }
+            if not next_url:
+                break
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    f"{ctx['instance_url']}{next_url}",
+                    headers={"Authorization": f"Bearer {ctx['access_token']}"},
+                )
+            if resp.status_code == 401:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Salesforce access revoked. Please reconnect.",
+                )
+            resp.raise_for_status()
+            page = resp.json()
+            next_url = page.get("nextRecordsUrl")
+        return {"rows": rows, "truncated": False, "api_mode": "rest"}
+
+    async def _salesforce_bulk_query(
+        self, ctx: Dict[str, Any], soql: str, row_limit: int
+    ) -> Dict[str, Any]:
+        jobs_url = (
+            f"{ctx['instance_url']}/services/data/{ctx['api_version']}/jobs/query"
+        )
+        headers = {
+            "Authorization": f"Bearer {ctx['access_token']}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            create_resp = await client.post(
+                jobs_url,
+                json={"operation": "query", "query": soql, "contentType": "CSV"},
+                headers=headers,
+            )
+            if create_resp.status_code == 401:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Salesforce access revoked. Please reconnect.",
+                )
+            create_resp.raise_for_status()
+            job_id = create_resp.json().get("id")
+            if not job_id:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Salesforce Bulk API did not return a job id.",
+                )
+            state = ""
+            for _ in range(20):
+                status_resp = await client.get(f"{jobs_url}/{job_id}", headers=headers)
+                status_resp.raise_for_status()
+                state = str(status_resp.json().get("state") or "")
+                if state in {"JobComplete", "Failed", "Aborted"}:
+                    break
+                await asyncio.sleep(0.5)
+            if state != "JobComplete":
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Salesforce Bulk API job ended as {state or 'unknown'}.",
+                )
+            result_resp = await client.get(
+                f"{jobs_url}/{job_id}/results",
+                headers={
+                    "Authorization": f"Bearer {ctx['access_token']}",
+                    "Accept": "text/csv",
+                },
+            )
+            result_resp.raise_for_status()
+        reader = csv.DictReader(io.StringIO(result_resp.text))
+        rows = list(reader)
+        truncated = len(rows) > row_limit
+        return {"rows": rows[:row_limit], "truncated": truncated, "api_mode": "bulk"}
+
+    async def fetch_salesforce_data(
+        self,
+        user_id: str,
+        report_type: str,
+        project_id: str,
+        date_preset: Optional[str] = "last_30d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        object_name: str = "all",
+        owner_id: str = "all",
+        row_limit: int = 5000,
+    ) -> Dict[str, Any]:
+        """Fetch Salesforce CRM data and save a flattened CSV asset."""
+        spec = self._salesforce_report_spec(report_type)
+        try:
+            row_limit = int(row_limit or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        row_limit = max(1, min(row_limit, 10000))
+        date_window = self._resolve_hubspot_dates(date_preset, start_date, end_date)
+        object_filter = str(object_name or "all").strip() or "all"
+        owner_filter = str(owner_id or "all").strip() or "all"
+        soql = self._build_salesforce_soql(
+            report_type=report_type,
+            spec=spec,
+            date_window=date_window,
+            owner_id=owner_filter,
+            row_limit=row_limit,
+            object_name=object_filter,
+        )
+        ctx = await self._salesforce_context(user_id)
+        if row_limit > 5000:
+            query_result = await self._salesforce_bulk_query(ctx, soql, row_limit)
+        else:
+            query_result = await self._salesforce_rest_query_all(ctx, soql, row_limit)
+        rows: List[Dict[str, Any]] = query_result["rows"]
+        headers = list(rows[0].keys()) if rows else list(spec["fields"])
+
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+        csv_bytes = output.getvalue().encode("utf-8")
+
+        entity_id = f"salesforce:{report_type}:{object_filter}:{owner_filter}"
+        entity_name = self._salesforce_report_label(
+            report_type, object_filter, owner_filter
+        )
+        filename = (
+            f"salesforce_{report_type}_{date_window['from']}_{date_window['to']}.csv"
+        )
+        asset = self._save_integration_asset(
+            user_id=user_id,
+            project_id=project_id,
+            file_content=csv_bytes,
+            filename=filename,
+            asset_type="integration_salesforce",
+            extension="csv",
+            row_count=len(rows),
+            column_count=len(headers),
+        )
+
+        connection = connected_accounts_repo.get_connection(user_id, "salesforce") or {}
+        manifest = {
+            "source_type": "salesforce",
+            "org_id": connection.get("org_id"),
+            "instance_domain": connection.get("instance_domain"),
+            "report_type": report_type,
+            "entity_id": entity_id,
+            "objects": [spec["primary_object"]],
+            "object_name": object_filter,
+            "owner_id": owner_filter,
+            "date_preset": date_preset or "last_30d",
+            "start_date": date_window["from"],
+            "end_date": date_window["to"],
+            "selected_fields": spec["fields"],
+            "generated_soql": soql,
+            "row_limit": row_limit,
+            "row_count": len(rows),
+            "column_schema": headers,
+            "truncated": bool(query_result.get("truncated")),
+            "api_mode": query_result.get("api_mode"),
+            "checksum": compute_sha256_checksum(csv_bytes),
+            "schema_fingerprint": hashlib.sha256(
+                json.dumps(headers, sort_keys=True).encode("utf-8")
+            ).hexdigest(),
+        }
+        connected_accounts_repo.append_selected_entity(
+            user_id=user_id,
+            provider="salesforce",
+            entity={
+                "id": entity_id,
+                "name": entity_name,
+                "type": "report",
+                "account_name": connection.get("account_name") or "Salesforce",
+                "report_type": report_type,
+                "object_name": object_filter,
+                "owner_id": owner_filter,
+            },
+        )
+        assets_repo.update_asset_metadata(
+            user_id=user_id,
+            asset_id=asset.get("asset_id"),
+            metadata={
+                "connector_key": "salesforce",
+                "connector_entity_id": entity_id,
+                "connector_entity_name": entity_name,
+                "salesforce_report_type": report_type,
+                "salesforce_manifest": manifest,
+            },
+        )
+        asset.update(
+            {
+                "connector_key": "salesforce",
+                "connector_entity_id": entity_id,
+                "connector_entity_name": entity_name,
+                "salesforce_report_type": report_type,
+                "salesforce_manifest": manifest,
+            }
+        )
+        return {
+            "success": True,
+            "asset": asset,
+            "row_count": len(rows),
+            "column_count": len(headers),
+            "message": f"Successfully synced {len(rows)} rows from Salesforce ({entity_name}).",
+            "entity_id": entity_id,
+            "truncated": bool(query_result.get("truncated")),
+        }
+
     # ── Scheduled sync token guards ───────────────────────────────────────────
 
     def assert_meta_token_valid(self, user_id: str) -> None:
@@ -2919,6 +4642,32 @@ class IntegrationService:
         if not record:
             raise TokenExpiredError(
                 "appsflyer", "AppsFlyer token missing — please reconnect"
+            )
+
+    def assert_hubspot_token_valid(self, user_id: str) -> None:
+        """Raise TokenExpiredError if no HubSpot token exists."""
+        record = connected_accounts_repo.get_connection(user_id, "hubspot")
+        if not record or not (
+            record.get("encrypted_access_token")
+            or record.get("encrypted_refresh_token")
+            or record.get("access_token")
+            or record.get("refresh_token")
+        ):
+            raise TokenExpiredError(
+                "hubspot", "HubSpot connection missing — please reconnect"
+            )
+
+    def assert_salesforce_token_valid(self, user_id: str) -> None:
+        """Raise TokenExpiredError if no Salesforce token exists."""
+        record = connected_accounts_repo.get_connection(user_id, "salesforce")
+        if not record or not (
+            record.get("encrypted_access_token")
+            or record.get("encrypted_refresh_token")
+            or record.get("access_token")
+            or record.get("refresh_token")
+        ):
+            raise TokenExpiredError(
+                "salesforce", "Salesforce connection missing — please reconnect"
             )
 
     def _resolve_stripe_dates(

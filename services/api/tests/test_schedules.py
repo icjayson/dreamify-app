@@ -322,6 +322,99 @@ class TestTriggerEndpoint:
             },
         )
 
+    def test_run_sync_dispatches_hubspot_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.integration_service.integration_service"
+        ) as mock_service:
+            mock_service.assert_hubspot_token_valid = MagicMock()
+            mock_service.fetch_hubspot_data = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 4,
+                    "column_count": 8,
+                    "asset": {"asset_id": "asset_hubspot"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="hubspot",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "sales_pipeline",
+                        "pipeline_id": "default",
+                        "owner_id": "42",
+                        "row_limit": 2500,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 4
+        mock_service.assert_hubspot_token_valid.assert_called_once_with("u1")
+        mock_service.fetch_hubspot_data.assert_awaited_once_with(
+            user_id="u1",
+            report_type="sales_pipeline",
+            project_id="p1",
+            date_preset="last_30d",
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            pipeline_id="default",
+            owner_id="42",
+            row_limit=2500,
+            include_associations=True,
+        )
+
+    def test_run_sync_dispatches_salesforce_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.integration_service.integration_service"
+        ) as mock_service:
+            mock_service.assert_salesforce_token_valid = MagicMock()
+            mock_service.fetch_salesforce_data = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 5,
+                    "column_count": 9,
+                    "asset": {"asset_id": "asset_salesforce"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="salesforce",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "sales_pipeline",
+                        "object_name": "Opportunity",
+                        "owner_id": "0051",
+                        "row_limit": 2500,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 5
+        mock_service.assert_salesforce_token_valid.assert_called_once_with("u1")
+        mock_service.fetch_salesforce_data.assert_awaited_once_with(
+            user_id="u1",
+            report_type="sales_pipeline",
+            project_id="p1",
+            date_preset="last_30d",
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            object_name="Opportunity",
+            owner_id="0051",
+            row_limit=2500,
+        )
+
 
 # ── Schedules CRUD validation ─────────────────────────────────────────────────
 
@@ -391,6 +484,58 @@ class TestScheduleValidation:
 
         assert _normalize_connector_config("stripe", {}) == {"report_type": "charges"}
 
+    def test_hubspot_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "hubspot",
+            {
+                "report_type": "sales_pipeline",
+                "pipeline_id": "default",
+                "owner_id": "42",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "sales_pipeline"
+        assert cfg["pipeline_id"] == "default"
+        assert cfg["owner_id"] == "42"
+        assert cfg["entity_id"] == "hubspot:sales_pipeline:default:42"
+        assert cfg["row_limit"] == 10000
+
+    def test_hubspot_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("hubspot", {"report_type": "tickets"})
+
+    def test_salesforce_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "salesforce",
+            {
+                "report_type": "sales_pipeline",
+                "object_name": "Opportunity",
+                "owner_id": "0051",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "sales_pipeline"
+        assert cfg["object_name"] == "Opportunity"
+        assert cfg["owner_id"] == "0051"
+        assert cfg["entity_id"] == "salesforce:sales_pipeline:Opportunity:0051"
+        assert cfg["row_limit"] == 10000
+
+    def test_salesforce_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("salesforce", {"report_type": "tickets"})
+
     def test_warehouse_config_normalizes_entity_and_caps_rows(self):
         from app.api.route_modules.schedules import _normalize_connector_config
 
@@ -442,6 +587,25 @@ class TestScheduleValidation:
         assert cfg["connector_key"] == "snowflake"
         assert cfg["entity_id"] == "conn_123:PUBLIC.ORDERS"
 
+    def test_warehouse_config_accepts_databricks_connector(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "warehouse",
+            {
+                "connector_key": "databricks",
+                "connection_id": "conn_123",
+                "catalog": "main",
+                "schema": "analytics",
+                "table": "events",
+            },
+        )
+
+        assert cfg["connector_key"] == "databricks"
+        assert cfg["catalog"] == "main"
+        assert cfg["schema"] == "main.analytics"
+        assert cfg["entity_id"] == "conn_123:main.analytics.events"
+
     def test_warehouse_config_rejects_unknown_connector_key(self):
         from app.api.route_modules.schedules import _normalize_connector_config
         from fastapi import HTTPException
@@ -450,7 +614,7 @@ class TestScheduleValidation:
             _normalize_connector_config(
                 "warehouse",
                 {
-                    "connector_key": "databricks",
+                    "connector_key": "redshift",
                     "connection_id": "conn_123",
                     "schema": "analytics",
                     "table": "events",

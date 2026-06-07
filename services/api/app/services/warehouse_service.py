@@ -4,7 +4,9 @@ import hashlib
 import io
 import json
 import logging
+import re
 import tempfile
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,12 +29,14 @@ logger = logging.getLogger(__name__)
 
 WAREHOUSE_PROVIDER = "warehouse"
 WAREHOUSE_CONNECTION_PREFIX = "warehouse#"
-SUPPORTED_WAREHOUSE_TYPES = {"postgres", "bigquery", "snowflake"}
+SUPPORTED_WAREHOUSE_TYPES = {"postgres", "bigquery", "snowflake", "databricks"}
 DEFAULT_ROW_LIMIT = 5_000
 MAX_ROW_LIMIT = 50_000
 DEFAULT_MAX_EXPORT_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_BILLING_BYTES = 10 * 1024 * 1024 * 1024
 DEFAULT_MAX_ASSIGNED_BYTES = DEFAULT_MAX_BILLING_BYTES
+DEFAULT_MAX_RESULT_BYTES = DEFAULT_MAX_BILLING_BYTES
+DEFAULT_STATEMENT_TIMEOUT_SECONDS = 300
 
 
 def _now_iso() -> str:
@@ -67,6 +71,22 @@ def _normalize_max_assigned_bytes(value: Any) -> int:
     return max(1, parsed)
 
 
+def _normalize_max_result_bytes(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = DEFAULT_MAX_RESULT_BYTES
+    return max(1, parsed)
+
+
+def _normalize_statement_timeout_seconds(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = DEFAULT_STATEMENT_TIMEOUT_SECONDS
+    return max(5, min(parsed, 900))
+
+
 def _quote_identifier(identifier: str) -> str:
     if not isinstance(identifier, str) or not identifier.strip():
         raise HTTPException(status_code=400, detail="SQL identifier is required")
@@ -89,6 +109,26 @@ def _quote_bigquery_identifier(identifier: str) -> str:
 
 def _quote_bigquery_table(project_id: str, dataset_name: str, table_name: str) -> str:
     return _quote_bigquery_identifier(f"{project_id}.{dataset_name}.{table_name}")
+
+
+def _quote_databricks_identifier(identifier: str) -> str:
+    if not isinstance(identifier, str) or not identifier.strip():
+        raise HTTPException(status_code=400, detail="Databricks identifier is required")
+    if "\x00" in identifier:
+        raise HTTPException(
+            status_code=400, detail="Databricks identifier contains invalid characters"
+        )
+    return "`" + identifier.replace("`", "``") + "`"
+
+
+def _quote_databricks_table(catalog: str, schema_name: str, table_name: str) -> str:
+    return ".".join(
+        [
+            _quote_databricks_identifier(catalog),
+            _quote_databricks_identifier(schema_name),
+            _quote_databricks_identifier(table_name),
+        ]
+    )
 
 
 def _quote_snowflake_table(database: str, schema_name: str, table_name: str) -> str:
@@ -182,6 +222,52 @@ def _require_snowflake_field(value: str, field_name: str) -> str:
             status_code=400, detail=f"Snowflake {field_name} is required"
         )
     return normalized
+
+
+def _require_databricks_field(value: str, field_name: str) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        raise HTTPException(
+            status_code=400, detail=f"Databricks {field_name} is required"
+        )
+    return normalized
+
+
+def _normalize_databricks_server_hostname(server_hostname: str) -> str:
+    raw = _require_databricks_field(server_hostname, "server_hostname")
+    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+    host = parsed.netloc or parsed.path
+    host = host.strip().strip("/")
+    if not host or "/" in host:
+        raise HTTPException(
+            status_code=400, detail="Databricks server_hostname must be a host name"
+        )
+    return host
+
+
+def _normalize_databricks_http_path(http_path: str) -> Tuple[str, str]:
+    raw = _require_databricks_field(http_path, "http_path").strip()
+    normalized = raw[1:] if raw.startswith("/") else raw
+    match = re.fullmatch(r"sql/1\.0/warehouses/([A-Za-z0-9_-]+)", normalized)
+    if not match:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Databricks http_path must target a SQL Warehouse "
+                "(sql/1.0/warehouses/<warehouse_id>)"
+            ),
+        )
+    return normalized, match.group(1)
+
+
+def _split_databricks_schema_path(
+    default_catalog: str, schema_path: str
+) -> Tuple[str, str]:
+    raw = str(schema_path or "").strip()
+    if "." in raw:
+        catalog, schema_name = raw.split(".", 1)
+        return catalog, schema_name
+    return str(default_catalog or "").strip(), raw
 
 
 def _warehouse_fernet() -> Fernet:
@@ -695,6 +781,506 @@ class BigQueryWarehouseAdapter:
         return list(row)
 
 
+class DatabricksWarehouseAdapter:
+    def _base_url(self, server_hostname: str) -> str:
+        host = _normalize_databricks_server_hostname(server_hostname)
+        return f"https://{host}"
+
+    def _headers(self, access_token: str) -> Dict[str, str]:
+        token = _require_databricks_field(access_token, "access_token")
+        return {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "dreamify-warehouse/1.0",
+        }
+
+    def _post_statement(
+        self,
+        server_hostname: str,
+        http_path: str,
+        access_token: str,
+        sql: str,
+        catalog: str,
+        row_limit: Optional[int],
+        byte_limit: Optional[int],
+        disposition: str,
+        result_format: str,
+        statement_timeout_seconds: int,
+    ) -> Dict[str, Any]:
+        _, warehouse_id = _normalize_databricks_http_path(http_path)
+        payload: Dict[str, Any] = {
+            "statement": sql,
+            "warehouse_id": warehouse_id,
+            "catalog": _require_databricks_field(catalog, "catalog"),
+            "disposition": disposition,
+            "format": result_format,
+            "wait_timeout": "30s",
+            "on_wait_timeout": "CONTINUE",
+        }
+        if row_limit is not None:
+            payload["row_limit"] = max(1, int(row_limit))
+        if byte_limit is not None:
+            payload["byte_limit"] = max(1, int(byte_limit))
+
+        timeout = _normalize_statement_timeout_seconds(statement_timeout_seconds)
+        base_url = self._base_url(server_hostname)
+        try:
+            import httpx
+        except ImportError as exc:
+            raise RuntimeError(
+                "httpx is not installed. Add httpx to backend dependencies."
+            ) from exc
+
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(
+                f"{base_url}/api/2.0/sql/statements/",
+                headers=self._headers(access_token),
+                json=payload,
+            )
+            response.raise_for_status()
+            return self._wait_for_statement(
+                client=client,
+                base_url=base_url,
+                access_token=access_token,
+                response=response.json(),
+                timeout_seconds=timeout,
+            )
+
+    def _wait_for_statement(
+        self,
+        client: Any,
+        base_url: str,
+        access_token: str,
+        response: Dict[str, Any],
+        timeout_seconds: int,
+    ) -> Dict[str, Any]:
+        deadline = time.time() + timeout_seconds
+        current = response
+        while True:
+            state = str((current.get("status") or {}).get("state") or "").upper()
+            if state in {"SUCCEEDED", ""}:
+                return current
+            if state in {"FAILED", "CANCELED", "CLOSED"}:
+                detail = ((current.get("status") or {}).get("error", {}) or {}).get(
+                    "message"
+                ) or f"Databricks statement {state.lower()}"
+                raise HTTPException(status_code=400, detail=str(detail))
+            statement_id = current.get("statement_id")
+            if not statement_id or time.time() >= deadline:
+                raise HTTPException(
+                    status_code=408, detail="Databricks statement timed out"
+                )
+            time.sleep(1)
+            poll = client.get(
+                f"{base_url}/api/2.0/sql/statements/{statement_id}",
+                headers=self._headers(access_token),
+            )
+            poll.raise_for_status()
+            current = poll.json()
+
+    def _execute_statement(self, **kwargs: Any) -> Dict[str, Any]:
+        return self._post_statement(**kwargs)
+
+    def test_connection(
+        self,
+        server_hostname: str,
+        http_path: str,
+        access_token: str,
+        catalog: str,
+        statement_timeout_seconds: int = DEFAULT_STATEMENT_TIMEOUT_SECONDS,
+    ) -> Dict[str, Any]:
+        normalized_host = _normalize_databricks_server_hostname(server_hostname)
+        normalized_http_path, warehouse_id = _normalize_databricks_http_path(http_path)
+        self._execute_statement(
+            server_hostname=normalized_host,
+            http_path=normalized_http_path,
+            access_token=access_token,
+            sql="SELECT 1",
+            catalog=catalog,
+            row_limit=1,
+            byte_limit=1024,
+            disposition="INLINE",
+            result_format="JSON_ARRAY",
+            statement_timeout_seconds=statement_timeout_seconds,
+        )
+        return {
+            "server_hostname": normalized_host,
+            "http_path": normalized_http_path,
+            "warehouse_id": warehouse_id,
+            "catalog": catalog,
+            "warehouse_accessible": True,
+        }
+
+    def refresh_schema(
+        self,
+        server_hostname: str,
+        http_path: str,
+        access_token: str,
+        catalog: str,
+        include_schemas: Optional[Sequence[str]] = None,
+        statement_timeout_seconds: int = DEFAULT_STATEMENT_TIMEOUT_SECONDS,
+    ) -> Dict[str, Any]:
+        normalized_catalog = _require_databricks_field(catalog, "catalog")
+        include = [str(s).strip() for s in (include_schemas or []) if str(s).strip()]
+        catalog_ref = _quote_databricks_identifier(normalized_catalog)
+        tables_sql = (
+            "SELECT table_catalog, table_schema, table_name, table_type, "
+            f"data_source_format, comment FROM {catalog_ref}.information_schema.tables "
+            "WHERE table_schema <> 'information_schema' "
+            "ORDER BY table_catalog, table_schema, table_name"
+        )
+        columns_sql = (
+            "SELECT table_catalog, table_schema, table_name, column_name, "
+            "ordinal_position, data_type, is_nullable, comment "
+            f"FROM {catalog_ref}.information_schema.columns "
+            "WHERE table_schema <> 'information_schema' "
+            "ORDER BY table_catalog, table_schema, table_name, ordinal_position"
+        )
+        statement_kwargs = {
+            "server_hostname": server_hostname,
+            "http_path": http_path,
+            "access_token": access_token,
+            "catalog": normalized_catalog,
+            "row_limit": MAX_ROW_LIMIT,
+            "byte_limit": DEFAULT_MAX_EXPORT_BYTES,
+            "disposition": "INLINE",
+            "result_format": "JSON_ARRAY",
+            "statement_timeout_seconds": statement_timeout_seconds,
+        }
+        table_response = self._execute_statement(sql=tables_sql, **statement_kwargs)
+        _, table_rows = self._inline_rows(table_response)
+        column_response = self._execute_statement(sql=columns_sql, **statement_kwargs)
+        _, column_rows = self._inline_rows(column_response)
+
+        tables_by_key: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        for row in table_rows:
+            row_catalog, schema_name, table_name = [str(v or "") for v in row[:3]]
+            if not self._schema_allowed(row_catalog, schema_name, include):
+                continue
+            key = (row_catalog, schema_name, table_name)
+            tables_by_key[key] = {
+                "catalog": row_catalog,
+                "schema": f"{row_catalog}.{schema_name}",
+                "source_schema": schema_name,
+                "name": table_name,
+                "type": str(row[3] if len(row) > 3 else "table").lower(),
+                "data_source_format": row[4] if len(row) > 4 else None,
+                "description": row[5] if len(row) > 5 else None,
+                "columns": [],
+            }
+
+        for row in column_rows:
+            row_catalog, schema_name, table_name = [str(v or "") for v in row[:3]]
+            table = tables_by_key.get((row_catalog, schema_name, table_name))
+            if table is None:
+                continue
+            table["columns"].append(
+                {
+                    "name": row[3],
+                    "ordinal_position": int(row[4] or 0),
+                    "data_type": row[5],
+                    "native_type": row[5],
+                    "nullable": str(row[6]).upper() == "YES",
+                    "description": row[7] if len(row) > 7 else None,
+                }
+            )
+
+        schemas: Dict[str, Dict[str, Any]] = {}
+        for table in tables_by_key.values():
+            schema_path = table["schema"]
+            schemas.setdefault(
+                schema_path,
+                {
+                    "name": schema_path,
+                    "catalog": table["catalog"],
+                    "source_schema": table["source_schema"],
+                    "tables": [],
+                },
+            )["tables"].append(table)
+
+        snapshot = {
+            "refreshed_at": _now_iso(),
+            "schemas": list(schemas.values()),
+            "table_count": len(tables_by_key),
+            "catalog": normalized_catalog,
+            "warehouse_id": _normalize_databricks_http_path(http_path)[1],
+        }
+        snapshot["schema_fingerprint"] = _schema_fingerprint(snapshot)
+        return snapshot
+
+    def sample_table(
+        self,
+        server_hostname: str,
+        http_path: str,
+        access_token: str,
+        catalog: str,
+        schema_name: str,
+        table_name: str,
+        columns: Optional[Sequence[str]] = None,
+        limit: int = 25,
+        statement_timeout_seconds: int = DEFAULT_STATEMENT_TIMEOUT_SECONDS,
+    ) -> Dict[str, Any]:
+        row_limit = max(1, min(int(limit or 25), 100))
+        resolved_catalog, resolved_schema = _split_databricks_schema_path(
+            catalog, schema_name
+        )
+        sql = self._select_sql(resolved_catalog, resolved_schema, table_name, columns)
+        response = self._execute_statement(
+            server_hostname=server_hostname,
+            http_path=http_path,
+            access_token=access_token,
+            sql=sql,
+            catalog=resolved_catalog,
+            row_limit=row_limit,
+            byte_limit=DEFAULT_MAX_EXPORT_BYTES,
+            disposition="INLINE",
+            result_format="JSON_ARRAY",
+            statement_timeout_seconds=statement_timeout_seconds,
+        )
+        headers, rows = self._inline_rows(response)
+        return {
+            "columns": headers,
+            "rows": rows,
+            "generated_sql": sql,
+            "result_byte_count": self._manifest_int(response, "total_byte_count"),
+            "truncated": self._manifest_bool(response, "truncated"),
+        }
+
+    def export_table_csv(
+        self,
+        server_hostname: str,
+        http_path: str,
+        access_token: str,
+        catalog: str,
+        schema_name: str,
+        table_name: str,
+        columns: Optional[Sequence[str]],
+        row_limit: int,
+        max_bytes: int,
+        max_result_bytes: int = DEFAULT_MAX_RESULT_BYTES,
+        statement_timeout_seconds: int = DEFAULT_STATEMENT_TIMEOUT_SECONDS,
+    ) -> Dict[str, Any]:
+        bounded_limit = _normalize_row_limit(row_limit)
+        resolved_catalog, resolved_schema = _split_databricks_schema_path(
+            catalog, schema_name
+        )
+        sql = self._select_sql(
+            resolved_catalog, resolved_schema, table_name, columns, bounded_limit
+        )
+        byte_limit = min(
+            _normalize_max_result_bytes(max_result_bytes),
+            max(1, int(max_bytes)),
+        )
+        response = self._execute_statement(
+            server_hostname=server_hostname,
+            http_path=http_path,
+            access_token=access_token,
+            sql=sql,
+            catalog=resolved_catalog,
+            row_limit=bounded_limit,
+            byte_limit=byte_limit,
+            disposition="EXTERNAL_LINKS",
+            result_format="CSV",
+            statement_timeout_seconds=statement_timeout_seconds,
+        )
+        csv_content = self._csv_content_from_statement(
+            response=response,
+            server_hostname=server_hostname,
+            access_token=access_token,
+            max_bytes=max_bytes,
+            statement_timeout_seconds=statement_timeout_seconds,
+        )
+        headers, parsed_row_count = _csv_stats_from_bytes(csv_content)
+        row_count = self._manifest_int(response, "total_row_count")
+        if row_count is None:
+            row_count = parsed_row_count
+        return {
+            "csv_content": csv_content,
+            "headers": headers,
+            "row_count": int(row_count or 0),
+            "column_count": len(headers),
+            "generated_sql": sql,
+            "row_limit": bounded_limit,
+            "result_byte_count": self._manifest_int(response, "total_byte_count"),
+            "max_result_bytes": max_result_bytes,
+            "byte_limit": byte_limit,
+            "truncated": self._manifest_bool(response, "truncated"),
+            "data_format": "csv",
+        }
+
+    def _select_sql(
+        self,
+        catalog: str,
+        schema_name: str,
+        table_name: str,
+        columns: Optional[Sequence[str]],
+        row_limit: Optional[int] = None,
+    ) -> str:
+        selected = [str(col).strip() for col in (columns or []) if str(col).strip()]
+        column_clause = (
+            ", ".join(_quote_databricks_identifier(col) for col in selected)
+            if selected
+            else "*"
+        )
+        sql = (
+            f"SELECT {column_clause} FROM "
+            f"{_quote_databricks_table(catalog, schema_name, table_name)}"
+        )
+        if row_limit is not None:
+            sql = f"{sql} LIMIT {_normalize_row_limit(row_limit)}"
+        return sql
+
+    def _schema_allowed(
+        self, catalog: str, schema_name: str, include_schemas: Sequence[str]
+    ) -> bool:
+        if not include_schemas:
+            return True
+        return (
+            schema_name in include_schemas
+            or f"{catalog}.{schema_name}" in include_schemas
+        )
+
+    def _inline_rows(
+        self, response: Dict[str, Any]
+    ) -> Tuple[List[str], List[List[Any]]]:
+        manifest = response.get("manifest") or {}
+        schema = manifest.get("schema") or {}
+        columns = schema.get("columns") or []
+        headers = [str(col.get("name") or "") for col in columns if col.get("name")]
+        data_array = (response.get("result") or {}).get("data_array") or []
+        return headers, [list(row) for row in data_array]
+
+    def _manifest_int(self, response: Dict[str, Any], key: str) -> Optional[int]:
+        value = (response.get("manifest") or {}).get(key)
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _manifest_bool(self, response: Dict[str, Any], key: str) -> bool:
+        return bool((response.get("manifest") or {}).get(key))
+
+    def _csv_content_from_statement(
+        self,
+        response: Dict[str, Any],
+        server_hostname: str,
+        access_token: str,
+        max_bytes: int,
+        statement_timeout_seconds: int,
+    ) -> bytes:
+        result = response.get("result") or {}
+        _, inline_rows = self._inline_rows(response)
+        headers = [
+            str(col.get("name") or "")
+            for col in ((response.get("manifest") or {}).get("schema") or {}).get(
+                "columns", []
+            )
+            if col.get("name")
+        ]
+        if inline_rows:
+            return self._rows_to_csv(headers, inline_rows, max_bytes)
+
+        chunks: List[bytes] = []
+        current_result = result
+        statement_id = response.get("statement_id")
+        base_url = self._base_url(server_hostname)
+        while current_result:
+            for link in current_result.get("external_links") or []:
+                external_link = link.get("external_link")
+                if external_link:
+                    chunks.append(
+                        self._download_external_link(
+                            external_link,
+                            timeout_seconds=statement_timeout_seconds,
+                        )
+                    )
+                    if sum(len(chunk) for chunk in chunks) > max_bytes:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Warehouse extract exceeded the configured byte cap. Select fewer columns or add filters.",
+                        )
+            next_link = current_result.get("next_chunk_internal_link")
+            if not next_link:
+                break
+            if not statement_id:
+                raise RuntimeError("Databricks result chunk was missing statement_id")
+            chunk_payload = self._fetch_result_chunk(
+                base_url=base_url,
+                access_token=access_token,
+                internal_link=next_link,
+                timeout_seconds=statement_timeout_seconds,
+            )
+            current_result = chunk_payload.get("result") or chunk_payload
+
+        body = b"\n".join(chunk.rstrip(b"\r\n") for chunk in chunks if chunk)
+        return self._ensure_csv_header(body, headers, max_bytes)
+
+    def _fetch_result_chunk(
+        self,
+        base_url: str,
+        access_token: str,
+        internal_link: str,
+        timeout_seconds: int,
+    ) -> Dict[str, Any]:
+        try:
+            import httpx
+        except ImportError as exc:
+            raise RuntimeError(
+                "httpx is not installed. Add httpx to backend dependencies."
+            ) from exc
+        url = f"{base_url}{internal_link if internal_link.startswith('/') else '/' + internal_link}"
+        response = httpx.get(
+            url, headers=self._headers(access_token), timeout=timeout_seconds
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _download_external_link(
+        self, external_link: str, timeout_seconds: int
+    ) -> bytes:
+        try:
+            import httpx
+        except ImportError as exc:
+            raise RuntimeError(
+                "httpx is not installed. Add httpx to backend dependencies."
+            ) from exc
+        response = httpx.get(external_link, timeout=timeout_seconds)
+        response.raise_for_status()
+        return response.content
+
+    def _rows_to_csv(
+        self, headers: Sequence[str], rows: Sequence[Sequence[Any]], max_bytes: int
+    ) -> bytes:
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(list(headers))
+        writer.writerows(rows)
+        data = output.getvalue().encode("utf-8")
+        if len(data) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail="Warehouse extract exceeded the configured byte cap. Select fewer columns or add filters.",
+            )
+        return data
+
+    def _ensure_csv_header(
+        self, body: bytes, headers: Sequence[str], max_bytes: int
+    ) -> bytes:
+        if not body:
+            return self._rows_to_csv(headers, [], max_bytes)
+        expected = ",".join(headers)
+        first_line = body.decode("utf-8-sig", errors="replace").splitlines()[0]
+        data = (
+            body if first_line == expected else f"{expected}\n".encode("utf-8") + body
+        )
+        if len(data) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail="Warehouse extract exceeded the configured byte cap. Select fewer columns or add filters.",
+            )
+        return data
+
+
 class SnowflakeWarehouseAdapter:
     def _connector_module(self):
         try:
@@ -1070,6 +1656,7 @@ class WarehouseService:
         self.postgres_adapter = PostgresWarehouseAdapter()
         self.bigquery_adapter = BigQueryWarehouseAdapter()
         self.snowflake_adapter = SnowflakeWarehouseAdapter()
+        self.databricks_adapter = DatabricksWarehouseAdapter()
 
     def _adapter_for(self, connector_key: str) -> Any:
         if connector_key == "postgres":
@@ -1078,6 +1665,8 @@ class WarehouseService:
             return self.bigquery_adapter
         if connector_key == "snowflake":
             return self.snowflake_adapter
+        if connector_key == "databricks":
+            return self.databricks_adapter
         if connector_key not in SUPPORTED_WAREHOUSE_TYPES:
             raise HTTPException(
                 status_code=400,
@@ -1114,6 +1703,12 @@ class WarehouseService:
             "service_account_email": record.get("service_account_email"),
             "max_billing_bytes": record.get("max_billing_bytes"),
             "max_assigned_bytes": record.get("max_assigned_bytes"),
+            "server_hostname": record.get("server_hostname"),
+            "http_path": record.get("http_path"),
+            "catalog": record.get("catalog"),
+            "warehouse_id": record.get("warehouse_id"),
+            "max_result_bytes": record.get("max_result_bytes"),
+            "statement_timeout_seconds": record.get("statement_timeout_seconds"),
             "source_timezone": record.get("source_timezone", "UTC"),
             "schema_snapshot": record.get("schema_snapshot") or {},
             "created_at": record.get("created_at"),
@@ -1142,6 +1737,12 @@ class WarehouseService:
         role: str = "",
         included_schemas: Optional[Sequence[str]] = None,
         max_assigned_bytes: Any = None,
+        server_hostname: str = "",
+        http_path: str = "",
+        access_token: str = "",
+        catalog: str = "",
+        max_result_bytes: Any = None,
+        statement_timeout_seconds: Any = None,
     ) -> Dict[str, Any]:
         if connector_key not in SUPPORTED_WAREHOUSE_TYPES:
             raise HTTPException(
@@ -1181,6 +1782,23 @@ class WarehouseService:
                 ),
                 source_timezone=source_timezone,
                 max_assigned_bytes=max_assigned_bytes,
+            )
+        if connector_key == "databricks":
+            return self._create_databricks_connection(
+                user_id=user_id,
+                server_hostname=server_hostname,
+                http_path=http_path,
+                access_token=access_token,
+                catalog=catalog,
+                display_name=display_name,
+                included_schemas=(
+                    included_schemas
+                    if included_schemas is not None
+                    else include_schemas
+                ),
+                source_timezone=source_timezone,
+                max_result_bytes=max_result_bytes,
+                statement_timeout_seconds=statement_timeout_seconds,
             )
 
         if not str(connection_uri or "").strip():
@@ -1344,6 +1962,67 @@ class WarehouseService:
         )
         return self._connection_summary(record)
 
+    def _create_databricks_connection(
+        self,
+        user_id: str,
+        server_hostname: str,
+        http_path: str,
+        access_token: str,
+        catalog: str,
+        display_name: str = "",
+        included_schemas: Optional[Sequence[str]] = None,
+        source_timezone: str = "UTC",
+        max_result_bytes: Any = None,
+        statement_timeout_seconds: Any = None,
+    ) -> Dict[str, Any]:
+        normalized_host = _normalize_databricks_server_hostname(server_hostname)
+        normalized_http_path, warehouse_id = _normalize_databricks_http_path(http_path)
+        normalized_access_token = _require_databricks_field(
+            access_token, "access_token"
+        )
+        normalized_catalog = _require_databricks_field(catalog, "catalog")
+        normalized_schemas = [
+            str(s).strip() for s in (included_schemas or []) if str(s).strip()
+        ]
+        normalized_max_result_bytes = _normalize_max_result_bytes(max_result_bytes)
+        normalized_timeout = _normalize_statement_timeout_seconds(
+            statement_timeout_seconds
+        )
+        test_result = self.databricks_adapter.test_connection(
+            server_hostname=normalized_host,
+            http_path=normalized_http_path,
+            access_token=normalized_access_token,
+            catalog=normalized_catalog,
+            statement_timeout_seconds=normalized_timeout,
+        )
+        connection_id = str(uuid.uuid4())
+        metadata = {
+            "connection_id": connection_id,
+            "connector_key": "databricks",
+            "database_type": "databricks",
+            "display_name": display_name.strip() or normalized_catalog,
+            "encrypted_access_token": _encrypt_secret(normalized_access_token),
+            "server_hostname": normalized_host,
+            "host": normalized_host,
+            "http_path": normalized_http_path,
+            "warehouse_id": warehouse_id,
+            "catalog": normalized_catalog,
+            "database": normalized_catalog,
+            "include_schemas": normalized_schemas,
+            "included_schemas": normalized_schemas,
+            "source_timezone": source_timezone.strip() or "UTC",
+            "max_result_bytes": normalized_max_result_bytes,
+            "statement_timeout_seconds": normalized_timeout,
+            "test_result": test_result,
+            "schema_snapshot": {},
+        }
+        record = connected_accounts_repo.upsert_provider_metadata(
+            user_id=user_id,
+            provider=_connection_provider(connection_id),
+            metadata=metadata,
+        )
+        return self._connection_summary(record)
+
     def list_connections(
         self, user_id: str, connector_key: Optional[str] = None
     ) -> List[Dict[str, Any]]:
@@ -1399,6 +2078,20 @@ class WarehouseService:
                 include_schemas=record.get("included_schemas")
                 or record.get("include_schemas")
                 or [],
+            )
+        elif connector_key == "databricks":
+            access_token = self._databricks_access_token(record)
+            snapshot = self.databricks_adapter.refresh_schema(
+                server_hostname=str(record.get("server_hostname") or ""),
+                http_path=str(record.get("http_path") or ""),
+                access_token=access_token,
+                catalog=str(record.get("catalog") or record.get("database") or ""),
+                include_schemas=record.get("included_schemas")
+                or record.get("include_schemas")
+                or [],
+                statement_timeout_seconds=_normalize_statement_timeout_seconds(
+                    record.get("statement_timeout_seconds")
+                ),
             )
         else:
             connection_uri = _decrypt_secret(
@@ -1469,6 +2162,21 @@ class WarehouseService:
                 columns=selected_columns,
                 limit=limit,
                 role=str(record.get("role") or ""),
+            )
+        if connector_key == "databricks":
+            access_token = self._databricks_access_token(record)
+            return self.databricks_adapter.sample_table(
+                server_hostname=str(record.get("server_hostname") or ""),
+                http_path=str(record.get("http_path") or ""),
+                access_token=access_token,
+                catalog=str(record.get("catalog") or record.get("database") or ""),
+                schema_name=schema_name,
+                table_name=table_name,
+                columns=selected_columns,
+                limit=limit,
+                statement_timeout_seconds=_normalize_statement_timeout_seconds(
+                    record.get("statement_timeout_seconds")
+                ),
             )
         connection_uri = _decrypt_secret(
             str(record.get("encrypted_connection_uri", ""))
@@ -1550,6 +2258,25 @@ class WarehouseService:
                     record.get("max_assigned_bytes")
                 ),
             )
+        elif connector_key == "databricks":
+            access_token = self._databricks_access_token(record)
+            export = self.databricks_adapter.export_table_csv(
+                server_hostname=str(record.get("server_hostname") or ""),
+                http_path=str(record.get("http_path") or ""),
+                access_token=access_token,
+                catalog=str(record.get("catalog") or record.get("database") or ""),
+                schema_name=schema_name,
+                table_name=table_name,
+                columns=selected_columns,
+                row_limit=row_limit,
+                max_bytes=max_bytes,
+                max_result_bytes=_normalize_max_result_bytes(
+                    record.get("max_result_bytes")
+                ),
+                statement_timeout_seconds=_normalize_statement_timeout_seconds(
+                    record.get("statement_timeout_seconds")
+                ),
+            )
         else:
             connection_uri = _decrypt_secret(
                 str(record.get("encrypted_connection_uri", ""))
@@ -1620,6 +2347,19 @@ class WarehouseService:
         table_name = str(
             connector_config.get("table") or connector_config.get("table_name") or ""
         ).strip()
+        connector_key = str(connector_config.get("connector_key") or "postgres")
+        catalog = str(
+            connector_config.get("catalog")
+            or connector_config.get("catalog_name")
+            or ""
+        ).strip()
+        if (
+            connector_key == "databricks"
+            and catalog
+            and schema_name
+            and "." not in schema_name
+        ):
+            schema_name = f"{catalog}.{schema_name}"
         if not connection_id or not schema_name or not table_name:
             entity_id = str(connector_config.get("entity_id") or "").strip()
             connection_id, schema_name, table_name = self.parse_entity_id(entity_id)
@@ -1643,12 +2383,15 @@ class WarehouseService:
         )
         return private_key_pem, private_key_passphrase
 
+    def _databricks_access_token(self, record: Dict[str, Any]) -> str:
+        return _decrypt_secret(str(record.get("encrypted_access_token", "")))
+
     def parse_entity_id(self, entity_id: str) -> Tuple[str, str, str]:
         raw = str(entity_id or "").strip()
         if ":" not in raw or "." not in raw.split(":", 1)[1]:
             raise HTTPException(status_code=400, detail="Invalid warehouse entity id")
         connection_id, table_path = raw.split(":", 1)
-        schema_name, table_name = table_path.split(".", 1)
+        schema_name, table_name = table_path.rsplit(".", 1)
         if not connection_id or not schema_name or not table_name:
             raise HTTPException(status_code=400, detail="Invalid warehouse entity id")
         return connection_id, schema_name, table_name
@@ -1681,20 +2424,36 @@ class WarehouseService:
         default_names = {
             "bigquery": "BigQuery",
             "snowflake": "Snowflake",
+            "databricks": "Databricks",
         }
         default_name = default_names.get(connector_key, "PostgreSQL")
         display_name = str(
             record.get("display_name") or record.get("database") or default_name
         )
+        catalog_name = None
+        source_schema_name = schema_name
+        entity_schema_name = schema_name
+        if connector_key == "databricks":
+            catalog_name, source_schema_name = _split_databricks_schema_path(
+                str(record.get("catalog") or record.get("database") or ""),
+                schema_name,
+            )
+            entity_schema_name = (
+                schema_name
+                if "." in schema_name
+                else f"{catalog_name}.{source_schema_name}"
+            )
         return {
-            "id": f"{connection_id}:{schema_name}.{table_name}",
-            "name": f"{schema_name}.{table_name}",
+            "id": f"{connection_id}:{entity_schema_name}.{table_name}",
+            "name": f"{entity_schema_name}.{table_name}",
             "type": "table",
             "account_name": display_name,
             "connection_id": connection_id,
             "connector_key": connector_key,
             "database_type": record.get("database_type", connector_key),
-            "schema_name": schema_name,
+            "catalog_name": catalog_name,
+            "schema_name": entity_schema_name,
+            "source_schema_name": source_schema_name,
             "table_name": table_name,
         }
 
@@ -1728,6 +2487,13 @@ class WarehouseService:
 
         table_columns = table.get("columns", [])
         connector_key = str(record.get("connector_key") or "postgres")
+        databricks_catalog = None
+        databricks_schema = schema_name
+        if connector_key == "databricks":
+            databricks_catalog, databricks_schema = _split_databricks_schema_path(
+                str(record.get("catalog") or record.get("database") or ""),
+                schema_name,
+            )
         manifest = {
             "connection_id": record.get("connection_id"),
             "connector_key": connector_key,
@@ -1736,10 +2502,17 @@ class WarehouseService:
             "location": record.get("location"),
             "account": record.get("account"),
             "warehouse": record.get("warehouse"),
+            "server_hostname": record.get("server_hostname"),
+            "http_path": record.get("http_path"),
+            "warehouse_id": record.get("warehouse_id"),
             "database": record.get("database"),
+            "catalog": databricks_catalog or record.get("catalog"),
             "role": record.get("role"),
             "dataset": schema_name if connector_key == "bigquery" else None,
-            "schema": schema_name,
+            "schema": (
+                databricks_schema if connector_key == "databricks" else schema_name
+            ),
+            "schema_path": schema_name,
             "table": table_name,
             "selected_columns": list(selected_columns),
             "generated_sql": export["generated_sql"],
@@ -1763,7 +2536,11 @@ class WarehouseService:
             "explain_assigned_bytes": export.get("explain_assigned_bytes"),
             "max_assigned_bytes": export.get("max_assigned_bytes")
             or record.get("max_assigned_bytes"),
-            "parquet_ready": connector_key in {"bigquery", "snowflake"},
+            "result_byte_count": export.get("result_byte_count"),
+            "max_result_bytes": export.get("max_result_bytes")
+            or record.get("max_result_bytes"),
+            "truncated": bool(export.get("truncated", False)),
+            "parquet_ready": connector_key in {"bigquery", "snowflake", "databricks"},
         }
         manifest_key = f"{s3_key}.manifest.json"
         upload_bytes(
@@ -1819,6 +2596,11 @@ class WarehouseService:
                     "explain_assigned_bytes"
                 ),
                 "warehouse_max_assigned_bytes": manifest.get("max_assigned_bytes"),
+                "warehouse_catalog": manifest.get("catalog"),
+                "warehouse_schema_path": manifest.get("schema_path"),
+                "warehouse_result_byte_count": manifest.get("result_byte_count"),
+                "warehouse_max_result_bytes": manifest.get("max_result_bytes"),
+                "warehouse_truncated": manifest.get("truncated"),
                 "warehouse_manifest": manifest,
             },
         )

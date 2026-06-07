@@ -2,6 +2,7 @@
 Internal endpoints called by EventBridge Scheduler — NOT accessible by end users.
 Protected by X-Internal-Sync-Secret header instead of Clerk JWT.
 """
+
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -39,7 +40,9 @@ def _resolve_dates(date_range_preset: str, provider: str):
     return start.isoformat(), end.isoformat()
 
 
-def _require_internal_secret(x_internal_sync_secret: Optional[str] = Header(None)) -> None:
+def _require_internal_secret(
+    x_internal_sync_secret: Optional[str] = Header(None),
+) -> None:
     if x_internal_sync_secret != config.scheduler.INTERNAL_SYNC_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -74,9 +77,13 @@ async def execute_schedule(schedule_id: str) -> dict:
     project_id = schedule.get("project_id", "")
     date_range_preset = schedule.get("date_range_preset", "last_30d")
 
-    from app.services.integration_service import TokenExpiredError  # noqa: F811 lazy import
+    from app.services.integration_service import (
+        TokenExpiredError,
+    )  # noqa: F811 lazy import
 
-    run = runs_repo.create_run(schedule_id=schedule_id, user_id=user_id, provider=provider)
+    run = runs_repo.create_run(
+        schedule_id=schedule_id, user_id=user_id, provider=provider
+    )
     run_id = run["run_id"]
     start_date, end_date = _resolve_dates(date_range_preset, provider)
     t0 = time.monotonic()
@@ -149,7 +156,10 @@ async def execute_schedule(schedule_id: str) -> dict:
 
     logger.info(
         "Scheduled sync %s completed: status=%s rows=%s duration=%dms",
-        schedule_id, status, rows, duration_ms,
+        schedule_id,
+        status,
+        rows,
+        duration_ms,
     )
 
     # Fire auto-refresh (re-analyze existing conversation with new asset)
@@ -158,6 +168,7 @@ async def execute_schedule(schedule_id: str) -> dict:
         if auto_refresh_conv_id:
             import asyncio as _asyncio
             from app.services.chat_platform_service import trigger_auto_refresh
+
             _asyncio.ensure_future(
                 trigger_auto_refresh(
                     user_id=user_id,
@@ -178,6 +189,7 @@ async def execute_schedule(schedule_id: str) -> dict:
             if action.get("type") == "slack" and action.get("channel_id"):
                 import asyncio as _asyncio
                 from app.services.chat_platform_service import post_sync_to_slack
+
                 _asyncio.ensure_future(
                     post_sync_to_slack(
                         user_id=user_id,
@@ -190,7 +202,12 @@ async def execute_schedule(schedule_id: str) -> dict:
                     )
                 )
 
-    return {"status": status, "run_id": run_id, "rows": rows, "duration_ms": duration_ms}
+    return {
+        "status": status,
+        "run_id": run_id,
+        "rows": rows,
+        "duration_ms": duration_ms,
+    }
 
 
 async def _run_sync(
@@ -204,7 +221,10 @@ async def _run_sync(
 ) -> dict:
     """Dispatch to the appropriate IntegrationService method based on provider."""
     # Lazy import to avoid loading google/stripe SDKs at module import time
-    from app.services.integration_service import TokenExpiredError, integration_service  # noqa: F401
+    from app.services.integration_service import (
+        TokenExpiredError,
+        integration_service,
+    )  # noqa: F401
 
     if provider == "ga4":
         property_id = connector_config.get("property_id", "")
@@ -278,6 +298,37 @@ async def _run_sync(
             end_date=None,
         )
 
+    elif provider == "hubspot":
+        integration_service.assert_hubspot_token_valid(user_id)
+        return await integration_service.fetch_hubspot_data(
+            user_id=user_id,
+            report_type=connector_config.get("report_type", "sales_pipeline"),
+            project_id=project_id,
+            date_preset=date_range_preset,
+            start_date=start_date,
+            end_date=end_date,
+            pipeline_id=connector_config.get("pipeline_id", "all"),
+            owner_id=connector_config.get("owner_id", "all"),
+            row_limit=int(connector_config.get("row_limit") or 5000),
+            include_associations=bool(
+                connector_config.get("include_associations", True)
+            ),
+        )
+
+    elif provider == "salesforce":
+        integration_service.assert_salesforce_token_valid(user_id)
+        return await integration_service.fetch_salesforce_data(
+            user_id=user_id,
+            report_type=connector_config.get("report_type", "sales_pipeline"),
+            project_id=project_id,
+            date_preset=date_range_preset,
+            start_date=start_date,
+            end_date=end_date,
+            object_name=connector_config.get("object_name", "all"),
+            owner_id=connector_config.get("owner_id", "all"),
+            row_limit=int(connector_config.get("row_limit") or 5000),
+        )
+
     elif provider == "warehouse":
         from app.services.warehouse_service import warehouse_service
 
@@ -297,6 +348,8 @@ _PROVIDER_LABELS: dict = {
     "tiktok": "TikTok Ads",
     "appsflyer": "AppsFlyer",
     "stripe": "Stripe",
+    "hubspot": "HubSpot",
+    "salesforce": "Salesforce",
     "warehouse": "Warehouse",
 }
 
@@ -312,7 +365,9 @@ def _write_notification(
 ) -> None:
     """Create a notification record after a sync run completes."""
     provider = schedule.get("provider", "")
-    account_name = schedule.get("account_name") or _PROVIDER_LABELS.get(provider, provider)
+    account_name = schedule.get("account_name") or _PROVIDER_LABELS.get(
+        provider, provider
+    )
     project_id = schedule.get("project_id")
     schedule_id = schedule.get("schedule_id")
     label = _PROVIDER_LABELS.get(provider, provider)

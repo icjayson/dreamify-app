@@ -1654,6 +1654,8 @@ _PROVIDER_LABELS_SLACK: Dict[str, str] = {
     "tiktok": "TikTok Ads",
     "appsflyer": "AppsFlyer",
     "stripe": "Stripe",
+    "hubspot": "HubSpot",
+    "salesforce": "Salesforce",
 }
 
 SYNC_ANALYSIS_PROMPT = (
@@ -3296,7 +3298,9 @@ def _download_and_attach_whatsapp_files(
 # ── WhatsApp clarifications ───────────────────────────────────────────────────
 
 
-def build_whatsapp_clarification_message(pending: Dict[str, Any], project_id: str) -> str:
+def build_whatsapp_clarification_message(
+    pending: Dict[str, Any], project_id: str
+) -> str:
     lines = ["📊 *Dreamify*", "", "I need your choice before I continue the analysis."]
     if pending.get("last_error"):
         lines.extend(["", f"⚠️ {pending['last_error']}"])
@@ -3337,9 +3341,7 @@ def _send_whatsapp_clarification(
         return  # labels too long to round-trip through a 20-char button title
     buttons = [(str(o.get("id")), str(o.get("label"))) for o in options]
     try:
-        whatsapp_service.send_reply_buttons(
-            wa_id, "Tap a choice below:", buttons
-        )
+        whatsapp_service.send_reply_buttons(wa_id, "Tap a choice below:", buttons)
     except Exception as exc:
         logger.debug("WhatsApp reply buttons failed (non-fatal): %s", exc)
 
@@ -3364,7 +3366,10 @@ def _deliver_whatsapp_answer(
 
     if dashboard_url:
         res = whatsapp_service.send_cta_url(
-            wa_id, "📈 Open your live dashboard in Dreamify", "View Dashboard", dashboard_url
+            wa_id,
+            "📈 Open your live dashboard in Dreamify",
+            "View Dashboard",
+            dashboard_url,
         )
         if not res or res.get("error"):
             whatsapp_service.send_message(wa_id, f"📈 View dashboard: {dashboard_url}")
@@ -3382,7 +3387,9 @@ def _deliver_whatsapp_answer(
                     filename=f"{safe_name or 'chart'}.png",
                 )
             except Exception as exc:
-                logger.warning("Failed to send WhatsApp chart '%s': %s", chart_title, exc)
+                logger.warning(
+                    "Failed to send WhatsApp chart '%s': %s", chart_title, exc
+                )
 
 
 def _post_whatsapp_result(

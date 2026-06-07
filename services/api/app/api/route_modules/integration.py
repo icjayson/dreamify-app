@@ -11,7 +11,9 @@ from app.dependencies.auth import require_user
 from app.services.integration_service import integration_service
 from app.api.route_modules.user import AssetResponse, _map_asset, _ensure_project
 
-router = APIRouter(tags=["integration", "google", "meta", "tiktok", "appsflyer", "stripe"])
+router = APIRouter(
+    tags=["integration", "google", "meta", "tiktok", "appsflyer", "stripe"]
+)
 
 
 class GoogleAnalyticsSyncRequest(BaseModel):
@@ -79,6 +81,10 @@ class ConnectorSelectedEntity(BaseModel):
     database_type: Optional[str] = None
     schema_name: Optional[str] = None
     table_name: Optional[str] = None
+    report_type: Optional[str] = None
+    pipeline_id: Optional[str] = None
+    object_name: Optional[str] = None
+    owner_id: Optional[str] = None
 
 
 class ConnectorOverviewItem(BaseModel):
@@ -249,7 +255,9 @@ async def get_google_token(user_id: str = Depends(require_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/integration/connectors/overview", response_model=ConnectorsOverviewResponse)
+@router.get(
+    "/integration/connectors/overview", response_model=ConnectorsOverviewResponse
+)
 async def get_connectors_overview(user_id: str = Depends(require_user)):
     """Get unified connector statuses with selected entities."""
     try:
@@ -433,7 +441,9 @@ async def delete_connector_entity(
             connector_key=connector_key,
             entity_id=entity_id,
         )
-        return ConnectorEntityDeleteResponse(success=True, message="Connector entity deleted.")
+        return ConnectorEntityDeleteResponse(
+            success=True, message="Connector entity deleted."
+        )
     except Exception as e:
         logger.error(f"Failed to delete connector entity: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1207,7 +1217,8 @@ async def stripe_sync(
     try:
         if request.report_type not in ("charges", "subscriptions", "customers"):
             return StripeSyncResponse(
-                success=False, error="Invalid report_type. Must be charges, subscriptions, or customers."
+                success=False,
+                error="Invalid report_type. Must be charges, subscriptions, or customers.",
             )
         project = _ensure_project(user_id, request.project_id)
         result = await integration_service.fetch_stripe_data(
@@ -1247,7 +1258,443 @@ async def stripe_disconnect(user_id: str = Depends(require_user)):
         logger.error(f"Stripe disconnect error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ── HubSpot CRM & Sales ───────────────────────────────────────────────────────
+
+_HUBSPOT_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "hubspot_oauth"
+).replace("META_OAUTH_SUCCESS", "HUBSPOT_OAUTH_SUCCESS")
+
+_HUBSPOT_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "hubspot_oauth"
+).replace("META_OAUTH_ERROR", "HUBSPOT_OAUTH_ERROR")
+
+
+class HubSpotPipelineStage(BaseModel):
+    id: str
+    label: str
+    probability: Optional[Any] = None
+
+
+class HubSpotPipeline(BaseModel):
+    id: str
+    label: str
+    stages: List[HubSpotPipelineStage] = Field(default_factory=list)
+
+
+class HubSpotOwner(BaseModel):
+    id: str
+    name: str
+    email: Optional[str] = None
+
+
+class HubSpotPipelinesResponse(BaseModel):
+    success: bool
+    pipelines: List[HubSpotPipeline] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class HubSpotOwnersResponse(BaseModel):
+    success: bool
+    owners: List[HubSpotOwner] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class HubSpotSyncRequest(BaseModel):
+    report_type: str = "sales_pipeline"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    pipeline_id: str = "all"
+    owner_id: str = "all"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_associations: bool = True
+
+
+class HubSpotSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/hubspot/oauth/start")
+async def hubspot_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+):
+    """Redirect the popup to the HubSpot OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _HUBSPOT_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _HUBSPOT_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+    try:
+        url = integration_service.get_hubspot_oauth_url(user_id)
+        return RedirectResponse(url=url)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/hubspot/oauth/callback", response_class=HTMLResponse)
+async def hubspot_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. HubSpot redirects here after authorization."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_HUBSPOT_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await integration_service.handle_hubspot_oauth_callback(code=code, state=state)
+        return HTMLResponse(_HUBSPOT_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"HubSpot OAuth callback error: {e}")
+        return HTMLResponse(_HUBSPOT_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/hubspot/status")
+async def hubspot_status(user_id: str = Depends(require_user)):
+    """Return whether the authenticated user has a connected HubSpot portal."""
+    try:
+        return await integration_service.get_hubspot_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"HubSpot status error: {e}")
+        return {"connected": False}
+
+
+@router.delete("/integration/hubspot/disconnect")
+async def hubspot_disconnect(user_id: str = Depends(require_user)):
+    """Remove the stored HubSpot connection for the authenticated user."""
+    try:
+        await integration_service.disconnect_hubspot(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"HubSpot disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/hubspot/pipelines", response_model=HubSpotPipelinesResponse)
+async def hubspot_pipelines(user_id: str = Depends(require_user)):
+    try:
+        pipelines = await integration_service.fetch_hubspot_pipelines(user_id)
+        return HubSpotPipelinesResponse(success=True, pipelines=pipelines)
+    except HTTPException as e:
+        return HubSpotPipelinesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"HubSpot pipelines error: {e}")
+        return HubSpotPipelinesResponse(success=False, error=str(e))
+
+
+@router.get("/integration/hubspot/owners", response_model=HubSpotOwnersResponse)
+async def hubspot_owners(user_id: str = Depends(require_user)):
+    try:
+        owners = await integration_service.fetch_hubspot_owners(user_id)
+        return HubSpotOwnersResponse(success=True, owners=owners)
+    except HTTPException as e:
+        return HubSpotOwnersResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"HubSpot owners error: {e}")
+        return HubSpotOwnersResponse(success=False, error=str(e))
+
+
+@router.post("/integration/hubspot/sync", response_model=HubSpotSyncResponse)
+async def hubspot_sync(
+    request: HubSpotSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        if request.report_type not in (
+            "sales_pipeline",
+            "contacts",
+            "companies",
+            "activities",
+        ):
+            return HubSpotSyncResponse(
+                success=False,
+                error="Invalid report_type. Must be sales_pipeline, contacts, companies, or activities.",
+            )
+        project = _ensure_project(user_id, request.project_id)
+        result = await integration_service.fetch_hubspot_data(
+            user_id=user_id,
+            report_type=request.report_type,
+            project_id=project["project_id"],
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            pipeline_id=request.pipeline_id or "all",
+            owner_id=request.owner_id or "all",
+            row_limit=request.row_limit,
+            include_associations=request.include_associations,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return HubSpotSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+        )
+    except HTTPException as e:
+        return HubSpotSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"HubSpot sync error: {e}")
+        return HubSpotSyncResponse(success=False, error=str(e))
+
+
+# ── Salesforce CRM & Sales Cloud ──────────────────────────────────────────────
+
+_SALESFORCE_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "salesforce_oauth"
+).replace("META_OAUTH_SUCCESS", "SALESFORCE_OAUTH_SUCCESS")
+
+_SALESFORCE_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "salesforce_oauth"
+).replace("META_OAUTH_ERROR", "SALESFORCE_OAUTH_ERROR")
+
+
+class SalesforceObject(BaseModel):
+    name: str
+    label: str
+    label_plural: Optional[str] = None
+    queryable: bool = True
+    custom: bool = False
+
+
+class SalesforceField(BaseModel):
+    name: str
+    label: str
+    type: str
+    filterable: bool = False
+    sortable: bool = False
+    nillable: bool = False
+    custom: bool = False
+
+
+class SalesforceOwner(BaseModel):
+    id: str
+    name: str
+    email: Optional[str] = None
+
+
+class SalesforceObjectsResponse(BaseModel):
+    success: bool
+    objects: List[SalesforceObject] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class SalesforceFieldsResponse(BaseModel):
+    success: bool
+    fields: List[SalesforceField] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class SalesforceOwnersResponse(BaseModel):
+    success: bool
+    owners: List[SalesforceOwner] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class SalesforceSyncRequest(BaseModel):
+    report_type: str = "sales_pipeline"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    object_name: str = "all"
+    owner_id: str = "all"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+
+
+class SalesforceSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/salesforce/oauth/start")
+async def salesforce_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+):
+    """Redirect the popup to the Salesforce OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _SALESFORCE_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _SALESFORCE_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+    try:
+        url = integration_service.get_salesforce_oauth_url(user_id)
+        return RedirectResponse(url=url)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/salesforce/oauth/callback", response_class=HTMLResponse)
+async def salesforce_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Salesforce redirects here after authorization."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_SALESFORCE_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await integration_service.handle_salesforce_oauth_callback(
+            code=code, state=state
+        )
+        return HTMLResponse(_SALESFORCE_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Salesforce OAuth callback error: {e}")
+        return HTMLResponse(_SALESFORCE_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/salesforce/status")
+async def salesforce_status(user_id: str = Depends(require_user)):
+    """Return whether the authenticated user has a connected Salesforce org."""
+    try:
+        return await integration_service.get_salesforce_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Salesforce status error: {e}")
+        return {"connected": False}
+
+
+@router.delete("/integration/salesforce/disconnect")
+async def salesforce_disconnect(user_id: str = Depends(require_user)):
+    """Remove the stored Salesforce connection for the authenticated user."""
+    try:
+        await integration_service.disconnect_salesforce(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Salesforce disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/salesforce/objects", response_model=SalesforceObjectsResponse)
+async def salesforce_objects(user_id: str = Depends(require_user)):
+    try:
+        objects = await integration_service.fetch_salesforce_objects(user_id)
+        return SalesforceObjectsResponse(success=True, objects=objects)
+    except HTTPException as e:
+        return SalesforceObjectsResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Salesforce objects error: {e}")
+        return SalesforceObjectsResponse(success=False, error=str(e))
+
+
+@router.get("/integration/salesforce/fields", response_model=SalesforceFieldsResponse)
+async def salesforce_fields(
+    object_name: str = Query(...),
+    user_id: str = Depends(require_user),
+):
+    try:
+        fields = await integration_service.fetch_salesforce_fields(user_id, object_name)
+        return SalesforceFieldsResponse(success=True, fields=fields)
+    except HTTPException as e:
+        return SalesforceFieldsResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Salesforce fields error: {e}")
+        return SalesforceFieldsResponse(success=False, error=str(e))
+
+
+@router.get("/integration/salesforce/owners", response_model=SalesforceOwnersResponse)
+async def salesforce_owners(user_id: str = Depends(require_user)):
+    try:
+        owners = await integration_service.fetch_salesforce_owners(user_id)
+        return SalesforceOwnersResponse(success=True, owners=owners)
+    except HTTPException as e:
+        return SalesforceOwnersResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Salesforce owners error: {e}")
+        return SalesforceOwnersResponse(success=False, error=str(e))
+
+
+@router.post("/integration/salesforce/sync", response_model=SalesforceSyncResponse)
+async def salesforce_sync(
+    request: SalesforceSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        if request.report_type not in (
+            "sales_pipeline",
+            "leads",
+            "accounts_contacts",
+            "activities",
+            "campaigns",
+        ):
+            return SalesforceSyncResponse(
+                success=False,
+                error="Invalid report_type. Must be sales_pipeline, leads, accounts_contacts, activities, or campaigns.",
+            )
+        project = _ensure_project(user_id, request.project_id)
+        result = await integration_service.fetch_salesforce_data(
+            user_id=user_id,
+            report_type=request.report_type,
+            project_id=project["project_id"],
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            object_name=request.object_name or "all",
+            owner_id=request.owner_id or "all",
+            row_limit=request.row_limit,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return SalesforceSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+        )
+    except HTTPException as e:
+        return SalesforceSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Salesforce sync error: {e}")
+        return SalesforceSyncResponse(success=False, error=str(e))
+
+
 # ── Google Ads ───────────────────────────────────────────────────────────────
+
 
 class GoogleAdsAccount(BaseModel):
     id: str
@@ -1257,10 +1704,12 @@ class GoogleAdsAccount(BaseModel):
     timezone_name: str
     source_type: str = "standard"
 
+
 class GoogleAdsAccountsResponse(BaseModel):
     success: bool
     ad_accounts: list[GoogleAdsAccount] = []
     error: Optional[str] = None
+
 
 class GoogleAdsSyncRequest(BaseModel):
     ad_account_id: str
@@ -1269,6 +1718,7 @@ class GoogleAdsSyncRequest(BaseModel):
     end_date: str = "today"
     account_name: str = ""
 
+
 class GoogleAdsSyncResponse(BaseModel):
     success: bool
     message: str
@@ -1276,7 +1726,10 @@ class GoogleAdsSyncResponse(BaseModel):
     row_count: int = 0
     column_count: int = 0
 
-@router.get("/integration/google-ads/accounts", response_model=GoogleAdsAccountsResponse)
+
+@router.get(
+    "/integration/google-ads/accounts", response_model=GoogleAdsAccountsResponse
+)
 async def get_google_ads_accounts(
     user_id: str = Depends(require_user),
 ):
@@ -1291,6 +1744,7 @@ async def get_google_ads_accounts(
     except Exception as e:
         logger.error(f"Failed to fetch Google Ads accounts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/integration/google-ads/sync", response_model=GoogleAdsSyncResponse)
 async def sync_google_ads_data(
@@ -1333,15 +1787,18 @@ async def sync_google_ads_data(
 
 # ── Firebase ─────────────────────────────────────────────────────────────────
 
+
 class FirebaseProject(BaseModel):
     id: str
     name: str
     source_type: str = "project"
 
+
 class FirebaseProjectsResponse(BaseModel):
     success: bool
     projects: list[FirebaseProject] = []
     error: Optional[str] = None
+
 
 class FirebaseSyncRequest(BaseModel):
     firebase_project_id: str
@@ -1350,12 +1807,14 @@ class FirebaseSyncRequest(BaseModel):
     start_date: str = "30daysAgo"
     end_date: str = "today"
 
+
 class FirebaseSyncResponse(BaseModel):
     success: bool
     message: str
     asset: Optional[AssetResponse] = None
     row_count: int = 0
     column_count: int = 0
+
 
 @router.get("/integration/firebase/projects", response_model=FirebaseProjectsResponse)
 async def get_firebase_projects(
@@ -1373,6 +1832,7 @@ async def get_firebase_projects(
         logger.error(f"Failed to fetch Firebase projects: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/integration/firebase/sync", response_model=FirebaseSyncResponse)
 async def sync_firebase_data(
     request: FirebaseSyncRequest,
@@ -1381,7 +1841,9 @@ async def sync_firebase_data(
     """Sync Firebase Analytics data and save it as a CSV asset."""
     try:
         if not request.firebase_project_id:
-            raise HTTPException(status_code=400, detail="firebase_project_id is required")
+            raise HTTPException(
+                status_code=400, detail="firebase_project_id is required"
+            )
 
         project = _ensure_project(user_id, request.project_id)
 

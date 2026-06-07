@@ -29,6 +29,8 @@ class WarehouseColumn(BaseModel):
 class WarehouseTable(BaseModel):
     schema: str
     name: str
+    catalog: Optional[str] = None
+    source_schema: Optional[str] = None
     type: Optional[str] = None
     row_count: Optional[int] = None
     columns: List[WarehouseColumn] = Field(default_factory=list)
@@ -36,6 +38,8 @@ class WarehouseTable(BaseModel):
 
 class WarehouseSchema(BaseModel):
     name: str
+    catalog: Optional[str] = None
+    source_schema: Optional[str] = None
     tables: List[WarehouseTable] = Field(default_factory=list)
 
 
@@ -50,6 +54,8 @@ class WarehouseSchemaSnapshot(BaseModel):
     warehouse: Optional[str] = None
     database: Optional[str] = None
     role: Optional[str] = None
+    catalog: Optional[str] = None
+    warehouse_id: Optional[str] = None
 
 
 class WarehouseConnectionResponse(BaseModel):
@@ -72,6 +78,12 @@ class WarehouseConnectionResponse(BaseModel):
     service_account_email: Optional[str] = None
     max_billing_bytes: Optional[int] = None
     max_assigned_bytes: Optional[int] = None
+    server_hostname: Optional[str] = None
+    http_path: Optional[str] = None
+    catalog: Optional[str] = None
+    warehouse_id: Optional[str] = None
+    max_result_bytes: Optional[int] = None
+    statement_timeout_seconds: Optional[int] = None
     source_timezone: str = "UTC"
     schema_snapshot: WarehouseSchemaSnapshot = Field(
         default_factory=WarehouseSchemaSnapshot
@@ -105,6 +117,12 @@ class WarehouseQuickConnectRequest(BaseModel):
     role: str = ""
     included_schemas: List[str] = Field(default_factory=list)
     max_assigned_bytes: Optional[int] = None
+    server_hostname: str = ""
+    http_path: str = ""
+    access_token: str = ""
+    catalog: str = ""
+    max_result_bytes: Optional[int] = None
+    statement_timeout_seconds: Optional[int] = None
 
 
 class WarehouseTableRequest(BaseModel):
@@ -180,6 +198,12 @@ async def quick_connect_warehouse(
         role=request.role,
         included_schemas=request.included_schemas or request.include_schemas,
         max_assigned_bytes=request.max_assigned_bytes,
+        server_hostname=request.server_hostname,
+        http_path=request.http_path,
+        access_token=request.access_token,
+        catalog=request.catalog,
+        max_result_bytes=request.max_result_bytes,
+        statement_timeout_seconds=request.statement_timeout_seconds,
     )
 
 

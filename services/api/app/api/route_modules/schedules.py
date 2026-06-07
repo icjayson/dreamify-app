@@ -21,7 +21,7 @@ router = APIRouter(tags=["schedules"])
 
 
 class CreateScheduleRequest(BaseModel):
-    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | warehouse
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | warehouse
     connector_config: Dict[str, Any]
     project_id: str
     account_name: str = ""
@@ -49,11 +49,33 @@ class UpdateScheduleRequest(BaseModel):
     auto_refresh_prompt: Optional[str] = None
 
 
-_VALID_PROVIDERS = {"ga4", "meta_ads", "tiktok", "appsflyer", "stripe", "warehouse"}
+_VALID_PROVIDERS = {
+    "ga4",
+    "meta_ads",
+    "tiktok",
+    "appsflyer",
+    "stripe",
+    "hubspot",
+    "salesforce",
+    "warehouse",
+}
 _VALID_FREQUENCIES = {"daily", "weekly", "biweekly"}
 _VALID_DATE_PRESETS = {"last_7d", "last_14d", "last_30d", "last_90d"}
 _VALID_STRIPE_REPORT_TYPES = {"charges", "subscriptions", "customers"}
-_VALID_WAREHOUSE_CONNECTORS = {"postgres", "bigquery", "snowflake"}
+_VALID_HUBSPOT_REPORT_TYPES = {
+    "sales_pipeline",
+    "contacts",
+    "companies",
+    "activities",
+}
+_VALID_SALESFORCE_REPORT_TYPES = {
+    "sales_pipeline",
+    "leads",
+    "accounts_contacts",
+    "activities",
+    "campaigns",
+}
+_VALID_WAREHOUSE_CONNECTORS = {"postgres", "bigquery", "snowflake", "databricks"}
 
 
 def _validate_create(req: CreateScheduleRequest) -> None:
@@ -102,16 +124,80 @@ def _normalize_connector_config(
                 "connector_config.report_type must be charges, subscriptions, or customers",
             )
         cfg["report_type"] = report_type
+    if provider == "hubspot":
+        report_type = str(cfg.get("report_type") or "sales_pipeline").strip()
+        if report_type not in _VALID_HUBSPOT_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_pipeline, contacts, companies, or activities",
+            )
+        pipeline_id = str(cfg.get("pipeline_id") or "all").strip() or "all"
+        owner_id = str(cfg.get("owner_id") or "all").strip() or "all"
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        include_associations = cfg.get("include_associations", True)
+        cfg["report_type"] = report_type
+        cfg["pipeline_id"] = pipeline_id
+        cfg["owner_id"] = owner_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_associations"] = bool(include_associations)
+        cfg["entity_id"] = str(
+            cfg.get("entity_id") or f"hubspot:{report_type}:{pipeline_id}:{owner_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "salesforce":
+        report_type = str(cfg.get("report_type") or "sales_pipeline").strip()
+        if report_type not in _VALID_SALESFORCE_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_pipeline, leads, accounts_contacts, activities, or campaigns",
+            )
+        object_name = str(cfg.get("object_name") or "all").strip() or "all"
+        owner_id = str(cfg.get("owner_id") or "all").strip() or "all"
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["object_name"] = object_name
+        cfg["owner_id"] = owner_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["entity_id"] = str(
+            cfg.get("entity_id") or f"salesforce:{report_type}:{object_name}:{owner_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
     if provider == "warehouse":
         connection_id = str(cfg.get("connection_id") or "").strip()
         schema_name = str(cfg.get("schema") or cfg.get("schema_name") or "").strip()
         table_name = str(cfg.get("table") or cfg.get("table_name") or "").strip()
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if (not connection_id or not schema_name or not table_name) and entity_id:
+            try:
+                connection_id_from_id, table_path = entity_id.split(":", 1)
+                schema_from_id, table_from_id = table_path.rsplit(".", 1)
+                connection_id = connection_id or connection_id_from_id
+                schema_name = schema_name or schema_from_id
+                table_name = table_name or table_from_id
+            except ValueError:
+                pass
         connector_key = str(cfg.get("connector_key") or "postgres").strip()
         if connector_key not in _VALID_WAREHOUSE_CONNECTORS:
             raise HTTPException(
                 400,
-                "connector_config.connector_key must be postgres, bigquery, or snowflake",
+                "connector_config.connector_key must be postgres, bigquery, snowflake, or databricks",
             )
+        catalog = str(cfg.get("catalog") or cfg.get("catalog_name") or "").strip()
+        if connector_key == "databricks":
+            if catalog and schema_name and not schema_name.startswith(f"{catalog}."):
+                schema_name = f"{catalog}.{schema_name}"
+            elif not catalog and "." in schema_name:
+                catalog = schema_name.split(".", 1)[0]
         if not connection_id:
             raise HTTPException(
                 400,
@@ -131,10 +217,12 @@ def _normalize_connector_config(
             row_limit = 5000
         cfg["connector_key"] = connector_key
         cfg["connection_id"] = connection_id
+        if connector_key == "databricks" and catalog:
+            cfg["catalog"] = catalog
         cfg["schema"] = schema_name
         cfg["table"] = table_name
         cfg["entity_id"] = str(
-            cfg.get("entity_id") or f"{connection_id}:{schema_name}.{table_name}"
+            entity_id or f"{connection_id}:{schema_name}.{table_name}"
         )
         cfg["row_limit"] = max(1, min(row_limit, 50000))
     return cfg

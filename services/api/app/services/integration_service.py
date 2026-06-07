@@ -2937,6 +2937,7 @@ class IntegrationService:
             "hubspot": "hubspot",
             "salesforce": "salesforce",
             "pipedrive": "pipedrive",
+            "shopify": "shopify",
             "supabase": "supabase",
             "postgres": "warehouse",
             "bigquery": "warehouse",
@@ -2962,6 +2963,7 @@ class IntegrationService:
             "hubspot": "integration_hubspot",
             "salesforce": "integration_salesforce",
             "pipedrive": "integration_pipedrive",
+            "shopify": "integration_shopify",
             "supabase": "integration_supabase",
             "postgres": "warehouse_extract",
             "bigquery": "warehouse_extract",
@@ -3007,6 +3009,14 @@ class IntegrationService:
             pipeline_id = connector_config.get("pipeline_id") or "all"
             owner_id = connector_config.get("owner_id") or "all"
             return f"pipedrive:{report_type}:{pipeline_id}:{owner_id}"
+        if provider == "shopify":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "sales_overview"
+            shop_domain = connector_config.get("shop_domain") or "shopify"
+            resource = connector_config.get("resource") or "all"
+            return f"shopify:{report_type}:{shop_domain}:{resource}"
         if provider == "supabase":
             entity_id = connector_config.get("entity_id")
             if entity_id:
@@ -3229,6 +3239,32 @@ class IntegrationService:
                     }
                 ]
 
+        if provider == "shopify":
+            report_type = str(connector_config.get("report_type") or "sales_overview")
+            shop_domain = str(connector_config.get("shop_domain") or "")
+            resource = str(connector_config.get("resource") or "all")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "shop_domain": shop_domain,
+                        "report_type": report_type,
+                        "resource": resource,
+                        "connector_key": "shopify",
+                    }
+                ]
+
         if provider == "supabase":
             entity_id = self._extract_entity_id_from_schedule(
                 provider, connector_config
@@ -3331,6 +3367,7 @@ class IntegrationService:
             "hubspot": [],
             "salesforce": [],
             "pipedrive": [],
+            "shopify": [],
             "supabase": [],
             "postgres": [],
             "bigquery": [],
@@ -3359,6 +3396,11 @@ class IntegrationService:
         )
         status_map["pipedrive"] = bool(
             (await self.get_pipedrive_connection_status(user_id)).get("connected")
+        )
+        from app.services.shopify_service import shopify_service
+
+        status_map["shopify"] = bool(
+            (await shopify_service.get_connection_status(user_id)).get("connected")
         )
         from app.services.supabase_service import supabase_service
 
@@ -3399,6 +3441,7 @@ class IntegrationService:
             "hubspot": "hubspot",
             "salesforce": "salesforce",
             "pipedrive": "pipedrive",
+            "shopify": "shopify",
             "supabase": "supabase",
         }
         for connector_key, provider in metadata_provider_map.items():
@@ -3435,6 +3478,7 @@ class IntegrationService:
             "hubspot": "hubspot",
             "salesforce": "salesforce",
             "pipedrive": "pipedrive",
+            "shopify": "shopify",
             "supabase": "supabase",
             "google_ads": "google_ads",
             "firebase": "firebase",
@@ -3475,6 +3519,7 @@ class IntegrationService:
             {"connector_key": "hubspot", "display_name": "HubSpot"},
             {"connector_key": "salesforce", "display_name": "Salesforce"},
             {"connector_key": "pipedrive", "display_name": "Pipedrive"},
+            {"connector_key": "shopify", "display_name": "Shopify"},
             {"connector_key": "supabase", "display_name": "Supabase"},
             {"connector_key": "postgres", "display_name": "PostgreSQL"},
             {"connector_key": "bigquery", "display_name": "BigQuery"},
@@ -4016,6 +4061,7 @@ class IntegrationService:
             "hubspot",
             "salesforce",
             "pipedrive",
+            "shopify",
             "supabase",
         }:
             # only date overrides are supported for these in refresh modal
@@ -4159,6 +4205,15 @@ class IntegrationService:
                     owner_id=str(cfg.get("owner_id") or "all"),
                     row_limit=int(cfg.get("row_limit") or 5000),
                 )
+            elif connector_key == "shopify":
+                from app.services.shopify_service import shopify_service
+
+                result = await shopify_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
             elif connector_key == "supabase":
                 from app.services.supabase_service import supabase_service
 
@@ -4209,6 +4264,7 @@ class IntegrationService:
             "snowflake",
             "databricks",
             "supabase",
+            "shopify",
         }:
             stable_entity_name = self._pick_best_entity_name(
                 str(entity_id),

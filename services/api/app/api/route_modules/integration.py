@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_user
 from app.services.integration_service import integration_service
+from app.services.shopify_service import shopify_service
 from app.services.supabase_service import supabase_service
 from app.api.route_modules.user import AssetResponse, _map_asset, _ensure_project
 
@@ -88,6 +89,8 @@ class ConnectorSelectedEntity(BaseModel):
     owner_id: Optional[str] = None
     sync_mode: Optional[str] = None
     project_ref: Optional[str] = None
+    shop_domain: Optional[str] = None
+    resource: Optional[str] = None
 
 
 class ConnectorOverviewItem(BaseModel):
@@ -1930,6 +1933,204 @@ async def pipedrive_sync(
     except Exception as e:
         logger.error(f"Pipedrive sync error: {e}")
         return PipedriveSyncResponse(success=False, error=str(e))
+
+
+# ── Shopify Commerce & Revenue ───────────────────────────────────────────────
+
+_SHOPIFY_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "shopify_oauth"
+).replace("META_OAUTH_SUCCESS", "SHOPIFY_OAUTH_SUCCESS")
+
+_SHOPIFY_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "shopify_oauth"
+).replace("META_OAUTH_ERROR", "SHOPIFY_OAUTH_ERROR")
+
+
+class ShopifyShopResponse(BaseModel):
+    connected: bool = False
+    shop_id: Optional[str] = None
+    shop_domain: Optional[str] = None
+    shop_name: Optional[str] = None
+    shop_url: Optional[str] = None
+    currency: Optional[str] = None
+    timezone: Optional[str] = None
+    account_name: Optional[str] = None
+    scopes: List[str] = Field(default_factory=list)
+    read_all_orders_enabled: bool = False
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class ShopifyResource(BaseModel):
+    report_type: str
+    label: str
+    resource: str
+    default: bool = False
+
+
+class ShopifyResourcesResponse(BaseModel):
+    success: bool
+    resources: List[ShopifyResource] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class ShopifySyncRequest(BaseModel):
+    report_type: str = "sales_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+    resource: str = ""
+
+
+class ShopifySyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/shopify/oauth/start")
+async def shopify_oauth_start(
+    request: Request,
+    shop: str = Query(...),
+    token: Optional[str] = Query(default=None),
+):
+    """Redirect the popup to the Shopify OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _SHOPIFY_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _SHOPIFY_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+    try:
+        return RedirectResponse(url=shopify_service.get_oauth_url(user_id, shop))
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/shopify/oauth/callback", response_class=HTMLResponse)
+async def shopify_oauth_callback(
+    request: Request,
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    shop: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Shopify redirects here after authorization."""
+    if error or not code or not state or not shop:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_SHOPIFY_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await shopify_service.handle_oauth_callback(
+            code=code,
+            state=state,
+            shop=shop,
+            query_params=dict(request.query_params),
+        )
+        return HTMLResponse(_SHOPIFY_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Shopify OAuth callback error: {e}")
+        return HTMLResponse(_SHOPIFY_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/shopify/status", response_model=ShopifyShopResponse)
+async def shopify_status(user_id: str = Depends(require_user)):
+    try:
+        return await shopify_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Shopify status error: {e}")
+        return ShopifyShopResponse(connected=False)
+
+
+@router.delete("/integration/shopify/disconnect")
+async def shopify_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await shopify_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Shopify disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/shopify/shop", response_model=ShopifyShopResponse)
+async def shopify_shop(user_id: str = Depends(require_user)):
+    try:
+        shop = await shopify_service.get_shop(user_id)
+        return ShopifyShopResponse(connected=True, **shop)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Shopify shop error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/shopify/resources", response_model=ShopifyResourcesResponse)
+async def shopify_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await shopify_service.list_resources(user_id)
+        return ShopifyResourcesResponse(success=True, resources=resources)
+    except HTTPException as e:
+        return ShopifyResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Shopify resources error: {e}")
+        return ShopifyResourcesResponse(success=False, error=str(e))
+
+
+@router.post("/integration/shopify/sync", response_model=ShopifySyncResponse)
+async def shopify_sync(
+    request: ShopifySyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await shopify_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+            resource=request.resource,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return ShopifySyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return ShopifySyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Shopify sync error: {e}")
+        return ShopifySyncResponse(success=False, error=str(e))
 
 
 # ── Supabase Application Database ────────────────────────────────────────────

@@ -1657,6 +1657,7 @@ _PROVIDER_LABELS_SLACK: Dict[str, str] = {
     "hubspot": "HubSpot",
     "salesforce": "Salesforce",
     "pipedrive": "Pipedrive",
+    "shopify": "Shopify",
     "supabase": "Supabase",
 }
 

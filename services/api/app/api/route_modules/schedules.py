@@ -21,7 +21,7 @@ router = APIRouter(tags=["schedules"])
 
 
 class CreateScheduleRequest(BaseModel):
-    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | supabase | warehouse
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | shopify | supabase | warehouse
     connector_config: Dict[str, Any]
     project_id: str
     account_name: str = ""
@@ -58,6 +58,7 @@ _VALID_PROVIDERS = {
     "hubspot",
     "salesforce",
     "pipedrive",
+    "shopify",
     "supabase",
     "warehouse",
 }
@@ -83,6 +84,14 @@ _VALID_PIPEDRIVE_REPORT_TYPES = {
     "contacts_organizations",
     "activities",
     "products",
+}
+_VALID_SHOPIFY_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "products",
+    "customers",
+    "inventory",
+    "discounts",
 }
 _VALID_SUPABASE_SYNC_MODES = {
     "profile_only",
@@ -206,6 +215,49 @@ def _normalize_connector_config(
         cfg["row_limit"] = max(1, min(row_limit, 10000))
         cfg["entity_id"] = str(
             cfg.get("entity_id") or f"pipedrive:{report_type}:{pipeline_id}:{owner_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "shopify":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        shop_domain = str(cfg.get("shop_domain") or "").strip()
+        raw_resource = str(cfg.get("resource") or "").strip()
+        resource = str(cfg.get("resource") or "all").strip() or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "shopify":
+                report_type = raw_report_type or parts[1] or report_type
+                shop_domain = shop_domain or parts[2]
+                resource = raw_resource or parts[3] or "all"
+        if report_type not in _VALID_SHOPIFY_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, products, customers, inventory, or discounts",
+            )
+        if not shop_domain:
+            raise HTTPException(
+                400,
+                "connector_config.shop_domain is required for Shopify schedules",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["shop_domain"] = shop_domain
+        cfg["resource"] = resource
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"shopify:{report_type}:{shop_domain}:{resource}"
         )
         cfg["entity_name"] = str(
             cfg.get("entity_name") or report_type.replace("_", " ").title()

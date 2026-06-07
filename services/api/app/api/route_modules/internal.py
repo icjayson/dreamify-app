@@ -343,6 +343,18 @@ async def _run_sync(
             row_limit=int(connector_config.get("row_limit") or 5000),
         )
 
+    elif provider == "shopify":
+        from app.services.shopify_service import shopify_service
+
+        return await shopify_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
     elif provider == "supabase":
         from app.services.supabase_service import supabase_service
 
@@ -374,6 +386,7 @@ _PROVIDER_LABELS: dict = {
     "hubspot": "HubSpot",
     "salesforce": "Salesforce",
     "pipedrive": "Pipedrive",
+    "shopify": "Shopify",
     "supabase": "Supabase",
     "warehouse": "Warehouse",
 }

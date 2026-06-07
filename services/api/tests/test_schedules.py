@@ -461,6 +461,50 @@ class TestTriggerEndpoint:
             row_limit=2500,
         )
 
+    def test_run_sync_dispatches_shopify_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch("app.services.shopify_service.shopify_service") as mock_shopify:
+            mock_shopify.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 7,
+                    "column_count": 25,
+                    "asset": {"asset_id": "asset_shopify"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="shopify",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "sales_overview",
+                        "shop_domain": "demo.myshopify.com",
+                        "resource": "orders",
+                        "row_limit": 3000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 7
+        mock_shopify.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "sales_overview",
+                "shop_domain": "demo.myshopify.com",
+                "resource": "orders",
+                "row_limit": 3000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
 
 # ── Schedules CRUD validation ─────────────────────────────────────────────────
 
@@ -607,6 +651,47 @@ class TestScheduleValidation:
 
         with pytest.raises(HTTPException):
             _normalize_connector_config("pipedrive", {"report_type": "tickets"})
+
+    def test_shopify_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "shopify",
+            {
+                "report_type": "sales_overview",
+                "shop_domain": "demo.myshopify.com",
+                "resource": "orders",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "sales_overview"
+        assert cfg["shop_domain"] == "demo.myshopify.com"
+        assert cfg["resource"] == "orders"
+        assert cfg["entity_id"] == "shopify:sales_overview:demo.myshopify.com:orders"
+        assert cfg["row_limit"] == 10000
+
+    def test_shopify_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "shopify",
+            {"entity_id": "shopify:products:demo.myshopify.com:products"},
+        )
+
+        assert cfg["report_type"] == "products"
+        assert cfg["shop_domain"] == "demo.myshopify.com"
+        assert cfg["resource"] == "products"
+
+    def test_shopify_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "shopify",
+                {"report_type": "payments", "shop_domain": "demo.myshopify.com"},
+            )
 
     def test_supabase_config_normalizes_table_entity_and_caps_rows(self):
         from app.api.route_modules.schedules import _normalize_connector_config

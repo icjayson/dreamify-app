@@ -187,13 +187,18 @@ export default function ProductWorkspaceAgentsPage() {
       ) : (
         <VideoBackground className="fixed inset-0 z-0" />
       )}
-      <div className={cn("fixed inset-0 z-[1]", resolvedTheme === "dark" ? "bg-black/72" : "bg-white/35")} />
+      <div className={cn("fixed inset-0 z-[1]", resolvedTheme === "dark" ? "bg-black/60" : "bg-white/20")} />
 
       <main className="relative z-10">
         <section className="relative flex min-h-[calc(100vh-2rem)] items-center px-5 pb-8 pt-28 sm:px-8 lg:pb-10 lg:pt-24 xl:pt-20">
           <div className="mx-auto grid min-w-0 w-full max-w-[84rem] items-center gap-8 lg:grid-cols-[0.78fr_1.22fr]">
             <div className="min-w-0 text-center lg:text-left">
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              <div className={cn(
+                "mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em]",
+                resolvedTheme === "dark"
+                  ? "border-white/30 bg-white/20 text-white"
+                  : "border-primary/25 bg-primary/10 text-primary",
+              )}>
                 <Bot className="h-3.5 w-3.5" />
                 Workspace Agents
               </div>

@@ -62,7 +62,7 @@ const AboutPage = () => {
       )}
 
       {/* Fixed overlay for better text readability */}
-      <div className={`fixed inset-0 z-[1] ${resolvedTheme === 'dark' ? 'bg-black/70' : 'bg-white/20'}`}></div>
+      <div className={`fixed inset-0 z-[1] ${resolvedTheme === 'dark' ? 'bg-black/60' : 'bg-white/20'}`}></div>
 
       <main className="relative z-10">
         <div className="relative z-10">

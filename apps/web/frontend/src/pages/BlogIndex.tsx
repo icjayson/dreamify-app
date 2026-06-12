@@ -20,13 +20,14 @@ const formatDate = (value: string | null): string => {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 };
 
-const CoverImage = ({ post, className }: { post: BlogPostSummary; className?: string }) => {
+const CoverImage = ({ post, className, priority = false }: { post: BlogPostSummary; className?: string; priority?: boolean }) => {
   if (post.cover_image_url) {
     return (
       <img
         src={post.cover_image_url}
         alt={post.cover_image_alt || post.title}
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
         className={cn("h-full w-full object-cover", className)}
       />
     );
@@ -71,6 +72,7 @@ const sortPosts = (posts: BlogPostSummary[], by: SortOption): BlogPostSummary[] 
 };
 
 const STALE_TIME = 5 * 60 * 1000; // 5 min — blog content rarely changes within a session
+const PAGE_SIZE = 9; // cards rendered per "load more" page (keeps initial paint light)
 
 export default function BlogIndex() {
   const { resolvedTheme } = useTheme();
@@ -91,11 +93,19 @@ export default function BlogIndex() {
     });
 
   const [sortBy, setSortBy] = useState<SortOption>("latest");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const changeSort = (val: SortOption) => {
+    setSortBy(val);
+    setVisibleCount(PAGE_SIZE); // re-sorting starts a fresh first page
+  };
 
   const posts = data ?? [];
   // The admin-flagged post is the hero; fall back to the latest if none is set.
   const featured = posts.find((p) => p.featured) ?? posts[0];
   const rest = sortPosts(posts.filter((p) => p.slug !== featured?.slug), sortBy);
+  const visibleRest = rest.slice(0, visibleCount);
+  const hasMore = visibleCount < rest.length;
 
   return (
     <>
@@ -117,16 +127,21 @@ export default function BlogIndex() {
         ) : (
           <VideoBackground className="fixed inset-0 z-0" />
         )}
-        <div className={cn("fixed inset-0 z-[1]", resolvedTheme === "dark" ? "bg-black/72" : "bg-white/35")} />
+        <div className={cn("fixed inset-0 z-[1]", resolvedTheme === "dark" ? "bg-black/60" : "bg-white/20")} />
 
         <main className="relative z-10">
           {/* Hero */}
           <section className="px-5 pb-8 pt-36 sm:px-8 sm:pt-40 lg:pt-40">
             <div className="mx-auto max-w-6xl">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              <div className={cn(
+                "mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em]",
+                resolvedTheme === "dark"
+                  ? "border-white/30 bg-white/20 text-white"
+                  : "border-primary/25 bg-primary/10 text-primary",
+              )}>
                 Dreamify Blog
               </div>
-              <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+              <h1 className="max-w-3xl text-4xl font-medium tracking-tight text-foreground sm:text-5xl">
                 Guides on AI dashboards, analytics, and shipping reports faster
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
@@ -159,7 +174,7 @@ export default function BlogIndex() {
                     <Link to={`/blog/${featured.slug}`} onMouseEnter={() => prefetchPost(featured.slug)} className="group mb-10 block">
                       <Card className="grid overflow-hidden border-border/60 bg-background/70 backdrop-blur-md transition-all hover:border-primary/40 hover:shadow-lg md:grid-cols-2 md:items-center">
                         <div className="aspect-[16/9] overflow-hidden rounded-lg">
-                          <CoverImage post={featured} className="transition-transform duration-300 group-hover:scale-[1.03]" />
+                          <CoverImage post={featured} priority className="transition-transform duration-300 group-hover:scale-[1.03]" />
                         </div>
                         <div className="flex flex-col justify-center gap-3 p-4 sm:p-6">
                           {featured.tags.length > 0 && (
@@ -190,7 +205,7 @@ export default function BlogIndex() {
                           <button
                             key={val}
                             type="button"
-                            onClick={() => setSortBy(val)}
+                            onClick={() => changeSort(val)}
                             className={cn(
                               "rounded px-3 py-1 text-sm font-medium transition-colors",
                               sortBy === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
@@ -206,7 +221,7 @@ export default function BlogIndex() {
                   {/* Grid */}
                   {rest.length > 0 && (
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                      {rest.map((post) => (
+                      {visibleRest.map((post) => (
                         <Link key={post.slug} to={`/blog/${post.slug}`} onMouseEnter={() => prefetchPost(post.slug)} className="group block">
                           <Card className="flex h-full flex-col overflow-hidden border-border/60 bg-background/70 backdrop-blur-md transition-all hover:border-primary/40 hover:shadow-lg">
                             <div className="aspect-[16/9] overflow-hidden">
@@ -227,6 +242,23 @@ export default function BlogIndex() {
                           </Card>
                         </Link>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Load more — keeps the initial paint light; reveals the next page on demand */}
+                  {hasMore && (
+                    <div className="mt-10 flex flex-col items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                        className="button-outline inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all"
+                      >
+                        Load more articles
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                      <span className="text-xs text-muted-foreground">
+                        Showing {visibleRest.length} of {rest.length}
+                      </span>
                     </div>
                   )}
                 </>

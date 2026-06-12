@@ -26,11 +26,11 @@ type PlatformMeta = {
 };
 
 const glass =
-  "rounded-2xl border border-slate-200/75 bg-white/72 shadow-[0_24px_70px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/12 dark:bg-zinc-950/58";
+  "rounded-2xl border border-border/70 bg-background/75 shadow-[0_24px_70px_rgba(15,23,42,0.12)] backdrop-blur-2xl";
 const innerGlass =
-  "rounded-xl border border-slate-200/75 bg-white/68 shadow-[0_10px_26px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/10 dark:bg-white/6";
+  "rounded-xl border border-border/60 bg-background/60 shadow-[0_10px_26px_rgba(15,23,42,0.06)] backdrop-blur-xl";
 const softButton =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200/80 bg-white/40 px-3 text-sm font-semibold text-slate-800 shadow-sm backdrop-blur-xl transition-colors hover:border-primary/40 hover:bg-white/55 dark:border-white/10 dark:bg-white/8 dark:text-white";
+  "inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-border/70 bg-background/50 px-3 text-sm font-semibold text-foreground shadow-sm backdrop-blur-xl transition-colors hover:border-primary/40 hover:bg-background/70";
 
 function connectorExamples(integration: IntegrationContent) {
   const dataOptions = integration.sampleDashboards.slice(0, 3).map((dashboard) => dashboard.title);
@@ -65,28 +65,28 @@ export function ConnectorMockModalPreview({ integration }: { integration: Integr
     <div className={cn(glass, "mx-auto w-full max-w-[560px] p-4 sm:p-5")} role="dialog" aria-label={`Mock ${integration.name} connector modal`}>
       <div className="mb-5 flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className={cn("flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/75 dark:border-white/10 dark:bg-white/8", integration.iconBg)}>
+          <div className={cn("flex h-14 w-14 items-center justify-center rounded-2xl border border-border/70 bg-background/70", integration.iconBg)}>
             <img src={integration.icon} alt="" className="h-9 w-9 object-contain" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white">Connect {integration.name}</h2>
+              <h2 className="text-xl font-bold tracking-tight text-foreground">Connect {integration.name}</h2>
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/12 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 Mock
               </span>
             </div>
-            <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-300">
+            <p className="mt-1 text-sm leading-5 text-muted-foreground">
               Interactive example account. No API calls, no backend sync.
             </p>
           </div>
         </div>
-        <div className="hidden h-9 w-9 items-center justify-center rounded-xl border border-slate-200/70 bg-white/70 text-primary dark:border-white/10 dark:bg-white/8 sm:flex">
+        <div className="hidden h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-background/70 text-primary sm:flex">
           <ShieldCheck className="h-4 w-4" />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200/70 bg-slate-100/60 p-1 dark:border-white/10 dark:bg-white/7">
+      <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/60 bg-foreground/5 p-1">
         {[
           { value: "new", label: "Connect New" },
           { value: "connected", label: "Connected Data" },
@@ -98,8 +98,8 @@ export function ConnectorMockModalPreview({ integration }: { integration: Integr
             className={cn(
               "h-9 rounded-lg text-sm font-semibold transition-all",
               tab === item.value
-                ? "bg-white text-slate-950 shadow-sm dark:bg-white/16 dark:text-white"
-                : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white",
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {item.label}
@@ -131,8 +131,8 @@ export function ConnectorMockModalPreview({ integration }: { integration: Integr
                     <Database className="h-4 w-4" />
                   </span>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Example Data</p>
-                    <p className="text-sm font-semibold text-slate-950 dark:text-white">{data}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Example Data</p>
+                    <p className="text-sm font-semibold text-foreground">{data}</p>
                   </div>
                 </div>
                 <button type="button" className={softButton} onClick={() => setDateRange(dateRange === "Last 30 days" ? "Last 7 days" : "Last 30 days")}>
@@ -150,7 +150,7 @@ export function ConnectorMockModalPreview({ integration }: { integration: Integr
                       "min-h-16 rounded-xl border px-3 py-2 text-left text-xs font-semibold leading-5 transition-all",
                       data === option
                         ? "border-primary/45 bg-primary/10 text-primary"
-                        : "border-slate-200/75 bg-white/64 text-slate-600 hover:border-primary/30 dark:border-white/10 dark:bg-white/7 dark:text-slate-300",
+                        : "border-border/60 bg-background/55 text-muted-foreground hover:border-primary/30",
                     )}
                   >
                     <span className="mb-1 flex items-center gap-1.5">
@@ -170,15 +170,15 @@ export function ConnectorMockModalPreview({ integration }: { integration: Integr
                 <CheckCircle2 className="h-5 w-5" />
               </span>
               <div>
-                <p className="text-sm font-bold text-slate-950 dark:text-white">{account}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Last synced just now • {project}</p>
+                <p className="text-sm font-bold text-foreground">{account}</p>
+                <p className="text-xs text-muted-foreground">Last synced just now • {project}</p>
               </div>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2">
               {["Rows", "Fields", "Freshness"].map((label, index) => (
-                <div key={label} className="rounded-xl border border-slate-200/70 bg-white/64 p-3 dark:border-white/10 dark:bg-white/7">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{label}</p>
-                  <p className="mt-1 text-sm font-bold text-slate-950 dark:text-white">{["12.4K", "38", "Live"][index]}</p>
+                <div key={label} className="rounded-xl border border-border/60 bg-background/55 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+                  <p className="mt-1 text-sm font-bold text-foreground">{["12.4K", "38", "Live"][index]}</p>
                 </div>
               ))}
             </div>
@@ -225,18 +225,18 @@ export function WorkspaceMockModalPreview({
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white">Connect {workspace.name}</h2>
+              <h2 className="text-xl font-bold tracking-tight text-foreground">Connect {workspace.name}</h2>
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/12 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 Example
               </span>
             </div>
-            <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-300">
+            <p className="mt-1 text-sm leading-5 text-muted-foreground">
               Mock workspace setup. Try the controls, no messages are sent.
             </p>
           </div>
         </div>
-        <span className="hidden h-9 w-9 items-center justify-center rounded-xl border border-slate-200/70 bg-white/70 text-primary dark:border-white/10 dark:bg-white/8 sm:flex">
+        <span className="hidden h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-background/70 text-primary sm:flex">
           <MessageSquare className="h-4 w-4" />
         </span>
       </div>
@@ -270,8 +270,8 @@ export function WorkspaceMockModalPreview({
                 <RefreshCw className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Schedule</p>
-                <p className="text-sm font-semibold text-slate-950 dark:text-white">{cadence}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Schedule</p>
+                <p className="text-sm font-semibold text-foreground">{cadence}</p>
               </div>
             </div>
             <button type="button" className={softButton} onClick={() => setCadence(cadence === "Daily at 9:00" ? "Weekly Monday" : "Daily at 9:00")}>
@@ -282,8 +282,8 @@ export function WorkspaceMockModalPreview({
         </div>
       </div>
 
-      <div className="mt-5 rounded-xl border border-primary/20 bg-primary/8 p-3 text-sm leading-6 text-slate-700 dark:text-slate-200">
-        <span className="font-bold text-slate-950 dark:text-white">Preview:</span> Dreamify will post a fresh dashboard to {destination} for {report.toLowerCase()}.
+      <div className="mt-5 rounded-xl border border-primary/20 bg-primary/8 p-3 text-sm leading-6 text-muted-foreground">
+        <span className="font-bold text-foreground">Preview:</span> Dreamify will post a fresh dashboard to {destination} for {report.toLowerCase()}.
       </div>
 
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -354,7 +354,7 @@ function MockSelect({
         className={cn(
           innerGlass,
           "relative flex w-full cursor-pointer items-center justify-between gap-3 p-3 text-left transition-colors hover:border-primary/35",
-          isOpen && "border-primary/45 bg-white/80 shadow-[0_18px_42px_rgba(37,99,235,0.13)] dark:bg-white/10",
+          isOpen && "border-primary/45 bg-background/80 shadow-[0_18px_42px_rgba(37,99,235,0.13)]",
         )}
       >
         <span className="flex min-w-0 items-center gap-3">
@@ -362,11 +362,11 @@ function MockSelect({
             <Icon className="h-4 w-4" />
           </span>
           <span className="min-w-0">
-            <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</span>
-            <span className="mt-0.5 block truncate text-sm font-bold text-slate-950 dark:text-white">{value}</span>
+            <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
+            <span className="mt-0.5 block truncate text-sm font-bold text-foreground">{value}</span>
           </span>
         </span>
-        <ChevronDown className={cn("h-4 w-4 flex-shrink-0 text-slate-500 transition-transform", isOpen && "rotate-180")} />
+        <ChevronDown className={cn("h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
       </button>
 
       <div
@@ -374,7 +374,7 @@ function MockSelect({
         role="listbox"
         aria-label={label}
         className={cn(
-          "absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-2 text-slate-950 shadow-[0_22px_60px_rgba(15,23,42,0.20)] backdrop-blur-2xl transition-all duration-150 dark:border-white/12 dark:bg-popover dark:text-popover-foreground",
+          "absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-border/70 bg-popover p-2 text-popover-foreground shadow-[0_22px_60px_rgba(15,23,42,0.20)] backdrop-blur-2xl transition-all duration-150",
           isOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0",
         )}
       >
@@ -392,7 +392,7 @@ function MockSelect({
               "block w-full rounded-xl px-4 py-3 text-left text-sm font-bold leading-5 transition-colors hover:bg-primary hover:text-primary-foreground",
               value === option
                 ? "bg-primary text-primary-foreground"
-                : "bg-transparent text-slate-950 dark:text-popover-foreground",
+                : "bg-transparent text-popover-foreground",
             )}
           >
             {option}

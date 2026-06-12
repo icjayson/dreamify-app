@@ -29,9 +29,9 @@ function applyTheme(resolved: ResolvedTheme) {
 // ---------------------------------------------------------------------------
 let moduleTheme: Theme = (() => {
   try {
-    return (localStorage.getItem(STORAGE_KEY) as Theme) || 'system';
+    return (localStorage.getItem(STORAGE_KEY) as Theme) || 'light';
   } catch {
-    return 'system';
+    return 'light';
   }
 })();
 

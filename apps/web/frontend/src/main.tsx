@@ -12,7 +12,7 @@ import ReactGA from 'react-ga4';
 
 // Apply theme class before React mounts to prevent flash
 try {
-  const theme = localStorage.getItem('dreamify-theme') || 'system';
+  const theme = localStorage.getItem('dreamify-theme') || 'light';
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const resolved = theme === 'dark' || (theme === 'system' && prefersDark) ? 'dark' : 'light';
   document.documentElement.classList.toggle('dark', resolved === 'dark');

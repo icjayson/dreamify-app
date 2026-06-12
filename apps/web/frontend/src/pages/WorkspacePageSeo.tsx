@@ -35,11 +35,11 @@ import {
 import { WorkspaceMockModalPreview } from "@/components/seo/ProductMockModals";
 
 const surface =
-  "rounded-2xl border border-slate-200/75 bg-white/70 shadow-[0_18px_54px_rgba(15,23,42,0.10)] backdrop-blur-2xl dark:border-white/12 dark:bg-zinc-950/56";
+  "rounded-2xl border border-border/70 bg-background/70 shadow-[0_18px_54px_rgba(15,23,42,0.10)] backdrop-blur-2xl";
 const iconTile =
-  "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-slate-200/70 bg-blue-50/70 text-primary dark:border-white/10 dark:bg-primary/12";
+  "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary";
 const chip =
-  "inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200/75 bg-white/66 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/7 dark:text-slate-200";
+  "inline-flex min-h-10 items-center gap-2 rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm font-semibold text-foreground shadow-sm backdrop-blur-xl";
 
 const PLATFORM_META: Record<string, { Logo: ElementType; logoBg: string }> = {
   slack: { Logo: SlackLogo, logoBg: "bg-[#4A154B]" },
@@ -108,14 +108,14 @@ const WorkspacePageSeo = () => {
         <main className="relative z-10">
           <section className="relative px-5 pb-10 pt-28 sm:px-8 lg:pb-16 lg:pt-32">
             <div className="mx-auto w-full max-w-7xl">
-              <nav className="mb-10 inline-flex max-w-full items-center gap-2 overflow-hidden rounded-2xl border border-slate-200/75 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/7 dark:text-slate-300">
+              <nav className="mb-10 inline-flex max-w-full items-center gap-2 overflow-hidden rounded-2xl border border-border/70 bg-background/70 px-3 py-2 text-xs font-semibold text-muted-foreground shadow-sm backdrop-blur-xl">
                 <Home className="h-4 w-4 text-primary" />
                 <ChevronRight className="h-3.5 w-3.5" />
                 <Link to="/product/workspace-agents" className="truncate no-underline hover:text-primary">
                   Workspace Agents
                 </Link>
                 <ChevronRight className="h-3.5 w-3.5" />
-                <span className="truncate text-slate-950 dark:text-white">{workspace.name}</span>
+                <span className="truncate text-foreground">{workspace.name}</span>
               </nav>
 
               <div className="grid items-center gap-10 lg:grid-cols-[0.92fr_1.08fr]">
@@ -126,21 +126,21 @@ const WorkspacePageSeo = () => {
                     </span>
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-lg font-bold text-slate-950 dark:text-white">{workspace.name}</p>
+                        <p className="text-lg font-bold text-foreground">{workspace.name}</p>
                         <span className="rounded-full border border-emerald-400/30 bg-emerald-400/12 px-2 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-200">
                           Active
                         </span>
                       </div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                         Workspace agent
                       </p>
                     </div>
                   </div>
 
-                  <h1 className="max-w-3xl text-5xl font-black leading-[0.94] tracking-tight text-slate-950 dark:text-white sm:text-6xl lg:text-7xl">
+                  <h1 className="max-w-3xl text-5xl font-black leading-[0.94] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
                     {workspace.hero.headline}
                   </h1>
-                  <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
+                  <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
                     {workspace.hero.subhead}
                   </p>
 
@@ -166,10 +166,10 @@ const WorkspacePageSeo = () => {
                 <div className={iconTile}>
                   <Workflow className="h-6 w-6" />
                 </div>
-                <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                <h2 className="mt-5 text-2xl font-black tracking-tight text-foreground">
                   What you can do
                 </h2>
-                <p className="mt-3 text-base leading-7 text-slate-600 dark:text-slate-300">
+                <p className="mt-3 text-base leading-7 text-muted-foreground">
                   Use Dreamify in {workspace.name} without moving your team out of the conversation.
                 </p>
               </div>
@@ -181,8 +181,8 @@ const WorkspacePageSeo = () => {
                       <div className={iconTile}>
                         <Icon className="h-5 w-5" />
                       </div>
-                      <h3 className="mt-5 text-lg font-black text-slate-950 dark:text-white">{capability.title}</h3>
-                      <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">{capability.body}</p>
+                      <h3 className="mt-5 text-lg font-black text-foreground">{capability.title}</h3>
+                      <p className="mt-2 text-sm leading-7 text-muted-foreground">{capability.body}</p>
                     </div>
                   );
                 })}
@@ -197,20 +197,20 @@ const WorkspacePageSeo = () => {
                   <div className={iconTile}>
                     <Send className="h-6 w-6" />
                   </div>
-                  <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                  <h2 className="mt-5 text-2xl font-black tracking-tight text-foreground">
                     Set up Dreamify in {workspace.name}
                   </h2>
-                  <p className="mt-3 text-base leading-7 text-slate-600 dark:text-slate-300">
+                  <p className="mt-3 text-base leading-7 text-muted-foreground">
                     Route dashboards and alerts into the right team channel.
                   </p>
                 </div>
                 <ol className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                   {workspace.setupSteps.map((step, index) => (
-                    <li key={step} className="relative rounded-2xl border border-slate-200/75 bg-white/60 p-4 shadow-sm dark:border-white/10 dark:bg-white/7">
+                    <li key={step} className="relative rounded-2xl border border-border/70 bg-background/55 p-4 shadow-sm">
                       <span className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-black text-white shadow-[0_8px_22px_rgba(37,99,235,0.3)]">
                         {index + 1}
                       </span>
-                      <p className="text-sm font-bold leading-6 text-slate-800 dark:text-slate-100">{step}</p>
+                      <p className="text-sm font-bold leading-6 text-foreground">{step}</p>
                     </li>
                   ))}
                 </ol>
@@ -223,7 +223,7 @@ const WorkspacePageSeo = () => {
               <div className="mb-5 flex items-end justify-between gap-4">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Use cases</p>
-                  <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white">
+                  <h2 className="mt-2 text-3xl font-black tracking-tight text-foreground">
                     Where {workspace.name} agents fit
                   </h2>
                 </div>
@@ -234,7 +234,7 @@ const WorkspacePageSeo = () => {
                     <div className="mb-5 inline-flex rounded-xl border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-black text-primary">
                       {useCase.persona}
                     </div>
-                    <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">{useCase.example}</p>
+                    <p className="text-sm leading-7 text-muted-foreground">{useCase.example}</p>
                   </div>
                 ))}
               </div>
@@ -247,21 +247,21 @@ const WorkspacePageSeo = () => {
                 <div className={iconTile}>
                   <HelpCircle className="h-6 w-6" />
                 </div>
-                <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                <h2 className="mt-5 text-2xl font-black tracking-tight text-foreground">
                   Frequently asked questions
                 </h2>
-                <p className="mt-3 text-base leading-7 text-slate-600 dark:text-slate-300">
+                <p className="mt-3 text-base leading-7 text-muted-foreground">
                   Common questions about Dreamify for {workspace.name}.
                 </p>
               </div>
-              <div className={cn(surface, "divide-y divide-slate-200/70 p-2 dark:divide-white/10")}>
+              <div className={cn(surface, "divide-y divide-border/60 p-2")}>
                 {workspace.faqs.map((faq) => (
-                  <details key={faq.q} className="group rounded-xl px-4 py-4 open:bg-white/55 dark:open:bg-white/7">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-black text-slate-950 dark:text-white">
+                  <details key={faq.q} className="group rounded-xl px-4 py-4 open:bg-foreground/5">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-black text-foreground">
                       {faq.q}
-                      <ChevronRight className="h-4 w-4 flex-shrink-0 text-slate-400 transition-transform group-open:rotate-90 group-open:text-primary" />
+                      <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform group-open:rotate-90 group-open:text-primary" />
                     </summary>
-                    <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">{faq.a}</p>
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">{faq.a}</p>
                   </details>
                 ))}
               </div>
@@ -270,7 +270,7 @@ const WorkspacePageSeo = () => {
 
           <section className="relative px-5 py-5 sm:px-8">
             <div className={cn(surface, "mx-auto max-w-7xl p-6")}>
-              <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">Also works with</h2>
+              <h2 className="text-2xl font-black tracking-tight text-foreground">Also works with</h2>
               <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {WORKSPACES.filter((item) => item.slug !== workspace.slug).map((item) => {
                   const itemMeta = PLATFORM_META[item.slug] ?? PLATFORM_META.slack;
@@ -278,16 +278,16 @@ const WorkspacePageSeo = () => {
                     <Link
                       key={item.slug}
                       to={`/product/workspace-agents/${item.slug}`}
-                      className="group flex items-center gap-4 rounded-2xl border border-slate-200/75 bg-white/60 p-4 no-underline shadow-sm backdrop-blur-xl transition-colors hover:border-primary/40 dark:border-white/10 dark:bg-white/7"
+                      className="group flex items-center gap-4 rounded-2xl border border-border/70 bg-background/55 p-4 no-underline shadow-sm backdrop-blur-xl transition-colors hover:border-primary/40"
                     >
                       <span className={cn("flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm", itemMeta.logoBg)}>
                         <itemMeta.Logo className="h-7 w-7" aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-black text-slate-950 dark:text-white">{item.name}</span>
-                        <span className="mt-1 block truncate text-xs font-semibold text-slate-500 dark:text-slate-400">Workspace agent</span>
+                        <span className="block text-sm font-black text-foreground">{item.name}</span>
+                        <span className="mt-1 block truncate text-xs font-semibold text-muted-foreground">Workspace agent</span>
                       </span>
-                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
                     </Link>
                   );
                 })}
@@ -306,8 +306,8 @@ const WorkspacePageSeo = () => {
                   <div className={iconTile}>
                     <Icon className="h-5 w-5" />
                   </div>
-                  <h3 className="mt-5 text-base font-black text-slate-950 dark:text-white">{title}</h3>
-                  <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">{body}</p>
+                  <h3 className="mt-5 text-base font-black text-foreground">{title}</h3>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{body}</p>
                 </div>
               ))}
             </div>
@@ -320,8 +320,8 @@ const WorkspacePageSeo = () => {
                   <Bot className="h-6 w-6" />
                 </span>
                 <div>
-                  <h2 className="text-xl font-black tracking-tight text-slate-950 dark:text-white">Bring Dreamify into {workspace.name}.</h2>
-                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                  <h2 className="text-xl font-black tracking-tight text-foreground">Bring Dreamify into {workspace.name}.</h2>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     Start free, connect a data source, and send your first dashboard into the workspace your team already uses.
                   </p>
                 </div>

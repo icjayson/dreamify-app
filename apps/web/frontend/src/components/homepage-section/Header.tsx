@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, LogIn, User as UserIcon, ChevronsUpDown, LogOut, PanelLeftOpen, Menu, PlugZap, Sparkles } from "lucide-react";
+import { Bot, ChevronDown, LogIn, User as UserIcon, ChevronsUpDown, LogOut, PanelLeftOpen, Menu, PlugZap, Sparkles, Sun, Moon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, useUser, useClerk, UserProfile } from "@clerk/clerk-react";
@@ -23,8 +23,10 @@ const Header = () => {
   const [showProjectsBtn, setShowProjectsBtn] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [productMenuOpen, setProductMenuOpen] = useState(false);
+  const [mobileProductOpen, setMobileProductOpen] = useState(() => location.pathname.startsWith("/product"));
   const { creditsRemaining } = useSubscription();
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const logoHorizon = resolvedTheme === 'dark' ? "/logo-horizon.png" : "/logo-horizon-dark.png";
   const logoWatermark = resolvedTheme === 'dark' ? "/logo-watermark.png" : "/logo-horizon-dark.png";
   const tierLimit = 1000;
@@ -34,14 +36,14 @@ const Header = () => {
   const navItemClass = (active = false) => cn(
     "relative text-sm font-medium transition-colors hover:text-accent hover:translate-y-[-2px]",
     active
-      ? "text-primary after:absolute after:-bottom-2 after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-primary dark:text-white"
+      ? "text-primary after:absolute after:-bottom-2 after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-primary dark:after:bg-white dark:text-white"
       : "text-foreground dark:text-white",
   );
   const mobileNavItemClass = (active = false) => cn(
-    "w-full text-left px-3 py-2 rounded-md focus:outline-none text-sm transition-colors",
+    "w-full text-left px-3 py-2.5 rounded-md focus:outline-none text-sm font-medium transition-colors",
     active
       ? "bg-primary/10 text-primary"
-      : "hover:bg-black focus:bg-black",
+      : "text-foreground hover:bg-foreground/5 focus-visible:bg-foreground/5",
   );
 
   useEffect(() => {
@@ -139,7 +141,7 @@ const Header = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none" />
 
           <p className="text-xs sm:text-sm font-medium text-foreground/60 dark:text-white/70 text-center tracking-wide">
-            ✨ <span className="text-foreground dark:text-white">Limited Offer:</span> We're giving away <span className="text-accent font-bold">Free Pro Access</span> to all early members.
+            ✨ <span className="text-foreground dark:text-white">Limited Offer:</span> We're giving away <span className={cn("font-bold", resolvedTheme === "dark" ? "text-blue-400" : "text-accent")}>Free Pro Access</span> to all early members.
             <button
               onClick={() => navigate("/login")}
               className="ml-2 text-foreground dark:text-white border-b border-border dark:border-white/40 hover:border-foreground dark:hover:border-white transition-all pb-0.5"
@@ -156,7 +158,7 @@ const Header = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none" />
 
           <p className="text-xs sm:text-sm font-medium text-foreground/60 dark:text-white/70 text-center tracking-wide">
-            ✨ <span className="text-foreground dark:text-white">Limited Offer:</span> We're giving away <span className="text-accent font-bold">Free Pro Access</span> to all early members.
+            ✨ <span className="text-foreground dark:text-white">Limited Offer:</span> We're giving away <span className={cn("font-bold", resolvedTheme === "dark" ? "text-blue-400" : "text-accent")}>Free Pro Access</span> to all early members.
           </p>
         </div>
       </SignedIn>
@@ -253,7 +255,7 @@ const Header = () => {
                 </button>
                 <div
                   className={cn(
-                    "absolute left-0 top-full z-50 mt-4 w-64 rounded-lg border border-border bg-muted/95 p-2 shadow-xl backdrop-blur-xl transition-all duration-150",
+                    "absolute left-0 top-full z-50 mt-4 w-72 rounded-lg border border-border bg-muted/95 p-2 shadow-xl backdrop-blur-xl transition-all duration-150",
                     productMenuOpen ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-2 opacity-0"
                   )}
                   role="menu"
@@ -269,7 +271,7 @@ const Header = () => {
                     <PlugZap className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                     <span>
                       <span className="block text-sm font-semibold text-foreground">Data Connectors</span>
-                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">Connect live sources for AI dashboards.</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">Connect live sources for AI dashboards</span>
                     </span>
                   </button>
                   <button
@@ -283,7 +285,7 @@ const Header = () => {
                     <Bot className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                     <span>
                       <span className="block text-sm font-semibold text-foreground">Workspace Agents</span>
-                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">Ask and share insights in team chat.</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">Ask and share insights in team chat</span>
                     </span>
                   </button>
                 </div>
@@ -331,6 +333,29 @@ const Header = () => {
 
           {/* Right side - Flame icon, notifications, waitlist, and login */}
           <div className="flex items-center gap-4">
+            {/* Light/Dark theme on/off switch with icon inside the knob */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isDark}
+              aria-label="Toggle light/dark theme"
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                isDark ? "bg-primary" : "bg-input"
+              )}
+            >
+              <span
+                className={cn(
+                  "pointer-events-none flex h-5 w-5 items-center justify-center rounded-full bg-background shadow-lg ring-0 transition-transform",
+                  isDark ? "translate-x-5" : "translate-x-0"
+                )}
+              >
+                {isDark ? <Moon className="w-3 h-3 text-primary" /> : <Sun className="w-3 h-3 text-accent" />}
+              </span>
+            </button>
+
             {/* Waitlist CTA (only when signed out) */}
             {/*<SignedOut>
             <button
@@ -471,22 +496,35 @@ const Header = () => {
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <SheetContent side="left" className="md:hidden w-[60vw] max-w-xs bg-muted border-r border-border p-4 z-[300]" onOpenAutoFocus={(e) => e.preventDefault()}>
             <div className="space-y-2">
-              <div className="rounded-md border border-border/60 bg-background/40 p-2">
-                <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Product</p>
+              {/* Product — collapsible, styled like the flat items; expands to the 2 sub-pages */}
+              <div>
                 <button
-                  onClick={() => navigateToProduct('/product/data-connectors')}
-                  className={cn(mobileNavItemClass(location.pathname === "/product/data-connectors"), "flex items-center gap-2")}
+                  type="button"
+                  onClick={() => setMobileProductOpen((o) => !o)}
+                  aria-expanded={mobileProductOpen}
+                  className={cn(mobileNavItemClass(isProductActive), "flex items-center justify-between")}
                 >
-                  <PlugZap className="h-4 w-4 text-primary" />
-                  Data Connectors
+                  Product
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", mobileProductOpen && "rotate-180")} />
                 </button>
-                <button
-                  onClick={() => navigateToProduct('/product/workspace-agents')}
-                  className={cn(mobileNavItemClass(location.pathname === "/product/workspace-agents"), "flex items-center gap-2")}
-                >
-                  <Bot className="h-4 w-4 text-primary" />
-                  Workspace Agents
-                </button>
+                {mobileProductOpen && (
+                  <div className="mt-1 space-y-1 pl-3">
+                    <button
+                      onClick={() => navigateToProduct('/product/data-connectors')}
+                      className={cn(mobileNavItemClass(location.pathname === "/product/data-connectors"), "flex items-center gap-2")}
+                    >
+                      <PlugZap className="h-4 w-4 flex-shrink-0 text-primary" />
+                      Data Connectors
+                    </button>
+                    <button
+                      onClick={() => navigateToProduct('/product/workspace-agents')}
+                      className={cn(mobileNavItemClass(location.pathname === "/product/workspace-agents"), "flex items-center gap-2")}
+                    >
+                      <Bot className="h-4 w-4 flex-shrink-0 text-primary" />
+                      Workspace Agents
+                    </button>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => { setMobileNavOpen(false); navigate('/about'); }}

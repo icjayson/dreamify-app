@@ -244,14 +244,19 @@ export default function ProductDataConnectorsPage() {
       ) : (
         <VideoBackground className="fixed inset-0 z-0" />
       )}
-      <div className={cn("fixed inset-0 z-[1]", resolvedTheme === "dark" ? "bg-black/70" : "bg-white/35")} />
+      <div className={cn("fixed inset-0 z-[1]", resolvedTheme === "dark" ? "bg-black/60" : "bg-white/20")} />
 
       <main className="relative z-10">
         <section className="relative flex min-h-[78vh] items-center px-5 pb-16 pt-44 sm:px-8 lg:pt-36">
           <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-[1.02fr_0.98fr]">
             <div className="text-center lg:text-left">
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <div className={cn(
+                "mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em]",
+                resolvedTheme === "dark"
+                  ? "border-white/30 bg-white/20 text-white"
+                  : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700",
+              )}>
+                <span className={cn("h-1.5 w-1.5 rounded-full", resolvedTheme === "dark" ? "bg-white" : "bg-emerald-500")} />
                 100+ data connectors
               </div>
               <h1
@@ -468,7 +473,7 @@ export default function ProductDataConnectorsPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200/75 bg-white/70 p-5 shadow-[0_18px_54px_rgba(15,23,42,0.10)] backdrop-blur-2xl dark:border-white/12 dark:bg-zinc-950/56 sm:p-7">
+            <div className="rounded-2xl border border-border/70 bg-background/70 p-5 shadow-[0_18px_54px_rgba(15,23,42,0.10)] backdrop-blur-2xl sm:p-7">
               <div className="grid gap-8 md:grid-cols-4 md:gap-5">
                 {WORKFLOW_STEPS.map(({ title, description }, index) => (
                   <div key={title} className="relative text-center">
@@ -478,15 +483,15 @@ export default function ProductDataConnectorsPage() {
                         aria-hidden="true"
                       />
                     )}
-                    <div className="relative z-10 mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-primary/20 bg-primary/10 p-1 shadow-[0_0_0_6px_rgba(37,99,235,0.06)] dark:bg-primary/15">
+                    <div className="relative z-10 mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-primary/20 bg-primary/10 p-1 shadow-[0_0_0_6px_rgba(37,99,235,0.06)]">
                       <span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-[0_8px_22px_rgba(37,99,235,0.28)]">
                         {index + 1}
                       </span>
                     </div>
-                    <h3 className="mt-4 text-sm font-bold text-slate-950 dark:text-white">
+                    <h3 className="mt-4 text-sm font-bold text-foreground">
                       {title}
                     </h3>
-                    <p className="mx-auto mt-2 max-w-[12rem] text-xs leading-5 text-slate-600 dark:text-slate-300">
+                    <p className="mx-auto mt-2 max-w-[12rem] text-xs leading-5 text-muted-foreground">
                       {description}
                     </p>
                   </div>

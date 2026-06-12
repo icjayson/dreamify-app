@@ -21,6 +21,16 @@ LISTING_INDEX = "listing_index"
 SLUG_INDEX = "slug_index"
 GSI_PK_VALUE = "POST"
 
+# Summary fields only — listings must NOT pull content_html / content_json, so
+# list latency stays flat as posts (and their body size) grow. "status" is a
+# DynamoDB reserved word, so it is aliased via ExpressionAttributeNames.
+_LISTING_PROJECTION = (
+    "post_id, slug, title, description, cover_image_url, cover_image_alt, "
+    "author, persona, tags, #status, reading_minutes, published_at, featured, "
+    "created_at, updated_at"
+)
+_LISTING_PROJECTION_NAMES = {"#status": "status"}
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -90,12 +100,19 @@ def get_post_by_slug(slug: str) -> Optional[Dict]:
 
 
 def list_all() -> List[Dict]:
-    """Every post (drafts included), newest-first. Admin use."""
+    """Every post (drafts included), newest-first. Admin + public listings.
+
+    Returns summary fields only (no content_html/content_json) so the listing
+    payload stays small regardless of post body size. Detail reads use
+    get_post / get_post_by_slug which return the full item.
+    """
     table = get_table(tables.blog_posts)
     resp = table.query(
         IndexName=LISTING_INDEX,
         KeyConditionExpression=Key("gsi_pk").eq(GSI_PK_VALUE),
         ScanIndexForward=False,
+        ProjectionExpression=_LISTING_PROJECTION,
+        ExpressionAttributeNames=_LISTING_PROJECTION_NAMES,
     )
     return resp.get("Items", [])
 

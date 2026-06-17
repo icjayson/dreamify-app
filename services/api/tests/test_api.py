@@ -45,6 +45,18 @@ class TestFastAPIApp:
         data = response.json()
         assert data["status"] == "healthy"
         assert data["service"] == "dreamify-backend"
+        # Router registration is surfaced for monitoring.
+        assert data["routers"]["failed"] == {}
+        assert "user" in data["routers"]["registered"]
+
+    def test_critical_routers_registered(self):
+        """Critical routers must be registered (a missing one is a prod outage)."""
+        from app.main import CRITICAL_ROUTERS, _router_status
+
+        registered = set(_router_status["registered"])
+        missing = CRITICAL_ROUTERS - registered
+        assert not missing, f"critical routers not registered: {missing}"
+        assert _router_status["failed"] == {}
 
     def test_docs_endpoint(self):
         """Test API documentation endpoint."""

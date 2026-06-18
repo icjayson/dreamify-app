@@ -1658,6 +1658,12 @@ _PROVIDER_LABELS_SLACK: Dict[str, str] = {
     "salesforce": "Salesforce",
     "pipedrive": "Pipedrive",
     "shopify": "Shopify",
+    "klaviyo": "Klaviyo",
+    "quickbooks": "QuickBooks",
+    "amazon_seller": "Amazon Seller",
+    "tiktok_shop_seller": "TikTok Shop Seller",
+    "shopee_seller": "Shopee Seller",
+    "lazada_seller": "Lazada Seller",
     "supabase": "Supabase",
 }
 

@@ -2938,6 +2938,12 @@ class IntegrationService:
             "salesforce": "salesforce",
             "pipedrive": "pipedrive",
             "shopify": "shopify",
+            "klaviyo": "klaviyo",
+            "quickbooks": "quickbooks",
+            "amazon_seller": "amazon_seller",
+            "tiktok_shop_seller": "tiktok_shop_seller",
+            "shopee_seller": "shopee_seller",
+            "lazada_seller": "lazada_seller",
             "supabase": "supabase",
             "postgres": "warehouse",
             "bigquery": "warehouse",
@@ -2964,6 +2970,12 @@ class IntegrationService:
             "salesforce": "integration_salesforce",
             "pipedrive": "integration_pipedrive",
             "shopify": "integration_shopify",
+            "klaviyo": "integration_klaviyo",
+            "quickbooks": "integration_quickbooks",
+            "amazon_seller": "integration_amazon_seller",
+            "tiktok_shop_seller": "integration_tiktok_shop_seller",
+            "shopee_seller": "integration_shopee_seller",
+            "lazada_seller": "integration_lazada_seller",
             "supabase": "integration_supabase",
             "postgres": "warehouse_extract",
             "bigquery": "warehouse_extract",
@@ -3017,6 +3029,54 @@ class IntegrationService:
             shop_domain = connector_config.get("shop_domain") or "shopify"
             resource = connector_config.get("resource") or "all"
             return f"shopify:{report_type}:{shop_domain}:{resource}"
+        if provider == "klaviyo":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "lifecycle_overview"
+            account_id = connector_config.get("account_id") or "all"
+            resource_id = connector_config.get("resource_id") or "all"
+            return f"klaviyo:{report_type}:{account_id}:{resource_id}"
+        if provider == "quickbooks":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "finance_overview"
+            realm_id = connector_config.get("realm_id") or "all"
+            resource_id = connector_config.get("resource_id") or "all"
+            return f"quickbooks:{report_type}:{realm_id}:{resource_id}"
+        if provider == "amazon_seller":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "sales_overview"
+            seller_id = connector_config.get("seller_id") or "all"
+            marketplace_id = connector_config.get("marketplace_id") or "all"
+            return f"amazon_seller:{report_type}:{seller_id}:{marketplace_id}"
+        if provider == "tiktok_shop_seller":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "sales_overview"
+            shop_id = connector_config.get("shop_id") or "all"
+            region = connector_config.get("region") or "US"
+            return f"tiktok_shop_seller:{report_type}:{shop_id}:{region}"
+        if provider == "shopee_seller":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "sales_overview"
+            shop_id = connector_config.get("shop_id") or "all"
+            region = connector_config.get("region") or "VN"
+            return f"shopee_seller:{report_type}:{shop_id}:{region}"
+        if provider == "lazada_seller":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "sales_overview"
+            seller_id = connector_config.get("seller_id") or "all"
+            region = connector_config.get("region") or "VN"
+            return f"lazada_seller:{report_type}:{seller_id}:{region}"
         if provider == "supabase":
             entity_id = connector_config.get("entity_id")
             if entity_id:
@@ -3265,6 +3325,170 @@ class IntegrationService:
                     }
                 ]
 
+        if provider == "klaviyo":
+            report_type = str(
+                connector_config.get("report_type") or "lifecycle_overview"
+            )
+            account_id = str(connector_config.get("account_id") or "all")
+            resource_id = str(connector_config.get("resource_id") or "all")
+            metric_id = str(connector_config.get("metric_id") or "")
+            channel = str(connector_config.get("channel") or "all")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "account_id": account_id,
+                        "report_type": report_type,
+                        "resource_id": resource_id,
+                        "metric_id": metric_id,
+                        "channel": channel,
+                        "connector_key": "klaviyo",
+                    }
+                ]
+
+        if provider == "quickbooks":
+            report_type = str(connector_config.get("report_type") or "finance_overview")
+            realm_id = str(connector_config.get("realm_id") or "all")
+            resource_id = str(connector_config.get("resource_id") or "all")
+            accounting_basis = str(connector_config.get("accounting_basis") or "Accrual")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "realm_id": realm_id,
+                        "report_type": report_type,
+                        "resource_id": resource_id,
+                        "accounting_basis": accounting_basis,
+                        "connector_key": "quickbooks",
+                    }
+                ]
+
+        if provider == "amazon_seller":
+            report_type = str(connector_config.get("report_type") or "sales_overview")
+            seller_id = str(connector_config.get("seller_id") or "all")
+            marketplace_id = str(connector_config.get("marketplace_id") or "all")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "seller_id": seller_id,
+                        "report_type": report_type,
+                        "marketplace_id": marketplace_id,
+                        "connector_key": "amazon_seller",
+                    }
+                ]
+
+        if provider == "tiktok_shop_seller":
+            report_type = str(connector_config.get("report_type") or "sales_overview")
+            shop_id = str(connector_config.get("shop_id") or "all")
+            region = str(connector_config.get("region") or "US")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "shop_id": shop_id,
+                        "region": region,
+                        "report_type": report_type,
+                        "connector_key": "tiktok_shop_seller",
+                    }
+                ]
+
+        if provider == "shopee_seller":
+            report_type = str(connector_config.get("report_type") or "sales_overview")
+            shop_id = str(connector_config.get("shop_id") or "all")
+            region = str(connector_config.get("region") or "VN")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "shop_id": shop_id,
+                        "region": region,
+                        "report_type": report_type,
+                        "connector_key": "shopee_seller",
+                    }
+                ]
+
+        if provider == "lazada_seller":
+            report_type = str(connector_config.get("report_type") or "sales_overview")
+            seller_id = str(connector_config.get("seller_id") or "all")
+            region = str(connector_config.get("region") or "VN")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "seller_id": seller_id,
+                        "region": region,
+                        "report_type": report_type,
+                        "connector_key": "lazada_seller",
+                    }
+                ]
+
         if provider == "supabase":
             entity_id = self._extract_entity_id_from_schedule(
                 provider, connector_config
@@ -3368,6 +3592,12 @@ class IntegrationService:
             "salesforce": [],
             "pipedrive": [],
             "shopify": [],
+            "klaviyo": [],
+            "quickbooks": [],
+            "amazon_seller": [],
+            "tiktok_shop_seller": [],
+            "shopee_seller": [],
+            "lazada_seller": [],
             "supabase": [],
             "postgres": [],
             "bigquery": [],
@@ -3401,6 +3631,44 @@ class IntegrationService:
 
         status_map["shopify"] = bool(
             (await shopify_service.get_connection_status(user_id)).get("connected")
+        )
+        from app.services.klaviyo_service import klaviyo_service
+
+        status_map["klaviyo"] = bool(
+            (await klaviyo_service.get_connection_status(user_id)).get("connected")
+        )
+        from app.services.quickbooks_service import quickbooks_service
+
+        status_map["quickbooks"] = bool(
+            (await quickbooks_service.get_connection_status(user_id)).get("connected")
+        )
+        from app.services.amazon_seller_service import amazon_seller_service
+
+        status_map["amazon_seller"] = bool(
+            (await amazon_seller_service.get_connection_status(user_id)).get(
+                "connected"
+            )
+        )
+        from app.services.tiktok_shop_seller_service import tiktok_shop_seller_service
+
+        status_map["tiktok_shop_seller"] = bool(
+            (await tiktok_shop_seller_service.get_connection_status(user_id)).get(
+                "connected"
+            )
+        )
+        from app.services.shopee_seller_service import shopee_seller_service
+
+        status_map["shopee_seller"] = bool(
+            (await shopee_seller_service.get_connection_status(user_id)).get(
+                "connected"
+            )
+        )
+        from app.services.lazada_seller_service import lazada_seller_service
+
+        status_map["lazada_seller"] = bool(
+            (await lazada_seller_service.get_connection_status(user_id)).get(
+                "connected"
+            )
         )
         from app.services.supabase_service import supabase_service
 
@@ -3442,6 +3710,12 @@ class IntegrationService:
             "salesforce": "salesforce",
             "pipedrive": "pipedrive",
             "shopify": "shopify",
+            "klaviyo": "klaviyo",
+            "quickbooks": "quickbooks",
+            "amazon_seller": "amazon_seller",
+            "tiktok_shop_seller": "tiktok_shop_seller",
+            "shopee_seller": "shopee_seller",
+            "lazada_seller": "lazada_seller",
             "supabase": "supabase",
         }
         for connector_key, provider in metadata_provider_map.items():
@@ -3479,6 +3753,12 @@ class IntegrationService:
             "salesforce": "salesforce",
             "pipedrive": "pipedrive",
             "shopify": "shopify",
+            "klaviyo": "klaviyo",
+            "quickbooks": "quickbooks",
+            "amazon_seller": "amazon_seller",
+            "tiktok_shop_seller": "tiktok_shop_seller",
+            "shopee_seller": "shopee_seller",
+            "lazada_seller": "lazada_seller",
             "supabase": "supabase",
             "google_ads": "google_ads",
             "firebase": "firebase",
@@ -3520,6 +3800,15 @@ class IntegrationService:
             {"connector_key": "salesforce", "display_name": "Salesforce"},
             {"connector_key": "pipedrive", "display_name": "Pipedrive"},
             {"connector_key": "shopify", "display_name": "Shopify"},
+            {"connector_key": "klaviyo", "display_name": "Klaviyo"},
+            {"connector_key": "quickbooks", "display_name": "QuickBooks"},
+            {"connector_key": "amazon_seller", "display_name": "Amazon Seller"},
+            {
+                "connector_key": "tiktok_shop_seller",
+                "display_name": "TikTok Shop Seller",
+            },
+            {"connector_key": "shopee_seller", "display_name": "Shopee Seller"},
+            {"connector_key": "lazada_seller", "display_name": "Lazada Seller"},
             {"connector_key": "supabase", "display_name": "Supabase"},
             {"connector_key": "postgres", "display_name": "PostgreSQL"},
             {"connector_key": "bigquery", "display_name": "BigQuery"},
@@ -4062,6 +4351,12 @@ class IntegrationService:
             "salesforce",
             "pipedrive",
             "shopify",
+            "klaviyo",
+            "quickbooks",
+            "amazon_seller",
+            "tiktok_shop_seller",
+            "shopee_seller",
+            "lazada_seller",
             "supabase",
         }:
             # only date overrides are supported for these in refresh modal
@@ -4214,6 +4509,62 @@ class IntegrationService:
                     project_id=project_id,
                     overrides={**resolved_cfg, **overrides},
                 )
+            elif connector_key == "klaviyo":
+                from app.services.klaviyo_service import klaviyo_service
+
+                result = await klaviyo_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
+            elif connector_key == "quickbooks":
+                from app.services.quickbooks_service import quickbooks_service
+
+                result = await quickbooks_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
+            elif connector_key == "amazon_seller":
+                from app.services.amazon_seller_service import amazon_seller_service
+
+                result = await amazon_seller_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
+            elif connector_key == "tiktok_shop_seller":
+                from app.services.tiktok_shop_seller_service import (
+                    tiktok_shop_seller_service,
+                )
+
+                result = await tiktok_shop_seller_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
+            elif connector_key == "shopee_seller":
+                from app.services.shopee_seller_service import shopee_seller_service
+
+                result = await shopee_seller_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
+            elif connector_key == "lazada_seller":
+                from app.services.lazada_seller_service import lazada_seller_service
+
+                result = await lazada_seller_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
             elif connector_key == "supabase":
                 from app.services.supabase_service import supabase_service
 
@@ -4265,6 +4616,12 @@ class IntegrationService:
             "databricks",
             "supabase",
             "shopify",
+            "klaviyo",
+            "quickbooks",
+            "amazon_seller",
+            "tiktok_shop_seller",
+            "shopee_seller",
+            "lazada_seller",
         }:
             stable_entity_name = self._pick_best_entity_name(
                 str(entity_id),

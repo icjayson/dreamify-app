@@ -21,7 +21,7 @@ router = APIRouter(tags=["schedules"])
 
 
 class CreateScheduleRequest(BaseModel):
-    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | shopify | supabase | warehouse
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | shopify | klaviyo | quickbooks | amazon_seller | tiktok_shop_seller | shopee_seller | lazada_seller | supabase | warehouse
     connector_config: Dict[str, Any]
     project_id: str
     account_name: str = ""
@@ -59,6 +59,12 @@ _VALID_PROVIDERS = {
     "salesforce",
     "pipedrive",
     "shopify",
+    "klaviyo",
+    "quickbooks",
+    "amazon_seller",
+    "tiktok_shop_seller",
+    "shopee_seller",
+    "lazada_seller",
     "supabase",
     "warehouse",
 }
@@ -92,6 +98,63 @@ _VALID_SHOPIFY_REPORT_TYPES = {
     "customers",
     "inventory",
     "discounts",
+}
+_VALID_KLAVIYO_REPORT_TYPES = {
+    "lifecycle_overview",
+    "campaigns",
+    "flows",
+    "profiles",
+    "lists",
+    "events",
+    "metrics",
+}
+_VALID_QUICKBOOKS_REPORT_TYPES = {
+    "finance_overview",
+    "profit_and_loss",
+    "balance_sheet",
+    "cash_flow",
+    "invoices",
+    "bills",
+    "payments",
+    "customers",
+    "vendors",
+    "items",
+    "accounts",
+}
+_VALID_AMAZON_SELLER_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "order_items",
+    "inventory",
+    "listings",
+    "returns",
+}
+_VALID_TIKTOK_SHOP_SELLER_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "order_items",
+    "products",
+    "inventory",
+    "returns",
+    "settlements",
+}
+_VALID_SHOPEE_SELLER_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "order_items",
+    "products",
+    "inventory",
+    "returns",
+    "income",
+}
+_VALID_LAZADA_SELLER_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "order_items",
+    "products",
+    "inventory",
+    "returns",
+    "finance",
 }
 _VALID_SUPABASE_SYNC_MODES = {
     "profile_only",
@@ -258,6 +321,244 @@ def _normalize_connector_config(
                 cfg.pop("max_bytes", None)
         cfg["entity_id"] = str(
             entity_id or f"shopify:{report_type}:{shop_domain}:{resource}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "klaviyo":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "lifecycle_overview"
+        account_id = str(cfg.get("account_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "klaviyo":
+                report_type = raw_report_type or parts[1] or report_type
+                account_id = account_id if account_id != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_KLAVIYO_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be lifecycle_overview, campaigns, flows, profiles, lists, events, or metrics",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        channel = str(cfg.get("channel") or "all").strip().lower() or "all"
+        if channel not in {"all", "email", "sms"}:
+            raise HTTPException(
+                400, "connector_config.channel must be all, email, or sms"
+            )
+        cfg["report_type"] = report_type
+        cfg["account_id"] = account_id
+        cfg["resource_id"] = resource_id
+        cfg["metric_id"] = str(cfg.get("metric_id") or "").strip()
+        cfg["channel"] = channel
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"klaviyo:{report_type}:{account_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "quickbooks":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "finance_overview"
+        realm_id = str(cfg.get("realm_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "quickbooks":
+                report_type = raw_report_type or parts[1] or report_type
+                realm_id = realm_id if realm_id != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_QUICKBOOKS_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be finance_overview, profit_and_loss, balance_sheet, cash_flow, invoices, bills, payments, customers, vendors, items, or accounts",
+            )
+        accounting_basis = str(cfg.get("accounting_basis") or "Accrual").strip().title()
+        if accounting_basis not in {"Accrual", "Cash"}:
+            raise HTTPException(
+                400, "connector_config.accounting_basis must be Accrual or Cash"
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["realm_id"] = realm_id
+        cfg["resource_id"] = resource_id
+        cfg["accounting_basis"] = accounting_basis
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"quickbooks:{report_type}:{realm_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "amazon_seller":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        seller_id = str(cfg.get("seller_id") or "all").strip() or "all"
+        raw_marketplace_id = str(cfg.get("marketplace_id") or "").strip()
+        marketplace_id = raw_marketplace_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "amazon_seller":
+                report_type = raw_report_type or parts[1] or report_type
+                seller_id = seller_id if seller_id != "all" else parts[2] or "all"
+                marketplace_id = raw_marketplace_id or parts[3] or "all"
+        if report_type not in _VALID_AMAZON_SELLER_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, order_items, inventory, listings, or returns",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["seller_id"] = seller_id
+        cfg["marketplace_id"] = marketplace_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"amazon_seller:{report_type}:{seller_id}:{marketplace_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "tiktok_shop_seller":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        shop_id = str(cfg.get("shop_id") or "all").strip() or "all"
+        region = str(cfg.get("region") or "US").strip().upper() or "US"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "tiktok_shop_seller":
+                report_type = raw_report_type or parts[1] or report_type
+                shop_id = shop_id if shop_id != "all" else parts[2] or "all"
+                region = parts[3].upper() or region
+        if report_type not in _VALID_TIKTOK_SHOP_SELLER_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, order_items, products, inventory, returns, or settlements",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["shop_id"] = shop_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"tiktok_shop_seller:{report_type}:{shop_id}:{region}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "shopee_seller":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        shop_id = str(cfg.get("shop_id") or "all").strip() or "all"
+        region = str(cfg.get("region") or "VN").strip().upper() or "VN"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "shopee_seller":
+                report_type = raw_report_type or parts[1] or report_type
+                shop_id = shop_id if shop_id != "all" else parts[2] or "all"
+                region = parts[3].upper() or region
+        if report_type not in _VALID_SHOPEE_SELLER_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, order_items, products, inventory, returns, or income",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["shop_id"] = shop_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"shopee_seller:{report_type}:{shop_id}:{region}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "lazada_seller":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        seller_id = str(cfg.get("seller_id") or "all").strip() or "all"
+        region = str(cfg.get("region") or "VN").strip().upper() or "VN"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "lazada_seller":
+                report_type = raw_report_type or parts[1] or report_type
+                seller_id = seller_id if seller_id != "all" else parts[2] or "all"
+                region = parts[3].upper() or region
+        if report_type not in _VALID_LAZADA_SELLER_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, order_items, products, inventory, returns, or finance",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["seller_id"] = seller_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"lazada_seller:{report_type}:{seller_id}:{region}"
         )
         cfg["entity_name"] = str(
             cfg.get("entity_name") or report_type.replace("_", " ").title()

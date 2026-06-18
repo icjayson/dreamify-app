@@ -254,6 +254,22 @@ def _detect_source_label(contents: List[Dict[str, Any]]) -> str:
         return "Pipedrive"
     if "shopify" in raw:
         return "Shopify"
+    if "klaviyo" in raw:
+        return "Klaviyo"
+    if "quickbooks" in raw or "quick books" in raw:
+        return "QuickBooks"
+    if "amazon_seller" in raw or "amazon seller" in raw or "seller central" in raw:
+        return "Amazon Seller"
+    if "shopee_seller" in raw or "shopee seller" in raw or "shopee" in raw:
+        return "Shopee Seller"
+    if "lazada_seller" in raw or "lazada seller" in raw or "lazada" in raw:
+        return "Lazada Seller"
+    if (
+        "tiktok_shop_seller" in raw
+        or "tiktok shop seller" in raw
+        or "tiktok shop" in raw
+    ):
+        return "TikTok Shop Seller"
     if "supabase" in raw:
         return "Supabase"
     return "CSV"
@@ -298,6 +314,14 @@ def _infer_project_topic(prompt: str, source_label: str, filename_topic: str) ->
         return "Sales Pipeline"
     if source_label == "Shopify":
         return "Sales Performance"
+    if source_label == "Klaviyo":
+        return "Lifecycle Marketing"
+    if source_label == "QuickBooks":
+        return "Finance Overview"
+    if source_label == "Amazon Seller":
+        return "Marketplace Commerce"
+    if source_label == "TikTok Shop Seller":
+        return "Marketplace Commerce"
     if source_label == "Supabase":
         return "Product Analytics"
     if source_label == "Firebase":

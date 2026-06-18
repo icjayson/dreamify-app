@@ -505,6 +505,282 @@ class TestTriggerEndpoint:
             date_range_preset="last_30d",
         )
 
+    def test_run_sync_dispatches_klaviyo_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch("app.services.klaviyo_service.klaviyo_service") as mock_klaviyo:
+            mock_klaviyo.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 8,
+                    "column_count": 12,
+                    "asset": {"asset_id": "asset_klaviyo"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="klaviyo",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "lifecycle_overview",
+                        "account_id": "acct_1",
+                        "resource_id": "all",
+                        "metric_id": "metric_placed_order",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 8
+        mock_klaviyo.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "lifecycle_overview",
+                "account_id": "acct_1",
+                "resource_id": "all",
+                "metric_id": "metric_placed_order",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_quickbooks_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch("app.services.quickbooks_service.quickbooks_service") as mock_quickbooks:
+            mock_quickbooks.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 13,
+                    "column_count": 17,
+                    "asset": {"asset_id": "asset_quickbooks"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="quickbooks",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "finance_overview",
+                        "realm_id": "realm_1",
+                        "resource_id": "all",
+                        "accounting_basis": "Accrual",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 13
+        mock_quickbooks.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "finance_overview",
+                "realm_id": "realm_1",
+                "resource_id": "all",
+                "accounting_basis": "Accrual",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_amazon_seller_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.amazon_seller_service.amazon_seller_service"
+        ) as mock_amazon:
+            mock_amazon.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 9,
+                    "column_count": 21,
+                    "asset": {"asset_id": "asset_amazon"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="amazon_seller",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "sales_overview",
+                        "seller_id": "seller_123",
+                        "marketplace_id": "ATVPDKIKX0DER",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 9
+        mock_amazon.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "sales_overview",
+                "seller_id": "seller_123",
+                "marketplace_id": "ATVPDKIKX0DER",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_tiktok_shop_seller_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.tiktok_shop_seller_service.tiktok_shop_seller_service"
+        ) as mock_tiktok_shop:
+            mock_tiktok_shop.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 10,
+                    "column_count": 20,
+                    "asset": {"asset_id": "asset_tiktok_shop"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="tiktok_shop_seller",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "sales_overview",
+                        "shop_id": "shop_123",
+                        "region": "US",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 10
+        mock_tiktok_shop.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "sales_overview",
+                "shop_id": "shop_123",
+                "region": "US",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_shopee_seller_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.shopee_seller_service.shopee_seller_service"
+        ) as mock_shopee:
+            mock_shopee.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 11,
+                    "column_count": 20,
+                    "asset": {"asset_id": "asset_shopee"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="shopee_seller",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "sales_overview",
+                        "shop_id": "shop_123",
+                        "region": "VN",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 11
+        mock_shopee.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "sales_overview",
+                "shop_id": "shop_123",
+                "region": "VN",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_lazada_seller_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.lazada_seller_service.lazada_seller_service"
+        ) as mock_lazada:
+            mock_lazada.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 12,
+                    "column_count": 20,
+                    "asset": {"asset_id": "asset_lazada"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="lazada_seller",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "sales_overview",
+                        "seller_id": "seller_123",
+                        "region": "VN",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 12
+        mock_lazada.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "sales_overview",
+                "seller_id": "seller_123",
+                "region": "VN",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
 
 # ── Schedules CRUD validation ─────────────────────────────────────────────────
 
@@ -691,6 +967,263 @@ class TestScheduleValidation:
             _normalize_connector_config(
                 "shopify",
                 {"report_type": "payments", "shop_domain": "demo.myshopify.com"},
+            )
+
+    def test_klaviyo_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "klaviyo",
+            {
+                "report_type": "lifecycle_overview",
+                "account_id": "acct_1",
+                "resource_id": "all",
+                "metric_id": "metric_placed_order",
+                "channel": "email",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "lifecycle_overview"
+        assert cfg["account_id"] == "acct_1"
+        assert cfg["resource_id"] == "all"
+        assert cfg["metric_id"] == "metric_placed_order"
+        assert cfg["channel"] == "email"
+        assert cfg["entity_id"] == "klaviyo:lifecycle_overview:acct_1:all"
+        assert cfg["row_limit"] == 10000
+
+    def test_klaviyo_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "klaviyo",
+            {"entity_id": "klaviyo:campaigns:acct_1:campaign_123"},
+        )
+
+        assert cfg["report_type"] == "campaigns"
+        assert cfg["account_id"] == "acct_1"
+        assert cfg["resource_id"] == "campaign_123"
+
+    def test_klaviyo_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("klaviyo", {"report_type": "segments"})
+
+    def test_quickbooks_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "quickbooks",
+            {
+                "report_type": "finance_overview",
+                "realm_id": "realm_1",
+                "resource_id": "all",
+                "accounting_basis": "cash",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "finance_overview"
+        assert cfg["realm_id"] == "realm_1"
+        assert cfg["resource_id"] == "all"
+        assert cfg["accounting_basis"] == "Cash"
+        assert cfg["entity_id"] == "quickbooks:finance_overview:realm_1:all"
+        assert cfg["row_limit"] == 10000
+
+    def test_quickbooks_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "quickbooks",
+            {"entity_id": "quickbooks:invoices:realm_1:all"},
+        )
+
+        assert cfg["report_type"] == "invoices"
+        assert cfg["realm_id"] == "realm_1"
+        assert cfg["resource_id"] == "all"
+
+    def test_quickbooks_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("quickbooks", {"report_type": "payroll"})
+
+    def test_quickbooks_config_rejects_unknown_accounting_basis(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "quickbooks", {"accounting_basis": "ModifiedCash"}
+            )
+
+    def test_amazon_seller_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "amazon_seller",
+            {
+                "report_type": "sales_overview",
+                "seller_id": "seller_123",
+                "marketplace_id": "ATVPDKIKX0DER",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "sales_overview"
+        assert cfg["seller_id"] == "seller_123"
+        assert cfg["marketplace_id"] == "ATVPDKIKX0DER"
+        assert (
+            cfg["entity_id"]
+            == "amazon_seller:sales_overview:seller_123:ATVPDKIKX0DER"
+        )
+        assert cfg["row_limit"] == 10000
+
+    def test_amazon_seller_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "amazon_seller",
+            {"entity_id": "amazon_seller:inventory:seller_123:all"},
+        )
+
+        assert cfg["report_type"] == "inventory"
+        assert cfg["seller_id"] == "seller_123"
+        assert cfg["marketplace_id"] == "all"
+
+    def test_amazon_seller_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "amazon_seller", {"report_type": "brand_analytics"}
+            )
+
+    def test_tiktok_shop_seller_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "tiktok_shop_seller",
+            {
+                "report_type": "sales_overview",
+                "shop_id": "shop_123",
+                "region": "us",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "sales_overview"
+        assert cfg["shop_id"] == "shop_123"
+        assert cfg["region"] == "US"
+        assert (
+            cfg["entity_id"]
+            == "tiktok_shop_seller:sales_overview:shop_123:US"
+        )
+        assert cfg["row_limit"] == 10000
+
+    def test_tiktok_shop_seller_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "tiktok_shop_seller",
+            {"entity_id": "tiktok_shop_seller:inventory:shop_123:VN"},
+        )
+
+        assert cfg["report_type"] == "inventory"
+        assert cfg["shop_id"] == "shop_123"
+        assert cfg["region"] == "VN"
+
+    def test_tiktok_shop_seller_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "tiktok_shop_seller", {"report_type": "creator_affiliate"}
+            )
+
+    def test_shopee_seller_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "shopee_seller",
+            {
+                "report_type": "sales_overview",
+                "shop_id": "shop_123",
+                "region": "vn",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "sales_overview"
+        assert cfg["shop_id"] == "shop_123"
+        assert cfg["region"] == "VN"
+        assert cfg["entity_id"] == "shopee_seller:sales_overview:shop_123:VN"
+        assert cfg["row_limit"] == 10000
+
+    def test_shopee_seller_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "shopee_seller",
+            {"entity_id": "shopee_seller:inventory:shop_123:ID"},
+        )
+
+        assert cfg["report_type"] == "inventory"
+        assert cfg["shop_id"] == "shop_123"
+        assert cfg["region"] == "ID"
+
+    def test_shopee_seller_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "shopee_seller", {"report_type": "vouchers"}
+            )
+
+    def test_lazada_seller_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "lazada_seller",
+            {
+                "report_type": "sales_overview",
+                "seller_id": "seller_123",
+                "region": "vn",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "sales_overview"
+        assert cfg["seller_id"] == "seller_123"
+        assert cfg["region"] == "VN"
+        assert cfg["entity_id"] == "lazada_seller:sales_overview:seller_123:VN"
+        assert cfg["row_limit"] == 10000
+
+    def test_lazada_seller_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "lazada_seller",
+            {"entity_id": "lazada_seller:finance:seller_123:SG"},
+        )
+
+        assert cfg["report_type"] == "finance"
+        assert cfg["seller_id"] == "seller_123"
+        assert cfg["region"] == "SG"
+
+    def test_lazada_seller_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "lazada_seller", {"report_type": "sponsored_solutions"}
             )
 
     def test_supabase_config_normalizes_table_entity_and_caps_rows(self):

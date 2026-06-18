@@ -355,6 +355,78 @@ async def _run_sync(
             date_range_preset=date_range_preset,
         )
 
+    elif provider == "klaviyo":
+        from app.services.klaviyo_service import klaviyo_service
+
+        return await klaviyo_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
+    elif provider == "quickbooks":
+        from app.services.quickbooks_service import quickbooks_service
+
+        return await quickbooks_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
+    elif provider == "amazon_seller":
+        from app.services.amazon_seller_service import amazon_seller_service
+
+        return await amazon_seller_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
+    elif provider == "tiktok_shop_seller":
+        from app.services.tiktok_shop_seller_service import tiktok_shop_seller_service
+
+        return await tiktok_shop_seller_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
+    elif provider == "shopee_seller":
+        from app.services.shopee_seller_service import shopee_seller_service
+
+        return await shopee_seller_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
+    elif provider == "lazada_seller":
+        from app.services.lazada_seller_service import lazada_seller_service
+
+        return await lazada_seller_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
     elif provider == "supabase":
         from app.services.supabase_service import supabase_service
 
@@ -387,6 +459,12 @@ _PROVIDER_LABELS: dict = {
     "salesforce": "Salesforce",
     "pipedrive": "Pipedrive",
     "shopify": "Shopify",
+    "klaviyo": "Klaviyo",
+    "quickbooks": "QuickBooks",
+    "amazon_seller": "Amazon Seller",
+    "tiktok_shop_seller": "TikTok Shop Seller",
+    "shopee_seller": "Shopee Seller",
+    "lazada_seller": "Lazada Seller",
     "supabase": "Supabase",
     "warehouse": "Warehouse",
 }

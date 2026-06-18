@@ -8,9 +8,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_user
+from app.services.amazon_seller_service import amazon_seller_service
 from app.services.integration_service import integration_service
+from app.services.klaviyo_service import klaviyo_service
+from app.services.lazada_seller_service import lazada_seller_service
+from app.services.quickbooks_service import quickbooks_service
 from app.services.shopify_service import shopify_service
+from app.services.shopee_seller_service import shopee_seller_service
 from app.services.supabase_service import supabase_service
+from app.services.tiktok_shop_seller_service import tiktok_shop_seller_service
 from app.api.route_modules.user import AssetResponse, _map_asset, _ensure_project
 
 router = APIRouter(
@@ -91,6 +97,14 @@ class ConnectorSelectedEntity(BaseModel):
     project_ref: Optional[str] = None
     shop_domain: Optional[str] = None
     resource: Optional[str] = None
+    account_id: Optional[str] = None
+    resource_id: Optional[str] = None
+    metric_id: Optional[str] = None
+    channel: Optional[str] = None
+    seller_id: Optional[str] = None
+    marketplace_id: Optional[str] = None
+    shop_id: Optional[str] = None
+    region: Optional[str] = None
 
 
 class ConnectorOverviewItem(BaseModel):
@@ -2131,6 +2145,1193 @@ async def shopify_sync(
     except Exception as e:
         logger.error(f"Shopify sync error: {e}")
         return ShopifySyncResponse(success=False, error=str(e))
+
+
+# ── Klaviyo Lifecycle Marketing ─────────────────────────────────────────────
+
+_KLAVIYO_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "klaviyo_oauth"
+).replace("META_OAUTH_SUCCESS", "KLAVIYO_OAUTH_SUCCESS")
+
+_KLAVIYO_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "klaviyo_oauth"
+).replace("META_OAUTH_ERROR", "KLAVIYO_OAUTH_ERROR")
+
+
+class KlaviyoStatusResponse(BaseModel):
+    connected: bool = False
+    account_id: Optional[str] = None
+    account_name: Optional[str] = None
+    timezone: Optional[str] = None
+    currency: Optional[str] = None
+    api_revision: Optional[str] = None
+    scopes: List[str] = Field(default_factory=list)
+    default_metric_id: Optional[str] = None
+    default_metric_name: Optional[str] = None
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class KlaviyoReportResource(BaseModel):
+    report_type: str
+    label: str
+    resource: str
+    default: bool = False
+
+
+class KlaviyoNamedResource(BaseModel):
+    id: str
+    name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
+    channel: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class KlaviyoResourcesResponse(BaseModel):
+    success: bool
+    reports: List[KlaviyoReportResource] = Field(default_factory=list)
+    metrics: List[KlaviyoNamedResource] = Field(default_factory=list)
+    campaigns: List[KlaviyoNamedResource] = Field(default_factory=list)
+    flows: List[KlaviyoNamedResource] = Field(default_factory=list)
+    lists: List[KlaviyoNamedResource] = Field(default_factory=list)
+    default_metric_id: Optional[str] = None
+    default_metric_name: Optional[str] = None
+    error: Optional[str] = None
+
+
+class KlaviyoSyncRequest(BaseModel):
+    report_type: str = "lifecycle_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+    metric_id: str = ""
+    resource_id: str = "all"
+    channel: str = "all"
+
+
+class KlaviyoSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/klaviyo/oauth/start")
+async def klaviyo_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+):
+    """Redirect the popup to the Klaviyo OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _KLAVIYO_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _KLAVIYO_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+    try:
+        return RedirectResponse(url=klaviyo_service.get_oauth_url(user_id))
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/klaviyo/oauth/callback", response_class=HTMLResponse)
+async def klaviyo_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Klaviyo redirects here after authorization."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_KLAVIYO_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await klaviyo_service.handle_oauth_callback(code=code, state=state)
+        return HTMLResponse(_KLAVIYO_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Klaviyo OAuth callback error: {e}")
+        return HTMLResponse(_KLAVIYO_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/klaviyo/status", response_model=KlaviyoStatusResponse)
+async def klaviyo_status(user_id: str = Depends(require_user)):
+    try:
+        return await klaviyo_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Klaviyo status error: {e}")
+        return KlaviyoStatusResponse(connected=False)
+
+
+@router.delete("/integration/klaviyo/disconnect")
+async def klaviyo_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await klaviyo_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Klaviyo disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/klaviyo/resources", response_model=KlaviyoResourcesResponse)
+async def klaviyo_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await klaviyo_service.list_resources(user_id)
+        return KlaviyoResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return KlaviyoResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Klaviyo resources error: {e}")
+        return KlaviyoResourcesResponse(success=False, error=str(e))
+
+
+@router.post("/integration/klaviyo/sync", response_model=KlaviyoSyncResponse)
+async def klaviyo_sync(
+    request: KlaviyoSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await klaviyo_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+            metric_id=request.metric_id,
+            resource_id=request.resource_id,
+            channel=request.channel,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return KlaviyoSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return KlaviyoSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Klaviyo sync error: {e}")
+        return KlaviyoSyncResponse(success=False, error=str(e))
+
+
+# ── QuickBooks Online Finance & Accounting ──────────────────────────────────
+
+_QUICKBOOKS_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "quickbooks_oauth"
+).replace("META_OAUTH_SUCCESS", "QUICKBOOKS_OAUTH_SUCCESS")
+
+_QUICKBOOKS_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "quickbooks_oauth"
+).replace("META_OAUTH_ERROR", "QUICKBOOKS_OAUTH_ERROR")
+
+
+class QuickBooksRealm(BaseModel):
+    id: str
+    name: str
+    environment: Optional[str] = None
+
+
+class QuickBooksStatusResponse(BaseModel):
+    connected: bool = False
+    realm_id: Optional[str] = None
+    company_name: Optional[str] = None
+    environment: Optional[str] = None
+    minor_version: Optional[str] = None
+    country: Optional[str] = None
+    currency: Optional[str] = None
+    scopes: List[str] = Field(default_factory=list)
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class QuickBooksReportResource(BaseModel):
+    report_type: str
+    label: str
+    resource: str
+    default: bool = False
+
+
+class QuickBooksResourcesResponse(BaseModel):
+    success: bool
+    reports: List[QuickBooksReportResource] = Field(default_factory=list)
+    realms: List[QuickBooksRealm] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class QuickBooksSyncRequest(BaseModel):
+    report_type: str = "finance_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+    accounting_basis: str = "Accrual"
+    resource_id: str = "all"
+
+
+class QuickBooksSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/quickbooks/oauth/start")
+async def quickbooks_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+):
+    """Redirect the popup to the QuickBooks Online OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _QUICKBOOKS_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _QUICKBOOKS_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+    try:
+        return RedirectResponse(url=quickbooks_service.get_oauth_url(user_id))
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/quickbooks/oauth/callback", response_class=HTMLResponse)
+async def quickbooks_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    realmId: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Intuit redirects here after QuickBooks authorization."""
+    if error or not code or not state or not realmId:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_QUICKBOOKS_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await quickbooks_service.handle_oauth_callback(
+            code=code, state=state, realm_id=realmId
+        )
+        return HTMLResponse(_QUICKBOOKS_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"QuickBooks OAuth callback error: {e}")
+        return HTMLResponse(_QUICKBOOKS_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/quickbooks/status", response_model=QuickBooksStatusResponse)
+async def quickbooks_status(user_id: str = Depends(require_user)):
+    try:
+        return await quickbooks_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"QuickBooks status error: {e}")
+        return QuickBooksStatusResponse(connected=False)
+
+
+@router.delete("/integration/quickbooks/disconnect")
+async def quickbooks_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await quickbooks_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"QuickBooks disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/quickbooks/resources", response_model=QuickBooksResourcesResponse)
+async def quickbooks_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await quickbooks_service.list_resources(user_id)
+        return QuickBooksResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return QuickBooksResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"QuickBooks resources error: {e}")
+        return QuickBooksResourcesResponse(success=False, error=str(e))
+
+
+@router.post("/integration/quickbooks/sync", response_model=QuickBooksSyncResponse)
+async def quickbooks_sync(
+    request: QuickBooksSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await quickbooks_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+            accounting_basis=request.accounting_basis,
+            resource_id=request.resource_id,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return QuickBooksSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return QuickBooksSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"QuickBooks sync error: {e}")
+        return QuickBooksSyncResponse(success=False, error=str(e))
+
+
+# ── Amazon Seller Central ───────────────────────────────────────────────────
+
+_AMAZON_SELLER_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "amazon_seller_oauth"
+).replace("META_OAUTH_SUCCESS", "AMAZON_SELLER_OAUTH_SUCCESS")
+
+_AMAZON_SELLER_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "amazon_seller_oauth"
+).replace("META_OAUTH_ERROR", "AMAZON_SELLER_OAUTH_ERROR")
+
+
+class AmazonSellerMarketplace(BaseModel):
+    id: str
+    name: str
+    country_code: Optional[str] = None
+
+
+class AmazonSellerStatusResponse(BaseModel):
+    connected: bool = False
+    seller_id: Optional[str] = None
+    seller_name: Optional[str] = None
+    selling_region: Optional[str] = None
+    marketplaces: List[AmazonSellerMarketplace] = Field(default_factory=list)
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class AmazonSellerReportResource(BaseModel):
+    report_type: str
+    label: str
+    default: bool = False
+
+
+class AmazonSellerResourcesResponse(BaseModel):
+    success: bool
+    reports: List[AmazonSellerReportResource] = Field(default_factory=list)
+    marketplaces: List[AmazonSellerMarketplace] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class AmazonSellerSyncRequest(BaseModel):
+    report_type: str = "sales_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    marketplace_id: str = "all"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+
+
+class AmazonSellerSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/amazon-seller/oauth/start")
+async def amazon_seller_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+    region: str = Query(default="NA"),
+):
+    """Redirect the popup to the Amazon Seller Central consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _AMAZON_SELLER_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — please sign in."
+            )
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _AMAZON_SELLER_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — invalid token."
+            )
+        )
+    try:
+        return RedirectResponse(
+            url=amazon_seller_service.get_oauth_url(user_id, region=region)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/amazon-seller/oauth/callback", response_class=HTMLResponse)
+async def amazon_seller_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    spapi_oauth_code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    selling_partner_id: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Amazon redirects here after seller authorization."""
+    oauth_code = spapi_oauth_code or code
+    if error or not oauth_code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_AMAZON_SELLER_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await amazon_seller_service.handle_oauth_callback(
+            code=oauth_code,
+            state=state,
+            selling_partner_id=selling_partner_id,
+        )
+        return HTMLResponse(_AMAZON_SELLER_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Amazon Seller OAuth callback error: {e}")
+        return HTMLResponse(_AMAZON_SELLER_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get(
+    "/integration/amazon-seller/status", response_model=AmazonSellerStatusResponse
+)
+async def amazon_seller_status(user_id: str = Depends(require_user)):
+    try:
+        return await amazon_seller_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Amazon Seller status error: {e}")
+        return AmazonSellerStatusResponse(connected=False)
+
+
+@router.delete("/integration/amazon-seller/disconnect")
+async def amazon_seller_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await amazon_seller_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Amazon Seller disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/amazon-seller/resources",
+    response_model=AmazonSellerResourcesResponse,
+)
+async def amazon_seller_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await amazon_seller_service.list_resources(user_id)
+        return AmazonSellerResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return AmazonSellerResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Amazon Seller resources error: {e}")
+        return AmazonSellerResourcesResponse(success=False, error=str(e))
+
+
+@router.post("/integration/amazon-seller/sync", response_model=AmazonSellerSyncResponse)
+async def amazon_seller_sync(
+    request: AmazonSellerSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await amazon_seller_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            marketplace_id=request.marketplace_id,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return AmazonSellerSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return AmazonSellerSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Amazon Seller sync error: {e}")
+        return AmazonSellerSyncResponse(success=False, error=str(e))
+
+
+# ── TikTok Shop Seller ──────────────────────────────────────────────────────
+
+_TIKTOK_SHOP_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "tiktok_shop_seller_oauth"
+).replace("META_OAUTH_SUCCESS", "TIKTOK_SHOP_SELLER_OAUTH_SUCCESS")
+
+_TIKTOK_SHOP_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "tiktok_shop_seller_oauth"
+).replace("META_OAUTH_ERROR", "TIKTOK_SHOP_SELLER_OAUTH_ERROR")
+
+
+class TikTokShopSellerShop(BaseModel):
+    id: str
+    name: str
+    region: Optional[str] = None
+    shop_cipher: Optional[str] = None
+
+
+class TikTokShopSellerStatusResponse(BaseModel):
+    connected: bool = False
+    account_id: Optional[str] = None
+    account_name: Optional[str] = None
+    region: Optional[str] = None
+    shops: List[TikTokShopSellerShop] = Field(default_factory=list)
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class TikTokShopSellerReportResource(BaseModel):
+    report_type: str
+    label: str
+    default: bool = False
+
+
+class TikTokShopSellerResourcesResponse(BaseModel):
+    success: bool
+    reports: List[TikTokShopSellerReportResource] = Field(default_factory=list)
+    shops: List[TikTokShopSellerShop] = Field(default_factory=list)
+    regions: Dict[str, str] = Field(default_factory=dict)
+    error: Optional[str] = None
+
+
+class TikTokShopSellerSyncRequest(BaseModel):
+    report_type: str = "sales_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    shop_id: str = "all"
+    region: str = "US"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+
+
+class TikTokShopSellerSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/tiktok-shop-seller/oauth/start")
+async def tiktok_shop_seller_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+    region: str = Query(default="US"),
+):
+    """Redirect the popup to the TikTok Shop authorization screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _TIKTOK_SHOP_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — please sign in."
+            )
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _TIKTOK_SHOP_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — invalid token."
+            )
+        )
+    try:
+        return RedirectResponse(
+            url=tiktok_shop_seller_service.get_oauth_url(user_id, region=region)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/tiktok-shop-seller/oauth/callback", response_class=HTMLResponse)
+async def tiktok_shop_seller_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    auth_code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. TikTok Shop redirects here after seller authorization."""
+    oauth_code = auth_code or code
+    if error or not oauth_code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_TIKTOK_SHOP_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await tiktok_shop_seller_service.handle_oauth_callback(
+            code=oauth_code,
+            state=state,
+        )
+        return HTMLResponse(_TIKTOK_SHOP_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"TikTok Shop Seller OAuth callback error: {e}")
+        return HTMLResponse(_TIKTOK_SHOP_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get(
+    "/integration/tiktok-shop-seller/status",
+    response_model=TikTokShopSellerStatusResponse,
+)
+async def tiktok_shop_seller_status(user_id: str = Depends(require_user)):
+    try:
+        return await tiktok_shop_seller_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"TikTok Shop Seller status error: {e}")
+        return TikTokShopSellerStatusResponse(connected=False)
+
+
+@router.delete("/integration/tiktok-shop-seller/disconnect")
+async def tiktok_shop_seller_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await tiktok_shop_seller_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"TikTok Shop Seller disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/tiktok-shop-seller/resources",
+    response_model=TikTokShopSellerResourcesResponse,
+)
+async def tiktok_shop_seller_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await tiktok_shop_seller_service.list_resources(user_id)
+        return TikTokShopSellerResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return TikTokShopSellerResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"TikTok Shop Seller resources error: {e}")
+        return TikTokShopSellerResourcesResponse(success=False, error=str(e))
+
+
+@router.post(
+    "/integration/tiktok-shop-seller/sync",
+    response_model=TikTokShopSellerSyncResponse,
+)
+async def tiktok_shop_seller_sync(
+    request: TikTokShopSellerSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await tiktok_shop_seller_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            shop_id=request.shop_id,
+            region=request.region,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return TikTokShopSellerSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return TikTokShopSellerSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"TikTok Shop Seller sync error: {e}")
+        return TikTokShopSellerSyncResponse(success=False, error=str(e))
+
+
+# ── Shopee Seller ───────────────────────────────────────────────────────────
+
+_SHOPEE_SELLER_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "shopee_seller_oauth"
+).replace("META_OAUTH_SUCCESS", "SHOPEE_SELLER_OAUTH_SUCCESS")
+
+_SHOPEE_SELLER_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "shopee_seller_oauth"
+).replace("META_OAUTH_ERROR", "SHOPEE_SELLER_OAUTH_ERROR")
+
+
+class ShopeeSellerShop(BaseModel):
+    id: str
+    name: str
+    region: Optional[str] = None
+
+
+class ShopeeSellerStatusResponse(BaseModel):
+    connected: bool = False
+    account_id: Optional[str] = None
+    account_name: Optional[str] = None
+    region: Optional[str] = None
+    shops: List[ShopeeSellerShop] = Field(default_factory=list)
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class ShopeeSellerReportResource(BaseModel):
+    report_type: str
+    label: str
+    default: bool = False
+
+
+class ShopeeSellerResourcesResponse(BaseModel):
+    success: bool
+    reports: List[ShopeeSellerReportResource] = Field(default_factory=list)
+    shops: List[ShopeeSellerShop] = Field(default_factory=list)
+    regions: Dict[str, str] = Field(default_factory=dict)
+    error: Optional[str] = None
+
+
+class ShopeeSellerSyncRequest(BaseModel):
+    report_type: str = "sales_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    shop_id: str = "all"
+    region: str = "VN"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+
+
+class ShopeeSellerSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/shopee-seller/oauth/start")
+async def shopee_seller_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+    region: str = Query(default="VN"),
+):
+    """Redirect the popup to the Shopee seller authorization screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _SHOPEE_SELLER_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — please sign in."
+            )
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _SHOPEE_SELLER_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — invalid token."
+            )
+        )
+    try:
+        return RedirectResponse(
+            url=shopee_seller_service.get_oauth_url(user_id, region=region)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/shopee-seller/oauth/callback", response_class=HTMLResponse)
+async def shopee_seller_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    shop_id: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Shopee redirects here after seller authorization."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_SHOPEE_SELLER_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await shopee_seller_service.handle_oauth_callback(
+            code=code,
+            state=state,
+            shop_id=shop_id,
+        )
+        return HTMLResponse(_SHOPEE_SELLER_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Shopee Seller OAuth callback error: {e}")
+        return HTMLResponse(_SHOPEE_SELLER_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get(
+    "/integration/shopee-seller/status",
+    response_model=ShopeeSellerStatusResponse,
+)
+async def shopee_seller_status(user_id: str = Depends(require_user)):
+    try:
+        return await shopee_seller_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Shopee Seller status error: {e}")
+        return ShopeeSellerStatusResponse(connected=False)
+
+
+@router.delete("/integration/shopee-seller/disconnect")
+async def shopee_seller_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await shopee_seller_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Shopee Seller disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/shopee-seller/resources",
+    response_model=ShopeeSellerResourcesResponse,
+)
+async def shopee_seller_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await shopee_seller_service.list_resources(user_id)
+        return ShopeeSellerResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return ShopeeSellerResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Shopee Seller resources error: {e}")
+        return ShopeeSellerResourcesResponse(success=False, error=str(e))
+
+
+@router.post(
+    "/integration/shopee-seller/sync",
+    response_model=ShopeeSellerSyncResponse,
+)
+async def shopee_seller_sync(
+    request: ShopeeSellerSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await shopee_seller_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            shop_id=request.shop_id,
+            region=request.region,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return ShopeeSellerSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return ShopeeSellerSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Shopee Seller sync error: {e}")
+        return ShopeeSellerSyncResponse(success=False, error=str(e))
+
+
+# ── Lazada Seller ───────────────────────────────────────────────────────────
+
+_LAZADA_SELLER_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "lazada_seller_oauth"
+).replace("META_OAUTH_SUCCESS", "LAZADA_SELLER_OAUTH_SUCCESS")
+
+_LAZADA_SELLER_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "lazada_seller_oauth"
+).replace("META_OAUTH_ERROR", "LAZADA_SELLER_OAUTH_ERROR")
+
+
+class LazadaSellerAccount(BaseModel):
+    id: str
+    name: str
+    region: Optional[str] = None
+
+
+class LazadaSellerStatusResponse(BaseModel):
+    connected: bool = False
+    account_id: Optional[str] = None
+    account_name: Optional[str] = None
+    region: Optional[str] = None
+    sellers: List[LazadaSellerAccount] = Field(default_factory=list)
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class LazadaSellerReportResource(BaseModel):
+    report_type: str
+    label: str
+    default: bool = False
+
+
+class LazadaSellerResourcesResponse(BaseModel):
+    success: bool
+    reports: List[LazadaSellerReportResource] = Field(default_factory=list)
+    sellers: List[LazadaSellerAccount] = Field(default_factory=list)
+    regions: Dict[str, str] = Field(default_factory=dict)
+    error: Optional[str] = None
+
+
+class LazadaSellerSyncRequest(BaseModel):
+    report_type: str = "sales_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    seller_id: str = "all"
+    region: str = "VN"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+
+
+class LazadaSellerSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/lazada-seller/oauth/start")
+async def lazada_seller_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+    region: str = Query(default="VN"),
+):
+    """Redirect the popup to the Lazada seller authorization screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _LAZADA_SELLER_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — please sign in."
+            )
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _LAZADA_SELLER_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — invalid token."
+            )
+        )
+    try:
+        return RedirectResponse(
+            url=lazada_seller_service.get_oauth_url(user_id, region=region)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/lazada-seller/oauth/callback", response_class=HTMLResponse)
+async def lazada_seller_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Lazada redirects here after seller authorization."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_LAZADA_SELLER_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await lazada_seller_service.handle_oauth_callback(code=code, state=state)
+        return HTMLResponse(_LAZADA_SELLER_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Lazada Seller OAuth callback error: {e}")
+        return HTMLResponse(_LAZADA_SELLER_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get(
+    "/integration/lazada-seller/status",
+    response_model=LazadaSellerStatusResponse,
+)
+async def lazada_seller_status(user_id: str = Depends(require_user)):
+    try:
+        return await lazada_seller_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Lazada Seller status error: {e}")
+        return LazadaSellerStatusResponse(connected=False)
+
+
+@router.delete("/integration/lazada-seller/disconnect")
+async def lazada_seller_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await lazada_seller_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Lazada Seller disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/lazada-seller/resources",
+    response_model=LazadaSellerResourcesResponse,
+)
+async def lazada_seller_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await lazada_seller_service.list_resources(user_id)
+        return LazadaSellerResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return LazadaSellerResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Lazada Seller resources error: {e}")
+        return LazadaSellerResourcesResponse(success=False, error=str(e))
+
+
+@router.post(
+    "/integration/lazada-seller/sync",
+    response_model=LazadaSellerSyncResponse,
+)
+async def lazada_seller_sync(
+    request: LazadaSellerSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await lazada_seller_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            seller_id=request.seller_id,
+            region=request.region,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return LazadaSellerSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return LazadaSellerSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Lazada Seller sync error: {e}")
+        return LazadaSellerSyncResponse(success=False, error=str(e))
 
 
 # ── Supabase Application Database ────────────────────────────────────────────

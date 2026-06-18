@@ -413,7 +413,7 @@ async def update_project_endpoint(
                         project_id=project_id,
                         app_url=app_url,
                         from_email=config.resend.from_email,
-                        api_key=config.resend.api_key,
+                        api_key=config.resend.dashboard_share_api_key,
                     )
                 else:
                     logger.warning("[share] Skipped invite — no email for user_id=%s", invited.user_id)
@@ -1213,7 +1213,7 @@ async def submit_feedback(
 
     user_name, user_email = await _resolve_feedback_identity(user_id)
 
-    feedback_key = config.resend.feedback_api_key or config.resend.api_key
+    feedback_key = config.resend.feedback_api_key or config.resend.dashboard_share_api_key
     loop = asyncio.get_running_loop()
     sent = await loop.run_in_executor(
         None,
@@ -1278,7 +1278,7 @@ async def submit_overall_feedback(
         fallback_name=body.full_name.strip(),
         fallback_email=submitted_email,
     )
-    feedback_key = config.resend.feedback_api_key or config.resend.api_key
+    feedback_key = config.resend.feedback_api_key or config.resend.dashboard_share_api_key
     loop = asyncio.get_running_loop()
     sent = await loop.run_in_executor(
         None,

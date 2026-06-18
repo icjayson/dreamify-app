@@ -60,6 +60,12 @@ import SalesforceIntegrationModal from "./components/chat/SalesforceIntegrationM
 import PipedriveIntegrationModal from "./components/chat/PipedriveIntegrationModal";
 import SupabaseIntegrationModal from "./components/chat/SupabaseIntegrationModal";
 import ShopifyIntegrationModal from "./components/chat/ShopifyIntegrationModal";
+import KlaviyoIntegrationModal from "./components/chat/KlaviyoIntegrationModal";
+import QuickBooksIntegrationModal from "./components/chat/QuickBooksIntegrationModal";
+import AmazonSellerIntegrationModal from "./components/chat/AmazonSellerIntegrationModal";
+import TikTokShopSellerIntegrationModal from "./components/chat/TikTokShopSellerIntegrationModal";
+import ShopeeSellerIntegrationModal from "./components/chat/ShopeeSellerIntegrationModal";
+import LazadaSellerIntegrationModal from "./components/chat/LazadaSellerIntegrationModal";
 import GoogleAdsIntegrationModal from "./components/chat/GoogleAdsIntegrationModal";
 import FirebaseIntegrationModal from "./components/chat/FirebaseIntegrationModal";
 import WarehouseIntegrationModal from "./components/chat/WarehouseIntegrationModal";
@@ -263,6 +269,12 @@ const AppContent = () => {
       <PipedriveIntegrationModal />
       <SupabaseIntegrationModal />
       <ShopifyIntegrationModal />
+      <KlaviyoIntegrationModal />
+      <QuickBooksIntegrationModal />
+      <AmazonSellerIntegrationModal />
+      <TikTokShopSellerIntegrationModal />
+      <ShopeeSellerIntegrationModal />
+      <LazadaSellerIntegrationModal />
       <GoogleAdsIntegrationModal />
       <FirebaseIntegrationModal />
       <WarehouseIntegrationModal />

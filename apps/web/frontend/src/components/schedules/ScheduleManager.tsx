@@ -25,6 +25,12 @@ const PROVIDER_LABELS: Record<string, string> = {
   pipedrive: 'Pipedrive',
   supabase: 'Supabase',
   shopify: 'Shopify',
+  klaviyo: 'Klaviyo',
+  quickbooks: 'QuickBooks',
+  amazon_seller: 'Amazon Seller',
+  tiktok_shop_seller: 'TikTok Shop Seller',
+  shopee_seller: 'Shopee Seller',
+  lazada_seller: 'Lazada Seller',
   warehouse: 'Warehouse',
 };
 

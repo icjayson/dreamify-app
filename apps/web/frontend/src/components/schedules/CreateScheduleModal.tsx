@@ -43,6 +43,12 @@ const PROVIDER_LABELS: Record<ProviderKey, string> = {
   pipedrive: 'Pipedrive',
   supabase: 'Supabase',
   shopify: 'Shopify',
+  klaviyo: 'Klaviyo',
+  quickbooks: 'QuickBooks',
+  amazon_seller: 'Amazon Seller',
+  tiktok_shop_seller: 'TikTok Shop Seller',
+  shopee_seller: 'Shopee Seller',
+  lazada_seller: 'Lazada Seller',
   warehouse: 'Warehouse',
 };
 
@@ -89,6 +95,12 @@ const CONNECTOR_TO_PROVIDER: Record<string, ProviderKey> = {
   pipedrive: 'pipedrive',
   supabase: 'supabase',
   shopify: 'shopify',
+  klaviyo: 'klaviyo',
+  quickbooks: 'quickbooks',
+  amazon_seller: 'amazon_seller',
+  tiktok_shop_seller: 'tiktok_shop_seller',
+  shopee_seller: 'shopee_seller',
+  lazada_seller: 'lazada_seller',
   postgres: 'warehouse',
   bigquery: 'warehouse',
   snowflake: 'warehouse',
@@ -106,6 +118,12 @@ const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
   pipedrive: 'pipedrive',
   supabase: 'supabase',
   shopify: 'shopify',
+  klaviyo: 'klaviyo',
+  quickbooks: 'quickbooks',
+  amazon_seller: 'amazon_seller',
+  tiktok_shop_seller: 'tiktok_shop_seller',
+  shopee_seller: 'shopee_seller',
+  lazada_seller: 'lazada_seller',
   warehouse: 'postgres',
 };
 
@@ -151,6 +169,91 @@ function buildShopifyReportEntities(shopDomain: string): ConnectorSelectedEntity
   ];
 }
 
+function buildKlaviyoReportEntities(accountId: string, accountName = 'Klaviyo'): ConnectorSelectedEntity[] {
+  const account = accountId.trim() || 'all';
+  return [
+    { id: `klaviyo:lifecycle_overview:${account}:all`, name: 'Lifecycle Overview', type: 'report', report_type: 'lifecycle_overview', account_id: account, resource_id: 'all', account_name: accountName },
+    { id: `klaviyo:campaigns:${account}:all`, name: 'Campaigns', type: 'report', report_type: 'campaigns', account_id: account, resource_id: 'all', account_name: accountName },
+    { id: `klaviyo:flows:${account}:all`, name: 'Flows', type: 'report', report_type: 'flows', account_id: account, resource_id: 'all', account_name: accountName },
+    { id: `klaviyo:profiles:${account}:all`, name: 'Profiles', type: 'report', report_type: 'profiles', account_id: account, resource_id: 'all', account_name: accountName },
+    { id: `klaviyo:lists:${account}:all`, name: 'Lists', type: 'report', report_type: 'lists', account_id: account, resource_id: 'all', account_name: accountName },
+    { id: `klaviyo:events:${account}:all`, name: 'Events', type: 'report', report_type: 'events', account_id: account, resource_id: 'all', account_name: accountName },
+    { id: `klaviyo:metrics:${account}:all`, name: 'Metrics', type: 'report', report_type: 'metrics', account_id: account, resource_id: 'all', account_name: accountName },
+  ];
+}
+
+function buildQuickBooksReportEntities(realmId: string, accountName = 'QuickBooks'): ConnectorSelectedEntity[] {
+  const realm = realmId.trim() || 'all';
+  return [
+    { id: `quickbooks:finance_overview:${realm}:all`, name: 'Finance Overview', type: 'report', report_type: 'finance_overview', realm_id: realm, resource_id: 'all', account_name: accountName },
+    { id: `quickbooks:profit_and_loss:${realm}:reports`, name: 'Profit and Loss', type: 'report', report_type: 'profit_and_loss', realm_id: realm, resource_id: 'reports', account_name: accountName },
+    { id: `quickbooks:balance_sheet:${realm}:reports`, name: 'Balance Sheet', type: 'report', report_type: 'balance_sheet', realm_id: realm, resource_id: 'reports', account_name: accountName },
+    { id: `quickbooks:cash_flow:${realm}:reports`, name: 'Cash Flow', type: 'report', report_type: 'cash_flow', realm_id: realm, resource_id: 'reports', account_name: accountName },
+    { id: `quickbooks:invoices:${realm}:Invoice`, name: 'Invoices', type: 'report', report_type: 'invoices', realm_id: realm, resource_id: 'Invoice', account_name: accountName },
+    { id: `quickbooks:bills:${realm}:Bill`, name: 'Bills', type: 'report', report_type: 'bills', realm_id: realm, resource_id: 'Bill', account_name: accountName },
+    { id: `quickbooks:payments:${realm}:Payment`, name: 'Payments', type: 'report', report_type: 'payments', realm_id: realm, resource_id: 'Payment', account_name: accountName },
+    { id: `quickbooks:customers:${realm}:Customer`, name: 'Customers', type: 'report', report_type: 'customers', realm_id: realm, resource_id: 'Customer', account_name: accountName },
+    { id: `quickbooks:vendors:${realm}:Vendor`, name: 'Vendors', type: 'report', report_type: 'vendors', realm_id: realm, resource_id: 'Vendor', account_name: accountName },
+    { id: `quickbooks:items:${realm}:Item`, name: 'Items', type: 'report', report_type: 'items', realm_id: realm, resource_id: 'Item', account_name: accountName },
+    { id: `quickbooks:accounts:${realm}:Account`, name: 'Accounts', type: 'report', report_type: 'accounts', realm_id: realm, resource_id: 'Account', account_name: accountName },
+  ];
+}
+
+function buildAmazonSellerReportEntities(sellerId: string, accountName = 'Amazon Seller', marketplaceId = 'all'): ConnectorSelectedEntity[] {
+  const seller = sellerId.trim() || 'all';
+  const marketplace = marketplaceId.trim() || 'all';
+  return [
+    { id: `amazon_seller:sales_overview:${seller}:${marketplace}`, name: 'Sales Overview', type: 'report', report_type: 'sales_overview', seller_id: seller, marketplace_id: marketplace, account_name: accountName },
+    { id: `amazon_seller:orders:${seller}:${marketplace}`, name: 'Orders', type: 'report', report_type: 'orders', seller_id: seller, marketplace_id: marketplace, account_name: accountName },
+    { id: `amazon_seller:order_items:${seller}:${marketplace}`, name: 'Order Items', type: 'report', report_type: 'order_items', seller_id: seller, marketplace_id: marketplace, account_name: accountName },
+    { id: `amazon_seller:inventory:${seller}:${marketplace}`, name: 'Inventory', type: 'report', report_type: 'inventory', seller_id: seller, marketplace_id: marketplace, account_name: accountName },
+    { id: `amazon_seller:listings:${seller}:${marketplace}`, name: 'Listings', type: 'report', report_type: 'listings', seller_id: seller, marketplace_id: marketplace, account_name: accountName },
+    { id: `amazon_seller:returns:${seller}:${marketplace}`, name: 'Returns', type: 'report', report_type: 'returns', seller_id: seller, marketplace_id: marketplace, account_name: accountName },
+  ];
+}
+
+function buildTikTokShopSellerReportEntities(shopId: string, accountName = 'TikTok Shop Seller', region = 'US'): ConnectorSelectedEntity[] {
+  const shop = shopId.trim() || 'all';
+  const selectedRegion = region.trim().toUpperCase() || 'US';
+  return [
+    { id: `tiktok_shop_seller:sales_overview:${shop}:${selectedRegion}`, name: 'Sales Overview', type: 'report', report_type: 'sales_overview', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `tiktok_shop_seller:orders:${shop}:${selectedRegion}`, name: 'Orders', type: 'report', report_type: 'orders', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `tiktok_shop_seller:order_items:${shop}:${selectedRegion}`, name: 'Order Items', type: 'report', report_type: 'order_items', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `tiktok_shop_seller:products:${shop}:${selectedRegion}`, name: 'Products', type: 'report', report_type: 'products', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `tiktok_shop_seller:inventory:${shop}:${selectedRegion}`, name: 'Inventory', type: 'report', report_type: 'inventory', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `tiktok_shop_seller:returns:${shop}:${selectedRegion}`, name: 'Returns', type: 'report', report_type: 'returns', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `tiktok_shop_seller:settlements:${shop}:${selectedRegion}`, name: 'Settlements', type: 'report', report_type: 'settlements', shop_id: shop, region: selectedRegion, account_name: accountName },
+  ];
+}
+
+function buildShopeeSellerReportEntities(shopId: string, accountName = 'Shopee Seller', region = 'VN'): ConnectorSelectedEntity[] {
+  const shop = shopId.trim() || 'all';
+  const selectedRegion = region.trim().toUpperCase() || 'VN';
+  return [
+    { id: `shopee_seller:sales_overview:${shop}:${selectedRegion}`, name: 'Sales Overview', type: 'report', report_type: 'sales_overview', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `shopee_seller:orders:${shop}:${selectedRegion}`, name: 'Orders', type: 'report', report_type: 'orders', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `shopee_seller:order_items:${shop}:${selectedRegion}`, name: 'Order Items', type: 'report', report_type: 'order_items', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `shopee_seller:products:${shop}:${selectedRegion}`, name: 'Products', type: 'report', report_type: 'products', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `shopee_seller:inventory:${shop}:${selectedRegion}`, name: 'Inventory', type: 'report', report_type: 'inventory', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `shopee_seller:returns:${shop}:${selectedRegion}`, name: 'Returns', type: 'report', report_type: 'returns', shop_id: shop, region: selectedRegion, account_name: accountName },
+    { id: `shopee_seller:income:${shop}:${selectedRegion}`, name: 'Income', type: 'report', report_type: 'income', shop_id: shop, region: selectedRegion, account_name: accountName },
+  ];
+}
+
+function buildLazadaSellerReportEntities(sellerId: string, accountName = 'Lazada Seller', region = 'VN'): ConnectorSelectedEntity[] {
+  const seller = sellerId.trim() || 'all';
+  const selectedRegion = region.trim().toUpperCase() || 'VN';
+  return [
+    { id: `lazada_seller:sales_overview:${seller}:${selectedRegion}`, name: 'Sales Overview', type: 'report', report_type: 'sales_overview', seller_id: seller, region: selectedRegion, account_name: accountName },
+    { id: `lazada_seller:orders:${seller}:${selectedRegion}`, name: 'Orders', type: 'report', report_type: 'orders', seller_id: seller, region: selectedRegion, account_name: accountName },
+    { id: `lazada_seller:order_items:${seller}:${selectedRegion}`, name: 'Order Items', type: 'report', report_type: 'order_items', seller_id: seller, region: selectedRegion, account_name: accountName },
+    { id: `lazada_seller:products:${seller}:${selectedRegion}`, name: 'Products', type: 'report', report_type: 'products', seller_id: seller, region: selectedRegion, account_name: accountName },
+    { id: `lazada_seller:inventory:${seller}:${selectedRegion}`, name: 'Inventory', type: 'report', report_type: 'inventory', seller_id: seller, region: selectedRegion, account_name: accountName },
+    { id: `lazada_seller:returns:${seller}:${selectedRegion}`, name: 'Returns', type: 'report', report_type: 'returns', seller_id: seller, region: selectedRegion, account_name: accountName },
+    { id: `lazada_seller:finance:${seller}:${selectedRegion}`, name: 'Finance', type: 'report', report_type: 'finance', seller_id: seller, region: selectedRegion, account_name: accountName },
+  ];
+}
+
 function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unknown>) {
   if (provider === 'ga4') return String(config.property_id || '');
   if (provider === 'meta_ads' || provider === 'tiktok') return String(config.ad_account_id || '');
@@ -160,6 +263,12 @@ function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unk
   if (provider === 'salesforce') return String(config.entity_id || `salesforce:${config.report_type || 'sales_pipeline'}:${config.object_name || 'all'}:${config.owner_id || 'all'}`);
   if (provider === 'pipedrive') return String(config.entity_id || `pipedrive:${config.report_type || 'sales_pipeline'}:${config.pipeline_id || 'all'}:${config.owner_id || 'all'}`);
   if (provider === 'shopify') return String(config.entity_id || `shopify:${config.report_type || 'sales_overview'}:${config.shop_domain || ''}:${config.resource || 'all'}`);
+  if (provider === 'klaviyo') return String(config.entity_id || `klaviyo:${config.report_type || 'lifecycle_overview'}:${config.account_id || 'all'}:${config.resource_id || 'all'}`);
+  if (provider === 'quickbooks') return String(config.entity_id || `quickbooks:${config.report_type || 'finance_overview'}:${config.realm_id || 'all'}:${config.resource_id || 'all'}`);
+  if (provider === 'amazon_seller') return String(config.entity_id || `amazon_seller:${config.report_type || 'sales_overview'}:${config.seller_id || 'all'}:${config.marketplace_id || 'all'}`);
+  if (provider === 'tiktok_shop_seller') return String(config.entity_id || `tiktok_shop_seller:${config.report_type || 'sales_overview'}:${config.shop_id || 'all'}:${config.region || 'US'}`);
+  if (provider === 'shopee_seller') return String(config.entity_id || `shopee_seller:${config.report_type || 'sales_overview'}:${config.shop_id || 'all'}:${config.region || 'VN'}`);
+  if (provider === 'lazada_seller') return String(config.entity_id || `lazada_seller:${config.report_type || 'sales_overview'}:${config.seller_id || 'all'}:${config.region || 'VN'}`);
   if (provider === 'supabase') {
     const entityId = String(config.entity_id || '');
     if (entityId) return entityId;
@@ -233,6 +342,81 @@ function buildConnectorConfig(provider: ProviderKey, entity: ConnectorSelectedEn
       report_type: entity.report_type || reportType,
       shop_domain: entity.shop_domain || shopDomain,
       resource: entity.resource || resource,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'klaviyo') {
+    const [, reportType = 'lifecycle_overview', accountId = 'all', resourceId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      account_id: entity.account_id || accountId,
+      resource_id: entity.resource_id || resourceId,
+      metric_id: entity.metric_id || '',
+      channel: entity.channel || 'all',
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'quickbooks') {
+    const [, reportType = 'finance_overview', realmId = 'all', resourceId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      realm_id: entity.realm_id || realmId,
+      resource_id: entity.resource_id || resourceId,
+      accounting_basis: entity.accounting_basis || 'Accrual',
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'amazon_seller') {
+    const [, reportType = 'sales_overview', sellerId = 'all', marketplaceId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      seller_id: entity.seller_id || sellerId,
+      marketplace_id: entity.marketplace_id || marketplaceId,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'tiktok_shop_seller') {
+    const [, reportType = 'sales_overview', shopId = 'all', region = 'US'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      shop_id: entity.shop_id || shopId,
+      region: entity.region || region,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'shopee_seller') {
+    const [, reportType = 'sales_overview', shopId = 'all', region = 'VN'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      shop_id: entity.shop_id || shopId,
+      region: entity.region || region,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'lazada_seller') {
+    const [, reportType = 'sales_overview', sellerId = 'all', region = 'VN'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      seller_id: entity.seller_id || sellerId,
+      region: entity.region || region,
       entity_id: entity.id,
       entity_name: entity.name,
       row_limit: 5000,
@@ -371,6 +555,75 @@ async function fetchProviderEntities(provider: ProviderKey): Promise<ConnectorSe
     return buildShopifyReportEntities(status.shop_domain);
   }
 
+  if (provider === 'klaviyo') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Klaviyo reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'klaviyo');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getKlaviyoStatus();
+    if (!status.connected) return [];
+    return buildKlaviyoReportEntities(status.account_id || 'all', status.account_name || 'Klaviyo');
+  }
+
+  if (provider === 'quickbooks') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load QuickBooks reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'quickbooks');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getQuickBooksStatus();
+    if (!status.connected) return [];
+    return buildQuickBooksReportEntities(status.realm_id || 'all', status.company_name || 'QuickBooks');
+  }
+
+  if (provider === 'amazon_seller') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Amazon Seller reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'amazon_seller');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getAmazonSellerStatus();
+    if (!status.connected) return [];
+    return buildAmazonSellerReportEntities(status.seller_id || 'all', status.seller_name || 'Amazon Seller', 'all');
+  }
+
+  if (provider === 'tiktok_shop_seller') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load TikTok Shop reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'tiktok_shop_seller');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getTikTokShopSellerStatus();
+    if (!status.connected) return [];
+    const defaultShopId = status.shops?.[0]?.id || 'all';
+    return buildTikTokShopSellerReportEntities(defaultShopId, status.account_name || 'TikTok Shop Seller', status.region || 'US');
+  }
+
+  if (provider === 'shopee_seller') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Shopee Seller reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'shopee_seller');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getShopeeSellerStatus();
+    if (!status.connected) return [];
+    const defaultShopId = status.shops?.[0]?.id || 'all';
+    return buildShopeeSellerReportEntities(defaultShopId, status.account_name || 'Shopee Seller', status.region || 'VN');
+  }
+
+  if (provider === 'lazada_seller') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Lazada Seller reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'lazada_seller');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getLazadaSellerStatus();
+    if (!status.connected) return [];
+    const defaultSellerId = status.sellers?.[0]?.id || 'all';
+    return buildLazadaSellerReportEntities(defaultSellerId, status.account_name || 'Lazada Seller', status.region || 'VN');
+  }
+
   if (provider === 'supabase') {
     const response = await integrationService.fetchConnectorsOverview();
     if (!response.success) throw new Error(response.error || 'Failed to load Supabase entities.');
@@ -437,6 +690,15 @@ export function CreateScheduleModal({
         String(connector.account_name || '').includes('.myshopify.com')
           ? String(connector.account_name)
           : '';
+      const klaviyoAccountId = connector.selected_entities?.[0]?.account_id || 'all';
+      const quickBooksRealmId = connector.selected_entities?.[0]?.realm_id || 'all';
+      const amazonSellerId = connector.selected_entities?.[0]?.seller_id || 'all';
+      const tiktokShopId = connector.selected_entities?.[0]?.shop_id || 'all';
+      const tiktokShopRegion = connector.selected_entities?.[0]?.region || 'US';
+      const shopeeShopId = connector.selected_entities?.[0]?.shop_id || 'all';
+      const shopeeRegion = connector.selected_entities?.[0]?.region || 'VN';
+      const lazadaSellerId = connector.selected_entities?.[0]?.seller_id || 'all';
+      const lazadaRegion = connector.selected_entities?.[0]?.region || 'VN';
       const entities = connector.connector_key === 'stripe' && connectorEntities.length === 0
         ? STRIPE_REPORT_ENTITIES
         : connector.connector_key === 'hubspot' && connectorEntities.length === 0
@@ -447,7 +709,19 @@ export function CreateScheduleModal({
               ? PIPEDRIVE_REPORT_ENTITIES
               : connector.connector_key === 'shopify' && connectorEntities.length === 0
                 ? buildShopifyReportEntities(shopDomain)
-                : connectorEntities;
+                : connector.connector_key === 'klaviyo' && connectorEntities.length === 0
+                  ? buildKlaviyoReportEntities(String(klaviyoAccountId), connector.account_name || 'Klaviyo')
+                  : connector.connector_key === 'quickbooks' && connectorEntities.length === 0
+                    ? buildQuickBooksReportEntities(String(quickBooksRealmId), connector.account_name || 'QuickBooks')
+                    : connector.connector_key === 'amazon_seller' && connectorEntities.length === 0
+                      ? buildAmazonSellerReportEntities(String(amazonSellerId), connector.account_name || 'Amazon Seller')
+                      : connector.connector_key === 'tiktok_shop_seller' && connectorEntities.length === 0
+                        ? buildTikTokShopSellerReportEntities(String(tiktokShopId), connector.account_name || 'TikTok Shop Seller', String(tiktokShopRegion))
+                        : connector.connector_key === 'shopee_seller' && connectorEntities.length === 0
+                          ? buildShopeeSellerReportEntities(String(shopeeShopId), connector.account_name || 'Shopee Seller', String(shopeeRegion))
+                          : connector.connector_key === 'lazada_seller' && connectorEntities.length === 0
+                            ? buildLazadaSellerReportEntities(String(lazadaSellerId), connector.account_name || 'Lazada Seller', String(lazadaRegion))
+                            : connectorEntities;
 
       if (mappedProvider === 'warehouse') {
         const current = grouped.get('warehouse') || {

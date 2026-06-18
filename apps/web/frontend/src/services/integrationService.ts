@@ -57,6 +57,16 @@ export interface ConnectorSelectedEntity {
   bucket?: string;
   shop_domain?: string;
   resource?: string;
+  account_id?: string;
+  resource_id?: string;
+  metric_id?: string;
+  channel?: string;
+  realm_id?: string;
+  accounting_basis?: string;
+  seller_id?: string;
+  marketplace_id?: string;
+  shop_id?: string;
+  region?: string;
 }
 
 export interface ConnectorOverviewItem {
@@ -459,6 +469,351 @@ export interface ShopifySyncResponse {
   error?: string;
 }
 
+export interface KlaviyoConnectionStatusResponse {
+  connected: boolean;
+  account_id?: string;
+  account_name?: string;
+  timezone?: string;
+  currency?: string;
+  api_revision?: string;
+  scopes?: string[];
+  default_metric_id?: string;
+  default_metric_name?: string;
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface KlaviyoReportResource {
+  report_type: string;
+  label: string;
+  resource: string;
+  default?: boolean;
+}
+
+export interface KlaviyoNamedResource {
+  id: string;
+  name: string;
+  type?: string;
+  status?: string;
+  channel?: string;
+  updated_at?: string;
+}
+
+export interface KlaviyoResourcesResponse {
+  success: boolean;
+  reports: KlaviyoReportResource[];
+  metrics: KlaviyoNamedResource[];
+  campaigns: KlaviyoNamedResource[];
+  flows: KlaviyoNamedResource[];
+  lists: KlaviyoNamedResource[];
+  default_metric_id?: string;
+  default_metric_name?: string;
+  error?: string;
+}
+
+export interface KlaviyoSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+  metric_id?: string;
+  resource_id?: string;
+  channel?: string;
+}
+
+export interface KlaviyoSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
+export interface AmazonSellerMarketplace {
+  id: string;
+  name: string;
+  country_code?: string;
+}
+
+export interface AmazonSellerConnectionStatusResponse {
+  connected: boolean;
+  seller_id?: string;
+  seller_name?: string;
+  selling_region?: string;
+  marketplaces?: AmazonSellerMarketplace[];
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface AmazonSellerReportResource {
+  report_type: string;
+  label: string;
+  default?: boolean;
+}
+
+export interface AmazonSellerResourcesResponse {
+  success: boolean;
+  reports: AmazonSellerReportResource[];
+  marketplaces: AmazonSellerMarketplace[];
+  error?: string;
+}
+
+export interface AmazonSellerSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  marketplace_id?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+}
+
+export interface AmazonSellerSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
+export interface QuickBooksRealm {
+  id: string;
+  name: string;
+  environment?: string;
+}
+
+export interface QuickBooksConnectionStatusResponse {
+  connected: boolean;
+  realm_id?: string;
+  company_name?: string;
+  environment?: string;
+  minor_version?: string;
+  country?: string;
+  currency?: string;
+  scopes?: string[];
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface QuickBooksReportResource {
+  report_type: string;
+  label: string;
+  resource: string;
+  default?: boolean;
+}
+
+export interface QuickBooksResourcesResponse {
+  success: boolean;
+  reports: QuickBooksReportResource[];
+  realms: QuickBooksRealm[];
+  error?: string;
+}
+
+export interface QuickBooksSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+  accounting_basis?: string;
+  resource_id?: string;
+}
+
+export interface QuickBooksSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
+export interface TikTokShopSellerShop {
+  id: string;
+  name: string;
+  region?: string;
+  shop_cipher?: string;
+}
+
+export interface TikTokShopSellerConnectionStatusResponse {
+  connected: boolean;
+  account_id?: string;
+  account_name?: string;
+  region?: string;
+  shops?: TikTokShopSellerShop[];
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface TikTokShopSellerReportResource {
+  report_type: string;
+  label: string;
+  default?: boolean;
+}
+
+export interface TikTokShopSellerResourcesResponse {
+  success: boolean;
+  reports: TikTokShopSellerReportResource[];
+  shops: TikTokShopSellerShop[];
+  regions?: Record<string, string>;
+  error?: string;
+}
+
+export interface TikTokShopSellerSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  shop_id?: string;
+  region?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+}
+
+export interface TikTokShopSellerSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
+export interface ShopeeSellerShop {
+  id: string;
+  name: string;
+  region?: string;
+}
+
+export interface ShopeeSellerConnectionStatusResponse {
+  connected: boolean;
+  account_id?: string;
+  account_name?: string;
+  region?: string;
+  shops?: ShopeeSellerShop[];
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface ShopeeSellerReportResource {
+  report_type: string;
+  label: string;
+  default?: boolean;
+}
+
+export interface ShopeeSellerResourcesResponse {
+  success: boolean;
+  reports: ShopeeSellerReportResource[];
+  shops: ShopeeSellerShop[];
+  regions?: Record<string, string>;
+  error?: string;
+}
+
+export interface ShopeeSellerSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  shop_id?: string;
+  region?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+}
+
+export interface ShopeeSellerSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
+export interface LazadaSellerAccount {
+  id: string;
+  name: string;
+  region?: string;
+}
+
+export interface LazadaSellerConnectionStatusResponse {
+  connected: boolean;
+  account_id?: string;
+  account_name?: string;
+  region?: string;
+  sellers?: LazadaSellerAccount[];
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface LazadaSellerReportResource {
+  report_type: string;
+  label: string;
+  default?: boolean;
+}
+
+export interface LazadaSellerResourcesResponse {
+  success: boolean;
+  reports: LazadaSellerReportResource[];
+  sellers: LazadaSellerAccount[];
+  regions?: Record<string, string>;
+  error?: string;
+}
+
+export interface LazadaSellerSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  seller_id?: string;
+  region?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+}
+
+export interface LazadaSellerSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
 class IntegrationService {
   private baseUrl = '/api/v1/integration';
 
@@ -786,6 +1141,30 @@ class IntegrationService {
 
   getShopifyOAuthStartUrl(shop: string): string {
     return `/api/v1/integration/shopify/oauth/start?shop=${encodeURIComponent(shop)}`;
+  }
+
+  getKlaviyoOAuthStartUrl(): string {
+    return '/api/v1/integration/klaviyo/oauth/start';
+  }
+
+  getQuickBooksOAuthStartUrl(): string {
+    return '/api/v1/integration/quickbooks/oauth/start';
+  }
+
+  getAmazonSellerOAuthStartUrl(region: string): string {
+    return `/api/v1/integration/amazon-seller/oauth/start?region=${encodeURIComponent(region || 'NA')}`;
+  }
+
+  getTikTokShopSellerOAuthStartUrl(region: string): string {
+    return `/api/v1/integration/tiktok-shop-seller/oauth/start?region=${encodeURIComponent(region || 'US')}`;
+  }
+
+  getShopeeSellerOAuthStartUrl(region: string): string {
+    return `/api/v1/integration/shopee-seller/oauth/start?region=${encodeURIComponent(region || 'VN')}`;
+  }
+
+  getLazadaSellerOAuthStartUrl(region: string): string {
+    return `/api/v1/integration/lazada-seller/oauth/start?region=${encodeURIComponent(region || 'VN')}`;
   }
 
   async getMetaConnectionStatus(): Promise<MetaConnectionStatusResponse> {
@@ -1265,6 +1644,276 @@ class IntegrationService {
       const res = await api.post<ShopifySyncResponse>(`${this.baseUrl}/shopify/sync`, req);
       if (res.success && res.data) return res.data;
       return { success: false, error: res.error || 'Failed to sync Shopify data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getKlaviyoStatus(): Promise<KlaviyoConnectionStatusResponse> {
+    try {
+      const res = await api.get<KlaviyoConnectionStatusResponse>(`${this.baseUrl}/klaviyo/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectKlaviyo(): Promise<void> {
+    await api.delete(`${this.baseUrl}/klaviyo/disconnect`);
+  }
+
+  async fetchKlaviyoResources(): Promise<KlaviyoResourcesResponse> {
+    try {
+      const res = await api.get<KlaviyoResourcesResponse>(`${this.baseUrl}/klaviyo/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        metrics: [],
+        campaigns: [],
+        flows: [],
+        lists: [],
+        error: res.error || 'Failed to load Klaviyo resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        metrics: [],
+        campaigns: [],
+        flows: [],
+        lists: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncKlaviyo(req: KlaviyoSyncRequest): Promise<KlaviyoSyncResponse> {
+    try {
+      const res = await api.post<KlaviyoSyncResponse>(`${this.baseUrl}/klaviyo/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Klaviyo data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getQuickBooksStatus(): Promise<QuickBooksConnectionStatusResponse> {
+    try {
+      const res = await api.get<QuickBooksConnectionStatusResponse>(`${this.baseUrl}/quickbooks/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectQuickBooks(): Promise<void> {
+    await api.delete(`${this.baseUrl}/quickbooks/disconnect`);
+  }
+
+  async fetchQuickBooksResources(): Promise<QuickBooksResourcesResponse> {
+    try {
+      const res = await api.get<QuickBooksResourcesResponse>(`${this.baseUrl}/quickbooks/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        realms: [],
+        error: res.error || 'Failed to load QuickBooks resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        realms: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncQuickBooks(req: QuickBooksSyncRequest): Promise<QuickBooksSyncResponse> {
+    try {
+      const res = await api.post<QuickBooksSyncResponse>(`${this.baseUrl}/quickbooks/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync QuickBooks data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getAmazonSellerStatus(): Promise<AmazonSellerConnectionStatusResponse> {
+    try {
+      const res = await api.get<AmazonSellerConnectionStatusResponse>(`${this.baseUrl}/amazon-seller/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectAmazonSeller(): Promise<void> {
+    await api.delete(`${this.baseUrl}/amazon-seller/disconnect`);
+  }
+
+  async fetchAmazonSellerResources(): Promise<AmazonSellerResourcesResponse> {
+    try {
+      const res = await api.get<AmazonSellerResourcesResponse>(`${this.baseUrl}/amazon-seller/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        marketplaces: [],
+        error: res.error || 'Failed to load Amazon Seller resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        marketplaces: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncAmazonSeller(req: AmazonSellerSyncRequest): Promise<AmazonSellerSyncResponse> {
+    try {
+      const res = await api.post<AmazonSellerSyncResponse>(`${this.baseUrl}/amazon-seller/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Amazon Seller data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getTikTokShopSellerStatus(): Promise<TikTokShopSellerConnectionStatusResponse> {
+    try {
+      const res = await api.get<TikTokShopSellerConnectionStatusResponse>(`${this.baseUrl}/tiktok-shop-seller/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectTikTokShopSeller(): Promise<void> {
+    await api.delete(`${this.baseUrl}/tiktok-shop-seller/disconnect`);
+  }
+
+  async fetchTikTokShopSellerResources(): Promise<TikTokShopSellerResourcesResponse> {
+    try {
+      const res = await api.get<TikTokShopSellerResourcesResponse>(`${this.baseUrl}/tiktok-shop-seller/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        shops: [],
+        error: res.error || 'Failed to load TikTok Shop resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        shops: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncTikTokShopSeller(req: TikTokShopSellerSyncRequest): Promise<TikTokShopSellerSyncResponse> {
+    try {
+      const res = await api.post<TikTokShopSellerSyncResponse>(`${this.baseUrl}/tiktok-shop-seller/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync TikTok Shop data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getShopeeSellerStatus(): Promise<ShopeeSellerConnectionStatusResponse> {
+    try {
+      const res = await api.get<ShopeeSellerConnectionStatusResponse>(`${this.baseUrl}/shopee-seller/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectShopeeSeller(): Promise<void> {
+    await api.delete(`${this.baseUrl}/shopee-seller/disconnect`);
+  }
+
+  async fetchShopeeSellerResources(): Promise<ShopeeSellerResourcesResponse> {
+    try {
+      const res = await api.get<ShopeeSellerResourcesResponse>(`${this.baseUrl}/shopee-seller/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        shops: [],
+        error: res.error || 'Failed to load Shopee Seller resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        shops: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncShopeeSeller(req: ShopeeSellerSyncRequest): Promise<ShopeeSellerSyncResponse> {
+    try {
+      const res = await api.post<ShopeeSellerSyncResponse>(`${this.baseUrl}/shopee-seller/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Shopee Seller data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getLazadaSellerStatus(): Promise<LazadaSellerConnectionStatusResponse> {
+    try {
+      const res = await api.get<LazadaSellerConnectionStatusResponse>(`${this.baseUrl}/lazada-seller/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectLazadaSeller(): Promise<void> {
+    await api.delete(`${this.baseUrl}/lazada-seller/disconnect`);
+  }
+
+  async fetchLazadaSellerResources(): Promise<LazadaSellerResourcesResponse> {
+    try {
+      const res = await api.get<LazadaSellerResourcesResponse>(`${this.baseUrl}/lazada-seller/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        sellers: [],
+        error: res.error || 'Failed to load Lazada Seller resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        sellers: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncLazadaSeller(req: LazadaSellerSyncRequest): Promise<LazadaSellerSyncResponse> {
+    try {
+      const res = await api.post<LazadaSellerSyncResponse>(`${this.baseUrl}/lazada-seller/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Lazada Seller data' };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }

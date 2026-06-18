@@ -28,6 +28,12 @@ export type ConnectorModalTarget =
   | "pipedrive"
   | "supabase"
   | "shopify"
+  | "klaviyo"
+  | "quickbooks"
+  | "amazon_seller"
+  | "tiktok_shop_seller"
+  | "shopee_seller"
+  | "lazada_seller"
   | "google_ads"
   | "firebase"
   | "postgres"
@@ -99,9 +105,9 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "google_ads",
   },
-  { name: "Shopee Ads",  icon: "/shopee-ads.png",               category: "Advertising Platform" },
-  { name: "Apple Ads",   icon: "/apple-ads.png",               category: "Advertising Platform", iconBg: "bg-black" },
-  { name: "Unity Ads",   icon: "/unity-ads.png",               category: "Advertising Platform", iconBg: "bg-[#222222]" },
+  { name: "Shopee Ads",  icon: "/shopee-ads.png", isActive: false, category: "Advertising Platform" },
+  { name: "Apple Ads",   icon: "/apple-ads.png", isActive: false, category: "Advertising Platform", iconBg: "bg-black" },
+  { name: "Unity Ads",   icon: "/unity-ads.png", isActive: false, category: "Advertising Platform", iconBg: "bg-[#222222]" },
 
   // ── Analytics Platform ────────────────────────────────────────────────────────
   {
@@ -150,7 +156,19 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "stripe",
   },
-  { name: "PayPal",      icon: "/paypal.png",                  category: "Payment & Finance" },
+  { name: "PayPal",      icon: "/paypal.png", isActive: false, category: "Payment & Finance" },
+  {
+    name: "QuickBooks",
+    icon: "/quickbooks.svg",
+    isActive: false,
+    category: "Payment & Finance",
+    connectorKey: "quickbooks",
+    productDescription: "Analyze P&L, balance sheet, cash flow, invoices, bills, customers, vendors, items, and accounts.",
+    productCategory: "Finance",
+    showOnProductPage: true,
+    modalTarget: "quickbooks",
+    iconBg: "bg-white",
+  },
 
   // ── Sales & CRM ─────────────────────────────────────────────────────────────
   {
@@ -189,9 +207,40 @@ export const CONNECTORS: ConnectorItem[] = [
   },
 
   // ── E-commerce ────────────────────────────────────────────────────────────────
-  { name: "TikTok Shop Seller", icon: "/tiktokshop.png",  iconBg: "bg-black",    category: "E-commerce" },
-  { name: "Shopee Seller",      icon: "/shopee.png",                             category: "E-commerce" },
-  { name: "Lazada Seller",      icon: "/lazada.png",                             category: "E-commerce" },
+  {
+    name: "TikTok Shop Seller",
+    icon: "/tiktokshop.png",
+    isActive: false,
+    iconBg: "bg-black",
+    category: "E-commerce",
+    connectorKey: "tiktok_shop_seller",
+    productDescription: "Analyze TikTok Shop orders, products, inventory, returns, settlements, and social-commerce revenue.",
+    productCategory: "Ecommerce",
+    showOnProductPage: true,
+    modalTarget: "tiktok_shop_seller",
+  },
+  {
+    name: "Shopee Seller",
+    icon: "/shopee.png",
+    isActive: false,
+    category: "E-commerce",
+    connectorKey: "shopee_seller",
+    productDescription: "Analyze Shopee orders, order items, products, inventory, returns, income, and SEA marketplace revenue.",
+    productCategory: "Ecommerce",
+    showOnProductPage: true,
+    modalTarget: "shopee_seller",
+  },
+  {
+    name: "Lazada Seller",
+    icon: "/lazada.png",
+    isActive: false,
+    category: "E-commerce",
+    connectorKey: "lazada_seller",
+    productDescription: "Analyze Lazada orders, order items, products, inventory, returns, finance, and SEA marketplace revenue.",
+    productCategory: "Ecommerce",
+    showOnProductPage: true,
+    modalTarget: "lazada_seller",
+  },
   {
     name: "Shopify",
     icon: "/shopify.png",
@@ -204,8 +253,31 @@ export const CONNECTORS: ConnectorItem[] = [
     modalTarget: "shopify",
     iconBg: "bg-white",
   },
-  { name: "WooCommerce",        icon: "/woocommerce.png",                        category: "E-commerce" },
-  { name: "Amazon Seller",      icon: "/amazon-seller.png",                      category: "E-commerce" },
+  {
+    name: "Klaviyo",
+    icon: "/klaviyo.svg",
+    isActive: false,
+    category: "E-commerce",
+    connectorKey: "klaviyo",
+    productDescription: "Analyze email, SMS, flows, campaigns, profiles, and retention revenue.",
+    productCategory: "Ecommerce",
+    showOnProductPage: true,
+    modalTarget: "klaviyo",
+    iconBg: "bg-white",
+  },
+  { name: "WooCommerce",        icon: "/woocommerce.png", isActive: false, category: "E-commerce" },
+  {
+    name: "Amazon Seller",
+    icon: "/amazon-seller.png",
+    isActive: false,
+    category: "E-commerce",
+    connectorKey: "amazon_seller",
+    productDescription: "Analyze Seller Central orders, inventory, listings, returns, and marketplace revenue.",
+    productCategory: "Ecommerce",
+    showOnProductPage: true,
+    modalTarget: "amazon_seller",
+    iconBg: "bg-white",
+  },
 
   // ── Operations & Database ─────────────────────────────────────────────────────
   {
@@ -219,10 +291,10 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "google_sheets",
   },
-  { name: "Microsoft Excel Online", icon: "/microsoft-excel-online.png",               category: "Operations & Database" },
-  { name: "Notion",                 icon: "/notion.png",                               category: "Operations & Database" },
-  { name: "Lark",                   icon: "/lark.png",                                 category: "Operations & Database" },
-  { name: "Airtable",               icon: "/airtable.png",                             category: "Operations & Database" },
+  { name: "Microsoft Excel Online", icon: "/microsoft-excel-online.png", isActive: false, category: "Operations & Database" },
+  { name: "Notion",                 icon: "/notion.png", isActive: false, category: "Operations & Database" },
+  { name: "Lark",                   icon: "/lark.png", isActive: false, category: "Operations & Database" },
+  { name: "Airtable",               icon: "/airtable.png", isActive: false, category: "Operations & Database" },
   {
     name: "PostgreSQL",
     icon: "/PostgreSQL.png",
@@ -280,5 +352,5 @@ export const CONNECTORS: ConnectorItem[] = [
     modalTarget: "supabase",
     iconBg: "bg-[#051f1a]",
   },
-  { name: "Oracle",                 icon: "/oracle.png",                               category: "Operations & Database" },
+  { name: "Oracle",                 icon: "/oracle.png", isActive: false, category: "Operations & Database" },
 ];

@@ -68,7 +68,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "Meta Ads",
     icon: "/meta.png",
-    isActive: true,
+    isActive: false,
     category: "Advertising Platform",
     connectorKey: "meta_ads",
     productDescription: "Monitor ad performance across Facebook and Instagram.",
@@ -79,7 +79,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "TikTok Ads",
     icon: "/tiktok.png",
-    isActive: true,
+    isActive: false,
     category: "Advertising Platform",
     iconBg: "bg-black",
     connectorKey: "tiktok_ads",
@@ -99,9 +99,9 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "google_ads",
   },
-  { name: "Shopee Ads",  icon: "/shopee-ads.png",               category: "Advertising Platform" },
-  { name: "Apple Ads",   icon: "/apple-ads.png",               category: "Advertising Platform", iconBg: "bg-black" },
-  { name: "Unity Ads",   icon: "/unity-ads.png",               category: "Advertising Platform", iconBg: "bg-[#222222]" },
+  { name: "Shopee Ads",  icon: "/shopee-ads.png",     isActive: false,          category: "Advertising Platform" },
+  { name: "Apple Ads",   icon: "/apple-ads.png",  isActive: false,             category: "Advertising Platform", iconBg: "bg-black" },
+  { name: "Unity Ads",   icon: "/unity-ads.png",      isActive: false,         category: "Advertising Platform", iconBg: "bg-[#222222]" },
 
   // ── Analytics Platform ────────────────────────────────────────────────────────
   {
@@ -118,7 +118,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "AppsFlyer",
     icon: "/appsflyer.png",
-    isActive: true,
+    isActive: false,
     category: "Analytics Platform",
     connectorKey: "appsflyer",
     productDescription: "Bring attribution and analytics together for mobile growth.",
@@ -142,7 +142,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "Stripe",
     icon: "/stripe.png",
-    isActive: true,
+    isActive: false,
     category: "Payment & Finance",
     connectorKey: "stripe",
     productDescription: "Track payments, revenue, and subscription metrics.",
@@ -150,13 +150,13 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "stripe",
   },
-  { name: "PayPal",      icon: "/paypal.png",                  category: "Payment & Finance" },
+  { name: "PayPal",      icon: "/paypal.png", isActive: false,                 category: "Payment & Finance" },
 
   // ── Sales & CRM ─────────────────────────────────────────────────────────────
   {
     name: "HubSpot",
     icon: "/hubspot.png",
-    isActive: true,
+    isActive: false,
     category: "Sales & CRM",
     connectorKey: "hubspot",
     productDescription: "Analyze CRM pipeline, owners, contacts, companies, and activities.",
@@ -167,7 +167,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "Salesforce",
     icon: "/salesforce.svg",
-    isActive: true,
+    isActive: false,
     category: "Sales & CRM",
     connectorKey: "salesforce",
     productDescription: "Analyze Sales Cloud pipeline, leads, accounts, activities, and campaigns.",
@@ -178,7 +178,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "Pipedrive",
     icon: "/pipedrive.svg",
-    isActive: true,
+    isActive: false,
     category: "Sales & CRM",
     connectorKey: "pipedrive",
     productDescription: "Analyze deal stages, leads, contacts, activities, products, and owner performance.",
@@ -189,13 +189,13 @@ export const CONNECTORS: ConnectorItem[] = [
   },
 
   // ── E-commerce ────────────────────────────────────────────────────────────────
-  { name: "TikTok Shop Seller", icon: "/tiktokshop.png",  iconBg: "bg-black",    category: "E-commerce" },
-  { name: "Shopee Seller",      icon: "/shopee.png",                             category: "E-commerce" },
-  { name: "Lazada Seller",      icon: "/lazada.png",                             category: "E-commerce" },
+  { name: "TikTok Shop Seller", icon: "/tiktokshop.png", isActive: false, iconBg: "bg-black",    category: "E-commerce" },
+  { name: "Shopee Seller",      icon: "/shopee.png",                     isActive: false,        category: "E-commerce" },
+  { name: "Lazada Seller",      icon: "/lazada.png",                     isActive: false,        category: "E-commerce" },
   {
     name: "Shopify",
     icon: "/shopify.png",
-    isActive: true,
+    isActive: false,
     category: "E-commerce",
     connectorKey: "shopify",
     productDescription: "Analyze orders, customers, products, inventory, discounts, and ecommerce revenue.",
@@ -204,8 +204,8 @@ export const CONNECTORS: ConnectorItem[] = [
     modalTarget: "shopify",
     iconBg: "bg-white",
   },
-  { name: "WooCommerce",        icon: "/woocommerce.png",                        category: "E-commerce" },
-  { name: "Amazon Seller",      icon: "/amazon-seller.png",                      category: "E-commerce" },
+  { name: "WooCommerce",        icon: "/woocommerce.png",            isActive: false,            category: "E-commerce" },
+  { name: "Amazon Seller",      icon: "/amazon-seller.png",          isActive: false,            category: "E-commerce" },
 
   // ── Operations & Database ─────────────────────────────────────────────────────
   {
@@ -219,14 +219,14 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "google_sheets",
   },
-  { name: "Microsoft Excel Online", icon: "/microsoft-excel-online.png",               category: "Operations & Database" },
-  { name: "Notion",                 icon: "/notion.png",                               category: "Operations & Database" },
-  { name: "Lark",                   icon: "/lark.png",                                 category: "Operations & Database" },
-  { name: "Airtable",               icon: "/airtable.png",                             category: "Operations & Database" },
+  { name: "Microsoft Excel Online", icon: "/microsoft-excel-online.png", isActive: false,              category: "Operations & Database" },
+  { name: "Notion",                 icon: "/notion.png",             isActive: false,                  category: "Operations & Database" },
+  { name: "Lark",                   icon: "/lark.png",               isActive: false,                  category: "Operations & Database" },
+  { name: "Airtable",               icon: "/airtable.png",           isActive: false,                  category: "Operations & Database" },
   {
     name: "PostgreSQL",
     icon: "/PostgreSQL.png",
-    isActive: true,
+    isActive: false,
     category: "Operations & Database",
     connectorKey: "postgres",
     productDescription: "Connect your PostgreSQL database in minutes.",
@@ -237,7 +237,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "BigQuery",
     icon: "/bigquery.svg",
-    isActive: true,
+    isActive: false,
     category: "Operations & Database",
     connectorKey: "bigquery",
     productDescription: "Connect BigQuery datasets with schema-aware bounded extracts.",
@@ -248,7 +248,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "Snowflake",
     icon: "/snowflake.png",
-    isActive: true,
+    isActive: false,
     category: "Operations & Database",
     connectorKey: "snowflake",
     productDescription: "Sync governed Snowflake tables with schema-aware bounded extracts.",
@@ -259,7 +259,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "Databricks",
     icon: "/databricks.svg",
-    isActive: true,
+    isActive: false,
     category: "Operations & Database",
     connectorKey: "databricks",
     productDescription: "Connect Delta tables and Unity Catalog schemas through Databricks SQL Warehouses.",
@@ -271,7 +271,7 @@ export const CONNECTORS: ConnectorItem[] = [
   {
     name: "Supabase",
     icon: "/supabase.svg",
-    isActive: true,
+    isActive: false,
     category: "Operations & Database",
     connectorKey: "supabase",
     productDescription: "Connect Supabase projects with schema, RLS, Auth, Storage, and bounded table extracts.",

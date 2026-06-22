@@ -196,6 +196,10 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       "Airtable": { bg: "bg-blue-400", border: "border-blue-300", text: "text-white", hover: "hover:bg-blue-500" },
       "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
+      "Klaviyo": { bg: "bg-neutral-900", border: "border-neutral-800", text: "text-white", hover: "hover:bg-black" },
+      "QuickBooks": { bg: "bg-[#2CA01C]", border: "border-[#228B16]", text: "text-white", hover: "hover:bg-[#228B16]" },
+      "Amazon Seller": { bg: "bg-[#FF9900]", border: "border-[#E88A00]", text: "text-black", hover: "hover:bg-[#F2A900]" },
+      "TikTok Shop Seller": { bg: "bg-zinc-950", border: "border-[#25F4EE]", text: "text-white", hover: "hover:bg-black" },
       "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
       "Salesforce": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
       "Pipedrive": { bg: "bg-emerald-700", border: "border-emerald-600", text: "text-white", hover: "hover:bg-emerald-800" },
@@ -619,6 +623,36 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
     if (connector.name === 'Shopify') {
       setDropdownOpen(false);
       setTimeout(() => useChatStore.getState().setShopifyModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Klaviyo') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setKlaviyoModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'QuickBooks') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setQuickBooksModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Amazon Seller') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setAmazonSellerModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'TikTok Shop Seller') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setTikTokShopSellerModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Shopee Seller') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setShopeeSellerModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Lazada Seller') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setLazadaSellerModalOpen(true), 0);
       return;
     }
     if (connector.name === 'Google Ads') {

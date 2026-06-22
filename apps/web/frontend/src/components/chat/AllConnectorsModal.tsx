@@ -29,6 +29,12 @@ export default function AllConnectorsModal() {
     setPipedriveModalOpen,
     setSupabaseModalOpen,
     setShopifyModalOpen,
+    setKlaviyoModalOpen,
+    setQuickBooksModalOpen,
+    setAmazonSellerModalOpen,
+    setTikTokShopSellerModalOpen,
+    setShopeeSellerModalOpen,
+    setLazadaSellerModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -119,6 +125,36 @@ export default function AllConnectorsModal() {
         ? { connected: true, info: shopifyStatus.shop_domain || shopifyStatus.shop_name || 'Shopify' }
         : { connected: false };
 
+      const klaviyoStatus = await integrationService.getKlaviyoStatus();
+      results['Klaviyo'] = klaviyoStatus.connected
+        ? { connected: true, info: klaviyoStatus.account_name || klaviyoStatus.account_id || 'Klaviyo' }
+        : { connected: false };
+
+      const quickBooksStatus = await integrationService.getQuickBooksStatus();
+      results['QuickBooks'] = quickBooksStatus.connected
+        ? { connected: true, info: quickBooksStatus.company_name || quickBooksStatus.realm_id || 'QuickBooks' }
+        : { connected: false };
+
+      const amazonSellerStatus = await integrationService.getAmazonSellerStatus();
+      results['Amazon Seller'] = amazonSellerStatus.connected
+        ? { connected: true, info: amazonSellerStatus.seller_name || amazonSellerStatus.seller_id || 'Amazon Seller' }
+        : { connected: false };
+
+      const tiktokShopStatus = await integrationService.getTikTokShopSellerStatus();
+      results['TikTok Shop Seller'] = tiktokShopStatus.connected
+        ? { connected: true, info: tiktokShopStatus.account_name || tiktokShopStatus.account_id || 'TikTok Shop Seller' }
+        : { connected: false };
+
+      const shopeeSellerStatus = await integrationService.getShopeeSellerStatus();
+      results['Shopee Seller'] = shopeeSellerStatus.connected
+        ? { connected: true, info: shopeeSellerStatus.account_name || shopeeSellerStatus.account_id || 'Shopee Seller' }
+        : { connected: false };
+
+      const lazadaSellerStatus = await integrationService.getLazadaSellerStatus();
+      results['Lazada Seller'] = lazadaSellerStatus.connected
+        ? { connected: true, info: lazadaSellerStatus.account_name || lazadaSellerStatus.account_id || 'Lazada Seller' }
+        : { connected: false };
+
       const overview = await integrationService.fetchConnectorsOverview();
       if (overview.success) {
         const postgres = overview.connectors.find((connector) => connector.connector_key === 'postgres');
@@ -127,6 +163,12 @@ export default function AllConnectorsModal() {
         const databricks = overview.connectors.find((connector) => connector.connector_key === 'databricks');
         const supabase = overview.connectors.find((connector) => connector.connector_key === 'supabase');
         const shopify = overview.connectors.find((connector) => connector.connector_key === 'shopify');
+        const klaviyo = overview.connectors.find((connector) => connector.connector_key === 'klaviyo');
+        const quickBooks = overview.connectors.find((connector) => connector.connector_key === 'quickbooks');
+        const amazonSeller = overview.connectors.find((connector) => connector.connector_key === 'amazon_seller');
+        const tiktokShopSeller = overview.connectors.find((connector) => connector.connector_key === 'tiktok_shop_seller');
+        const shopeeSeller = overview.connectors.find((connector) => connector.connector_key === 'shopee_seller');
+        const lazadaSeller = overview.connectors.find((connector) => connector.connector_key === 'lazada_seller');
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results['PostgreSQL'] = {
@@ -177,6 +219,48 @@ export default function AllConnectorsModal() {
             info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Shopify']?.info || 'Shopify',
           };
         }
+        if (klaviyo?.connected) {
+          const reportCount = klaviyo.selected_entities?.length || 0;
+          results['Klaviyo'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Klaviyo']?.info || 'Klaviyo',
+          };
+        }
+        if (quickBooks?.connected) {
+          const reportCount = quickBooks.selected_entities?.length || 0;
+          results['QuickBooks'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['QuickBooks']?.info || 'QuickBooks',
+          };
+        }
+        if (amazonSeller?.connected) {
+          const reportCount = amazonSeller.selected_entities?.length || 0;
+          results['Amazon Seller'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Amazon Seller']?.info || 'Amazon Seller',
+          };
+        }
+        if (tiktokShopSeller?.connected) {
+          const reportCount = tiktokShopSeller.selected_entities?.length || 0;
+          results['TikTok Shop Seller'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['TikTok Shop Seller']?.info || 'TikTok Shop Seller',
+          };
+        }
+        if (shopeeSeller?.connected) {
+          const reportCount = shopeeSeller.selected_entities?.length || 0;
+          results['Shopee Seller'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Shopee Seller']?.info || 'Shopee Seller',
+          };
+        }
+        if (lazadaSeller?.connected) {
+          const reportCount = lazadaSeller.selected_entities?.length || 0;
+          results['Lazada Seller'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Lazada Seller']?.info || 'Lazada Seller',
+          };
+        }
       }
 
       setConnectorStatus(results);
@@ -205,6 +289,12 @@ export default function AllConnectorsModal() {
       else if (connectorName === 'Pipedrive') setPipedriveModalOpen(true);
       else if (connectorName === 'Supabase') setSupabaseModalOpen(true);
       else if (connectorName === 'Shopify') setShopifyModalOpen(true);
+      else if (connectorName === 'Klaviyo') setKlaviyoModalOpen(true);
+      else if (connectorName === 'QuickBooks') setQuickBooksModalOpen(true);
+      else if (connectorName === 'Amazon Seller') setAmazonSellerModalOpen(true);
+      else if (connectorName === 'TikTok Shop Seller') setTikTokShopSellerModalOpen(true);
+      else if (connectorName === 'Shopee Seller') setShopeeSellerModalOpen(true);
+      else if (connectorName === 'Lazada Seller') setLazadaSellerModalOpen(true);
       else if (connectorName === 'Google Ads') setGoogleAdsModalOpen(true);
       else if (connectorName === 'Firebase') setFirebaseModalOpen(true);
       else if (connectorName === 'PostgreSQL') setWarehouseModalOpen(true, 'postgres');

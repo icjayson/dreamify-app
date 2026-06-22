@@ -89,6 +89,12 @@ function inferSourceFromTitle(title: string): string {
   if (t.includes("pipedrive")) return "Pipedrive";
   if (t.includes("supabase")) return "Supabase";
   if (t.includes("shopify")) return "Shopify";
+  if (t.includes("klaviyo")) return "Klaviyo";
+  if (t.includes("quickbooks") || t.includes("quick books")) return "QuickBooks";
+  if (t.includes("amazon_seller") || t.includes("amazon seller") || t.includes("seller central")) return "Amazon Seller";
+  if (t.includes("shopee_seller") || t.includes("shopee seller") || t.includes("shopee")) return "Shopee Seller";
+  if (t.includes("lazada_seller") || t.includes("lazada seller") || t.includes("lazada")) return "Lazada Seller";
+  if (t.includes("tiktok_shop_seller") || t.includes("tiktok shop seller") || t.includes("tiktok shop")) return "TikTok Shop Seller";
   if (t.includes("bigquery")) return "BigQuery";
   if (t.includes("snowflake")) return "Snowflake";
   if (t.includes("databricks")) return "Databricks";
@@ -116,6 +122,12 @@ const SOURCE_COLORS: Record<string, string> = {
   Pipedrive: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
   Supabase: "bg-teal-500/20 text-teal-700 dark:text-teal-300",
   Shopify: "bg-green-500/20 text-green-700 dark:text-green-300",
+  Klaviyo: "bg-neutral-500/20 text-neutral-800 dark:text-neutral-200",
+  QuickBooks: "bg-green-500/20 text-green-700 dark:text-green-300",
+  "Amazon Seller": "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+  "Shopee Seller": "bg-orange-500/20 text-orange-700 dark:text-orange-300",
+  "Lazada Seller": "bg-orange-500/20 text-orange-700 dark:text-orange-300",
+  "TikTok Shop Seller": "bg-cyan-500/20 text-cyan-700 dark:text-cyan-300",
   Databricks: "bg-red-500/20 text-red-700 dark:text-red-300",
   CSV: "bg-foreground/10 text-foreground/60",
 };
@@ -484,6 +496,12 @@ export default function WorkspacePage() {
     setPipedriveModalOpen,
     setSupabaseModalOpen,
     setShopifyModalOpen,
+    setKlaviyoModalOpen,
+    setQuickBooksModalOpen,
+    setAmazonSellerModalOpen,
+    setTikTokShopSellerModalOpen,
+    setShopeeSellerModalOpen,
+    setLazadaSellerModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setWarehouseModalOpen,
@@ -518,6 +536,18 @@ export default function WorkspacePage() {
       setSupabaseModalOpen(true);
     } else if (connectorName === 'Shopify') {
       setShopifyModalOpen(true);
+    } else if (connectorName === 'Klaviyo') {
+      setKlaviyoModalOpen(true);
+    } else if (connectorName === 'QuickBooks') {
+      setQuickBooksModalOpen(true);
+    } else if (connectorName === 'Amazon Seller') {
+      setAmazonSellerModalOpen(true);
+    } else if (connectorName === 'TikTok Shop Seller') {
+      setTikTokShopSellerModalOpen(true);
+    } else if (connectorName === 'Shopee Seller') {
+      setShopeeSellerModalOpen(true);
+    } else if (connectorName === 'Lazada Seller') {
+      setLazadaSellerModalOpen(true);
     } else if (connectorName === 'Google Ads') {
       setGoogleAdsModalOpen(true);
     } else if (connectorName === 'Firebase') {
@@ -635,6 +665,36 @@ export default function WorkspacePage() {
         ? { connected: true, info: `Account: ${shopifyStatus.shop_domain || shopifyStatus.shop_name || "Shopify"}` }
         : { connected: false };
 
+      const klaviyoStatus = await integrationService.getKlaviyoStatus();
+      results["Klaviyo"] = klaviyoStatus.connected
+        ? { connected: true, info: `Account: ${klaviyoStatus.account_name || klaviyoStatus.account_id || "Klaviyo"}` }
+        : { connected: false };
+
+      const quickBooksStatus = await integrationService.getQuickBooksStatus();
+      results["QuickBooks"] = quickBooksStatus.connected
+        ? { connected: true, info: `Account: ${quickBooksStatus.company_name || quickBooksStatus.realm_id || "QuickBooks"}` }
+        : { connected: false };
+
+      const amazonSellerStatus = await integrationService.getAmazonSellerStatus();
+      results["Amazon Seller"] = amazonSellerStatus.connected
+        ? { connected: true, info: `Account: ${amazonSellerStatus.seller_name || amazonSellerStatus.seller_id || "Amazon Seller"}` }
+        : { connected: false };
+
+      const tiktokShopStatus = await integrationService.getTikTokShopSellerStatus();
+      results["TikTok Shop Seller"] = tiktokShopStatus.connected
+        ? { connected: true, info: `Account: ${tiktokShopStatus.account_name || tiktokShopStatus.account_id || "TikTok Shop Seller"}` }
+        : { connected: false };
+
+      const shopeeSellerStatus = await integrationService.getShopeeSellerStatus();
+      results["Shopee Seller"] = shopeeSellerStatus.connected
+        ? { connected: true, info: `Account: ${shopeeSellerStatus.account_name || shopeeSellerStatus.account_id || "Shopee Seller"}` }
+        : { connected: false };
+
+      const lazadaSellerStatus = await integrationService.getLazadaSellerStatus();
+      results["Lazada Seller"] = lazadaSellerStatus.connected
+        ? { connected: true, info: `Account: ${lazadaSellerStatus.account_name || lazadaSellerStatus.account_id || "Lazada Seller"}` }
+        : { connected: false };
+
       const overview = await integrationService.fetchConnectorsOverview();
       if (overview.success) {
         setConnectorOverview(overview.connectors);
@@ -647,6 +707,12 @@ export default function WorkspacePage() {
         const pipedrive = overview.connectors.find((connector) => connector.connector_key === "pipedrive");
         const supabase = overview.connectors.find((connector) => connector.connector_key === "supabase");
         const shopify = overview.connectors.find((connector) => connector.connector_key === "shopify");
+        const klaviyo = overview.connectors.find((connector) => connector.connector_key === "klaviyo");
+        const quickBooks = overview.connectors.find((connector) => connector.connector_key === "quickbooks");
+        const amazonSeller = overview.connectors.find((connector) => connector.connector_key === "amazon_seller");
+        const tiktokShopSeller = overview.connectors.find((connector) => connector.connector_key === "tiktok_shop_seller");
+        const shopeeSeller = overview.connectors.find((connector) => connector.connector_key === "shopee_seller");
+        const lazadaSeller = overview.connectors.find((connector) => connector.connector_key === "lazada_seller");
         if (postgres?.connected) {
           const tableCount = postgres.selected_entities?.length || 0;
           results["PostgreSQL"] = {
@@ -718,6 +784,48 @@ export default function WorkspacePage() {
             info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Shopify"]?.info || "Account: Shopify",
           };
         }
+        if (klaviyo?.connected) {
+          const reportCount = klaviyo.selected_entities?.length || 0;
+          results["Klaviyo"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Klaviyo"]?.info || "Account: Klaviyo",
+          };
+        }
+        if (quickBooks?.connected) {
+          const reportCount = quickBooks.selected_entities?.length || 0;
+          results["QuickBooks"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["QuickBooks"]?.info || "Account: QuickBooks",
+          };
+        }
+        if (amazonSeller?.connected) {
+          const reportCount = amazonSeller.selected_entities?.length || 0;
+          results["Amazon Seller"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Amazon Seller"]?.info || "Account: Amazon Seller",
+          };
+        }
+        if (tiktokShopSeller?.connected) {
+          const reportCount = tiktokShopSeller.selected_entities?.length || 0;
+          results["TikTok Shop Seller"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["TikTok Shop Seller"]?.info || "Account: TikTok Shop Seller",
+          };
+        }
+        if (shopeeSeller?.connected) {
+          const reportCount = shopeeSeller.selected_entities?.length || 0;
+          results["Shopee Seller"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Shopee Seller"]?.info || "Account: Shopee Seller",
+          };
+        }
+        if (lazadaSeller?.connected) {
+          const reportCount = lazadaSeller.selected_entities?.length || 0;
+          results["Lazada Seller"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Lazada Seller"]?.info || "Account: Lazada Seller",
+          };
+        }
       } else {
         setConnectorOverview([]);
         results["PostgreSQL"] = { connected: false };
@@ -726,6 +834,12 @@ export default function WorkspacePage() {
         results["Databricks"] = { connected: false };
         results["Supabase"] = { connected: false };
         results["Shopify"] = { connected: false };
+        results["Klaviyo"] = { connected: false };
+        results["QuickBooks"] = { connected: false };
+        results["Amazon Seller"] = { connected: false };
+        results["TikTok Shop Seller"] = { connected: false };
+        results["Shopee Seller"] = { connected: false };
+        results["Lazada Seller"] = { connected: false };
       }
       setConnectorStatus(results);
     } catch (e) {
@@ -1108,6 +1222,12 @@ export default function WorkspacePage() {
       'pipedrive': setPipedriveModalOpen,
       'supabase': setSupabaseModalOpen,
       'shopify': setShopifyModalOpen,
+      'klaviyo': setKlaviyoModalOpen,
+      'quickbooks': setQuickBooksModalOpen,
+      'amazon-seller': setAmazonSellerModalOpen,
+      'tiktok-shop-seller': setTikTokShopSellerModalOpen,
+      'shopee-seller': setShopeeSellerModalOpen,
+      'lazada-seller': setLazadaSellerModalOpen,
       'postgres': (open: boolean) => setWarehouseModalOpen(open, 'postgres'),
       'bigquery': (open: boolean) => setWarehouseModalOpen(open, 'bigquery'),
       'snowflake': (open: boolean) => setWarehouseModalOpen(open, 'snowflake'),
@@ -1125,7 +1245,7 @@ export default function WorkspacePage() {
     const remaining = newParams.toString();
     const newUrl = `${window.location.pathname}${remaining ? '?' + remaining : ''}`;
     window.history.replaceState({}, '', newUrl);
-  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setHubSpotModalOpen, setSalesforceModalOpen, setPipedriveModalOpen, setSupabaseModalOpen, setShopifyModalOpen, setWarehouseModalOpen]);
+  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setHubSpotModalOpen, setSalesforceModalOpen, setPipedriveModalOpen, setSupabaseModalOpen, setShopifyModalOpen, setKlaviyoModalOpen, setQuickBooksModalOpen, setAmazonSellerModalOpen, setTikTokShopSellerModalOpen, setShopeeSellerModalOpen, setLazadaSellerModalOpen, setWarehouseModalOpen]);
 
   const isAesthetic = layoutStyle === "aesthetic" && activeTab === "new-chat";
   const showWorkspaceHeaderActions = activeTab === "new-chat";

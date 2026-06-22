@@ -4,7 +4,7 @@ import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService, type ProcessingResponse } from '@/services/processingService';
 import { streamWorkflow } from '@/services/workflowStreamService';
 import type { ConversationChatRequest, DashboardDataResponse } from '@/services/conversationService';
-import type { ShopifySyncRequest, SupabaseSyncRequest } from '@/services/integrationService';
+import type { AmazonSellerSyncRequest, KlaviyoSyncRequest, LazadaSellerSyncRequest, QuickBooksSyncRequest, ShopifySyncRequest, ShopeeSellerSyncRequest, SupabaseSyncRequest, TikTokShopSellerSyncRequest } from '@/services/integrationService';
 import type { AnalysisStep, ChartChangeSummary, EditDataProvenance } from '@/types/chartEdit';
 import type { AssetRecord } from '@/services/fileService';
 import {
@@ -373,6 +373,12 @@ interface ChatState {
   isSalesforceModalOpen: boolean;
   isPipedriveModalOpen: boolean;
   isShopifyModalOpen: boolean;
+  isKlaviyoModalOpen: boolean;
+  isQuickBooksModalOpen: boolean;
+  isAmazonSellerModalOpen: boolean;
+  isTikTokShopSellerModalOpen: boolean;
+  isShopeeSellerModalOpen: boolean;
+  isLazadaSellerModalOpen: boolean;
   isSupabaseModalOpen: boolean;
   isGoogleAdsModalOpen: boolean;
   isFirebaseModalOpen: boolean;
@@ -449,6 +455,12 @@ interface ChatState {
   setSalesforceModalOpen: (open: boolean) => void;
   setPipedriveModalOpen: (open: boolean) => void;
   setShopifyModalOpen: (open: boolean) => void;
+  setKlaviyoModalOpen: (open: boolean) => void;
+  setQuickBooksModalOpen: (open: boolean) => void;
+  setAmazonSellerModalOpen: (open: boolean) => void;
+  setTikTokShopSellerModalOpen: (open: boolean) => void;
+  setShopeeSellerModalOpen: (open: boolean) => void;
+  setLazadaSellerModalOpen: (open: boolean) => void;
   setSupabaseModalOpen: (open: boolean) => void;
   setGoogleAdsModalOpen: (open: boolean) => void;
   setFirebaseModalOpen: (open: boolean) => void;
@@ -479,6 +491,12 @@ interface ChatState {
   syncSalesforce: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, objectName?: string, ownerId?: string, rowLimit?: number) => Promise<SalesforceSyncResult>;
   syncPipedrive: (reportType: string, projectId?: string, datePreset?: string, startDate?: string, endDate?: string, pipelineId?: string, ownerId?: string, rowLimit?: number) => Promise<PipedriveSyncResult>;
   syncShopify: (request: ShopifySyncRequest) => Promise<ShopifySyncResult>;
+  syncKlaviyo: (request: KlaviyoSyncRequest) => Promise<KlaviyoSyncResult>;
+  syncQuickBooks: (request: QuickBooksSyncRequest) => Promise<QuickBooksSyncResult>;
+  syncAmazonSeller: (request: AmazonSellerSyncRequest) => Promise<AmazonSellerSyncResult>;
+  syncTikTokShopSeller: (request: TikTokShopSellerSyncRequest) => Promise<TikTokShopSellerSyncResult>;
+  syncShopeeSeller: (request: ShopeeSellerSyncRequest) => Promise<ShopeeSellerSyncResult>;
+  syncLazadaSeller: (request: LazadaSellerSyncRequest) => Promise<LazadaSellerSyncResult>;
   syncSupabase: (request: SupabaseSyncRequest) => Promise<SupabaseSyncResult>;
   syncGoogleAds: (adAccountId: string, projectId?: string, startDate?: string, endDate?: string, accountName?: string) => Promise<StripeSyncResult>;
   syncFirebase: (firebaseProjectId: string, projectName: string, projectId?: string, startDate?: string, endDate?: string) => Promise<StripeSyncResult>;
@@ -537,6 +555,78 @@ export interface PipedriveSyncResult {
 
 /** Result of Shopify sync API */
 export interface ShopifySyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of Klaviyo sync API */
+export interface KlaviyoSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of QuickBooks sync API */
+export interface QuickBooksSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of Amazon Seller sync API */
+export interface AmazonSellerSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of TikTok Shop Seller sync API */
+export interface TikTokShopSellerSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of Shopee Seller sync API */
+export interface ShopeeSellerSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of Lazada Seller sync API */
+export interface LazadaSellerSyncResult {
   success: true;
   row_count: number;
   column_count: number;
@@ -1030,6 +1120,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isSalesforceModalOpen: false,
   isPipedriveModalOpen: false,
   isShopifyModalOpen: false,
+  isKlaviyoModalOpen: false,
+  isQuickBooksModalOpen: false,
+  isAmazonSellerModalOpen: false,
+  isTikTokShopSellerModalOpen: false,
+  isShopeeSellerModalOpen: false,
+  isLazadaSellerModalOpen: false,
   isSupabaseModalOpen: false,
   isGoogleAdsModalOpen: false,
   isFirebaseModalOpen: false,
@@ -1166,6 +1262,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSalesforceModalOpen: (open) => set({ isSalesforceModalOpen: open }),
   setPipedriveModalOpen: (open) => set({ isPipedriveModalOpen: open }),
   setShopifyModalOpen: (open) => set({ isShopifyModalOpen: open }),
+  setKlaviyoModalOpen: (open) => set({ isKlaviyoModalOpen: open }),
+  setQuickBooksModalOpen: (open) => set({ isQuickBooksModalOpen: open }),
+  setAmazonSellerModalOpen: (open) => set({ isAmazonSellerModalOpen: open }),
+  setTikTokShopSellerModalOpen: (open) => set({ isTikTokShopSellerModalOpen: open }),
+  setShopeeSellerModalOpen: (open) => set({ isShopeeSellerModalOpen: open }),
+  setLazadaSellerModalOpen: (open) => set({ isLazadaSellerModalOpen: open }),
   setSupabaseModalOpen: (open) => set({ isSupabaseModalOpen: open }),
   setGoogleAdsModalOpen: (open) => set({ isGoogleAdsModalOpen: open }),
   setFirebaseModalOpen: (open) => set({ isFirebaseModalOpen: open }),
@@ -1502,6 +1604,156 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync Shopify data');
     } catch (err) {
       console.error('Sync Shopify error:', err);
+      throw err;
+    }
+  },
+
+  syncKlaviyo: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncKlaviyo(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Klaviyo');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Klaviyo data');
+    } catch (err) {
+      console.error('Sync Klaviyo error:', err);
+      throw err;
+    }
+  },
+
+  syncQuickBooks: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncQuickBooks(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('QuickBooks');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync QuickBooks data');
+    } catch (err) {
+      console.error('Sync QuickBooks error:', err);
+      throw err;
+    }
+  },
+
+  syncAmazonSeller: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncAmazonSeller(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Amazon Seller');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Amazon Seller data');
+    } catch (err) {
+      console.error('Sync Amazon Seller error:', err);
+      throw err;
+    }
+  },
+
+  syncTikTokShopSeller: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncTikTokShopSeller(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('TikTok Shop Seller');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync TikTok Shop data');
+    } catch (err) {
+      console.error('Sync TikTok Shop Seller error:', err);
+      throw err;
+    }
+  },
+
+  syncShopeeSeller: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncShopeeSeller(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Shopee Seller');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Shopee Seller data');
+    } catch (err) {
+      console.error('Sync Shopee Seller error:', err);
+      throw err;
+    }
+  },
+
+  syncLazadaSeller: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncLazadaSeller(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Lazada Seller');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Lazada Seller data');
+    } catch (err) {
+      console.error('Sync Lazada Seller error:', err);
       throw err;
     }
   },

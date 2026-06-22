@@ -43,6 +43,7 @@ export const API_ENDPOINTS = {
   ADMIN_CONVERSATION_NODES: '/api/v1/admin/conversations',
   ADMIN_METRICS: '/api/v1/admin/metrics',
   ADMIN_TIMESERIES: '/api/v1/admin/metrics/timeseries',
+  ADMIN_USERS: '/api/v1/admin/users',
 
   // Blog (public reads)
   BLOG_POSTS: '/api/v1/blog/posts',

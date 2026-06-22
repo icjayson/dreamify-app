@@ -922,6 +922,12 @@ function getDashboardSourceLabel(dashboardCard: NonNullable<Message["dashboardCa
   if (source.includes("pipedrive") || filename.includes("pipedrive")) return "Pipedrive Data";
   if (source.includes("supabase") || filename.includes("supabase")) return "Supabase Data";
   if (source.includes("shopify") || filename.includes("shopify")) return "Shopify Data";
+  if (source.includes("klaviyo") || filename.includes("klaviyo")) return "Klaviyo Data";
+  if (source.includes("quickbooks") || source.includes("quick books") || filename.includes("quickbooks")) return "QuickBooks Data";
+  if (source.includes("amazon_seller") || source.includes("amazon seller") || filename.includes("amazon_seller")) return "Amazon Seller Data";
+  if (source.includes("shopee_seller") || source.includes("shopee seller") || filename.includes("shopee_seller")) return "Shopee Seller Data";
+  if (source.includes("lazada_seller") || source.includes("lazada seller") || filename.includes("lazada_seller")) return "Lazada Seller Data";
+  if (source.includes("tiktok_shop_seller") || source.includes("tiktok shop seller") || filename.includes("tiktok_shop_seller")) return "TikTok Shop Seller Data";
   if (source.includes("bigquery") || filename.includes("bigquery")) return "BigQuery Data";
   if (source.includes("snowflake") || filename.includes("snowflake")) return "Snowflake Data";
   if (source.includes("databricks") || filename.includes("databricks")) return "Databricks Data";
@@ -1322,6 +1328,12 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setPipedriveModalOpen,
     setSupabaseModalOpen,
     setShopifyModalOpen,
+    setKlaviyoModalOpen,
+    setQuickBooksModalOpen,
+    setAmazonSellerModalOpen,
+    setTikTokShopSellerModalOpen,
+    setShopeeSellerModalOpen,
+    setLazadaSellerModalOpen,
     setGoogleAdsModalOpen,
     setFirebaseModalOpen,
     setAllConnectorsModalOpen,
@@ -2181,6 +2193,36 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       setTimeout(() => setShopifyModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'Klaviyo') {
+      setDropdownOpen(false);
+      setTimeout(() => setKlaviyoModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'QuickBooks') {
+      setDropdownOpen(false);
+      setTimeout(() => setQuickBooksModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Amazon Seller') {
+      setDropdownOpen(false);
+      setTimeout(() => setAmazonSellerModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'TikTok Shop Seller') {
+      setDropdownOpen(false);
+      setTimeout(() => setTikTokShopSellerModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Shopee Seller') {
+      setDropdownOpen(false);
+      setTimeout(() => setShopeeSellerModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Lazada Seller') {
+      setDropdownOpen(false);
+      setTimeout(() => setLazadaSellerModalOpen(true), 0);
+      return;
+    }
     if (connector.name === 'Google Ads') {
       setDropdownOpen(false);
       setTimeout(() => setGoogleAdsModalOpen(true), 0);
@@ -2229,6 +2271,10 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       "Airtable": { bg: "bg-blue-400", border: "border-blue-300", text: "text-white", hover: "hover:bg-blue-500" },
       "Stripe": { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
+      "Klaviyo": { bg: "bg-neutral-900", border: "border-neutral-800", text: "text-white", hover: "hover:bg-black" },
+      "QuickBooks": { bg: "bg-[#2CA01C]", border: "border-[#228B16]", text: "text-white", hover: "hover:bg-[#228B16]" },
+      "Amazon Seller": { bg: "bg-[#FF9900]", border: "border-[#E88A00]", text: "text-black", hover: "hover:bg-[#F2A900]" },
+      "TikTok Shop Seller": { bg: "bg-zinc-950", border: "border-[#25F4EE]", text: "text-white", hover: "hover:bg-black" },
       "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },
       "Salesforce": { bg: "bg-sky-600", border: "border-sky-500", text: "text-white", hover: "hover:bg-sky-700" },
       "Pipedrive": { bg: "bg-emerald-700", border: "border-emerald-600", text: "text-white", hover: "hover:bg-emerald-800" },

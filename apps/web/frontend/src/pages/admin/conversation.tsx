@@ -4,14 +4,20 @@ import { ArrowLeft, Code, Copy, FileText, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { ConversationNodesView } from '@/components/admin/ConversationNodesView';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { adminService } from '@/services/adminService';
-import { useState, useMemo } from 'react';
-import { PanelLeft } from 'lucide-react';
+import { useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { formatToDisplay } from '@/utils/timestamp';
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const stringValue = (value: unknown): string | undefined => {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+};
 
 export default function AdminConversationPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -19,7 +25,6 @@ export default function AdminConversationPage() {
   const projectId = searchParams.get('project_id') || '';
   const navigate = useNavigate();
   const { getToken, isAdmin } = useAdminAuth();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { toast } = useToast();
 
   const { data: conversationData, isLoading: isLoadingConversation } = useQuery({
@@ -99,30 +104,13 @@ export default function AdminConversationPage() {
 
   return (
     <div className="min-h-screen bg-muted">
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: `${sidebarCollapsed ? '4rem' : '16rem'} 1fr` }}
-      >
-        <AdminSidebar
-          collapsed={sidebarCollapsed}
-          onCollapsedChange={setSidebarCollapsed}
-        />
-        
-        <main className="p-6 h-[calc(100vh)] overflow-y-auto">
+        <main className="p-6 h-screen overflow-y-auto">
           {/* Header */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-4">
-              <button
-                type="button"
-                className="p-1.5 rounded-md hover:bg-background transition-colors"
-                onClick={() => setSidebarCollapsed((v) => !v)}
-              >
-                <PanelLeft className="w-5 h-5" />
-              </button>
-              <div className="h-4 w-px bg-border mx-1" />
-              <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/admin/chat-logs')}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Dashboard
+                Back to Chat Logs
               </Button>
             </div>
             <h1 className="text-2xl font-semibold">Conversation Details</h1>
@@ -179,13 +167,15 @@ export default function AdminConversationPage() {
                       </div>
                       {(() => {
                         // Extract assets from nodes
-                        const nodes = conversation.nodes || [];
-                        const assets: any[] = [];
+                        const nodes = Array.isArray(conversation.nodes) ? conversation.nodes : [];
+                        const assets: Array<Record<string, unknown>> = [];
                         for (const node of nodes) {
-                          const contents = node?.contents || [];
+                          if (!isRecord(node) || !Array.isArray(node.contents)) continue;
+                          const contents = node.contents;
                           for (const content of contents) {
-                            if (content?.type === 'asset' || content?.type === 'attachment') {
-                              const assetData = content?.data || {};
+                            if (!isRecord(content)) continue;
+                            if ((content.type === 'asset' || content.type === 'attachment') && isRecord(content.data)) {
+                              const assetData = content.data;
                               if (assetData.asset_id) {
                                 assets.push(assetData);
                               }
@@ -198,7 +188,7 @@ export default function AdminConversationPage() {
                             <div className="ml-2 mt-1 space-y-1">
                               {assets.map((asset, idx) => (
                                 <div key={idx} className="font-mono text-xs">
-                                  {asset.asset_id} ({asset.filename || 'N/A'})
+                                  {stringValue(asset.asset_id) || 'unknown'} ({stringValue(asset.filename) || 'N/A'})
                                 </div>
                               ))}
                             </div>
@@ -279,8 +269,6 @@ export default function AdminConversationPage() {
             </Tabs>
           )}
         </main>
-      </div>
     </div>
   );
 }
-

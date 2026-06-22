@@ -391,6 +391,12 @@ export default function WorkspaceNewChat() {
     if (connector.name === "Pipedrive") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setPipedriveModalOpen(true), 0); return; }
     if (connector.name === "Supabase") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setSupabaseModalOpen(true), 0); return; }
     if (connector.name === "Shopify") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setShopifyModalOpen(true), 0); return; }
+    if (connector.name === "Klaviyo") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setKlaviyoModalOpen(true), 0); return; }
+    if (connector.name === "QuickBooks") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setQuickBooksModalOpen(true), 0); return; }
+    if (connector.name === "Amazon Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setAmazonSellerModalOpen(true), 0); return; }
+    if (connector.name === "TikTok Shop Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setTikTokShopSellerModalOpen(true), 0); return; }
+    if (connector.name === "Shopee Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setShopeeSellerModalOpen(true), 0); return; }
+    if (connector.name === "Lazada Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setLazadaSellerModalOpen(true), 0); return; }
     if (connector.name === "Google Ads") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setGoogleAdsModalOpen(true), 0); return; }
     if (connector.name === "Firebase") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setFirebaseModalOpen(true), 0); return; }
     if (connector.name === "PostgreSQL") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setWarehouseModalOpen(true, "postgres"), 0); return; }
@@ -418,6 +424,12 @@ export default function WorkspaceNewChat() {
       Stripe: { bg: "bg-purple-600", border: "border-purple-500", text: "text-white", hover: "hover:bg-purple-700" },
       Supabase: { bg: "bg-teal-700", border: "border-teal-600", text: "text-white", hover: "hover:bg-teal-800" },
       Shopify: { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
+      Klaviyo: { bg: "bg-neutral-900", border: "border-neutral-800", text: "text-white", hover: "hover:bg-black" },
+      QuickBooks: { bg: "bg-[#2CA01C]", border: "border-[#228B16]", text: "text-white", hover: "hover:bg-[#228B16]" },
+      "Amazon Seller": { bg: "bg-[#FF9900]", border: "border-[#E88A00]", text: "text-black", hover: "hover:bg-[#F2A900]" },
+      "TikTok Shop Seller": { bg: "bg-zinc-950", border: "border-[#25F4EE]", text: "text-white", hover: "hover:bg-black" },
+      "Shopee Seller": { bg: "bg-[#EE4D2D]", border: "border-[#D83B1F]", text: "text-white", hover: "hover:bg-[#D83B1F]" },
+      "Lazada Seller": { bg: "bg-[#FF5A00]", border: "border-[#E14E00]", text: "text-white", hover: "hover:bg-[#E14E00]" },
     };
     return colors[sourceName] || { bg: "bg-primary", border: "border-primary", text: "text-white", hover: "hover:bg-primary/90" };
   };

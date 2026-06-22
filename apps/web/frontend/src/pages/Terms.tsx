@@ -1,5 +1,6 @@
 import React from 'react';
 import DocsLayout from '@/components/layout/DocsLayout';
+import Seo from '@/components/seo/Seo';
 
 export const TERMS_METADATA = {
   title: "Terms of Service",
@@ -109,9 +110,25 @@ export const TermsContent: React.FC = () => (
 );
 
 const Terms = () => (
-  <DocsLayout metadata={TERMS_METADATA} toc={TERMS_TOC}>
-    <TermsContent />
-  </DocsLayout>
+  <>
+    <Seo
+      title="Dreamify Terms of Service — Platform Usage Terms"
+      description="The terms governing your use of Dreamify's AI data visualization platform: acceptable use, user data, third-party services, disclaimers, and liability."
+      canonical="https://app.dreamify.dev/terms"
+      jsonLd={{
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://app.dreamify.dev/terms#webpage",
+        url: "https://app.dreamify.dev/terms",
+        name: "Dreamify Terms of Service",
+        isPartOf: { "@id": "https://app.dreamify.dev/#website" },
+        inLanguage: "en",
+      }}
+    />
+    <DocsLayout metadata={TERMS_METADATA} toc={TERMS_TOC}>
+      <TermsContent />
+    </DocsLayout>
+  </>
 );
 
 export default Terms;

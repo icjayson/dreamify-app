@@ -1,5 +1,6 @@
 import React from 'react';
 import DocsLayout from '@/components/layout/DocsLayout';
+import Seo from '@/components/seo/Seo';
 
 export const PRIVACY_METADATA = {
   title: "Privacy Policy",
@@ -78,9 +79,25 @@ export const PrivacyContent: React.FC = () => (
 );
 
 const Privacy = () => (
-  <DocsLayout metadata={PRIVACY_METADATA} toc={PRIVACY_TOC}>
-    <PrivacyContent />
-  </DocsLayout>
+  <>
+    <Seo
+      title="Dreamify Privacy Policy — How We Handle Your Data"
+      description="How Dreamify collects, uses, stores, and protects your personal information, including Google API data handling under the Limited Use Policy."
+      canonical="https://app.dreamify.dev/privacy"
+      jsonLd={{
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://app.dreamify.dev/privacy#webpage",
+        url: "https://app.dreamify.dev/privacy",
+        name: "Dreamify Privacy Policy",
+        isPartOf: { "@id": "https://app.dreamify.dev/#website" },
+        inLanguage: "en",
+      }}
+    />
+    <DocsLayout metadata={PRIVACY_METADATA} toc={PRIVACY_TOC}>
+      <PrivacyContent />
+    </DocsLayout>
+  </>
 );
 
 export default Privacy;

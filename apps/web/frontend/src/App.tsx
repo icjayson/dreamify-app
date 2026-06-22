@@ -32,6 +32,7 @@ import CancelPage from "./pages/CancelPage";
 import SuccessPage from "./pages/SuccessPage";
 import AdminPage from "./pages/admin";
 import AdminConversationPage from "./pages/admin/conversation";
+import AdminUserPage from "./pages/admin/user";
 import AdminRoute from "./components/auth/AdminRoute";
 import CmsListPage from "./pages/cms/CmsListPage";
 import CmsEditorPage from "./pages/cms/CmsEditorPage";
@@ -60,6 +61,12 @@ import SalesforceIntegrationModal from "./components/chat/SalesforceIntegrationM
 import PipedriveIntegrationModal from "./components/chat/PipedriveIntegrationModal";
 import SupabaseIntegrationModal from "./components/chat/SupabaseIntegrationModal";
 import ShopifyIntegrationModal from "./components/chat/ShopifyIntegrationModal";
+import KlaviyoIntegrationModal from "./components/chat/KlaviyoIntegrationModal";
+import QuickBooksIntegrationModal from "./components/chat/QuickBooksIntegrationModal";
+import AmazonSellerIntegrationModal from "./components/chat/AmazonSellerIntegrationModal";
+import TikTokShopSellerIntegrationModal from "./components/chat/TikTokShopSellerIntegrationModal";
+import ShopeeSellerIntegrationModal from "./components/chat/ShopeeSellerIntegrationModal";
+import LazadaSellerIntegrationModal from "./components/chat/LazadaSellerIntegrationModal";
 import GoogleAdsIntegrationModal from "./components/chat/GoogleAdsIntegrationModal";
 import FirebaseIntegrationModal from "./components/chat/FirebaseIntegrationModal";
 import WarehouseIntegrationModal from "./components/chat/WarehouseIntegrationModal";
@@ -224,8 +231,12 @@ const AppContent = () => {
         <Route path="/preview/:assetId" element={<FilePreviewPage />} />
         <Route path="/cancel" element={<CancelPage />} />
         <Route path="/success" element={<SuccessPage />} />
-        <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+        <Route path="/admin" element={<Navigate to="/admin/analytics" replace />} />
+        <Route path="/admin/analytics" element={<AdminRoute><AdminPage /></AdminRoute>} />
+        <Route path="/admin/users" element={<AdminRoute><AdminPage /></AdminRoute>} />
+        <Route path="/admin/chat-logs" element={<AdminRoute><AdminPage /></AdminRoute>} />
         <Route path="/admin/conversation/:conversationId" element={<AdminRoute><AdminConversationPage /></AdminRoute>} />
+        <Route path="/admin/users/:userId" element={<AdminRoute><AdminUserPage /></AdminRoute>} />
         <Route path="/admin/cms" element={<AdminRoute><CmsListPage /></AdminRoute>} />
         <Route path="/admin/cms/new" element={<AdminRoute><CmsEditorPage /></AdminRoute>} />
         <Route path="/admin/cms/:postId" element={<AdminRoute><CmsEditorPage /></AdminRoute>} />
@@ -263,6 +274,12 @@ const AppContent = () => {
       <PipedriveIntegrationModal />
       <SupabaseIntegrationModal />
       <ShopifyIntegrationModal />
+      <KlaviyoIntegrationModal />
+      <QuickBooksIntegrationModal />
+      <AmazonSellerIntegrationModal />
+      <TikTokShopSellerIntegrationModal />
+      <ShopeeSellerIntegrationModal />
+      <LazadaSellerIntegrationModal />
       <GoogleAdsIntegrationModal />
       <FirebaseIntegrationModal />
       <WarehouseIntegrationModal />

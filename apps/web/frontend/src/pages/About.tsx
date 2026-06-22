@@ -12,6 +12,7 @@ import { useTheme } from "@/hooks/useTheme";
 import ProjectsSidebar from "@/components/homepage-section/ProjectsSidebar";
 import { useProjects } from "@/hooks/useProjects";
 import { FeedbackFloatingButton } from "@/components/ui/feedback-button";
+import Seo from "@/components/seo/Seo";
 
 const AboutPage = () => {
   const navigate = useNavigate();
@@ -53,6 +54,22 @@ const AboutPage = () => {
 
 
   return (
+    <>
+      <Seo
+        title="About Dreamify — AI Data Visualization for SMEs"
+        description="Dreamify's mission: give marketers, sellers, and founders at SMEs decision-ready dashboards in minutes — no data team, no BI setup, no formulas."
+        canonical="https://app.dreamify.dev/about"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "AboutPage",
+          "@id": "https://app.dreamify.dev/about#webpage",
+          url: "https://app.dreamify.dev/about",
+          name: "About Dreamify",
+          isPartOf: { "@id": "https://app.dreamify.dev/#website" },
+          about: { "@id": "https://app.dreamify.dev/#organization" },
+          inLanguage: "en",
+        }}
+      />
     <div className="min-h-screen overflow-y-auto">
       {/* Fixed background: Video for light, Wave for dark */}
       {resolvedTheme === 'dark' ? (
@@ -95,6 +112,7 @@ const AboutPage = () => {
         onDeleteProject={deleteProject}
       />
     </div>
+    </>
   );
 };
 

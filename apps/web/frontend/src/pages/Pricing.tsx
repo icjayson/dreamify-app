@@ -11,6 +11,7 @@ import ProjectsSidebar from "@/components/homepage-section/ProjectsSidebar";
 import { useProjects } from "@/hooks/useProjects";
 import { useTheme } from "@/hooks/useTheme";
 import { FeedbackFloatingButton } from "@/components/ui/feedback-button";
+import Seo from "@/components/seo/Seo";
 
 const PricingPage = () => {
   const navigate = useNavigate();
@@ -48,6 +49,21 @@ const PricingPage = () => {
   };
 
   return (
+    <>
+      <Seo
+        title="Dreamify Pricing — Sandbox Free, Pro $15/mo, Team $18/seat"
+        description="Dreamify pricing plans: Sandbox (free, 100 credits/mo, 2 sources), Pro ($15/mo, unlimited connectors, workspace agents), and Team ($18/seat). Dashboards in minutes."
+        canonical="https://app.dreamify.dev/pricing"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          "@id": "https://app.dreamify.dev/pricing#webpage",
+          url: "https://app.dreamify.dev/pricing",
+          name: "Dreamify Pricing",
+          isPartOf: { "@id": "https://app.dreamify.dev/#website" },
+          inLanguage: "en",
+        }}
+      />
     <div className="min-h-screen overflow-y-auto">
       {/* Fixed background: Video for light, Wave for dark */}
       {resolvedTheme === 'dark' ? (
@@ -87,6 +103,7 @@ const PricingPage = () => {
         onDeleteProject={deleteProject}
       />
     </div>
+    </>
   );
 };
 

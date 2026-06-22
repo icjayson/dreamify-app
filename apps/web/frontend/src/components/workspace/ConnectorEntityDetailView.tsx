@@ -479,6 +479,123 @@ export default function ConnectorEntityDetailView(props: Props) {
         entityName,
       };
     }
+    if (connectorKey === "klaviyo") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "lifecycle_overview", accountIdFromId = "all", resourceIdFromId = "all"] = entityId.split(":");
+      return {
+        provider: "klaviyo" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          account_id: String(scheduleConfig.account_id || entity?.account_id || accountIdFromId),
+          resource_id: String(scheduleConfig.resource_id || entity?.resource_id || resourceIdFromId),
+          metric_id: String(scheduleConfig.metric_id || entity?.metric_id || ""),
+          channel: String(scheduleConfig.channel || entity?.channel || "all"),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: scheduleConfig.include_pii ?? false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "quickbooks") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "finance_overview", realmIdFromId = "all", resourceIdFromId = "all"] = entityId.split(":");
+      return {
+        provider: "quickbooks" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          realm_id: String(scheduleConfig.realm_id || entity?.realm_id || realmIdFromId),
+          resource_id: String(scheduleConfig.resource_id || entity?.resource_id || resourceIdFromId),
+          accounting_basis: String(scheduleConfig.accounting_basis || entity?.accounting_basis || "Accrual"),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: scheduleConfig.include_pii ?? false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "amazon_seller") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "sales_overview", sellerIdFromId = "all", marketplaceIdFromId = "all"] = entityId.split(":");
+      return {
+        provider: "amazon_seller" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          seller_id: String(scheduleConfig.seller_id || entity?.seller_id || sellerIdFromId),
+          marketplace_id: String(scheduleConfig.marketplace_id || entity?.marketplace_id || marketplaceIdFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "tiktok_shop_seller") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "sales_overview", shopIdFromId = "all", regionFromId = "US"] = entityId.split(":");
+      return {
+        provider: "tiktok_shop_seller" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          shop_id: String(scheduleConfig.shop_id || entity?.shop_id || shopIdFromId),
+          region: String(scheduleConfig.region || entity?.region || regionFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "shopee_seller") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "sales_overview", shopIdFromId = "all", regionFromId = "VN"] = entityId.split(":");
+      return {
+        provider: "shopee_seller" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          shop_id: String(scheduleConfig.shop_id || entity?.shop_id || shopIdFromId),
+          region: String(scheduleConfig.region || entity?.region || regionFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "lazada_seller") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "sales_overview", sellerIdFromId = "all", regionFromId = "VN"] = entityId.split(":");
+      return {
+        provider: "lazada_seller" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          seller_id: String(scheduleConfig.seller_id || entity?.seller_id || sellerIdFromId),
+          region: String(scheduleConfig.region || entity?.region || regionFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
     if (connectorKey === "postgres" || connectorKey === "bigquery" || connectorKey === "snowflake" || connectorKey === "databricks") {
       const entity = connectorDetail?.entity;
       const [connectionIdFromId, tablePath = ""] = entityId.split(":");

@@ -7,6 +7,7 @@ import {
   AlertTriangle, Hash, Globe, RefreshCw, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Seo from '@/components/seo/Seo';
 
 /* ─── Navigation items ───────────────────────────────── */
 
@@ -223,6 +224,21 @@ const Docs = () => {
   };
 
   return (
+    <>
+      <Seo
+        title="Dreamify Docs — How to Build AI Dashboards"
+        description="Dreamify documentation: getting started, projects, file upload, AI chat, dashboards, integrations, workspace agents, schedules, billing, and FAQ."
+        canonical="https://app.dreamify.dev/docs"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          "@id": "https://app.dreamify.dev/docs#webpage",
+          url: "https://app.dreamify.dev/docs",
+          name: "Dreamify Documentation",
+          isPartOf: { "@id": "https://app.dreamify.dev/#website" },
+          inLanguage: "en",
+        }}
+      />
     <div className="min-h-screen bg-background text-foreground">
 
       {/* ── Fixed sidebar (desktop) ── */}
@@ -784,6 +800,7 @@ const Docs = () => {
         </div>
       </main>
     </div>
+    </>
   );
 };
 

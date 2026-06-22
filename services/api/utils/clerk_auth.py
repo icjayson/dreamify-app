@@ -1,11 +1,42 @@
 """
 Clerk JWT authentication using official Clerk SDK.
 """
+import logging
+from typing import Optional, Tuple
+
 from fastapi import Request, HTTPException, status
 from clerk_backend_api import Clerk
 from clerk_backend_api.security import authenticate_request
 from clerk_backend_api.security.types import AuthenticateRequestOptions
 from utils.config import config
+
+logger = logging.getLogger(__name__)
+
+# Reusable Clerk client for server-side user lookups (not request auth).
+_clerk_client = Clerk(bearer_auth=config.clerk.CLERK_SECRET_KEY)
+
+
+def get_user_email_name(user_id: str) -> Tuple[Optional[str], str]:
+    """
+    Resolve a Clerk user's primary email and first name from their user_id.
+
+    Returns (email, first_name); (None, "") on any failure. Used by the email
+    automation layer, where emit sites have a user_id but not the address.
+    """
+    try:
+        user = _clerk_client.users.get(user_id=user_id)
+        email = (
+            user.email_addresses[0].email_address
+            if getattr(user, "email_addresses", None)
+            else None
+        )
+        return email, (getattr(user, "first_name", None) or "")
+    except Exception as e:
+        logger.warning(
+            "[clerk] get_user_email_name failed for %s: %s: %s",
+            user_id, type(e).__name__, e,
+        )
+        return None, ""
 
 
 def clerk_auth_jwt(request: Request):

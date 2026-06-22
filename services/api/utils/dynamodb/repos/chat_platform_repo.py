@@ -59,7 +59,36 @@ def save_workspace(
         # Used by short-lived `zalo_upload:{token}` rows to point at the
         # real Zalo workspace that owns the upload session.
         item["target_workspace_id"] = target_workspace_id
+
+    # Flow 4: detect a brand-new, real workspace integration (before the write).
+    # Skip pending/placeholder rows (e.g. "telegram_pending", "zalo_upload:*") and
+    # re-saves of an existing workspace.
+    _is_real = (
+        "pending" not in (platform or "")
+        and not str(platform_workspace_id).startswith("zalo_upload")
+        and target_workspace_id is None
+    )
+    _is_new = False
+    if _is_real:
+        try:
+            _is_new = get_workspace(platform_workspace_id) is None
+        except Exception:
+            _is_new = False
+
     table.put_item(Item=item)
+
+    if _is_new:
+        try:
+            from utils import resend_automation
+            resend_automation.notify_workspace_integrated(
+                user_id=user_id,
+                platform=platform,
+                workspace_name=workspace_name,
+                workspace_id=platform_workspace_id,
+            )
+        except Exception:
+            pass
+
     return item
 
 
@@ -209,6 +238,20 @@ def create_session(
         "last_active_at": _now_iso(),
     }
     table.put_item(Item=item)
+
+    # Flow 4: first interaction in a workspace thread = workspace activity.
+    if user_id:
+        try:
+            _platform = str(platform_workspace_id).split(":", 1)[0]
+            from utils import resend_automation
+            resend_automation.notify_workspace_activity(
+                user_id=user_id,
+                workspace_id=platform_workspace_id,
+                platform=_platform,
+            )
+        except Exception:
+            pass
+
     return item
 
 

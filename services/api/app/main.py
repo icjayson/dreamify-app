@@ -95,6 +95,150 @@ def create_app():
         response.headers["Date"] = formatdate(usegmt=True)
         return response
     
+    # Import and register routers
+    try:
+        from app.api.route_modules.polar import router as polar_router
+        app.include_router(polar_router, prefix="/api/v1/polar", tags=["polar"])
+        logger.info("Polar router registered successfully")
+    except Exception as e:
+        logger.error(f"Failed to import polar router: {e}")
+
+    try:
+        from app.api.routes import router as main_router
+        app.include_router(main_router, prefix="/api/v1")
+        logger.info("Main API router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import main router: {e}")
+    
+    try:
+        from app.api.route_modules.stripe import router as stripe_router
+        app.include_router(stripe_router, prefix="/api/v1/stripe", tags=["stripe"])
+        logger.info("Stripe router registered successfully (DEPRECATED)")
+    except ImportError as e:
+        logger.error(f"Failed to import stripe router: {e}")
+    
+    try:
+        from app.api.route_modules.dashboard import router as dashboard_router
+        app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
+        logger.info("Dashboard router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import dashboard router: {e}")
+    
+    try:
+        from app.api.route_modules.auth import router as auth_router
+        app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+        logger.info("Auth router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import auth router: {e}")
+
+    try:
+        from app.api.route_modules.waitlist import router as waitlist_router
+        app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])
+        logger.info("Waitlist router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import waitlist router: {e}")
+
+    try:
+        from app.api.route_modules.user import router as user_router
+        app.include_router(user_router, prefix="/api/v1")
+        logger.info("User router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import user router: {e}")
+
+    try:
+        from app.api.route_modules.webhooks import router as webhooks_router
+        app.include_router(webhooks_router, prefix="/api/v1")
+        logger.info("Webhooks router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import webhooks router: {e}")
+
+    try:
+        from app.api.route_modules.morpheus import router as morpheus_router
+        app.include_router(morpheus_router, prefix="/api/v1")
+        logger.info("Morpheus router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Morpheus router: {e}")
+ 
+    try:
+        from app.api.route_modules.conversation import router as conversation_router
+        app.include_router(conversation_router, prefix="/api/v1", tags=["conversation"])
+        # Verify route registration
+        conversation_routes = [r for r in app.routes if hasattr(r, "path") and "conversation" in r.path]
+        if conversation_routes:
+            logger.info(
+                "Conversation router registered with %d route(s): %s",
+                len(conversation_routes),
+                [f"{','.join(sorted(getattr(r, 'methods', []) or []))} {r.path}" for r in conversation_routes],
+            )
+        else:
+            logger.warning("Conversation router registered but no routes found")
+    except ImportError as e:
+        logger.error(f"Failed to import Conversation router: {e}")
+    except Exception as e:
+        logger.error(f"Failed to register Conversation router: {e}", exc_info=True)
+    
+    try:
+        from app.api.route_modules.admin import router as admin_router
+        app.include_router(admin_router, prefix="/api/v1", tags=["admin"])
+        logger.info("Admin router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Admin router: {e}")
+    
+    try:
+        from app.api.route_modules.public import router as public_router
+        app.include_router(public_router, prefix="/api/v1", tags=["public"])
+        logger.info("Public router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Public router: {e}")
+        
+    try:
+        from app.api.route_modules.integration import router as integration_router
+        app.include_router(integration_router, prefix="/api/v1")
+        logger.info("Integration router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Integration router: {e}")
+
+    try:
+        from app.api.route_modules.warehouse import router as warehouse_router
+        app.include_router(warehouse_router, prefix="/api/v1")
+        logger.info("Warehouse router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Warehouse router: {e}")
+
+    try:
+        from app.api.route_modules.chat_platform import router as chat_router
+        app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
+        logger.info("Chat platform router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Chat platform router: {e}")
+
+    try:
+        from app.api.route_modules.schedules import router as schedules_router
+        app.include_router(schedules_router, prefix="/api/v1", tags=["schedules"])
+        logger.info("Schedules router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Schedules router: {e}")
+
+    try:
+        from app.api.route_modules.internal import router as internal_router
+        app.include_router(internal_router, prefix="/api/v1", tags=["internal"])
+        logger.info("Internal router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Internal router: {e}")
+
+    try:
+        from app.api.route_modules.notifications import router as notifications_router
+        app.include_router(notifications_router, prefix="/api/v1", tags=["notifications"])
+        logger.info("Notifications router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import Notifications router: {e}")
+
+    try:
+        from app.api.route_modules.cms import router as cms_router
+        app.include_router(cms_router, prefix="/api/v1", tags=["cms"])
+        logger.info("CMS router registered successfully")
+    except ImportError as e:
+        logger.error(f"Failed to import CMS router: {e}")
     # Import and register routers.
     # (name, import_path, attr, include_kwargs); criticality is decided by CRITICAL_ROUTERS.
     _router_status["registered"].clear()

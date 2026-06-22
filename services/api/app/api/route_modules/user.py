@@ -17,6 +17,7 @@ from urllib.parse import quote
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -46,6 +47,8 @@ from utils.s3.client import (
 )
 from utils.s3.paths import build_asset_key
 from utils.email_service import send_dashboard_share_email, send_feedback_email, send_feedback_thank_you_email
+from utils.resend_automation import emit as _emit_automation
+from utils.clerk_auth import get_user_email_name
 from clerk_backend_api import Clerk
 
 router = APIRouter(tags=["user"])
@@ -299,9 +302,40 @@ def _ensure_project(user_id: str, project_id: Optional[str]) -> dict:
     )
 
 
+def _emit_dashboard_created(user_id: str, project_id: str, name: Optional[str]) -> None:
+    """
+    Fire the `dashboard.created` automation event (Flow 2). Runs in a background
+    task so it never delays the create response; fully non-fatal.
+    """
+    try:
+        is_first = len(projects_repo.list_projects(user_id)) == 1
+        email, first_name = get_user_email_name(user_id)
+        if not email:
+            return
+        app_url = (
+            config.chat_platform.dreamify_app_url
+            if config.chat_platform
+            else "https://app.dreamify.dev"
+        )
+        _emit_automation(
+            event="dashboard.created",
+            email=email,
+            first_name=first_name,
+            payload={
+                "is_first": is_first,
+                "project_id": project_id,
+                "name": name or "",
+                "app_url": app_url,
+            },
+        )
+    except Exception as e:  # pragma: no cover - best effort
+        logger.warning("[automation] dashboard.created emit failed: %s: %s", type(e).__name__, e)
+
+
 @router.post("/user/project/create", response_model=ProjectResponse)
 async def create_project_endpoint(
     request: ProjectCreateRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(require_user),
 ):
     name_source = (
@@ -312,6 +346,10 @@ async def create_project_endpoint(
         name=request.name,
         description=request.description,
         name_source=name_source,
+    )
+    # Flow 2: enroll + fire dashboard.created (off the response path).
+    background_tasks.add_task(
+        _emit_dashboard_created, user_id, project["project_id"], project.get("name")
     )
     return _map_project(project)
 

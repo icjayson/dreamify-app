@@ -50,6 +50,9 @@ PyYAML>=6.0.1
 # Email
 resend>=2.0.0
 
+# Webhook signature verification (Clerk uses Svix)
+svix>=1.0.0
+
 # Chat platform integrations
 slack-bolt>=1.18.0
 slack-sdk>=3.27.0

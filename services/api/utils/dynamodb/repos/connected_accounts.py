@@ -91,6 +91,14 @@ def append_selected_entity(
     max_items: int = 50,
 ) -> Dict:
     """Append a selected entity to provider metadata with simple dedupe by id+type."""
+    # Flow 3: determine if this is the user's first connected entity across ALL
+    # providers (before this insert) — drives the "first connector" celebration.
+    try:
+        _all = list_connections_by_prefix(user_id, "")
+        _prior_total = sum(len(c.get("selected_entities", []) or []) for c in _all)
+    except Exception:
+        _prior_total = 1  # on error, assume not-first to avoid false celebrations
+
     existing = get_connection(user_id, provider) or {}
     entities: List[Dict[str, Any]] = list(existing.get("selected_entities", []))
     entity_id = str(entity.get("id", ""))
@@ -105,11 +113,25 @@ def append_selected_entity(
     normalized["name"] = str(entity.get("name", ""))
     normalized["type"] = entity_type
     deduped.insert(0, normalized)
-    return upsert_provider_metadata(
+    result = upsert_provider_metadata(
         user_id=user_id,
         provider=provider,
         metadata={"selected_entities": deduped[:max_items]},
     )
+
+    # Best-effort: notify the email automation layer (runs in a daemon thread).
+    try:
+        from utils import resend_automation
+        resend_automation.notify_connector_connected(
+            user_id=user_id,
+            provider=provider,
+            entity=normalized,
+            is_first=(_prior_total == 0),
+        )
+    except Exception:
+        pass
+
+    return result
 
 
 def remove_selected_entity(user_id: str, provider: str, entity_id: str) -> Dict:

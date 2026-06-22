@@ -1,16 +1,16 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, LayoutTemplate, Activity, FileText, Code, Copy, Info, PanelLeftClose, PanelRightClose, PanelRight, PanelLeft, LayoutDashboard, Database, CheckCircle2, AlertCircle as AlertIcon } from 'lucide-react';
+import { MessageSquare, LayoutTemplate, FileText, Copy, Info, PanelLeftClose, PanelRightClose, PanelRight, PanelLeft, Database, CheckCircle2, AlertCircle as AlertIcon, GitBranch, Braces, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type ConversationListItem } from '@/services/adminService';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { adminService } from '@/services/adminService';
 import { ChatTimelineNodesView } from './ChatTimelineNodesView';
-import { AdminDashboardPreview } from './AdminDashboardPreview';
+import { ConversationNodesView } from './ConversationNodesView';
 import { useToast } from '@/hooks/use-toast';
 import { formatToDisplay } from '@/utils/timestamp';
 
@@ -19,11 +19,20 @@ interface SplitPaneChatViewProps {
     projectIdFilter?: string;
 }
 
-export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneChatViewProps) {
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const stringValue = (value: unknown): string | undefined => {
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+};
+
+export function SplitPaneChatView({ conversations }: SplitPaneChatViewProps) {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [isLeftPaneOpen, setIsLeftPaneOpen] = useState(true);
     const [isRightPaneOpen, setIsRightPaneOpen] = useState(false);
-    const [activeView, setActiveView] = useState<'timeline' | 'dashboard'>('timeline');
+    const [activeView, setActiveView] = useState<'chat' | 'nodes' | 'json'>('chat');
+    const navigate = useNavigate();
 
     const { getToken, isAdmin } = useAdminAuth();
     const { toast } = useToast();
@@ -73,24 +82,28 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
 
     const dataSources = useMemo(() => {
         if (!nodesData?.nodes) return [];
-        const sources: Array<{ id: string; type: string; name: string; metadata: any }> = [];
+        const sources: Array<{ id: string; type: string; name: string; metadata: Record<string, unknown> }> = [];
         const seenIds = new Set<string>();
 
         nodesData.nodes.forEach(node => {
             if (node.contents && Array.isArray(node.contents)) {
-                node.contents.forEach((content: any) => {
-                    if (content.type === 'asset' && content.data?.asset_id && !seenIds.has(content.data.asset_id)) {
-                        const d = content.data;
+                node.contents.forEach((content) => {
+                    if (!isRecord(content) || content.type !== 'asset' || !isRecord(content.data)) return;
+
+                    const d = content.data;
+                    const assetId = stringValue(d.asset_id);
+
+                    if (assetId && !seenIds.has(assetId)) {
                         // Determine if it's an integration
-                        const isIntegration = d.kind === 'integration' || d.sourceType;
+                        const isIntegration = d.kind === 'integration' || Boolean(d.sourceType);
                         if (isIntegration) {
                             sources.push({
-                                id: d.asset_id,
-                                type: d.sourceType || d.asset_type || 'Unknown',
-                                name: d.filename || d.propertyName || d.accountName || d.asset_id,
+                                id: assetId,
+                                type: stringValue(d.sourceType) || stringValue(d.asset_type) || 'Unknown',
+                                name: stringValue(d.filename) || stringValue(d.propertyName) || stringValue(d.accountName) || assetId,
                                 metadata: d
                             });
-                            seenIds.add(d.asset_id);
+                            seenIds.add(assetId);
                         }
                     }
                 });
@@ -99,15 +112,47 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
         return sources;
     }, [nodesData]);
 
-    const handleCopyJson = async () => {
-        if (!conversationJsonString) return;
+    const handleCopy = async (value: string, label: string) => {
+        if (!value) return;
         try {
-            await navigator.clipboard.writeText(conversationJsonString);
-            toast({ title: "Copied JSON", description: "JSON copied to clipboard." });
+            await navigator.clipboard.writeText(value);
+            toast({ title: `Copied ${label}`, description: `${label} copied to clipboard.` });
         } catch (err) {
-            toast({ title: "Error", description: "Failed to copy JSON.", variant: "destructive" });
+            toast({ title: "Error", description: `Failed to copy ${label}.`, variant: "destructive" });
         }
     };
+
+    const renderJsonView = () => (
+        <div className="h-full bg-background p-4 md:p-6">
+            <div className="mb-3 flex justify-end">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-2"
+                    onClick={() => handleCopy(conversationJsonString, 'JSON')}
+                    disabled={!conversationJsonString}
+                >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy JSON
+                </Button>
+            </div>
+            <pre className="text-xs bg-muted p-4 rounded overflow-x-auto max-h-[calc(100vh-390px)] overflow-y-auto">
+                {conversationJsonString || 'No JSON available'}
+            </pre>
+        </div>
+    );
+
+    const renderNodesView = () => (
+        <div className="h-full bg-background p-4 md:p-6">
+            {nodesData?.nodes?.length ? (
+                <ConversationNodesView nodes={nodesData.nodes} />
+            ) : (
+                <div className="text-center p-8 text-muted-foreground border rounded bg-background">
+                    No nodes found for this conversation.
+                </div>
+            )}
+        </div>
+    );
 
     return (
         <div className="flex w-full h-[calc(100vh-250px)] border rounded-lg bg-background overflow-hidden relative">
@@ -191,7 +236,7 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                 </div>
             )}
 
-            {/* CENTER COLUMN: Detail View (Timeline Default) */}
+            {/* CENTER COLUMN: Detail View */}
             <div className="flex-1 min-w-0 bg-background flex flex-col overflow-hidden relative">
                 {!selectedId ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 relative">
@@ -207,7 +252,7 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                             <MessageSquare className="h-8 w-8 opacity-50" />
                         </div>
                         <p className="text-lg font-medium">No conversation selected</p>
-                        <p className="text-sm opacity-70 mt-1">Select a conversation to view the timeline</p>
+                        <p className="text-sm opacity-70 mt-1">Select a conversation to view the chat log</p>
                     </div>
                 ) : (
                     <div className="flex flex-col h-full w-full">
@@ -232,24 +277,43 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                             <div className="flex items-center gap-2 shrink-0">
                                 <div className="flex bg-muted rounded-md p-1 items-center mr-2">
                                     <Button
-                                        variant={activeView === 'timeline' ? 'secondary' : 'ghost'}
+                                        variant={activeView === 'chat' ? 'secondary' : 'ghost'}
                                         size="sm"
                                         className="h-7 px-3 text-xs gap-1.5"
-                                        onClick={() => setActiveView('timeline')}
+                                        onClick={() => setActiveView('chat')}
                                     >
-                                        <Activity className="h-3.5 w-3.5" />
-                                        Timeline
+                                        <MessageSquare className="h-3.5 w-3.5" />
+                                        Chat
                                     </Button>
                                     <Button
-                                        variant={activeView === 'dashboard' ? 'secondary' : 'ghost'}
+                                        variant={activeView === 'nodes' ? 'secondary' : 'ghost'}
                                         size="sm"
                                         className="h-7 px-3 text-xs gap-1.5"
-                                        onClick={() => setActiveView('dashboard')}
+                                        onClick={() => setActiveView('nodes')}
                                     >
-                                        <LayoutDashboard className="h-3.5 w-3.5" />
-                                        Dashboard
+                                        <GitBranch className="h-3.5 w-3.5" />
+                                        Nodes
+                                    </Button>
+                                    <Button
+                                        variant={activeView === 'json' ? 'secondary' : 'ghost'}
+                                        size="sm"
+                                        className="h-7 px-3 text-xs gap-1.5"
+                                        onClick={() => setActiveView('json')}
+                                    >
+                                        <Braces className="h-3.5 w-3.5" />
+                                        JSON
                                     </Button>
                                 </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-2"
+                                    onClick={() => navigate(`/admin/conversation/${selectedId}?project_id=${selectedConvMeta?.project_id || ''}`)}
+                                    disabled={!selectedConvMeta?.project_id}
+                                >
+                                    <ExternalLink className="h-4 w-4" />
+                                    <span className="hidden sm:inline">Full Logs</span>
+                                </Button>
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -262,20 +326,16 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                             </div>
                         </div>
 
-                        {/* Center Content: Timeline or Dashboard */}
+                        {/* Center Content: Chat, Nodes, or JSON */}
                         <div className="flex-1 overflow-auto bg-muted/5 relative p-0">
                             {(isLoadingConversation || isLoadingNodes) ? (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                                 </div>
-                            ) : activeView === 'dashboard' ? (
-                                <div className="h-full bg-background overflow-auto p-4 md:p-6">
-                                    <AdminDashboardPreview
-                                        conversationId={selectedId}
-                                        projectId={selectedConvMeta?.project_id || ''}
-                                        dashboardId="" // Pass empty to get latest
-                                    />
-                                </div>
+                            ) : activeView === 'json' ? (
+                                renderJsonView()
+                            ) : activeView === 'nodes' ? (
+                                renderNodesView()
                             ) : nodesData?.nodes ? (
                                 <div className="p-4 md:p-6">
                                     <ChatTimelineNodesView
@@ -294,146 +354,127 @@ export function SplitPaneChatView({ conversations, projectIdFilter }: SplitPaneC
                 )}
             </div>
 
-            {/* RIGHT COLUMN: Overview & JSON */}
+            {/* RIGHT COLUMN: Details */}
             {isRightPaneOpen && selectedId && (
                 <div className="w-[30%] min-w-[300px] border-l bg-muted/10 shrink-0 flex flex-col h-full overflow-hidden">
-                    <div className="flex-1 overflow-hidden flex flex-col pt-4">
-                        <Tabs defaultValue="overview" className="w-full h-full flex flex-col px-4 pb-4">
-                            <TabsList className="grid w-full grid-cols-2 mb-4 shrink-0">
-                                <TabsTrigger value="overview" className="flex items-center gap-2 text-xs">
-                                    <Info className="h-3 w-3" /> Info
-                                </TabsTrigger>
-                                <TabsTrigger value="json" className="flex items-center gap-2 text-xs">
-                                    <Code className="h-3 w-3" /> JSON
-                                </TabsTrigger>
-                            </TabsList>
-
-                            <TabsContent value="overview" className="flex-1 overflow-auto outline-none mx-0">
-                                <Card className="border-none shadow-none bg-transparent">
-                                    <CardHeader className="p-0 pb-4">
-                                        <CardTitle className="text-sm flex items-center gap-2">
-                                            <FileText className="h-4 w-4" /> Metadata
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4 p-0">
-                                        <div className="flex flex-col gap-4">
-                                            <div>
-                                                <div className="text-xs font-medium text-muted-foreground mb-1">User</div>
-                                                <div className="font-mono text-[11px] bg-muted/50 p-2 rounded truncate" title={selectedConvMeta?.user_id}>
-                                                    {selectedConvMeta?.user_name ? (
-                                                        <div className="flex items-center justify-between gap-2 overflow-hidden">
-                                                            <span className="font-medium text-primary truncate max-w-[150px]">{selectedConvMeta.user_name}</span>
-                                                            <span className="opacity-50 whitespace-nowrap text-[10px]">({selectedConvMeta.user_id.slice(0, 12)}...)</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2 text-muted-foreground italic">
-                                                            <span className="truncate">{selectedConvMeta?.user_id}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs font-medium text-muted-foreground mb-1">Project</div>
-                                                <div className="font-mono text-xs bg-muted/50 p-2 rounded truncate" title={selectedConvMeta?.project_id}>
-                                                    {selectedConvMeta?.project_id}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs font-medium text-muted-foreground mb-1">Created At</div>
-                                                <div className="text-xs bg-muted/50 p-2 rounded">
-                                                    {selectedConvMeta?.created_at ? formatToDisplay(selectedConvMeta.created_at, { format: 'full' }) : 'N/A'}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs font-medium text-muted-foreground mb-1">S3 Bucket</div>
-                                                <div className="text-xs bg-muted/50 p-2 rounded">{selectedConvMeta?.s3_bucket || 'N/A'}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs font-medium text-muted-foreground mb-1">S3 Key</div>
-                                                <div className="font-mono text-[10px] bg-muted/50 p-2 rounded break-all">
-                                                    {selectedConvMeta?.s3_key || 'N/A'}
-                                                </div>
-                                            </div>
-
-                                            {/* New Sections: Theme, Focus & Data Sources */}
-                                            <div className="pt-2 border-t mt-2">
-                                                <div className="text-xs font-bold text-primary flex items-center gap-2 mb-3">
-                                                    <LayoutTemplate className="h-3.5 w-3.5" />
-                                                    APP CONTEXT
-                                                </div>
-                                                
-                                                <div className="space-y-4">
-                                                    <div>
-                                                        <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center justify-between">
-                                                            Selected Theme / Focus
-                                                            {(selectedConvMeta?.theme_id || selectedConvMeta?.analysis_focus_id || selectedConvMeta?.template_id) && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-                                                        </div>
-                                                        <div className={cn(
-                                                            "text-xs p-2.5 rounded-md border flex items-center gap-2",
-                                                            (selectedConvMeta?.theme_id || selectedConvMeta?.analysis_focus_id || selectedConvMeta?.template_id) ? "bg-primary/5 border-primary/20 text-primary font-medium" : "bg-muted/30 border-dashed text-muted-foreground italic"
-                                                        )}>
-                                                            <LayoutTemplate className="h-3.5 w-3.5 opacity-70" />
-                                                            {selectedConvMeta?.theme_id || selectedConvMeta?.template_id || 'No theme selected'}
-                                                            {selectedConvMeta?.analysis_focus_id ? ` / ${selectedConvMeta.analysis_focus_id}` : ''}
-                                                        </div>
+                    <div className="p-4 border-b bg-background shrink-0 flex items-center justify-between">
+                        <div className="font-semibold text-sm flex items-center gap-2">
+                            <Info className="h-4 w-4 text-primary" />
+                            Details
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsRightPaneOpen(false)}>
+                            <PanelRightClose className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <ScrollArea className="flex-1">
+                        <div className="p-4">
+                            <Card className="border-none shadow-none bg-transparent">
+                                <CardHeader className="p-0 pb-4">
+                                    <CardTitle className="text-sm flex items-center gap-2">
+                                        <FileText className="h-4 w-4" /> Metadata
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4 p-0">
+                                    <div className="flex flex-col gap-4">
+                                        <div>
+                                            <div className="text-xs font-medium text-muted-foreground mb-1">User</div>
+                                            <div className="font-mono text-[11px] bg-muted/50 p-2 rounded truncate" title={selectedConvMeta?.user_id}>
+                                                {selectedConvMeta?.user_name ? (
+                                                    <div className="flex items-center justify-between gap-2 overflow-hidden">
+                                                        <span className="font-medium text-primary truncate max-w-[150px]">{selectedConvMeta.user_name}</span>
+                                                        <span className="opacity-50 whitespace-nowrap text-[10px]">({selectedConvMeta.user_id.slice(0, 12)}...)</span>
                                                     </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2 text-muted-foreground italic">
+                                                        <span className="truncate">{selectedConvMeta?.user_id}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-medium text-muted-foreground mb-1">Project</div>
+                                            <div className="font-mono text-xs bg-muted/50 p-2 rounded truncate" title={selectedConvMeta?.project_id}>
+                                                {selectedConvMeta?.project_id}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-medium text-muted-foreground mb-1">Created At</div>
+                                            <div className="text-xs bg-muted/50 p-2 rounded">
+                                                {selectedConvMeta?.created_at ? formatToDisplay(selectedConvMeta.created_at, { format: 'full' }) : 'N/A'}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-medium text-muted-foreground mb-1">S3 Bucket</div>
+                                            <div className="text-xs bg-muted/50 p-2 rounded">{selectedConvMeta?.s3_bucket || 'N/A'}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-medium text-muted-foreground mb-1">S3 Key</div>
+                                            <div className="font-mono text-[10px] bg-muted/50 p-2 rounded break-all">
+                                                {selectedConvMeta?.s3_key || 'N/A'}
+                                            </div>
+                                        </div>
 
-                                                    <div>
-                                                        <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-2">
-                                                            Connected Data Sources
-                                                            <span className="bg-muted px-1.5 py-0.5 rounded text-[9px]">{dataSources.length}</span>
-                                                        </div>
-                                                        <div className="space-y-1.5">
-                                                            {dataSources.length > 0 ? (
-                                                                dataSources.map((source) => (
-                                                                    <div key={source.id} className="text-xs p-2 rounded-md bg-background border flex items-start gap-2.5 shadow-sm">
-                                                                        <Database className="h-3.5 w-3.5 mt-0.5 text-blue-500" />
-                                                                        <div className="min-w-0">
-                                                                            <div className="font-medium truncate">{source.name}</div>
-                                                                            <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                                                                                <span className="bg-muted px-1 rounded uppercase text-[8px]">{source.type}</span>
-                                                                                {source.metadata?.status === 'synced' && (
-                                                                                    <span className="flex items-center gap-0.5 text-green-600">
-                                                                                        <CheckCircle2 className="h-2.5 w-2.5" />
-                                                                                        synced
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
+                                        <div className="pt-2 border-t mt-2">
+                                            <div className="text-xs font-bold text-primary flex items-center gap-2 mb-3">
+                                                <LayoutTemplate className="h-3.5 w-3.5" />
+                                                APP CONTEXT
+                                            </div>
+                                                
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center justify-between">
+                                                        Selected Theme / Focus
+                                                        {(selectedConvMeta?.theme_id || selectedConvMeta?.analysis_focus_id || selectedConvMeta?.template_id) && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+                                                    </div>
+                                                    <div className={cn(
+                                                        "text-xs p-2.5 rounded-md border flex items-center gap-2",
+                                                        (selectedConvMeta?.theme_id || selectedConvMeta?.analysis_focus_id || selectedConvMeta?.template_id) ? "bg-primary/5 border-primary/20 text-primary font-medium" : "bg-muted/30 border-dashed text-muted-foreground italic"
+                                                    )}>
+                                                        <LayoutTemplate className="h-3.5 w-3.5 opacity-70" />
+                                                        {selectedConvMeta?.theme_id || selectedConvMeta?.template_id || 'No theme selected'}
+                                                        {selectedConvMeta?.analysis_focus_id ? ` / ${selectedConvMeta.analysis_focus_id}` : ''}
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-2">
+                                                        Connected Data Sources
+                                                        <span className="bg-muted px-1.5 py-0.5 rounded text-[9px]">{dataSources.length}</span>
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        {dataSources.length > 0 ? (
+                                                            dataSources.map((source) => (
+                                                                <div key={source.id} className="text-xs p-2 rounded-md bg-background border flex items-start gap-2.5 shadow-sm">
+                                                                    <Database className="h-3.5 w-3.5 mt-0.5 text-blue-500" />
+                                                                    <div className="min-w-0">
+                                                                        <div className="font-medium truncate">{source.name}</div>
+                                                                        <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                                                                            <span className="bg-muted px-1 rounded uppercase text-[8px]">{source.type}</span>
+                                                                            {source.metadata?.status === 'synced' && (
+                                                                                <span className="flex items-center gap-0.5 text-green-600">
+                                                                                    <CheckCircle2 className="h-2.5 w-2.5" />
+                                                                                    synced
+                                                                                </span>
+                                                                            )}
                                                                         </div>
                                                                     </div>
-                                                                ))
-                                                            ) : (
-                                                                <div className="text-xs p-3 rounded-md border border-dashed text-muted-foreground italic bg-muted/10 flex items-center justify-center gap-2">
-                                                                    <AlertIcon className="h-3.5 w-3.5 opacity-50" />
-                                                                    No data sources connected
                                                                 </div>
-                                                            )}
-                                                        </div>
+                                                            ))
+                                                        ) : (
+                                                            <div className="text-xs p-3 rounded-md border border-dashed text-muted-foreground italic bg-muted/10 flex items-center justify-center gap-2">
+                                                                <AlertIcon className="h-3.5 w-3.5 opacity-50" />
+                                                                No data sources connected
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            </TabsContent>
-
-                            <TabsContent value="json" className="flex-1 overflow-hidden outline-none h-full flex flex-col mx-0">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm font-semibold">Raw Data</span>
-                                    <Button variant="outline" size="icon" className="h-6 w-6" onClick={handleCopyJson} title="Copy JSON">
-                                        <Copy className="h-3 w-3" />
-                                    </Button>
-                                </div>
-                                <div className="flex-1 relative rounded-md border bg-muted/30">
-                                    <ScrollArea className="absolute inset-0">
-                                        <pre className="p-3 text-[10px] font-mono whitespace-pre-wrap">
-                                            {conversationJsonString || 'No JSON available'}
-                                        </pre>
-                                    </ScrollArea>
-                                </div>
-                            </TabsContent>
-                        </Tabs>
-                    </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </ScrollArea>
                 </div>
             )}
         </div>

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, LayoutGrid, Table2, PanelLeft, ChevronLeft, ChevronRight, Activity, MessageSquare, LogOut, FileText } from 'lucide-react';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { Search, LayoutGrid, Table2, PanelLeft, ChevronLeft, ChevronRight, Activity, MessageSquare, LogOut, FileText, Users } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ConversationTable } from '@/components/admin/ConversationTable';
 import { ConversationCard } from '@/components/admin/ConversationCard';
 import { SplitPaneChatView } from '@/components/admin/SplitPaneChatView';
 import { AdminMetricsPanel } from '@/components/admin/AdminMetricsPanel';
+import { UserBaseTable, type UserSortConfig, type UserSortField } from '@/components/admin/UserBaseTable';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { adminService, type ConversationListItem } from '@/services/adminService';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,14 +25,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type ViewMode = 'table' | 'card' | 'split';
 const PAGE_SIZE = 20;
+const USER_PAGE_SIZE = 50;
 
 export default function AdminPage() {
   const { isAdmin, userEmail, getToken, signOut } = useAdminAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('split');
   const [projectIdFilter, setProjectIdFilter] = useState(searchParams.get('project_id') || '');
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1', 10));
+  const [userSearch, setUserSearch] = useState('');
+  const [userPage, setUserPage] = useState(1);
+  const [userHasDashboard, setUserHasDashboard] = useState('all');
+  const [userHasWorkspace, setUserHasWorkspace] = useState('all');
+  const [userHasConnector, setUserHasConnector] = useState('all');
+  const [userSortConfig, setUserSortConfig] = useState<UserSortConfig | null>({
+    field: 'signup_date',
+    direction: 'desc',
+  });
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-conversations', projectIdFilter, currentPage],
@@ -49,6 +61,55 @@ export default function AdminPage() {
   });
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
+  const activeTab =
+    location.pathname === '/admin/users'
+      ? 'users'
+      : location.pathname === '/admin/chat-logs'
+        ? 'chat-logs'
+        : 'analytics';
+
+  const { data: usersData, isLoading: isLoadingUsers, error: usersError, refetch: refetchUsers } = useQuery({
+    queryKey: [
+      'admin-users',
+      userSearch,
+      userPage,
+      userHasDashboard,
+      userHasWorkspace,
+      userHasConnector,
+      userSortConfig?.field,
+      userSortConfig?.direction,
+    ],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
+      return adminService.listUsers(token, {
+        page: userPage,
+        pageSize: USER_PAGE_SIZE,
+        query: userSearch,
+        hasDashboard: userHasDashboard === 'all' ? undefined : userHasDashboard === 'true',
+        hasWorkspace: userHasWorkspace === 'all' ? undefined : userHasWorkspace === 'true',
+        hasConnector: userHasConnector === 'all' ? undefined : userHasConnector === 'true',
+        sortBy: userSortConfig?.field,
+        sortDir: userSortConfig?.direction,
+      });
+    },
+    enabled: isAdmin,
+  });
+
+  const handleUserSort = (field: UserSortField) => {
+    setUserSortConfig((prev) => {
+      if (prev?.field === field) {
+        if (prev.direction === 'asc') {
+          return { field, direction: 'desc' };
+        }
+        return null;
+      }
+      return { field, direction: 'asc' };
+    });
+    setUserPage(1);
+  };
+
+  const userTotalPages = usersData ? Math.ceil(usersData.total / USER_PAGE_SIZE) : 0;
 
   const handleProjectIdSearch = (value: string) => {
     setProjectIdFilter(value);
@@ -93,11 +154,23 @@ export default function AdminPage() {
         </div>
 
         {/* Tabs Navigation */}
-        <Tabs defaultValue="analytics" className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            if (value === 'analytics') navigate('/admin/analytics');
+            if (value === 'users') navigate('/admin/users');
+            if (value === 'chat-logs') navigate('/admin/chat-logs');
+          }}
+          className="space-y-6"
+        >
           <TabsList>
             <TabsTrigger value="analytics" className="gap-2">
               <Activity className="h-4 w-4" />
               Analytics
+            </TabsTrigger>
+            <TabsTrigger value="users" className="gap-2">
+              <Users className="h-4 w-4" />
+              Users
             </TabsTrigger>
             <TabsTrigger value="chat-logs" className="gap-2">
               <MessageSquare className="h-4 w-4" />
@@ -108,6 +181,137 @@ export default function AdminPage() {
           <TabsContent value="analytics" className="space-y-6">
             {/* Metrics Panel */}
             <AdminMetricsPanel />
+          </TabsContent>
+
+          <TabsContent value="users" className="space-y-6">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="relative max-w-lg flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by uid, email, name, connector..."
+                  value={userSearch}
+                  onChange={(event) => {
+                    setUserSearch(event.target.value);
+                    setUserPage(1);
+                  }}
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={userHasDashboard}
+                  onChange={(event) => {
+                    setUserHasDashboard(event.target.value);
+                    setUserPage(1);
+                  }}
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="all">All dashboards</option>
+                  <option value="true">Has dashboard</option>
+                  <option value="false">No dashboard</option>
+                </select>
+                <select
+                  value={userHasWorkspace}
+                  onChange={(event) => {
+                    setUserHasWorkspace(event.target.value);
+                    setUserPage(1);
+                  }}
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="all">All workspaces</option>
+                  <option value="true">Has workspace</option>
+                  <option value="false">No workspace</option>
+                </select>
+                <select
+                  value={userHasConnector}
+                  onChange={(event) => {
+                    setUserHasConnector(event.target.value);
+                    setUserPage(1);
+                  }}
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="all">All connectors</option>
+                  <option value="true">Has connector</option>
+                  <option value="false">No connector</option>
+                </select>
+                <select
+                  value={userSortConfig?.field || 'default'}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setUserSortConfig(value === 'default' ? null : { field: value as UserSortField, direction: 'desc' });
+                    setUserPage(1);
+                  }}
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="default">Default sort</option>
+                  <option value="signup_date">Signup date</option>
+                  <option value="latest_signin_date">Latest signin</option>
+                  <option value="token_burned">Tokens burned</option>
+                  <option value="dashboard_count">Dashboards</option>
+                  <option value="project_count">Projects</option>
+                  <option value="file_upload_count">Files</option>
+                  <option value="connector_count">Connectors</option>
+                  <option value="workspace_count">Workspaces</option>
+                </select>
+              </div>
+            </div>
+
+            {isLoadingUsers && (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <p>Loading users...</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {usersError && (
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-destructive">Error loading users: {usersError instanceof Error ? usersError.message : 'Unknown error'}</p>
+                  <Button onClick={() => refetchUsers()} className="mt-4">
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {usersData && !isLoadingUsers && !usersError && (
+              <>
+                <div className="text-sm text-muted-foreground">
+                  Showing {usersData.total === 0 ? 0 : ((userPage - 1) * USER_PAGE_SIZE) + 1} to {Math.min(userPage * USER_PAGE_SIZE, usersData.total)} of {usersData.total} users
+                </div>
+                <UserBaseTable
+                  users={usersData.users}
+                  sortConfig={userSortConfig}
+                  onSort={handleUserSort}
+                />
+                {userTotalPages > 1 && (
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setUserPage((page) => Math.max(1, page - 1))}
+                      disabled={userPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {userPage} of {userTotalPages}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setUserPage((page) => Math.min(userTotalPages, page + 1))}
+                      disabled={userPage >= userTotalPages}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="chat-logs" className="space-y-6">

@@ -32,6 +32,7 @@ import CancelPage from "./pages/CancelPage";
 import SuccessPage from "./pages/SuccessPage";
 import AdminPage from "./pages/admin";
 import AdminConversationPage from "./pages/admin/conversation";
+import AdminUserPage from "./pages/admin/user";
 import AdminRoute from "./components/auth/AdminRoute";
 import CmsListPage from "./pages/cms/CmsListPage";
 import CmsEditorPage from "./pages/cms/CmsEditorPage";
@@ -230,8 +231,12 @@ const AppContent = () => {
         <Route path="/preview/:assetId" element={<FilePreviewPage />} />
         <Route path="/cancel" element={<CancelPage />} />
         <Route path="/success" element={<SuccessPage />} />
-        <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+        <Route path="/admin" element={<Navigate to="/admin/analytics" replace />} />
+        <Route path="/admin/analytics" element={<AdminRoute><AdminPage /></AdminRoute>} />
+        <Route path="/admin/users" element={<AdminRoute><AdminPage /></AdminRoute>} />
+        <Route path="/admin/chat-logs" element={<AdminRoute><AdminPage /></AdminRoute>} />
         <Route path="/admin/conversation/:conversationId" element={<AdminRoute><AdminConversationPage /></AdminRoute>} />
+        <Route path="/admin/users/:userId" element={<AdminRoute><AdminUserPage /></AdminRoute>} />
         <Route path="/admin/cms" element={<AdminRoute><CmsListPage /></AdminRoute>} />
         <Route path="/admin/cms/new" element={<AdminRoute><CmsEditorPage /></AdminRoute>} />
         <Route path="/admin/cms/:postId" element={<AdminRoute><CmsEditorPage /></AdminRoute>} />

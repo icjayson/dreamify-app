@@ -28,11 +28,11 @@ export interface ConversationListResponse {
 }
 
 export interface ConversationDetailResponse {
-  conversation: Record<string, any>;
+  conversation: Record<string, unknown>;
 }
 
 export interface NodeListResponse {
-  nodes: Array<Record<string, any>>;
+  nodes: Array<Record<string, unknown>>;
 }
 
 export interface AdminMetricsResponse {
@@ -55,6 +55,126 @@ export interface TimeSeriesDataPoint {
   modes: Record<string, number>;
   models: Record<string, number>;
   tokens_by_model: Record<string, number>;
+}
+
+export interface AdminUserListItem {
+  uid: string;
+  mail?: string | null;
+  name: string;
+  has_dashboard: boolean;
+  workspace_platform: string;
+  workspace_platforms: string[];
+  has_workspace: boolean;
+  has_connector: boolean;
+  dashboard_count: number;
+  project_count: number;
+  file_upload_count: number;
+  connector_count: number;
+  connected_connectors: string[];
+  connector_entity_count: number;
+  workspace_count: number;
+  connected_workspaces: string[];
+  token_burned: number;
+  signup_date?: string | null;
+  latest_signin_date?: string | null;
+}
+
+export interface AdminUserProjectItem {
+  project_id: string;
+  name: string;
+  description?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  latest_conversation_id?: string | null;
+  latest_dashboard_id?: string | null;
+  dashboard_title?: string | null;
+  dashboard_preview_key?: string | null;
+  source_type?: string | null;
+}
+
+export interface AdminUserDashboardItem {
+  dashboard_id: string;
+  project_id: string;
+  conversation_id?: string | null;
+  title?: string | null;
+  status?: string | null;
+  s3_bucket?: string | null;
+  s3_key?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface AdminUserFileItem {
+  asset_id: string;
+  file_id?: string | null;
+  project_id?: string | null;
+  filename: string;
+  extension: string;
+  asset_type: string;
+  status: string;
+  size_bytes: number;
+  created_at?: string | null;
+  row_count?: number | null;
+  column_count?: number | null;
+}
+
+export interface AdminUserEntityItem {
+  provider: string;
+  display_name: string;
+  id: string;
+  name: string;
+  type?: string | null;
+  raw: Record<string, unknown>;
+}
+
+export interface AdminUserConnectorItem {
+  provider: string;
+  display_name: string;
+  connected: boolean;
+  entity_count: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  selected_entities: AdminUserEntityItem[];
+  raw: Record<string, unknown>;
+}
+
+export interface AdminUserWorkspaceItem {
+  platform_workspace_id: string;
+  platform: string;
+  workspace_name: string;
+  project_id?: string | null;
+  language?: string | null;
+  created_at?: string | null;
+  raw: Record<string, unknown>;
+}
+
+export interface AdminUserConversationItem {
+  conversation_id: string;
+  project_id: string;
+  title: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  total_tokens: number;
+  chat_mode?: string | null;
+  model?: string | null;
+}
+
+export interface AdminUserListResponse {
+  users: AdminUserListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface AdminUserDetailResponse {
+  user: AdminUserListItem;
+  projects: AdminUserProjectItem[];
+  dashboards: AdminUserDashboardItem[];
+  files: AdminUserFileItem[];
+  connectors: AdminUserConnectorItem[];
+  entities: AdminUserEntityItem[];
+  workspaces: AdminUserWorkspaceItem[];
+  conversations: AdminUserConversationItem[];
 }
 
 class AdminService {
@@ -194,6 +314,57 @@ class AdminService {
       return response.data;
     }
     throw new Error(response.error || 'Failed to get time-series metrics');
+  }
+
+  async listUsers(
+    token: string,
+    options: {
+      page?: number;
+      pageSize?: number;
+      query?: string;
+      hasDashboard?: boolean;
+      hasWorkspace?: boolean;
+      hasConnector?: boolean;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+    } = {},
+  ): Promise<AdminUserListResponse> {
+    const params = new URLSearchParams();
+    params.append('page', String(options.page ?? 1));
+    params.append('page_size', String(options.pageSize ?? 50));
+    if (options.query) params.append('query', options.query);
+    if (options.hasDashboard !== undefined) params.append('has_dashboard', String(options.hasDashboard));
+    if (options.hasWorkspace !== undefined) params.append('has_workspace', String(options.hasWorkspace));
+    if (options.hasConnector !== undefined) params.append('has_connector', String(options.hasConnector));
+    if (options.sortBy) params.append('sort_by', options.sortBy);
+    if (options.sortDir) params.append('sort_dir', options.sortDir);
+
+    const response = await this.requestWithAuth<AdminUserListResponse>(
+      `${API_ENDPOINTS.ADMIN_USERS}?${params.toString()}`,
+      token,
+      { method: 'GET' },
+    );
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.error || 'Failed to list admin users');
+  }
+
+  async getUserDetail(
+    token: string,
+    userId: string,
+  ): Promise<AdminUserDetailResponse> {
+    const response = await this.requestWithAuth<AdminUserDetailResponse>(
+      `${API_ENDPOINTS.ADMIN_USERS}/${encodeURIComponent(userId)}`,
+      token,
+      { method: 'GET' },
+    );
+
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.error || 'Failed to load admin user detail');
   }
 
   async getFilePreview(

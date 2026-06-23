@@ -15,6 +15,11 @@ type UploadState = "idle" | "uploading" | "success" | "error";
 const ACCEPT = ".csv,.xlsx,.xls,.json,.txt,.pdf";
 const MAX_BYTES = 5 * 1024 * 1024;
 
+// Hit the backend via the configured API base — app.dreamify.dev (frontend) and
+// api.dreamify.dev (backend) are different origins in prod, so a relative
+// "/api/..." would resolve to the SPA host and never reach the backend.
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
 export default function ZaloUploadPage() {
   const { token = "" } = useParams<{ token: string }>();
   const [info, setInfo] = useState<UploadInfo | null>(null);
@@ -29,7 +34,7 @@ export default function ZaloUploadPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/v1/chat/zalo/upload/${token}`);
+        const res = await fetch(`${API_BASE}/api/v1/chat/zalo/upload/${token}`);
         const data: UploadInfo = await res.json();
         if (!cancelled) {
           setInfo(data);
@@ -70,7 +75,7 @@ export default function ZaloUploadPage() {
     try {
       const fd = new FormData();
       fd.append("file", file, file.name);
-      const res = await fetch(`/api/v1/chat/zalo/upload/${token}`, {
+      const res = await fetch(`${API_BASE}/api/v1/chat/zalo/upload/${token}`, {
         method: "POST",
         body: fd,
       });

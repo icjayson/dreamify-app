@@ -31,6 +31,9 @@ export default function AllConnectorsModal() {
     setShopifyModalOpen,
     setKlaviyoModalOpen,
     setQuickBooksModalOpen,
+    setZendeskModalOpen,
+    setMixpanelModalOpen,
+    setPostHogModalOpen,
     setAmazonSellerModalOpen,
     setTikTokShopSellerModalOpen,
     setShopeeSellerModalOpen,
@@ -135,6 +138,21 @@ export default function AllConnectorsModal() {
         ? { connected: true, info: quickBooksStatus.company_name || quickBooksStatus.realm_id || 'QuickBooks' }
         : { connected: false };
 
+      const zendeskStatus = await integrationService.getZendeskStatus();
+      results['Zendesk'] = zendeskStatus.connected
+        ? { connected: true, info: zendeskStatus.account_name || zendeskStatus.subdomain || 'Zendesk' }
+        : { connected: false };
+
+      const mixpanelStatus = await integrationService.getMixpanelStatus();
+      results['Mixpanel'] = mixpanelStatus.connected
+        ? { connected: true, info: mixpanelStatus.account_name || mixpanelStatus.project_id || 'Mixpanel' }
+        : { connected: false };
+
+      const postHogStatus = await integrationService.getPostHogStatus();
+      results['PostHog'] = postHogStatus.connected
+        ? { connected: true, info: postHogStatus.account_name || postHogStatus.project_id || 'PostHog' }
+        : { connected: false };
+
       const amazonSellerStatus = await integrationService.getAmazonSellerStatus();
       results['Amazon Seller'] = amazonSellerStatus.connected
         ? { connected: true, info: amazonSellerStatus.seller_name || amazonSellerStatus.seller_id || 'Amazon Seller' }
@@ -165,6 +183,9 @@ export default function AllConnectorsModal() {
         const shopify = overview.connectors.find((connector) => connector.connector_key === 'shopify');
         const klaviyo = overview.connectors.find((connector) => connector.connector_key === 'klaviyo');
         const quickBooks = overview.connectors.find((connector) => connector.connector_key === 'quickbooks');
+        const zendesk = overview.connectors.find((connector) => connector.connector_key === 'zendesk');
+        const mixpanel = overview.connectors.find((connector) => connector.connector_key === 'mixpanel');
+        const posthog = overview.connectors.find((connector) => connector.connector_key === 'posthog');
         const amazonSeller = overview.connectors.find((connector) => connector.connector_key === 'amazon_seller');
         const tiktokShopSeller = overview.connectors.find((connector) => connector.connector_key === 'tiktok_shop_seller');
         const shopeeSeller = overview.connectors.find((connector) => connector.connector_key === 'shopee_seller');
@@ -233,6 +254,27 @@ export default function AllConnectorsModal() {
             info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['QuickBooks']?.info || 'QuickBooks',
           };
         }
+        if (zendesk?.connected) {
+          const reportCount = zendesk.selected_entities?.length || 0;
+          results['Zendesk'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Zendesk']?.info || 'Zendesk',
+          };
+        }
+        if (mixpanel?.connected) {
+          const reportCount = mixpanel.selected_entities?.length || 0;
+          results['Mixpanel'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Mixpanel']?.info || 'Mixpanel',
+          };
+        }
+        if (posthog?.connected) {
+          const reportCount = posthog.selected_entities?.length || 0;
+          results['PostHog'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['PostHog']?.info || 'PostHog',
+          };
+        }
         if (amazonSeller?.connected) {
           const reportCount = amazonSeller.selected_entities?.length || 0;
           results['Amazon Seller'] = {
@@ -291,6 +333,9 @@ export default function AllConnectorsModal() {
       else if (connectorName === 'Shopify') setShopifyModalOpen(true);
       else if (connectorName === 'Klaviyo') setKlaviyoModalOpen(true);
       else if (connectorName === 'QuickBooks') setQuickBooksModalOpen(true);
+      else if (connectorName === 'Zendesk') setZendeskModalOpen(true);
+      else if (connectorName === 'Mixpanel') setMixpanelModalOpen(true);
+      else if (connectorName === 'PostHog') setPostHogModalOpen(true);
       else if (connectorName === 'Amazon Seller') setAmazonSellerModalOpen(true);
       else if (connectorName === 'TikTok Shop Seller') setTikTokShopSellerModalOpen(true);
       else if (connectorName === 'Shopee Seller') setShopeeSellerModalOpen(true);

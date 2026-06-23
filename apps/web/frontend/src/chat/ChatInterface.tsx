@@ -924,6 +924,9 @@ function getDashboardSourceLabel(dashboardCard: NonNullable<Message["dashboardCa
   if (source.includes("shopify") || filename.includes("shopify")) return "Shopify Data";
   if (source.includes("klaviyo") || filename.includes("klaviyo")) return "Klaviyo Data";
   if (source.includes("quickbooks") || source.includes("quick books") || filename.includes("quickbooks")) return "QuickBooks Data";
+  if (source.includes("zendesk") || filename.includes("zendesk")) return "Zendesk Data";
+  if (source.includes("mixpanel") || filename.includes("mixpanel")) return "Mixpanel Data";
+  if (source.includes("posthog") || source.includes("post hog") || filename.includes("posthog")) return "PostHog Data";
   if (source.includes("amazon_seller") || source.includes("amazon seller") || filename.includes("amazon_seller")) return "Amazon Seller Data";
   if (source.includes("shopee_seller") || source.includes("shopee seller") || filename.includes("shopee_seller")) return "Shopee Seller Data";
   if (source.includes("lazada_seller") || source.includes("lazada seller") || filename.includes("lazada_seller")) return "Lazada Seller Data";
@@ -1330,6 +1333,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setShopifyModalOpen,
     setKlaviyoModalOpen,
     setQuickBooksModalOpen,
+    setZendeskModalOpen,
+    setMixpanelModalOpen,
+    setPostHogModalOpen,
     setAmazonSellerModalOpen,
     setTikTokShopSellerModalOpen,
     setShopeeSellerModalOpen,
@@ -2203,6 +2209,21 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       setTimeout(() => setQuickBooksModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'Zendesk') {
+      setDropdownOpen(false);
+      setTimeout(() => setZendeskModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Mixpanel') {
+      setDropdownOpen(false);
+      setTimeout(() => setMixpanelModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'PostHog') {
+      setDropdownOpen(false);
+      setTimeout(() => setPostHogModalOpen(true), 0);
+      return;
+    }
     if (connector.name === 'Amazon Seller') {
       setDropdownOpen(false);
       setTimeout(() => setAmazonSellerModalOpen(true), 0);
@@ -2273,6 +2294,9 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
       "Shopify": { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
       "Klaviyo": { bg: "bg-neutral-900", border: "border-neutral-800", text: "text-white", hover: "hover:bg-black" },
       "QuickBooks": { bg: "bg-[#2CA01C]", border: "border-[#228B16]", text: "text-white", hover: "hover:bg-[#228B16]" },
+      "Zendesk": { bg: "bg-[#03363D]", border: "border-[#022D33]", text: "text-white", hover: "hover:bg-[#022D33]" },
+      "Mixpanel": { bg: "bg-[#111111]", border: "border-[#7856FF]", text: "text-white", hover: "hover:bg-black" },
+      "PostHog": { bg: "bg-[#F9BD2B]", border: "border-[#DFA51E]", text: "text-black", hover: "hover:bg-[#EAB224]" },
       "Amazon Seller": { bg: "bg-[#FF9900]", border: "border-[#E88A00]", text: "text-black", hover: "hover:bg-[#F2A900]" },
       "TikTok Shop Seller": { bg: "bg-zinc-950", border: "border-[#25F4EE]", text: "text-white", hover: "hover:bg-black" },
       "HubSpot": { bg: "bg-orange-600", border: "border-orange-500", text: "text-white", hover: "hover:bg-orange-700" },

@@ -520,6 +520,66 @@ export default function ConnectorEntityDetailView(props: Props) {
         entityName,
       };
     }
+    if (connectorKey === "zendesk") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "support_overview", subdomainFromId = "all", resourceIdFromId = "all"] = entityId.split(":");
+      return {
+        provider: "zendesk" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          subdomain: String(scheduleConfig.subdomain || entity?.subdomain || subdomainFromId),
+          resource_id: String(scheduleConfig.resource_id || entity?.resource_id || resourceIdFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: scheduleConfig.include_pii ?? false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "mixpanel") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "product_overview", projectIdFromId = "all", resourceIdFromId = "all"] = entityId.split(":");
+      return {
+        provider: "mixpanel" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          project_id: String(scheduleConfig.project_id || entity?.project_id || projectIdFromId),
+          resource_id: String(scheduleConfig.resource_id || entity?.resource_id || resourceIdFromId),
+          region: String(scheduleConfig.region || entity?.region || "US"),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: scheduleConfig.include_pii ?? false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "posthog") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "product_overview", projectIdFromId = "all", resourceIdFromId = "all"] = entityId.split(":");
+      return {
+        provider: "posthog" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          project_id: String(scheduleConfig.project_id || entity?.project_id || projectIdFromId),
+          resource_id: String(scheduleConfig.resource_id || entity?.resource_id || resourceIdFromId),
+          region: String(scheduleConfig.region || entity?.region || "US"),
+          base_url: String(scheduleConfig.base_url || entity?.base_url || ""),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: scheduleConfig.include_pii ?? false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
     if (connectorKey === "amazon_seller") {
       const entity = connectorDetail?.entity;
       const [, reportTypeFromId = "sales_overview", sellerIdFromId = "all", marketplaceIdFromId = "all"] = entityId.split(":");

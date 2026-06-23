@@ -63,6 +63,9 @@ import SupabaseIntegrationModal from "./components/chat/SupabaseIntegrationModal
 import ShopifyIntegrationModal from "./components/chat/ShopifyIntegrationModal";
 import KlaviyoIntegrationModal from "./components/chat/KlaviyoIntegrationModal";
 import QuickBooksIntegrationModal from "./components/chat/QuickBooksIntegrationModal";
+import ZendeskIntegrationModal from "./components/chat/ZendeskIntegrationModal";
+import MixpanelIntegrationModal from "./components/chat/MixpanelIntegrationModal";
+import PostHogIntegrationModal from "./components/chat/PostHogIntegrationModal";
 import AmazonSellerIntegrationModal from "./components/chat/AmazonSellerIntegrationModal";
 import TikTokShopSellerIntegrationModal from "./components/chat/TikTokShopSellerIntegrationModal";
 import ShopeeSellerIntegrationModal from "./components/chat/ShopeeSellerIntegrationModal";
@@ -276,6 +279,9 @@ const AppContent = () => {
       <ShopifyIntegrationModal />
       <KlaviyoIntegrationModal />
       <QuickBooksIntegrationModal />
+      <ZendeskIntegrationModal />
+      <MixpanelIntegrationModal />
+      <PostHogIntegrationModal />
       <AmazonSellerIntegrationModal />
       <TikTokShopSellerIntegrationModal />
       <ShopeeSellerIntegrationModal />

@@ -45,6 +45,9 @@ const PROVIDER_LABELS: Record<ProviderKey, string> = {
   shopify: 'Shopify',
   klaviyo: 'Klaviyo',
   quickbooks: 'QuickBooks',
+  zendesk: 'Zendesk',
+  mixpanel: 'Mixpanel',
+  posthog: 'PostHog',
   amazon_seller: 'Amazon Seller',
   tiktok_shop_seller: 'TikTok Shop Seller',
   shopee_seller: 'Shopee Seller',
@@ -97,6 +100,9 @@ const CONNECTOR_TO_PROVIDER: Record<string, ProviderKey> = {
   shopify: 'shopify',
   klaviyo: 'klaviyo',
   quickbooks: 'quickbooks',
+  zendesk: 'zendesk',
+  mixpanel: 'mixpanel',
+  posthog: 'posthog',
   amazon_seller: 'amazon_seller',
   tiktok_shop_seller: 'tiktok_shop_seller',
   shopee_seller: 'shopee_seller',
@@ -120,6 +126,9 @@ const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
   shopify: 'shopify',
   klaviyo: 'klaviyo',
   quickbooks: 'quickbooks',
+  zendesk: 'zendesk',
+  mixpanel: 'mixpanel',
+  posthog: 'posthog',
   amazon_seller: 'amazon_seller',
   tiktok_shop_seller: 'tiktok_shop_seller',
   shopee_seller: 'shopee_seller',
@@ -199,6 +208,49 @@ function buildQuickBooksReportEntities(realmId: string, accountName = 'QuickBook
   ];
 }
 
+function buildZendeskReportEntities(subdomain: string, accountName = 'Zendesk'): ConnectorSelectedEntity[] {
+  const domain = subdomain.trim() || 'all';
+  return [
+    { id: `zendesk:support_overview:${domain}:all`, name: 'Support Overview', type: 'report', report_type: 'support_overview', subdomain: domain, resource_id: 'all', account_name: accountName },
+    { id: `zendesk:tickets:${domain}:tickets`, name: 'Tickets', type: 'report', report_type: 'tickets', subdomain: domain, resource_id: 'tickets', account_name: accountName },
+    { id: `zendesk:ticket_events:${domain}:ticket_events`, name: 'Ticket Events', type: 'report', report_type: 'ticket_events', subdomain: domain, resource_id: 'ticket_events', account_name: accountName },
+    { id: `zendesk:users:${domain}:users`, name: 'Users', type: 'report', report_type: 'users', subdomain: domain, resource_id: 'users', account_name: accountName },
+    { id: `zendesk:organizations:${domain}:organizations`, name: 'Organizations', type: 'report', report_type: 'organizations', subdomain: domain, resource_id: 'organizations', account_name: accountName },
+    { id: `zendesk:groups:${domain}:groups`, name: 'Groups', type: 'report', report_type: 'groups', subdomain: domain, resource_id: 'groups', account_name: accountName },
+    { id: `zendesk:satisfaction_ratings:${domain}:satisfaction_ratings`, name: 'Satisfaction Ratings', type: 'report', report_type: 'satisfaction_ratings', subdomain: domain, resource_id: 'satisfaction_ratings', account_name: accountName },
+  ];
+}
+
+function buildMixpanelReportEntities(projectId: string, accountName = 'Mixpanel', region = 'US'): ConnectorSelectedEntity[] {
+  const project = projectId.trim() || 'all';
+  const selectedRegion = region.trim().toUpperCase() || 'US';
+  return [
+    { id: `mixpanel:product_overview:${project}:all`, name: 'Product Overview', type: 'report', report_type: 'product_overview', project_id: project, resource_id: 'all', region: selectedRegion, account_name: accountName },
+    { id: `mixpanel:events:${project}:all`, name: 'Raw Events', type: 'report', report_type: 'events', project_id: project, resource_id: 'all', region: selectedRegion, account_name: accountName },
+    { id: `mixpanel:event_breakdown:${project}:all`, name: 'Event Breakdown', type: 'report', report_type: 'event_breakdown', project_id: project, resource_id: 'all', region: selectedRegion, account_name: accountName },
+    { id: `mixpanel:funnels:${project}:all`, name: 'Funnels', type: 'report', report_type: 'funnels', project_id: project, resource_id: 'all', region: selectedRegion, account_name: accountName },
+    { id: `mixpanel:retention:${project}:all`, name: 'Retention', type: 'report', report_type: 'retention', project_id: project, resource_id: 'all', region: selectedRegion, account_name: accountName },
+    { id: `mixpanel:cohorts:${project}:all`, name: 'Cohorts', type: 'report', report_type: 'cohorts', project_id: project, resource_id: 'all', region: selectedRegion, account_name: accountName },
+    { id: `mixpanel:users:${project}:all`, name: 'Users', type: 'report', report_type: 'users', project_id: project, resource_id: 'all', region: selectedRegion, account_name: accountName },
+  ];
+}
+
+function buildPostHogReportEntities(projectId: string, accountName = 'PostHog', region = 'US', baseUrl = ''): ConnectorSelectedEntity[] {
+  const project = projectId.trim() || 'all';
+  const selectedRegion = region.trim().toUpperCase() || 'US';
+  return [
+    { id: `posthog:product_overview:${project}:all`, name: 'Product Overview', type: 'report', report_type: 'product_overview', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `posthog:events:${project}:all`, name: 'Events', type: 'report', report_type: 'events', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `posthog:event_breakdown:${project}:all`, name: 'Event Breakdown', type: 'report', report_type: 'event_breakdown', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `posthog:insights:${project}:all`, name: 'Insights', type: 'report', report_type: 'insights', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `posthog:funnels:${project}:all`, name: 'Funnels', type: 'report', report_type: 'funnels', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `posthog:retention:${project}:all`, name: 'Retention', type: 'report', report_type: 'retention', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `posthog:cohorts:${project}:all`, name: 'Cohorts', type: 'report', report_type: 'cohorts', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `posthog:persons:${project}:all`, name: 'Persons', type: 'report', report_type: 'persons', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `posthog:feature_flags:${project}:all`, name: 'Feature Flags', type: 'report', report_type: 'feature_flags', project_id: project, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+  ];
+}
+
 function buildAmazonSellerReportEntities(sellerId: string, accountName = 'Amazon Seller', marketplaceId = 'all'): ConnectorSelectedEntity[] {
   const seller = sellerId.trim() || 'all';
   const marketplace = marketplaceId.trim() || 'all';
@@ -265,6 +317,9 @@ function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unk
   if (provider === 'shopify') return String(config.entity_id || `shopify:${config.report_type || 'sales_overview'}:${config.shop_domain || ''}:${config.resource || 'all'}`);
   if (provider === 'klaviyo') return String(config.entity_id || `klaviyo:${config.report_type || 'lifecycle_overview'}:${config.account_id || 'all'}:${config.resource_id || 'all'}`);
   if (provider === 'quickbooks') return String(config.entity_id || `quickbooks:${config.report_type || 'finance_overview'}:${config.realm_id || 'all'}:${config.resource_id || 'all'}`);
+  if (provider === 'zendesk') return String(config.entity_id || `zendesk:${config.report_type || 'support_overview'}:${config.subdomain || 'all'}:${config.resource_id || 'all'}`);
+  if (provider === 'mixpanel') return String(config.entity_id || `mixpanel:${config.report_type || 'product_overview'}:${config.project_id || 'all'}:${config.resource_id || 'all'}`);
+  if (provider === 'posthog') return String(config.entity_id || `posthog:${config.report_type || 'product_overview'}:${config.project_id || 'all'}:${config.resource_id || 'all'}`);
   if (provider === 'amazon_seller') return String(config.entity_id || `amazon_seller:${config.report_type || 'sales_overview'}:${config.seller_id || 'all'}:${config.marketplace_id || 'all'}`);
   if (provider === 'tiktok_shop_seller') return String(config.entity_id || `tiktok_shop_seller:${config.report_type || 'sales_overview'}:${config.shop_id || 'all'}:${config.region || 'US'}`);
   if (provider === 'shopee_seller') return String(config.entity_id || `shopee_seller:${config.report_type || 'sales_overview'}:${config.shop_id || 'all'}:${config.region || 'VN'}`);
@@ -369,6 +424,45 @@ function buildConnectorConfig(provider: ProviderKey, entity: ConnectorSelectedEn
       realm_id: entity.realm_id || realmId,
       resource_id: entity.resource_id || resourceId,
       accounting_basis: entity.accounting_basis || 'Accrual',
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'zendesk') {
+    const [, reportType = 'support_overview', subdomain = 'all', resourceId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      subdomain: entity.subdomain || subdomain,
+      resource_id: entity.resource_id || resourceId,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'mixpanel') {
+    const [, reportType = 'product_overview', projectId = 'all', resourceId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      project_id: entity.project_id || entity.account_id || projectId,
+      resource_id: entity.resource_id || resourceId,
+      region: entity.region || 'US',
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'posthog') {
+    const [, reportType = 'product_overview', projectId = 'all', resourceId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      project_id: entity.project_id || entity.account_id || projectId,
+      resource_id: entity.resource_id || resourceId,
+      region: entity.region || 'US',
+      base_url: entity.base_url || '',
       entity_id: entity.id,
       entity_name: entity.name,
       row_limit: 5000,
@@ -577,6 +671,39 @@ async function fetchProviderEntities(provider: ProviderKey): Promise<ConnectorSe
     return buildQuickBooksReportEntities(status.realm_id || 'all', status.company_name || 'QuickBooks');
   }
 
+  if (provider === 'zendesk') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Zendesk reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'zendesk');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getZendeskStatus();
+    if (!status.connected) return [];
+    return buildZendeskReportEntities(status.subdomain || 'all', status.account_name || 'Zendesk');
+  }
+
+  if (provider === 'mixpanel') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Mixpanel reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'mixpanel');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getMixpanelStatus();
+    if (!status.connected) return [];
+    return buildMixpanelReportEntities(status.project_id || 'all', status.account_name || 'Mixpanel', status.region || 'US');
+  }
+
+  if (provider === 'posthog') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load PostHog reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'posthog');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getPostHogStatus();
+    if (!status.connected) return [];
+    return buildPostHogReportEntities(status.project_id || 'all', status.account_name || 'PostHog', status.region || 'US', status.base_url || '');
+  }
+
   if (provider === 'amazon_seller') {
     const response = await integrationService.fetchConnectorsOverview();
     if (!response.success) throw new Error(response.error || 'Failed to load Amazon Seller reports.');
@@ -692,6 +819,12 @@ export function CreateScheduleModal({
           : '';
       const klaviyoAccountId = connector.selected_entities?.[0]?.account_id || 'all';
       const quickBooksRealmId = connector.selected_entities?.[0]?.realm_id || 'all';
+      const zendeskSubdomain = connector.selected_entities?.[0]?.subdomain || 'all';
+      const mixpanelProjectId = connector.selected_entities?.[0]?.project_id || connector.selected_entities?.[0]?.account_id || 'all';
+      const mixpanelRegion = connector.selected_entities?.[0]?.region || 'US';
+      const postHogProjectId = connector.selected_entities?.[0]?.project_id || connector.selected_entities?.[0]?.account_id || 'all';
+      const postHogRegion = connector.selected_entities?.[0]?.region || 'US';
+      const postHogBaseUrl = connector.selected_entities?.[0]?.base_url || '';
       const amazonSellerId = connector.selected_entities?.[0]?.seller_id || 'all';
       const tiktokShopId = connector.selected_entities?.[0]?.shop_id || 'all';
       const tiktokShopRegion = connector.selected_entities?.[0]?.region || 'US';
@@ -713,15 +846,21 @@ export function CreateScheduleModal({
                   ? buildKlaviyoReportEntities(String(klaviyoAccountId), connector.account_name || 'Klaviyo')
                   : connector.connector_key === 'quickbooks' && connectorEntities.length === 0
                     ? buildQuickBooksReportEntities(String(quickBooksRealmId), connector.account_name || 'QuickBooks')
-                    : connector.connector_key === 'amazon_seller' && connectorEntities.length === 0
-                      ? buildAmazonSellerReportEntities(String(amazonSellerId), connector.account_name || 'Amazon Seller')
-                      : connector.connector_key === 'tiktok_shop_seller' && connectorEntities.length === 0
-                        ? buildTikTokShopSellerReportEntities(String(tiktokShopId), connector.account_name || 'TikTok Shop Seller', String(tiktokShopRegion))
-                        : connector.connector_key === 'shopee_seller' && connectorEntities.length === 0
-                          ? buildShopeeSellerReportEntities(String(shopeeShopId), connector.account_name || 'Shopee Seller', String(shopeeRegion))
-                          : connector.connector_key === 'lazada_seller' && connectorEntities.length === 0
-                            ? buildLazadaSellerReportEntities(String(lazadaSellerId), connector.account_name || 'Lazada Seller', String(lazadaRegion))
-                            : connectorEntities;
+                    : connector.connector_key === 'zendesk' && connectorEntities.length === 0
+                      ? buildZendeskReportEntities(String(zendeskSubdomain), connector.account_name || 'Zendesk')
+                      : connector.connector_key === 'mixpanel' && connectorEntities.length === 0
+                        ? buildMixpanelReportEntities(String(mixpanelProjectId), connector.account_name || 'Mixpanel', String(mixpanelRegion))
+                        : connector.connector_key === 'posthog' && connectorEntities.length === 0
+                          ? buildPostHogReportEntities(String(postHogProjectId), connector.account_name || 'PostHog', String(postHogRegion), String(postHogBaseUrl))
+                          : connector.connector_key === 'amazon_seller' && connectorEntities.length === 0
+                            ? buildAmazonSellerReportEntities(String(amazonSellerId), connector.account_name || 'Amazon Seller')
+                            : connector.connector_key === 'tiktok_shop_seller' && connectorEntities.length === 0
+                              ? buildTikTokShopSellerReportEntities(String(tiktokShopId), connector.account_name || 'TikTok Shop Seller', String(tiktokShopRegion))
+                              : connector.connector_key === 'shopee_seller' && connectorEntities.length === 0
+                                ? buildShopeeSellerReportEntities(String(shopeeShopId), connector.account_name || 'Shopee Seller', String(shopeeRegion))
+                                : connector.connector_key === 'lazada_seller' && connectorEntities.length === 0
+                                  ? buildLazadaSellerReportEntities(String(lazadaSellerId), connector.account_name || 'Lazada Seller', String(lazadaRegion))
+                                  : connectorEntities;
 
       if (mappedProvider === 'warehouse') {
         const current = grouped.get('warehouse') || {

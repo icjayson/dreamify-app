@@ -61,12 +61,15 @@ export interface ConnectorSelectedEntity {
   resource_id?: string;
   metric_id?: string;
   channel?: string;
+  project_id?: string;
   realm_id?: string;
   accounting_basis?: string;
   seller_id?: string;
   marketplace_id?: string;
   shop_id?: string;
   region?: string;
+  base_url?: string;
+  subdomain?: string;
 }
 
 export interface ConnectorOverviewItem {
@@ -414,6 +417,7 @@ export interface SupabaseSyncResponse {
   column_count?: number;
   entity_id?: string;
   truncated?: boolean;
+  api_mode?: string;
   error?: string;
 }
 
@@ -637,6 +641,209 @@ export interface QuickBooksSyncRequest {
 }
 
 export interface QuickBooksSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
+export interface ZendeskAccount {
+  subdomain: string;
+  name?: string;
+  timezone?: string;
+}
+
+export interface ZendeskConnectionStatusResponse {
+  connected: boolean;
+  subdomain?: string;
+  account_name?: string;
+  timezone?: string;
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface ZendeskReportResource {
+  report_type: string;
+  label: string;
+  resource: string;
+  default?: boolean;
+}
+
+export interface ZendeskResourcesResponse {
+  success: boolean;
+  reports: ZendeskReportResource[];
+  accounts: ZendeskAccount[];
+  error?: string;
+}
+
+export interface ZendeskSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+  resource_id?: string;
+}
+
+export interface ZendeskSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  cursor?: string;
+  end_time?: number;
+  error?: string;
+}
+
+export interface MixpanelProject {
+  id: string;
+  name: string;
+  region?: string;
+}
+
+export interface MixpanelConnectionStatusResponse {
+  connected: boolean;
+  project_id?: string;
+  region?: string;
+  account_name?: string;
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface MixpanelReportResource {
+  report_type: string;
+  label: string;
+  resource: string;
+  default?: boolean;
+}
+
+export interface MixpanelNamedResource {
+  id: string;
+  name: string;
+  type?: string;
+  status?: string;
+  updated_at?: string;
+}
+
+export interface MixpanelConnectRequest {
+  project_id: string;
+  service_account_username: string;
+  service_account_secret: string;
+  region?: string;
+  account_name?: string;
+}
+
+export interface MixpanelResourcesResponse {
+  success: boolean;
+  reports: MixpanelReportResource[];
+  projects: MixpanelProject[];
+  events: MixpanelNamedResource[];
+  funnels: MixpanelNamedResource[];
+  cohorts: MixpanelNamedResource[];
+  error?: string;
+}
+
+export interface MixpanelSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+  resource_id?: string;
+}
+
+export interface MixpanelSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
+export interface PostHogProject {
+  id: string;
+  name: string;
+  region?: string;
+  base_url?: string;
+}
+
+export interface PostHogConnectionStatusResponse {
+  connected: boolean;
+  project_id?: string;
+  region?: string;
+  base_url?: string;
+  account_name?: string;
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface PostHogReportResource {
+  report_type: string;
+  label: string;
+  resource: string;
+  default?: boolean;
+}
+
+export interface PostHogNamedResource {
+  id: string;
+  name: string;
+  type?: string;
+  status?: string;
+  updated_at?: string;
+}
+
+export interface PostHogConnectRequest {
+  project_id: string;
+  personal_api_key: string;
+  region?: string;
+  base_url?: string;
+  account_name?: string;
+}
+
+export interface PostHogResourcesResponse {
+  success: boolean;
+  reports: PostHogReportResource[];
+  projects: PostHogProject[];
+  events: PostHogNamedResource[];
+  properties: PostHogNamedResource[];
+  insights: PostHogNamedResource[];
+  cohorts: PostHogNamedResource[];
+  feature_flags: PostHogNamedResource[];
+  error?: string;
+}
+
+export interface PostHogSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+  resource_id?: string;
+}
+
+export interface PostHogSyncResponse {
   success: boolean;
   message?: string;
   asset?: AssetRecord;
@@ -1149,6 +1356,10 @@ class IntegrationService {
 
   getQuickBooksOAuthStartUrl(): string {
     return '/api/v1/integration/quickbooks/oauth/start';
+  }
+
+  getZendeskOAuthStartUrl(subdomain: string): string {
+    return `/api/v1/integration/zendesk/oauth/start?subdomain=${encodeURIComponent(subdomain)}`;
   }
 
   getAmazonSellerOAuthStartUrl(region: string): string {
@@ -1743,6 +1954,166 @@ class IntegrationService {
     }
   }
 
+  async getZendeskStatus(): Promise<ZendeskConnectionStatusResponse> {
+    try {
+      const res = await api.get<ZendeskConnectionStatusResponse>(`${this.baseUrl}/zendesk/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectZendesk(): Promise<void> {
+    await api.delete(`${this.baseUrl}/zendesk/disconnect`);
+  }
+
+  async fetchZendeskResources(): Promise<ZendeskResourcesResponse> {
+    try {
+      const res = await api.get<ZendeskResourcesResponse>(`${this.baseUrl}/zendesk/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        accounts: [],
+        error: res.error || 'Failed to load Zendesk resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        accounts: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncZendesk(req: ZendeskSyncRequest): Promise<ZendeskSyncResponse> {
+    try {
+      const res = await api.post<ZendeskSyncResponse>(`${this.baseUrl}/zendesk/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Zendesk data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async connectMixpanel(req: MixpanelConnectRequest): Promise<MixpanelConnectionStatusResponse> {
+    const res = await api.post<MixpanelConnectionStatusResponse>(`${this.baseUrl}/mixpanel/connect`, req);
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || 'Failed to connect Mixpanel');
+  }
+
+  async getMixpanelStatus(): Promise<MixpanelConnectionStatusResponse> {
+    try {
+      const res = await api.get<MixpanelConnectionStatusResponse>(`${this.baseUrl}/mixpanel/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectMixpanel(): Promise<void> {
+    await api.delete(`${this.baseUrl}/mixpanel/disconnect`);
+  }
+
+  async fetchMixpanelResources(): Promise<MixpanelResourcesResponse> {
+    try {
+      const res = await api.get<MixpanelResourcesResponse>(`${this.baseUrl}/mixpanel/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        projects: [],
+        events: [],
+        funnels: [],
+        cohorts: [],
+        error: res.error || 'Failed to load Mixpanel resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        projects: [],
+        events: [],
+        funnels: [],
+        cohorts: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncMixpanel(req: MixpanelSyncRequest): Promise<MixpanelSyncResponse> {
+    try {
+      const res = await api.post<MixpanelSyncResponse>(`${this.baseUrl}/mixpanel/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Mixpanel data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async connectPostHog(req: PostHogConnectRequest): Promise<PostHogConnectionStatusResponse> {
+    const res = await api.post<PostHogConnectionStatusResponse>(`${this.baseUrl}/posthog/connect`, req);
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || 'Failed to connect PostHog');
+  }
+
+  async getPostHogStatus(): Promise<PostHogConnectionStatusResponse> {
+    try {
+      const res = await api.get<PostHogConnectionStatusResponse>(`${this.baseUrl}/posthog/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectPostHog(): Promise<void> {
+    await api.delete(`${this.baseUrl}/posthog/disconnect`);
+  }
+
+  async fetchPostHogResources(): Promise<PostHogResourcesResponse> {
+    try {
+      const res = await api.get<PostHogResourcesResponse>(`${this.baseUrl}/posthog/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        projects: [],
+        events: [],
+        properties: [],
+        insights: [],
+        cohorts: [],
+        feature_flags: [],
+        error: res.error || 'Failed to load PostHog resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        projects: [],
+        events: [],
+        properties: [],
+        insights: [],
+        cohorts: [],
+        feature_flags: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncPostHog(req: PostHogSyncRequest): Promise<PostHogSyncResponse> {
+    try {
+      const res = await api.post<PostHogSyncResponse>(`${this.baseUrl}/posthog/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync PostHog data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
   async getAmazonSellerStatus(): Promise<AmazonSellerConnectionStatusResponse> {
     try {
       const res = await api.get<AmazonSellerConnectionStatusResponse>(`${this.baseUrl}/amazon-seller/status`);
@@ -2163,6 +2534,7 @@ export interface HubSpotSyncResponse {
   column_count?: number;
   entity_id?: string;
   truncated?: boolean;
+  api_mode?: string;
   error?: string;
 }
 

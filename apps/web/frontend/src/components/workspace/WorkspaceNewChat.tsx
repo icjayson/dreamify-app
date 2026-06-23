@@ -393,6 +393,9 @@ export default function WorkspaceNewChat() {
     if (connector.name === "Shopify") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setShopifyModalOpen(true), 0); return; }
     if (connector.name === "Klaviyo") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setKlaviyoModalOpen(true), 0); return; }
     if (connector.name === "QuickBooks") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setQuickBooksModalOpen(true), 0); return; }
+    if (connector.name === "Zendesk") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setZendeskModalOpen(true), 0); return; }
+    if (connector.name === "Mixpanel") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setMixpanelModalOpen(true), 0); return; }
+    if (connector.name === "PostHog") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setPostHogModalOpen(true), 0); return; }
     if (connector.name === "Amazon Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setAmazonSellerModalOpen(true), 0); return; }
     if (connector.name === "TikTok Shop Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setTikTokShopSellerModalOpen(true), 0); return; }
     if (connector.name === "Shopee Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setShopeeSellerModalOpen(true), 0); return; }
@@ -426,6 +429,9 @@ export default function WorkspaceNewChat() {
       Shopify: { bg: "bg-green-700", border: "border-green-600", text: "text-white", hover: "hover:bg-green-800" },
       Klaviyo: { bg: "bg-neutral-900", border: "border-neutral-800", text: "text-white", hover: "hover:bg-black" },
       QuickBooks: { bg: "bg-[#2CA01C]", border: "border-[#228B16]", text: "text-white", hover: "hover:bg-[#228B16]" },
+      Zendesk: { bg: "bg-[#03363D]", border: "border-[#022D33]", text: "text-white", hover: "hover:bg-[#022D33]" },
+      Mixpanel: { bg: "bg-[#111111]", border: "border-[#7856FF]", text: "text-white", hover: "hover:bg-black" },
+      PostHog: { bg: "bg-[#F9BD2B]", border: "border-[#DFA51E]", text: "text-black", hover: "hover:bg-[#EAB224]" },
       "Amazon Seller": { bg: "bg-[#FF9900]", border: "border-[#E88A00]", text: "text-black", hover: "hover:bg-[#F2A900]" },
       "TikTok Shop Seller": { bg: "bg-zinc-950", border: "border-[#25F4EE]", text: "text-white", hover: "hover:bg-black" },
       "Shopee Seller": { bg: "bg-[#EE4D2D]", border: "border-[#D83B1F]", text: "text-white", hover: "hover:bg-[#D83B1F]" },

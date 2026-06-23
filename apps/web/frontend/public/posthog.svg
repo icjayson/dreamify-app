@@ -1,0 +1,10 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PostHog">
+  <rect width="128" height="128" rx="24" fill="#F9BD2B"/>
+  <path d="M28 36h72v56H28V36Z" fill="#111111"/>
+  <path d="M36 44h56v40H36V44Z" fill="#F9BD2B"/>
+  <path d="M42 50h44v28H42V50Z" fill="#111111"/>
+  <path d="M50 58h28v12H50V58Z" fill="#F9BD2B"/>
+  <path d="M30 94h68v8H30v-8Z" fill="#111111"/>
+  <circle cx="46" cy="66" r="3" fill="#111111"/>
+  <circle cx="82" cy="66" r="3" fill="#111111"/>
+</svg>

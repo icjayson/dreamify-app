@@ -42,11 +42,14 @@ const CONNECTOR_FILTERS: { label: ConnectorFilter; Icon: ElementType }[] = [
   { label: "All Connectors", Icon: Grid2X2 },
   { label: "Advertising", Icon: Megaphone },
   { label: "Analytics", Icon: BarChart3 },
+  { label: "Product Analytics", Icon: BarChart3 },
+  { label: "Marketing", Icon: Megaphone },
   { label: "Spreadsheets", Icon: Table2 },
   { label: "Databases", Icon: Database },
   { label: "Sales & CRM", Icon: Users },
   { label: "Ecommerce", Icon: ShoppingBag },
   { label: "Finance", Icon: CreditCard },
+  { label: "Support", Icon: MessageCircle },
   { label: "Mobile & Attribution", Icon: Smartphone },
 ];
 
@@ -63,12 +66,12 @@ const DATA_CONNECTORS_FAQ: { question: string; answer: string }[] = [
   {
     question: "What are data connectors?",
     answer:
-      "A data connector is a live, authenticated link between Dreamify and one of your business systems — your ad accounts, analytics, payment processor, ecommerce store, spreadsheets, or warehouse. Once connected, Dreamify reads the source on a schedule, joins the data with everything else you've connected, and uses it to generate AI dashboards on demand. No SQL, no data modeling, no manual exports.\n\nDreamify ships native and queued connector surfaces for the platforms marketers, founders, and operators actually use: Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, QuickBooks, Shopify, Klaviyo, Amazon Seller, TikTok Shop Seller, Shopee Seller, Lazada Seller, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase. Each connector is read-only by default and uses OAuth or scoped credentials for security.",
+      "A data connector is a live, authenticated link between Dreamify and one of your business systems — your ad accounts, analytics, payment processor, ecommerce store, support desk, product analytics workspace, spreadsheets, or warehouse. Once connected, Dreamify reads the source on a schedule, joins the data with everything else you've connected, and uses it to generate AI dashboards on demand. No SQL, no data modeling, no manual exports.\n\nDreamify ships native and queued connector surfaces for the platforms marketers, founders, and operators actually use: Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Mixpanel, PostHog, Stripe, QuickBooks, Zendesk, Shopify, Klaviyo, Amazon Seller, TikTok Shop Seller, Shopee Seller, Lazada Seller, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase. Each connector is read-only by default and uses OAuth or scoped credentials for security.",
   },
   {
     question: "Which data sources does Dreamify connect to?",
     answer:
-      "Native connector surfaces include Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, QuickBooks, Shopify, Klaviyo, Amazon Seller, TikTok Shop Seller, Shopee Seller, Lazada Seller, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase. Unavailable cards remain gated until their live sync and schedule smoke tests pass.",
+      "Native connector surfaces include Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Mixpanel, PostHog, Stripe, QuickBooks, Zendesk, Shopify, Klaviyo, Amazon Seller, TikTok Shop Seller, Shopee Seller, Lazada Seller, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase. Unavailable cards remain gated until their live sync and schedule smoke tests pass.",
   },
   {
     question: "Do I need to write SQL or build a data model?",
@@ -114,6 +117,9 @@ export default function ProductDataConnectorsPage() {
     setShopifyModalOpen,
     setKlaviyoModalOpen,
     setQuickBooksModalOpen,
+    setZendeskModalOpen,
+    setMixpanelModalOpen,
+    setPostHogModalOpen,
     setAmazonSellerModalOpen,
     setTikTokShopSellerModalOpen,
     setShopeeSellerModalOpen,
@@ -156,6 +162,9 @@ export default function ProductDataConnectorsPage() {
       shopify: () => setShopifyModalOpen(true),
       klaviyo: () => setKlaviyoModalOpen(true),
       quickbooks: () => setQuickBooksModalOpen(true),
+      zendesk: () => setZendeskModalOpen(true),
+      mixpanel: () => setMixpanelModalOpen(true),
+      posthog: () => setPostHogModalOpen(true),
       amazon_seller: () => setAmazonSellerModalOpen(true),
       tiktok_shop_seller: () => setTikTokShopSellerModalOpen(true),
       shopee_seller: () => setShopeeSellerModalOpen(true),
@@ -199,7 +208,7 @@ export default function ProductDataConnectorsPage() {
     <>
       <Seo
         title="Data Connectors — Dreamify | Live Connectors for AI Dashboards"
-        description="Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Stripe, QuickBooks, Shopify, Klaviyo, Amazon Seller, TikTok Shop Seller, Shopee Seller, Lazada Seller, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase to Dreamify as each connector becomes available."
+        description="Connect Meta Ads, Google Ads, GA4, TikTok Ads, AppsFlyer, Firebase, Mixpanel, PostHog, Stripe, QuickBooks, Zendesk, Shopify, Klaviyo, Amazon Seller, TikTok Shop Seller, Shopee Seller, Lazada Seller, HubSpot, Salesforce, Pipedrive, Google Sheets, PostgreSQL, BigQuery, Snowflake, Databricks, and Supabase to Dreamify as each connector becomes available."
         canonical="https://app.dreamify.dev/product/data-connectors"
         jsonLd={[
           {

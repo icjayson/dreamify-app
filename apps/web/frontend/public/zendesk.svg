@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title">
+  <title>Zendesk</title>
+  <rect width="160" height="160" rx="24" fill="#ffffff"/>
+  <path d="M48 48h64L48 112h64" fill="none" stroke="#03363D" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="118" cy="44" r="10" fill="#03363D"/>
+  <circle cx="42" cy="116" r="10" fill="#03363D"/>
+</svg>

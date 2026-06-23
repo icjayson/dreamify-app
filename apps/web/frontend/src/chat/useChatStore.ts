@@ -4,7 +4,7 @@ import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService, type ProcessingResponse } from '@/services/processingService';
 import { streamWorkflow } from '@/services/workflowStreamService';
 import type { ConversationChatRequest, DashboardDataResponse } from '@/services/conversationService';
-import type { AmazonSellerSyncRequest, KlaviyoSyncRequest, LazadaSellerSyncRequest, QuickBooksSyncRequest, ShopifySyncRequest, ShopeeSellerSyncRequest, SupabaseSyncRequest, TikTokShopSellerSyncRequest } from '@/services/integrationService';
+import type { AmazonSellerSyncRequest, KlaviyoSyncRequest, LazadaSellerSyncRequest, MixpanelSyncRequest, PostHogSyncRequest, QuickBooksSyncRequest, ShopifySyncRequest, ShopeeSellerSyncRequest, SupabaseSyncRequest, TikTokShopSellerSyncRequest, ZendeskSyncRequest } from '@/services/integrationService';
 import type { AnalysisStep, ChartChangeSummary, EditDataProvenance } from '@/types/chartEdit';
 import type { AssetRecord } from '@/services/fileService';
 import {
@@ -375,6 +375,9 @@ interface ChatState {
   isShopifyModalOpen: boolean;
   isKlaviyoModalOpen: boolean;
   isQuickBooksModalOpen: boolean;
+  isZendeskModalOpen: boolean;
+  isMixpanelModalOpen: boolean;
+  isPostHogModalOpen: boolean;
   isAmazonSellerModalOpen: boolean;
   isTikTokShopSellerModalOpen: boolean;
   isShopeeSellerModalOpen: boolean;
@@ -457,6 +460,9 @@ interface ChatState {
   setShopifyModalOpen: (open: boolean) => void;
   setKlaviyoModalOpen: (open: boolean) => void;
   setQuickBooksModalOpen: (open: boolean) => void;
+  setZendeskModalOpen: (open: boolean) => void;
+  setMixpanelModalOpen: (open: boolean) => void;
+  setPostHogModalOpen: (open: boolean) => void;
   setAmazonSellerModalOpen: (open: boolean) => void;
   setTikTokShopSellerModalOpen: (open: boolean) => void;
   setShopeeSellerModalOpen: (open: boolean) => void;
@@ -493,6 +499,9 @@ interface ChatState {
   syncShopify: (request: ShopifySyncRequest) => Promise<ShopifySyncResult>;
   syncKlaviyo: (request: KlaviyoSyncRequest) => Promise<KlaviyoSyncResult>;
   syncQuickBooks: (request: QuickBooksSyncRequest) => Promise<QuickBooksSyncResult>;
+  syncZendesk: (request: ZendeskSyncRequest) => Promise<ZendeskSyncResult>;
+  syncMixpanel: (request: MixpanelSyncRequest) => Promise<MixpanelSyncResult>;
+  syncPostHog: (request: PostHogSyncRequest) => Promise<PostHogSyncResult>;
   syncAmazonSeller: (request: AmazonSellerSyncRequest) => Promise<AmazonSellerSyncResult>;
   syncTikTokShopSeller: (request: TikTokShopSellerSyncRequest) => Promise<TikTokShopSellerSyncResult>;
   syncShopeeSeller: (request: ShopeeSellerSyncRequest) => Promise<ShopeeSellerSyncResult>;
@@ -529,6 +538,7 @@ export interface HubSpotSyncResult {
   message?: string;
   entity_id?: string;
   truncated?: boolean;
+  api_mode?: string;
 }
 
 /** Result of Salesforce sync API */
@@ -579,6 +589,41 @@ export interface KlaviyoSyncResult {
 
 /** Result of QuickBooks sync API */
 export interface QuickBooksSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of Zendesk sync API */
+export interface ZendeskSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+}
+
+/** Result of Mixpanel sync API */
+export interface MixpanelSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of PostHog sync API */
+export interface PostHogSyncResult {
   success: true;
   row_count: number;
   column_count: number;
@@ -1122,6 +1167,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isShopifyModalOpen: false,
   isKlaviyoModalOpen: false,
   isQuickBooksModalOpen: false,
+  isZendeskModalOpen: false,
+  isMixpanelModalOpen: false,
+  isPostHogModalOpen: false,
   isAmazonSellerModalOpen: false,
   isTikTokShopSellerModalOpen: false,
   isShopeeSellerModalOpen: false,
@@ -1264,6 +1312,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setShopifyModalOpen: (open) => set({ isShopifyModalOpen: open }),
   setKlaviyoModalOpen: (open) => set({ isKlaviyoModalOpen: open }),
   setQuickBooksModalOpen: (open) => set({ isQuickBooksModalOpen: open }),
+  setZendeskModalOpen: (open) => set({ isZendeskModalOpen: open }),
+  setMixpanelModalOpen: (open) => set({ isMixpanelModalOpen: open }),
+  setPostHogModalOpen: (open) => set({ isPostHogModalOpen: open }),
   setAmazonSellerModalOpen: (open) => set({ isAmazonSellerModalOpen: open }),
   setTikTokShopSellerModalOpen: (open) => set({ isTikTokShopSellerModalOpen: open }),
   setShopeeSellerModalOpen: (open) => set({ isShopeeSellerModalOpen: open }),
@@ -1508,6 +1559,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           message: response.message,
           entity_id: response.entity_id,
           truncated: response.truncated,
+          api_mode: response.api_mode,
         };
       }
       throw new Error(response.error || 'Failed to sync HubSpot');
@@ -1654,6 +1706,80 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync QuickBooks data');
     } catch (err) {
       console.error('Sync QuickBooks error:', err);
+      throw err;
+    }
+  },
+
+  syncZendesk: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncZendesk(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Zendesk');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Zendesk data');
+    } catch (err) {
+      console.error('Sync Zendesk error:', err);
+      throw err;
+    }
+  },
+
+  syncMixpanel: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncMixpanel(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Mixpanel');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Mixpanel data');
+    } catch (err) {
+      console.error('Sync Mixpanel error:', err);
+      throw err;
+    }
+  },
+
+  syncPostHog: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncPostHog(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('PostHog');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync PostHog data');
+    } catch (err) {
+      console.error('Sync PostHog error:', err);
       throw err;
     }
   },

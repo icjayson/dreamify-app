@@ -1,19 +1,25 @@
 export type ConnectorCategory =
   | "Advertising Platform"
+  | "Marketing & Lifecycle"
   | "Sales & CRM"
   | "E-commerce"
+  | "Customer Support & Success"
   | "Analytics Platform"
+  | "Product Analytics"
   | "Payment & Finance"
   | "Operations & Database";
 
 export type ProductConnectorCategory =
   | "Advertising"
   | "Analytics"
+  | "Product Analytics"
+  | "Marketing"
   | "Spreadsheets"
   | "Databases"
   | "Sales & CRM"
   | "Ecommerce"
   | "Finance"
+  | "Support"
   | "Mobile & Attribution";
 
 export type ConnectorModalTarget =
@@ -30,6 +36,9 @@ export type ConnectorModalTarget =
   | "shopify"
   | "klaviyo"
   | "quickbooks"
+  | "zendesk"
+  | "mixpanel"
+  | "posthog"
   | "amazon_seller"
   | "tiktok_shop_seller"
   | "shopee_seller"
@@ -62,9 +71,12 @@ export interface ConnectorItem {
 
 export const CONNECTOR_CATEGORIES: ConnectorCategory[] = [
   "Advertising Platform",
+  "Marketing & Lifecycle",
   "Analytics Platform",
+  "Product Analytics",
   "Sales & CRM",
   "Operations & Database",
+  "Customer Support & Success",
   "Payment & Finance",
   "E-commerce",
 ];
@@ -105,6 +117,7 @@ export const CONNECTORS: ConnectorItem[] = [
     showOnProductPage: true,
     modalTarget: "google_ads",
   },
+  { name: "LinkedIn Ads", icon: "/logo-favicon.png", isActive: false, category: "Advertising Platform", productDescription: "Analyze LinkedIn campaign performance, B2B audiences, leads, and pipeline influence.", productCategory: "Advertising", showOnProductPage: true },
   { name: "Shopee Ads",  icon: "/shopee-ads.png", isActive: false, category: "Advertising Platform" },
   { name: "Apple Ads",   icon: "/apple-ads.png", isActive: false, category: "Advertising Platform", iconBg: "bg-black" },
   { name: "Unity Ads",   icon: "/unity-ads.png", isActive: false, category: "Advertising Platform", iconBg: "bg-[#222222]" },
@@ -144,6 +157,41 @@ export const CONNECTORS: ConnectorItem[] = [
     modalTarget: "firebase",
   },
 
+  // ── Product Analytics ────────────────────────────────────────────────────────
+  {
+    name: "Mixpanel",
+    icon: "/mixpanel.svg",
+    isActive: false,
+    category: "Product Analytics",
+    connectorKey: "mixpanel",
+    productDescription: "Analyze activation, funnels, retention, cohorts, product events, and product-led revenue.",
+    productCategory: "Product Analytics",
+    showOnProductPage: true,
+    modalTarget: "mixpanel",
+    iconBg: "bg-black",
+  },
+  {
+    name: "PostHog",
+    icon: "/posthog.svg",
+    isActive: false,
+    category: "Product Analytics",
+    connectorKey: "posthog",
+    productDescription: "Analyze events, persons, cohorts, insights, funnels, retention, feature flags, and product-led growth.",
+    productCategory: "Product Analytics",
+    showOnProductPage: true,
+    modalTarget: "posthog",
+    iconBg: "bg-white",
+  },
+  { name: "Amplitude", icon: "/logo-favicon.png", isActive: false, category: "Product Analytics", productDescription: "Analyze behavioral cohorts, funnels, retention, experimentation, and product journeys.", productCategory: "Product Analytics", showOnProductPage: true },
+  { name: "Pendo", icon: "/logo-favicon.png", isActive: false, category: "Product Analytics", productDescription: "Analyze product adoption, guides, accounts, feature usage, and user feedback.", productCategory: "Product Analytics", showOnProductPage: true },
+  { name: "Segment", icon: "/logo-favicon.png", isActive: false, category: "Product Analytics", productDescription: "Bring customer event streams and profile traits into Dreamify analytics.", productCategory: "Product Analytics", showOnProductPage: true },
+
+  // ── Marketing & Lifecycle ───────────────────────────────────────────────────
+  { name: "Customer.io", icon: "/logo-favicon.png", isActive: false, category: "Marketing & Lifecycle", productDescription: "Analyze lifecycle journeys, broadcasts, segments, conversions, and messaging performance.", productCategory: "Marketing", showOnProductPage: true },
+  { name: "Mailchimp", icon: "/logo-favicon.png", isActive: false, category: "Marketing & Lifecycle", productDescription: "Analyze email campaigns, audiences, list growth, engagement, and ecommerce impact.", productCategory: "Marketing", showOnProductPage: true },
+  { name: "Braze", icon: "/logo-favicon.png", isActive: false, category: "Marketing & Lifecycle", productDescription: "Analyze cross-channel campaigns, canvases, cohorts, and customer lifecycle performance.", productCategory: "Marketing", showOnProductPage: true },
+  { name: "Google Search Console", icon: "/logo-favicon.png", isActive: false, category: "Marketing & Lifecycle", productDescription: "Analyze organic search queries, pages, clicks, impressions, CTR, and SEO growth.", productCategory: "Marketing", showOnProductPage: true },
+
   // ── Payment & Finance ─────────────────────────────────────────────────────────
   {
     name: "Stripe",
@@ -169,6 +217,21 @@ export const CONNECTORS: ConnectorItem[] = [
     modalTarget: "quickbooks",
     iconBg: "bg-white",
   },
+
+  // ── Customer Support & Success ────────────────────────────────────────────────
+  {
+    name: "Zendesk",
+    icon: "/zendesk.svg",
+    isActive: false,
+    category: "Customer Support & Success",
+    connectorKey: "zendesk",
+    productDescription: "Analyze tickets, SLA pressure, CSAT, support backlog, users, organizations, and customer health.",
+    productCategory: "Support",
+    showOnProductPage: true,
+    modalTarget: "zendesk",
+    iconBg: "bg-white",
+  },
+  { name: "Intercom", icon: "/logo-favicon.png", isActive: false, category: "Customer Support & Success", productDescription: "Analyze conversations, support workload, customer segments, and success signals.", productCategory: "Support", showOnProductPage: true },
 
   // ── Sales & CRM ─────────────────────────────────────────────────────────────
   {
@@ -205,6 +268,10 @@ export const CONNECTORS: ConnectorItem[] = [
     modalTarget: "pipedrive",
     iconBg: "bg-white",
   },
+  { name: "Close", icon: "/logo-favicon.png", isActive: false, category: "Sales & CRM", productDescription: "Analyze outbound-heavy sales pipelines, calling, email, opportunities, and sales activity.", productCategory: "Sales & CRM", showOnProductPage: true },
+  { name: "Outreach", icon: "/logo-favicon.png", isActive: false, category: "Sales & CRM", productDescription: "Analyze sequences, rep activity, touches, meetings, and outbound conversion.", productCategory: "Sales & CRM", showOnProductPage: true },
+  { name: "Salesloft", icon: "/logo-favicon.png", isActive: false, category: "Sales & CRM", productDescription: "Analyze cadence performance, seller activity, meetings, calls, and pipeline creation.", productCategory: "Sales & CRM", showOnProductPage: true },
+  { name: "Gong", icon: "/logo-favicon.png", isActive: false, category: "Sales & CRM", productDescription: "Analyze call intelligence, deal risk, conversation themes, and sales coaching signals.", productCategory: "Sales & CRM", showOnProductPage: true },
 
   // ── E-commerce ────────────────────────────────────────────────────────────────
   {

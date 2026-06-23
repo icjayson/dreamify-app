@@ -554,7 +554,9 @@ class TestTriggerEndpoint:
     def test_run_sync_dispatches_quickbooks_provider(self):
         from app.api.route_modules.internal import _run_sync
 
-        with patch("app.services.quickbooks_service.quickbooks_service") as mock_quickbooks:
+        with patch(
+            "app.services.quickbooks_service.quickbooks_service"
+        ) as mock_quickbooks:
             mock_quickbooks.sync_scheduled_entity = AsyncMock(
                 return_value={
                     "success": True,
@@ -590,6 +592,138 @@ class TestTriggerEndpoint:
                 "realm_id": "realm_1",
                 "resource_id": "all",
                 "accounting_basis": "Accrual",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_zendesk_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch("app.services.zendesk_service.zendesk_service") as mock_zendesk:
+            mock_zendesk.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 8,
+                    "column_count": 17,
+                    "asset": {"asset_id": "asset_zendesk"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="zendesk",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "support_overview",
+                        "subdomain": "dream",
+                        "resource_id": "all",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 8
+        mock_zendesk.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "support_overview",
+                "subdomain": "dream",
+                "resource_id": "all",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_mixpanel_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch("app.services.mixpanel_service.mixpanel_service") as mock_mixpanel:
+            mock_mixpanel.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 6,
+                    "column_count": 9,
+                    "asset": {"asset_id": "asset_mixpanel"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="mixpanel",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "product_overview",
+                        "project_id": "12345",
+                        "resource_id": "all",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 6
+        mock_mixpanel.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "product_overview",
+                "project_id": "12345",
+                "resource_id": "all",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_posthog_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch("app.services.posthog_service.posthog_service") as mock_posthog:
+            mock_posthog.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 8,
+                    "column_count": 9,
+                    "asset": {"asset_id": "asset_posthog"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="posthog",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "product_overview",
+                        "project_id": "12345",
+                        "resource_id": "all",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 8
+        mock_posthog.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "product_overview",
+                "project_id": "12345",
+                "resource_id": "all",
                 "row_limit": 5000,
             },
             start_date="2026-01-01",
@@ -1060,6 +1194,138 @@ class TestScheduleValidation:
                 "quickbooks", {"accounting_basis": "ModifiedCash"}
             )
 
+    def test_zendesk_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "zendesk",
+            {
+                "report_type": "support_overview",
+                "subdomain": "dream",
+                "resource_id": "all",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "support_overview"
+        assert cfg["subdomain"] == "dream"
+        assert cfg["resource_id"] == "all"
+        assert cfg["entity_id"] == "zendesk:support_overview:dream:all"
+        assert cfg["row_limit"] == 10000
+
+    def test_zendesk_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "zendesk",
+            {"entity_id": "zendesk:tickets:dream:groups"},
+        )
+
+        assert cfg["report_type"] == "tickets"
+        assert cfg["subdomain"] == "dream"
+        assert cfg["resource_id"] == "groups"
+
+    def test_zendesk_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("zendesk", {"report_type": "macros"})
+
+    def test_mixpanel_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "mixpanel",
+            {
+                "report_type": "funnels",
+                "project_id": "12345",
+                "resource_id": "funnel_1",
+                "region": "eu",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "funnels"
+        assert cfg["project_id"] == "12345"
+        assert cfg["resource_id"] == "funnel_1"
+        assert cfg["region"] == "EU"
+        assert cfg["entity_id"] == "mixpanel:funnels:12345:funnel_1"
+        assert cfg["row_limit"] == 10000
+
+    def test_mixpanel_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "mixpanel",
+            {"entity_id": "mixpanel:events:12345:Signup"},
+        )
+
+        assert cfg["report_type"] == "events"
+        assert cfg["project_id"] == "12345"
+        assert cfg["resource_id"] == "Signup"
+
+    def test_mixpanel_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("mixpanel", {"report_type": "jql"})
+
+    def test_mixpanel_config_rejects_unknown_region(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("mixpanel", {"region": "APAC"})
+
+    def test_posthog_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "posthog",
+            {
+                "report_type": "feature_flags",
+                "project_id": "12345",
+                "resource_id": "flag_1",
+                "region": "eu",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "feature_flags"
+        assert cfg["project_id"] == "12345"
+        assert cfg["resource_id"] == "flag_1"
+        assert cfg["region"] == "EU"
+        assert cfg["entity_id"] == "posthog:feature_flags:12345:flag_1"
+        assert cfg["row_limit"] == 10000
+
+    def test_posthog_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "posthog",
+            {"entity_id": "posthog:events:12345:Signup"},
+        )
+
+        assert cfg["report_type"] == "events"
+        assert cfg["project_id"] == "12345"
+        assert cfg["resource_id"] == "Signup"
+
+    def test_posthog_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("posthog", {"report_type": "jql"})
+
+    def test_posthog_config_rejects_unknown_region(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("posthog", {"region": "APAC"})
+
     def test_amazon_seller_config_normalizes_report_entity_and_caps_rows(self):
         from app.api.route_modules.schedules import _normalize_connector_config
 
@@ -1077,8 +1343,7 @@ class TestScheduleValidation:
         assert cfg["seller_id"] == "seller_123"
         assert cfg["marketplace_id"] == "ATVPDKIKX0DER"
         assert (
-            cfg["entity_id"]
-            == "amazon_seller:sales_overview:seller_123:ATVPDKIKX0DER"
+            cfg["entity_id"] == "amazon_seller:sales_overview:seller_123:ATVPDKIKX0DER"
         )
         assert cfg["row_limit"] == 10000
 
@@ -1119,10 +1384,7 @@ class TestScheduleValidation:
         assert cfg["report_type"] == "sales_overview"
         assert cfg["shop_id"] == "shop_123"
         assert cfg["region"] == "US"
-        assert (
-            cfg["entity_id"]
-            == "tiktok_shop_seller:sales_overview:shop_123:US"
-        )
+        assert cfg["entity_id"] == "tiktok_shop_seller:sales_overview:shop_123:US"
         assert cfg["row_limit"] == 10000
 
     def test_tiktok_shop_seller_config_can_parse_entity_id_only(self):
@@ -1182,9 +1444,7 @@ class TestScheduleValidation:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException):
-            _normalize_connector_config(
-                "shopee_seller", {"report_type": "vouchers"}
-            )
+            _normalize_connector_config("shopee_seller", {"report_type": "vouchers"})
 
     def test_lazada_seller_config_normalizes_report_entity_and_caps_rows(self):
         from app.api.route_modules.schedules import _normalize_connector_config

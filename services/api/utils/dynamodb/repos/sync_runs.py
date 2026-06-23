@@ -5,6 +5,7 @@ Schema:
   SK: run_id (String, UUID)
   GSI: user_id_triggered_at_index (PK: user_id, SK: triggered_at)
 """
+
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
@@ -12,7 +13,7 @@ import uuid
 
 from boto3.dynamodb.conditions import Key
 
-from utils.dynamodb.client import get_table
+from utils.dynamodb.client import floats_to_decimal, get_table
 from utils.dynamodb.tables import tables
 
 _RUN_TTL_DAYS = 90
@@ -53,6 +54,7 @@ def complete_run(
     date_range_start: Optional[str] = None,
     date_range_end: Optional[str] = None,
     config_snapshot: Optional[Dict] = None,
+    metric_snapshot: Optional[Dict] = None,
 ) -> None:
     """Mark a run as complete with outcome data."""
     table = get_table(tables.sync_runs)
@@ -71,6 +73,8 @@ def complete_run(
         "date_range_start": date_range_start,
         "date_range_end": date_range_end,
         "config_snapshot": config_snapshot,
+        # Snapshot holds floats; DynamoDB resource API requires Decimal.
+        "metric_snapshot": floats_to_decimal(metric_snapshot),
     }
     for field, value in optional_fields.items():
         if value is not None:

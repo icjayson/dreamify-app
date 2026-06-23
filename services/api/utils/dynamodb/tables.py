@@ -22,6 +22,11 @@ class DynamoTables:
     sync_runs: str = config.aws.dynamodb.SYNC_RUNS_TABLE
     notifications: str = config.aws.dynamodb.NOTIFICATIONS_TABLE
     blog_posts: str = config.aws.dynamodb.BLOG_POSTS_TABLE
+    # Operator Brief ledger. getattr fallback keeps imports working before the
+    # OPERATOR_BRIEFS_TABLE env var / table is provisioned.
+    operator_briefs: str = getattr(
+        config.aws.dynamodb, "OPERATOR_BRIEFS_TABLE", "dreamify-operator-briefs"
+    )
 
 
 tables = DynamoTables()

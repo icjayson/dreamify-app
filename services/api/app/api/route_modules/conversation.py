@@ -258,6 +258,12 @@ def _detect_source_label(contents: List[Dict[str, Any]]) -> str:
         return "Klaviyo"
     if "quickbooks" in raw or "quick books" in raw:
         return "QuickBooks"
+    if "zendesk" in raw:
+        return "Zendesk"
+    if "mixpanel" in raw:
+        return "Mixpanel"
+    if "posthog" in raw or "post hog" in raw:
+        return "PostHog"
     if "amazon_seller" in raw or "amazon seller" in raw or "seller central" in raw:
         return "Amazon Seller"
     if "shopee_seller" in raw or "shopee seller" in raw or "shopee" in raw:
@@ -318,6 +324,12 @@ def _infer_project_topic(prompt: str, source_label: str, filename_topic: str) ->
         return "Lifecycle Marketing"
     if source_label == "QuickBooks":
         return "Finance Overview"
+    if source_label == "Zendesk":
+        return "Support Operations"
+    if source_label == "Mixpanel":
+        return "Product Analytics"
+    if source_label == "PostHog":
+        return "Product Analytics"
     if source_label == "Amazon Seller":
         return "Marketplace Commerce"
     if source_label == "TikTok Shop Seller":

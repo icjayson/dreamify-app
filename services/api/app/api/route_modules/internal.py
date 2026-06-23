@@ -94,6 +94,7 @@ async def execute_schedule(schedule_id: str) -> dict:
     asset_id: Optional[str] = None
     asset_obj: dict = {}
     error_message: Optional[str] = None
+    metric_snapshot: dict = {}
 
     try:
         result = await _run_sync(
@@ -110,6 +111,11 @@ async def execute_schedule(schedule_id: str) -> dict:
         columns = result.get("column_count")
         asset_obj = result.get("asset") or {}
         asset_id = asset_obj.get("asset_id") if asset_obj else None
+
+        # Compact numeric snapshot so the next run can diff against this one.
+        from app.services import operator_brief
+
+        metric_snapshot = operator_brief.extract_snapshot(asset_obj, rows, columns)
 
     except TokenExpiredError as exc:
         status = "token_expired"
@@ -134,6 +140,7 @@ async def execute_schedule(schedule_id: str) -> dict:
         duration_ms=duration_ms,
         date_range_start=start_date,
         date_range_end=end_date,
+        metric_snapshot=metric_snapshot or None,
     )
     schedules_repo.update_last_run(
         user_id=user_id,
@@ -201,6 +208,18 @@ async def execute_schedule(schedule_id: str) -> dict:
                         asset=asset_obj,
                     )
                 )
+            elif action.get("type") == "operator_brief":
+                import asyncio as _asyncio
+
+                _asyncio.ensure_future(
+                    _run_operator_brief(
+                        schedule=schedule,
+                        run_id=run_id,
+                        metric_snapshot=metric_snapshot,
+                        asset_id=asset_id,
+                        action=action,
+                    )
+                )
 
     return {
         "status": status,
@@ -208,6 +227,127 @@ async def execute_schedule(schedule_id: str) -> dict:
         "rows": rows,
         "duration_ms": duration_ms,
     }
+
+
+def _to_float_map(raw: Optional[dict]) -> dict:
+    """Coerce a stored snapshot (DynamoDB Decimals) into plain floats."""
+    out: dict = {}
+    for key, value in (raw or {}).items():
+        try:
+            out[key] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _previous_snapshot(schedule_id: str, current_run_id: str) -> Optional[dict]:
+    """Most recent successful run's metric snapshot, excluding the current run."""
+    for prior in runs_repo.list_runs_for_schedule(schedule_id, limit=5):
+        if prior.get("run_id") == current_run_id:
+            continue
+        if prior.get("status") == "success" and prior.get("metric_snapshot"):
+            return _to_float_map(prior["metric_snapshot"])
+    return None
+
+
+async def _run_operator_brief(
+    schedule: dict,
+    run_id: str,
+    metric_snapshot: dict,
+    asset_id: Optional[str],
+    action: dict,
+) -> None:
+    """Compose and deliver a proactive 'what changed & why' brief. Never raises."""
+    from app.services import operator_brief
+
+    try:
+        schedule_id = schedule["schedule_id"]
+        user_id = schedule["user_id"]
+        provider = schedule["provider"]
+        account_name = schedule.get("account_name", provider)
+        project_id = schedule.get("project_id", "")
+
+        prev = _previous_snapshot(schedule_id, run_id)
+        curr = _to_float_map(metric_snapshot)
+        changes = operator_brief.detect_changes(prev, curr)
+        brief = operator_brief.compose_brief(
+            provider, account_name, changes, is_first_run=prev is None
+        )
+
+        _deliver_operator_brief(
+            user_id=user_id,
+            project_id=project_id,
+            schedule_id=schedule_id,
+            run_id=run_id,
+            provider=provider,
+            asset_id=asset_id,
+            brief=brief,
+            metric_snapshot=curr,
+        )
+        logger.info(
+            "Operator brief sent: schedule=%s severity=%s changes=%d",
+            schedule_id,
+            brief.severity,
+            len(brief.changes),
+        )
+    except Exception as exc:  # an operator brief must never break the sync
+        logger.error("Operator brief failed (non-fatal): %s", exc, exc_info=True)
+
+
+def _deliver_operator_brief(
+    user_id: str,
+    project_id: str,
+    schedule_id: str,
+    run_id: str,
+    provider: str,
+    asset_id: Optional[str],
+    brief,
+    metric_snapshot: dict,
+) -> None:
+    """Log the brief to the ledger and push it to the in-app notification surface."""
+    from utils.dynamodb.repos import operator_briefs as briefs_repo
+
+    serialised_changes = [
+        {
+            "metric": c.metric,
+            "previous": c.previous,
+            "current": c.current,
+            "pct_change": c.pct_change,
+            "severity": c.severity,
+        }
+        for c in brief.changes
+    ]
+
+    # The outcome ledger (the flywheel) — best-effort; table may not be provisioned yet.
+    try:
+        briefs_repo.record_brief(
+            user_id=user_id,
+            schedule_id=schedule_id,
+            run_id=run_id,
+            provider=provider,
+            headline=brief.headline,
+            body=brief.as_text(),
+            severity=brief.severity,
+            recommendation=brief.recommendation,
+            changes=serialised_changes,
+            metric_snapshot=metric_snapshot,
+            project_id=project_id,
+        )
+    except Exception as exc:
+        logger.warning("Operator brief ledger write skipped: %s", exc)
+
+    # Delivery surface that already works end-to-end today.
+    notifications_repo.create_notification(
+        user_id=user_id,
+        notification_type="operator_brief",
+        title=brief.headline,
+        body=brief.as_text(),
+        schedule_id=schedule_id,
+        run_id=run_id,
+        provider=provider,
+        asset_id=asset_id,
+        project_id=project_id,
+    )
 
 
 async def _run_sync(
@@ -379,6 +519,42 @@ async def _run_sync(
             date_range_preset=date_range_preset,
         )
 
+    elif provider == "zendesk":
+        from app.services.zendesk_service import zendesk_service
+
+        return await zendesk_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
+    elif provider == "mixpanel":
+        from app.services.mixpanel_service import mixpanel_service
+
+        return await mixpanel_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
+    elif provider == "posthog":
+        from app.services.posthog_service import posthog_service
+
+        return await posthog_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
     elif provider == "amazon_seller":
         from app.services.amazon_seller_service import amazon_seller_service
 
@@ -461,6 +637,9 @@ _PROVIDER_LABELS: dict = {
     "shopify": "Shopify",
     "klaviyo": "Klaviyo",
     "quickbooks": "QuickBooks",
+    "zendesk": "Zendesk",
+    "mixpanel": "Mixpanel",
+    "posthog": "PostHog",
     "amazon_seller": "Amazon Seller",
     "tiktok_shop_seller": "TikTok Shop Seller",
     "shopee_seller": "Shopee Seller",

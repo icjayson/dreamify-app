@@ -12,11 +12,14 @@ from app.services.amazon_seller_service import amazon_seller_service
 from app.services.integration_service import integration_service
 from app.services.klaviyo_service import klaviyo_service
 from app.services.lazada_seller_service import lazada_seller_service
+from app.services.mixpanel_service import mixpanel_service
+from app.services.posthog_service import posthog_service
 from app.services.quickbooks_service import quickbooks_service
 from app.services.shopify_service import shopify_service
 from app.services.shopee_seller_service import shopee_seller_service
 from app.services.supabase_service import supabase_service
 from app.services.tiktok_shop_seller_service import tiktok_shop_seller_service
+from app.services.zendesk_service import zendesk_service
 from app.api.route_modules.user import AssetResponse, _map_asset, _ensure_project
 
 router = APIRouter(
@@ -101,10 +104,12 @@ class ConnectorSelectedEntity(BaseModel):
     resource_id: Optional[str] = None
     metric_id: Optional[str] = None
     channel: Optional[str] = None
+    project_id: Optional[str] = None
     seller_id: Optional[str] = None
     marketplace_id: Optional[str] = None
     shop_id: Optional[str] = None
     region: Optional[str] = None
+    subdomain: Optional[str] = None
 
 
 class ConnectorOverviewItem(BaseModel):
@@ -2477,7 +2482,9 @@ async def quickbooks_disconnect(user_id: str = Depends(require_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/integration/quickbooks/resources", response_model=QuickBooksResourcesResponse)
+@router.get(
+    "/integration/quickbooks/resources", response_model=QuickBooksResourcesResponse
+)
 async def quickbooks_resources(user_id: str = Depends(require_user)):
     try:
         resources = await quickbooks_service.list_resources(user_id)
@@ -2529,6 +2536,529 @@ async def quickbooks_sync(
     except Exception as e:
         logger.error(f"QuickBooks sync error: {e}")
         return QuickBooksSyncResponse(success=False, error=str(e))
+
+
+# ── Zendesk Support & Customer Success ──────────────────────────────────────
+
+_ZENDESK_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "zendesk_oauth"
+).replace("META_OAUTH_SUCCESS", "ZENDESK_OAUTH_SUCCESS")
+
+_ZENDESK_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "zendesk_oauth"
+).replace("META_OAUTH_ERROR", "ZENDESK_OAUTH_ERROR")
+
+
+class ZendeskAccount(BaseModel):
+    id: str
+    name: str
+    subdomain: str
+
+
+class ZendeskStatusResponse(BaseModel):
+    connected: bool = False
+    subdomain: Optional[str] = None
+    account_name: Optional[str] = None
+    timezone: Optional[str] = None
+    scopes: List[str] = Field(default_factory=list)
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class ZendeskReportResource(BaseModel):
+    report_type: str
+    label: str
+    resource: str
+    default: bool = False
+
+
+class ZendeskResourcesResponse(BaseModel):
+    success: bool
+    reports: List[ZendeskReportResource] = Field(default_factory=list)
+    accounts: List[ZendeskAccount] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class ZendeskSyncRequest(BaseModel):
+    report_type: str = "support_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    resource_id: str = "all"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+
+
+class ZendeskSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/zendesk/oauth/start")
+async def zendesk_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+    subdomain: str = Query(...),
+):
+    """Redirect the popup to the Zendesk OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _ZENDESK_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _ZENDESK_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
+        )
+    try:
+        return RedirectResponse(
+            url=zendesk_service.get_oauth_url(user_id, subdomain=subdomain)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/integration/zendesk/oauth/callback", response_class=HTMLResponse)
+async def zendesk_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Zendesk redirects here after support authorization."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_ZENDESK_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await zendesk_service.handle_oauth_callback(code=code, state=state)
+        return HTMLResponse(_ZENDESK_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Zendesk OAuth callback error: {e}")
+        return HTMLResponse(_ZENDESK_OAUTH_ERROR_HTML.format(error=str(e)))
+
+
+@router.get("/integration/zendesk/status", response_model=ZendeskStatusResponse)
+async def zendesk_status(user_id: str = Depends(require_user)):
+    try:
+        return await zendesk_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Zendesk status error: {e}")
+        return ZendeskStatusResponse(connected=False)
+
+
+@router.delete("/integration/zendesk/disconnect")
+async def zendesk_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await zendesk_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Zendesk disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/zendesk/resources", response_model=ZendeskResourcesResponse)
+async def zendesk_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await zendesk_service.list_resources(user_id)
+        return ZendeskResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return ZendeskResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Zendesk resources error: {e}")
+        return ZendeskResourcesResponse(success=False, error=str(e))
+
+
+@router.post("/integration/zendesk/sync", response_model=ZendeskSyncResponse)
+async def zendesk_sync(
+    request: ZendeskSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await zendesk_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+            resource_id=request.resource_id,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return ZendeskSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return ZendeskSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Zendesk sync error: {e}")
+        return ZendeskSyncResponse(success=False, error=str(e))
+
+
+# ── Mixpanel Product Analytics ──────────────────────────────────────────────
+
+
+class MixpanelProject(BaseModel):
+    id: str
+    name: str
+    region: str = "US"
+
+
+class MixpanelStatusResponse(BaseModel):
+    connected: bool = False
+    project_id: Optional[str] = None
+    region: Optional[str] = "US"
+    account_name: Optional[str] = None
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class MixpanelReportResource(BaseModel):
+    report_type: str
+    label: str
+    resource: str
+    default: bool = False
+
+
+class MixpanelNamedResource(BaseModel):
+    id: str
+    name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class MixpanelConnectRequest(BaseModel):
+    project_id: str = ""
+    service_account_username: str = ""
+    service_account_secret: str = ""
+    region: str = "US"
+    account_name: Optional[str] = None
+
+
+class MixpanelResourcesResponse(BaseModel):
+    success: bool
+    reports: List[MixpanelReportResource] = Field(default_factory=list)
+    projects: List[MixpanelProject] = Field(default_factory=list)
+    events: List[MixpanelNamedResource] = Field(default_factory=list)
+    funnels: List[MixpanelNamedResource] = Field(default_factory=list)
+    cohorts: List[MixpanelNamedResource] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class MixpanelSyncRequest(BaseModel):
+    report_type: str = "product_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    resource_id: str = "all"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+
+
+class MixpanelSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post("/integration/mixpanel/connect", response_model=MixpanelStatusResponse)
+async def mixpanel_connect(
+    request: MixpanelConnectRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        return await mixpanel_service.connect(
+            user_id=user_id,
+            project_id=request.project_id,
+            service_account_username=request.service_account_username,
+            service_account_secret=request.service_account_secret,
+            region=request.region,
+            account_name=request.account_name,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Mixpanel connect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/mixpanel/status", response_model=MixpanelStatusResponse)
+async def mixpanel_status(user_id: str = Depends(require_user)):
+    try:
+        return await mixpanel_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Mixpanel status error: {e}")
+        return MixpanelStatusResponse(connected=False)
+
+
+@router.delete("/integration/mixpanel/disconnect")
+async def mixpanel_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await mixpanel_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Mixpanel disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/mixpanel/resources", response_model=MixpanelResourcesResponse)
+async def mixpanel_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await mixpanel_service.list_resources(user_id)
+        return MixpanelResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return MixpanelResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Mixpanel resources error: {e}")
+        return MixpanelResourcesResponse(success=False, error=str(e))
+
+
+@router.post("/integration/mixpanel/sync", response_model=MixpanelSyncResponse)
+async def mixpanel_sync(
+    request: MixpanelSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await mixpanel_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+            resource_id=request.resource_id,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return MixpanelSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return MixpanelSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Mixpanel sync error: {e}")
+        return MixpanelSyncResponse(success=False, error=str(e))
+
+
+# ── PostHog Product Analytics ───────────────────────────────────────────────
+
+
+class PostHogProject(BaseModel):
+    id: str
+    name: str
+    region: str = "US"
+    base_url: Optional[str] = None
+
+
+class PostHogStatusResponse(BaseModel):
+    connected: bool = False
+    project_id: Optional[str] = None
+    region: Optional[str] = "US"
+    base_url: Optional[str] = None
+    account_name: Optional[str] = None
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class PostHogReportResource(BaseModel):
+    report_type: str
+    label: str
+    resource: str
+    default: bool = False
+
+
+class PostHogNamedResource(BaseModel):
+    id: str
+    name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PostHogConnectRequest(BaseModel):
+    project_id: str = ""
+    personal_api_key: str = ""
+    region: str = "US"
+    base_url: Optional[str] = None
+    account_name: Optional[str] = None
+
+
+class PostHogResourcesResponse(BaseModel):
+    success: bool
+    reports: List[PostHogReportResource] = Field(default_factory=list)
+    projects: List[PostHogProject] = Field(default_factory=list)
+    events: List[PostHogNamedResource] = Field(default_factory=list)
+    properties: List[PostHogNamedResource] = Field(default_factory=list)
+    insights: List[PostHogNamedResource] = Field(default_factory=list)
+    cohorts: List[PostHogNamedResource] = Field(default_factory=list)
+    feature_flags: List[PostHogNamedResource] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class PostHogSyncRequest(BaseModel):
+    report_type: str = "product_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    resource_id: str = "all"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+
+
+class PostHogSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post("/integration/posthog/connect", response_model=PostHogStatusResponse)
+async def posthog_connect(
+    request: PostHogConnectRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        return await posthog_service.connect(
+            user_id=user_id,
+            project_id=request.project_id,
+            personal_api_key=request.personal_api_key,
+            region=request.region,
+            base_url=request.base_url,
+            account_name=request.account_name,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PostHog connect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/posthog/status", response_model=PostHogStatusResponse)
+async def posthog_status(user_id: str = Depends(require_user)):
+    try:
+        return await posthog_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"PostHog status error: {e}")
+        return PostHogStatusResponse(connected=False)
+
+
+@router.delete("/integration/posthog/disconnect")
+async def posthog_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await posthog_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"PostHog disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/posthog/resources", response_model=PostHogResourcesResponse)
+async def posthog_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await posthog_service.list_resources(user_id)
+        return PostHogResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return PostHogResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"PostHog resources error: {e}")
+        return PostHogResourcesResponse(success=False, error=str(e))
+
+
+@router.post("/integration/posthog/sync", response_model=PostHogSyncResponse)
+async def posthog_sync(
+    request: PostHogSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await posthog_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+            resource_id=request.resource_id,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return PostHogSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return PostHogSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"PostHog sync error: {e}")
+        return PostHogSyncResponse(success=False, error=str(e))
 
 
 # ── Amazon Seller Central ───────────────────────────────────────────────────
@@ -2808,16 +3338,12 @@ async def tiktok_shop_seller_oauth_start(
         bearer = f"Bearer {token}"
     if not bearer:
         return HTMLResponse(
-            _TIKTOK_SHOP_OAUTH_ERROR_HTML.format(
-                error="Unauthorized — please sign in."
-            )
+            _TIKTOK_SHOP_OAUTH_ERROR_HTML.format(error="Unauthorized — please sign in.")
         )
     user_id = _verify_bearer(bearer)
     if not user_id:
         return HTMLResponse(
-            _TIKTOK_SHOP_OAUTH_ERROR_HTML.format(
-                error="Unauthorized — invalid token."
-            )
+            _TIKTOK_SHOP_OAUTH_ERROR_HTML.format(error="Unauthorized — invalid token.")
         )
     try:
         return RedirectResponse(
@@ -2827,7 +3353,9 @@ async def tiktok_shop_seller_oauth_start(
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.get("/integration/tiktok-shop-seller/oauth/callback", response_class=HTMLResponse)
+@router.get(
+    "/integration/tiktok-shop-seller/oauth/callback", response_class=HTMLResponse
+)
 async def tiktok_shop_seller_oauth_callback(
     code: Optional[str] = Query(default=None),
     auth_code: Optional[str] = Query(default=None),

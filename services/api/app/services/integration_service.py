@@ -2940,6 +2940,9 @@ class IntegrationService:
             "shopify": "shopify",
             "klaviyo": "klaviyo",
             "quickbooks": "quickbooks",
+            "zendesk": "zendesk",
+            "mixpanel": "mixpanel",
+            "posthog": "posthog",
             "amazon_seller": "amazon_seller",
             "tiktok_shop_seller": "tiktok_shop_seller",
             "shopee_seller": "shopee_seller",
@@ -2972,6 +2975,9 @@ class IntegrationService:
             "shopify": "integration_shopify",
             "klaviyo": "integration_klaviyo",
             "quickbooks": "integration_quickbooks",
+            "zendesk": "integration_zendesk",
+            "mixpanel": "integration_mixpanel",
+            "posthog": "integration_posthog",
             "amazon_seller": "integration_amazon_seller",
             "tiktok_shop_seller": "integration_tiktok_shop_seller",
             "shopee_seller": "integration_shopee_seller",
@@ -3045,6 +3051,30 @@ class IntegrationService:
             realm_id = connector_config.get("realm_id") or "all"
             resource_id = connector_config.get("resource_id") or "all"
             return f"quickbooks:{report_type}:{realm_id}:{resource_id}"
+        if provider == "zendesk":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "support_overview"
+            subdomain = connector_config.get("subdomain") or "all"
+            resource_id = connector_config.get("resource_id") or "all"
+            return f"zendesk:{report_type}:{subdomain}:{resource_id}"
+        if provider == "mixpanel":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "product_overview"
+            project_id = connector_config.get("project_id") or "all"
+            resource_id = connector_config.get("resource_id") or "all"
+            return f"mixpanel:{report_type}:{project_id}:{resource_id}"
+        if provider == "posthog":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "product_overview"
+            project_id = connector_config.get("project_id") or "all"
+            resource_id = connector_config.get("resource_id") or "all"
+            return f"posthog:{report_type}:{project_id}:{resource_id}"
         if provider == "amazon_seller":
             entity_id = connector_config.get("entity_id")
             if entity_id:
@@ -3361,7 +3391,9 @@ class IntegrationService:
             report_type = str(connector_config.get("report_type") or "finance_overview")
             realm_id = str(connector_config.get("realm_id") or "all")
             resource_id = str(connector_config.get("resource_id") or "all")
-            accounting_basis = str(connector_config.get("accounting_basis") or "Accrual")
+            accounting_basis = str(
+                connector_config.get("accounting_basis") or "Accrual"
+            )
             entity_id = self._extract_entity_id_from_schedule(
                 provider, connector_config
             )
@@ -3382,6 +3414,92 @@ class IntegrationService:
                         "resource_id": resource_id,
                         "accounting_basis": accounting_basis,
                         "connector_key": "quickbooks",
+                    }
+                ]
+
+        if provider == "zendesk":
+            report_type = str(connector_config.get("report_type") or "support_overview")
+            subdomain = str(connector_config.get("subdomain") or "all")
+            resource_id = str(connector_config.get("resource_id") or "all")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "subdomain": subdomain,
+                        "report_type": report_type,
+                        "resource_id": resource_id,
+                        "connector_key": "zendesk",
+                    }
+                ]
+
+        if provider == "mixpanel":
+            report_type = str(connector_config.get("report_type") or "product_overview")
+            project_id = str(connector_config.get("project_id") or "all")
+            resource_id = str(connector_config.get("resource_id") or "all")
+            region = str(connector_config.get("region") or "US")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "account_id": project_id,
+                        "project_id": project_id,
+                        "region": region,
+                        "report_type": report_type,
+                        "resource_id": resource_id,
+                        "connector_key": "mixpanel",
+                    }
+                ]
+
+        if provider == "posthog":
+            report_type = str(connector_config.get("report_type") or "product_overview")
+            project_id = str(connector_config.get("project_id") or "all")
+            resource_id = str(connector_config.get("resource_id") or "all")
+            region = str(connector_config.get("region") or "US")
+            base_url = str(connector_config.get("base_url") or "")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "account_id": project_id,
+                        "project_id": project_id,
+                        "region": region,
+                        "base_url": base_url,
+                        "report_type": report_type,
+                        "resource_id": resource_id,
+                        "connector_key": "posthog",
                     }
                 ]
 
@@ -3594,6 +3712,9 @@ class IntegrationService:
             "shopify": [],
             "klaviyo": [],
             "quickbooks": [],
+            "zendesk": [],
+            "mixpanel": [],
+            "posthog": [],
             "amazon_seller": [],
             "tiktok_shop_seller": [],
             "shopee_seller": [],
@@ -3641,6 +3762,21 @@ class IntegrationService:
 
         status_map["quickbooks"] = bool(
             (await quickbooks_service.get_connection_status(user_id)).get("connected")
+        )
+        from app.services.zendesk_service import zendesk_service
+
+        status_map["zendesk"] = bool(
+            (await zendesk_service.get_connection_status(user_id)).get("connected")
+        )
+        from app.services.mixpanel_service import mixpanel_service
+
+        status_map["mixpanel"] = bool(
+            (await mixpanel_service.get_connection_status(user_id)).get("connected")
+        )
+        from app.services.posthog_service import posthog_service
+
+        status_map["posthog"] = bool(
+            (await posthog_service.get_connection_status(user_id)).get("connected")
         )
         from app.services.amazon_seller_service import amazon_seller_service
 
@@ -3712,6 +3848,9 @@ class IntegrationService:
             "shopify": "shopify",
             "klaviyo": "klaviyo",
             "quickbooks": "quickbooks",
+            "zendesk": "zendesk",
+            "mixpanel": "mixpanel",
+            "posthog": "posthog",
             "amazon_seller": "amazon_seller",
             "tiktok_shop_seller": "tiktok_shop_seller",
             "shopee_seller": "shopee_seller",
@@ -3755,6 +3894,9 @@ class IntegrationService:
             "shopify": "shopify",
             "klaviyo": "klaviyo",
             "quickbooks": "quickbooks",
+            "zendesk": "zendesk",
+            "mixpanel": "mixpanel",
+            "posthog": "posthog",
             "amazon_seller": "amazon_seller",
             "tiktok_shop_seller": "tiktok_shop_seller",
             "shopee_seller": "shopee_seller",
@@ -3802,6 +3944,9 @@ class IntegrationService:
             {"connector_key": "shopify", "display_name": "Shopify"},
             {"connector_key": "klaviyo", "display_name": "Klaviyo"},
             {"connector_key": "quickbooks", "display_name": "QuickBooks"},
+            {"connector_key": "zendesk", "display_name": "Zendesk"},
+            {"connector_key": "mixpanel", "display_name": "Mixpanel"},
+            {"connector_key": "posthog", "display_name": "PostHog"},
             {"connector_key": "amazon_seller", "display_name": "Amazon Seller"},
             {
                 "connector_key": "tiktok_shop_seller",
@@ -4353,6 +4498,9 @@ class IntegrationService:
             "shopify",
             "klaviyo",
             "quickbooks",
+            "zendesk",
+            "mixpanel",
+            "posthog",
             "amazon_seller",
             "tiktok_shop_seller",
             "shopee_seller",
@@ -4527,6 +4675,33 @@ class IntegrationService:
                     project_id=project_id,
                     overrides={**resolved_cfg, **overrides},
                 )
+            elif connector_key == "zendesk":
+                from app.services.zendesk_service import zendesk_service
+
+                result = await zendesk_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
+            elif connector_key == "mixpanel":
+                from app.services.mixpanel_service import mixpanel_service
+
+                result = await mixpanel_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
+            elif connector_key == "posthog":
+                from app.services.posthog_service import posthog_service
+
+                result = await posthog_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
             elif connector_key == "amazon_seller":
                 from app.services.amazon_seller_service import amazon_seller_service
 
@@ -4618,6 +4793,9 @@ class IntegrationService:
             "shopify",
             "klaviyo",
             "quickbooks",
+            "zendesk",
+            "mixpanel",
+            "posthog",
             "amazon_seller",
             "tiktok_shop_seller",
             "shopee_seller",

@@ -12,6 +12,7 @@ from app.dependencies.auth import require_user
 from app.services import scheduler_service
 from utils.dynamodb.repos import sync_schedules as schedules_repo
 from utils.dynamodb.repos import sync_runs as runs_repo
+from utils.dynamodb.repos import operator_briefs as briefs_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["schedules"])
@@ -21,7 +22,7 @@ router = APIRouter(tags=["schedules"])
 
 
 class CreateScheduleRequest(BaseModel):
-    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | shopify | klaviyo | quickbooks | amazon_seller | tiktok_shop_seller | shopee_seller | lazada_seller | supabase | warehouse
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | shopify | klaviyo | quickbooks | zendesk | mixpanel | posthog | amazon_seller | tiktok_shop_seller | shopee_seller | lazada_seller | supabase | warehouse
     connector_config: Dict[str, Any]
     project_id: str
     account_name: str = ""
@@ -61,6 +62,9 @@ _VALID_PROVIDERS = {
     "shopify",
     "klaviyo",
     "quickbooks",
+    "zendesk",
+    "mixpanel",
+    "posthog",
     "amazon_seller",
     "tiktok_shop_seller",
     "shopee_seller",
@@ -120,6 +124,35 @@ _VALID_QUICKBOOKS_REPORT_TYPES = {
     "vendors",
     "items",
     "accounts",
+}
+_VALID_ZENDESK_REPORT_TYPES = {
+    "support_overview",
+    "tickets",
+    "ticket_events",
+    "users",
+    "organizations",
+    "groups",
+    "satisfaction_ratings",
+}
+_VALID_MIXPANEL_REPORT_TYPES = {
+    "product_overview",
+    "events",
+    "event_breakdown",
+    "funnels",
+    "retention",
+    "cohorts",
+    "users",
+}
+_VALID_POSTHOG_REPORT_TYPES = {
+    "product_overview",
+    "events",
+    "event_breakdown",
+    "insights",
+    "funnels",
+    "retention",
+    "cohorts",
+    "persons",
+    "feature_flags",
 }
 _VALID_AMAZON_SELLER_REPORT_TYPES = {
     "sales_overview",
@@ -410,6 +443,128 @@ def _normalize_connector_config(
                 cfg.pop("max_bytes", None)
         cfg["entity_id"] = str(
             entity_id or f"quickbooks:{report_type}:{realm_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "zendesk":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "support_overview"
+        subdomain = str(cfg.get("subdomain") or "all").strip().lower() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "zendesk":
+                report_type = raw_report_type or parts[1] or report_type
+                subdomain = subdomain if subdomain != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_ZENDESK_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be support_overview, tickets, ticket_events, users, organizations, groups, or satisfaction_ratings",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["subdomain"] = subdomain
+        cfg["resource_id"] = resource_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"zendesk:{report_type}:{subdomain}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "mixpanel":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "product_overview"
+        project_id = str(cfg.get("project_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "mixpanel":
+                report_type = raw_report_type or parts[1] or report_type
+                project_id = project_id if project_id != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_MIXPANEL_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be product_overview, events, event_breakdown, funnels, retention, cohorts, or users",
+            )
+        region = str(cfg.get("region") or "US").strip().upper() or "US"
+        if region not in {"US", "EU"}:
+            raise HTTPException(400, "connector_config.region must be US or EU")
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["project_id"] = project_id
+        cfg["resource_id"] = resource_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"mixpanel:{report_type}:{project_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "posthog":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "product_overview"
+        project_id = str(cfg.get("project_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "posthog":
+                report_type = raw_report_type or parts[1] or report_type
+                project_id = project_id if project_id != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_POSTHOG_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be product_overview, events, event_breakdown, insights, funnels, retention, cohorts, persons, or feature_flags",
+            )
+        region = str(cfg.get("region") or "US").strip().upper() or "US"
+        if region not in {"US", "EU"}:
+            raise HTTPException(400, "connector_config.region must be US or EU")
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["project_id"] = project_id
+        cfg["resource_id"] = resource_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"posthog:{report_type}:{project_id}:{resource_id}"
         )
         cfg["entity_name"] = str(
             cfg.get("entity_name") or report_type.replace("_", " ").title()
@@ -943,6 +1098,30 @@ async def get_schedule_runs(
     if not existing:
         raise HTTPException(404, "Schedule not found")
     return runs_repo.list_runs_for_schedule(schedule_id, limit=min(limit, 100))
+
+
+@router.get("/schedules/{schedule_id}/briefs")
+async def get_schedule_briefs(
+    schedule_id: str,
+    limit: int = 20,
+    user_id: str = Depends(require_user),
+) -> List[Dict]:
+    """Return recent Operator Briefs for a specific schedule, newest first."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+    return briefs_repo.list_briefs_for_schedule(
+        user_id, schedule_id, limit=min(limit, 100)
+    )
+
+
+@router.get("/operator-briefs")
+async def get_operator_briefs(
+    limit: int = 50,
+    user_id: str = Depends(require_user),
+) -> List[Dict]:
+    """Return recent Operator Briefs across all schedules for the current user."""
+    return briefs_repo.list_briefs_for_user(user_id, limit=min(limit, 100))
 
 
 @router.get("/sync-runs")

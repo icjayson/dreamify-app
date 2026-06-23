@@ -114,6 +114,27 @@ def clear_pending_assets(platform_workspace_id: str) -> None:
     )
 
 
+def set_workspace_pending_collect(platform_workspace_id: str, state: Dict) -> None:
+    """Store the 2-step collect-flow state (awaiting_file / awaiting_prompt) on a
+    chat workspace. Lives alongside ``pending_assets`` so the file-gathering and
+    the prompt step share one record (Zalo has a single DM thread per workspace).
+    """
+    table = get_table(tables.chat_workspaces)
+    table.update_item(
+        Key={"platform_workspace_id": platform_workspace_id},
+        UpdateExpression="SET pending_collect = :s",
+        ExpressionAttributeValues={":s": state},
+    )
+
+
+def clear_workspace_pending_collect(platform_workspace_id: str) -> None:
+    table = get_table(tables.chat_workspaces)
+    table.update_item(
+        Key={"platform_workspace_id": platform_workspace_id},
+        UpdateExpression="REMOVE pending_collect",
+    )
+
+
 def cleanup_expired_pending(
     platform: str, ttl_seconds: int, user_id: Optional[str] = None
 ) -> int:

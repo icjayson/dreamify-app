@@ -39,8 +39,12 @@ from app.services.chat_platform_service import (
     handle_whatsapp_clarification_reply,
     handle_whatsapp_query,
     handle_zalo_clarification_reply,
+    handle_zalo_collect_step,
     handle_zalo_query,
+    build_collect_state,
     has_pending_clarification,
+    has_pending_collect,
+    is_zalo_collect_trigger,
 )
 from app.services.slack_service import decrypt_token, encrypt_token
 from utils.config import config
@@ -1148,42 +1152,92 @@ async def zalo_webhook(request: Request, background_tasks: BackgroundTasks):
             background_tasks.add_task(_send_zalo_start_hint, chat_id)
         return {"ok": True}
 
-    # Zalo Bot Platform delivers files (CSV/PDF/etc.) as `message.unsupported.received`
-    # with no downloadable reference. We mint a one-tap upload URL so the user can
-    # attach the file via the web — it queues onto the workspace and the next text
-    # query will pull it into the conversation.
-    if event_name == "message.unsupported.received":
-        platform_workspace_id = f"zalo:{chat_id}"
-        if chat_platform_repo.get_workspace(platform_workspace_id):
-            background_tasks.add_task(_handle_zalo_unsupported_file, chat_id)
+    platform_workspace_id = f"zalo:{chat_id}"
+    workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+    zalo_file_ids = _extract_zalo_image_file_ids(message)
+    is_unsupported = event_name == "message.unsupported.received"
+    thread_key = f"{chat_id}#0"
+
+    # Unregistered chat — only nudge on a real message.
+    if not workspace:
+        if text or zalo_file_ids or is_unsupported:
+            logger.warning(
+                "Zalo message from unregistered chat: %s", platform_workspace_id
+            )
+            background_tasks.add_task(_send_zalo_unregistered_hint, chat_id)
         return {"ok": True}
 
-    # Dispatch based on actual payload shape, not event_name strings — Zalo's
-    # event naming has shifted (`text_message` → `user_send_text` →
-    # `message.text.received`) and gating on names breaks silently each time.
-    # Any message-family event carrying text or an image is a query.
-    zalo_file_ids = _extract_zalo_image_file_ids(message)
+    # Document (CSV/PDF/etc.) — Zalo delivers it as `message.unsupported.received`
+    # with no downloadable reference. Phase 0: log the raw payload so we can
+    # confirm whether a downloadable handle is actually present. Then mint the
+    # web-upload URL (which also enters the 2-step flow at `awaiting_file`).
+    if is_unsupported:
+        try:
+            logger.info(
+                "Zalo unsupported payload probe: %s",
+                json.dumps(
+                    {
+                        k: message.get(k)
+                        for k in (
+                            "file_id", "document", "file", "attachment",
+                            "doc", "photo", "image", "sticker", "type",
+                        )
+                    },
+                    default=str,
+                ),
+            )
+            logger.info(
+                "Zalo unsupported FULL message: %s",
+                json.dumps(message, default=str)[:2000],
+            )
+        except Exception:
+            pass
+        background_tasks.add_task(_handle_zalo_unsupported_file, chat_id)
+        return {"ok": True}
+
     if not text and not zalo_file_ids:
         return {"ok": True}
 
-    platform_workspace_id = f"zalo:{chat_id}"
-    workspace = chat_platform_repo.get_workspace(platform_workspace_id)
-    if not workspace:
-        logger.warning("Zalo message from unregistered chat: %s", platform_workspace_id)
-        background_tasks.add_task(_send_zalo_unregistered_hint, chat_id)
+    # 1) An active 2-step collect flow takes precedence over everything else.
+    if has_pending_collect(platform_workspace_id):
+        background_tasks.add_task(
+            handle_zalo_collect_step,
+            platform_workspace_id=platform_workspace_id,
+            chat_id=chat_id,
+            text=text,
+            zalo_file_ids=zalo_file_ids,
+            start=False,
+        )
         return {"ok": True}
 
-    query = text or "(image attachment)"
-    thread_key = f"{chat_id}#0"
+    # 2) Pending clarification reply (existing behaviour).
     if text and has_pending_clarification(platform_workspace_id, thread_key):
         background_tasks.add_task(
             handle_zalo_clarification_reply,
-            query=query,
+            query=text,
             platform_workspace_id=platform_workspace_id,
             chat_id=chat_id,
         )
         return {"ok": True}
 
+    # 3) Enter the 2-step collect flow:
+    #    (a) auto — a file arrives with no accompanying prompt; or
+    #    (b) explicit — user types exactly a start keyword (e.g. "phân tích").
+    if (zalo_file_ids and not text) or (
+        text and not zalo_file_ids and is_zalo_collect_trigger(text)
+    ):
+        background_tasks.add_task(
+            handle_zalo_collect_step,
+            platform_workspace_id=platform_workspace_id,
+            chat_id=chat_id,
+            text=text,
+            zalo_file_ids=zalo_file_ids,
+            start=True,
+        )
+        return {"ok": True}
+
+    # 4) Default — image+caption in one message, or a plain text query.
+    query = text or "(image attachment)"
     background_tasks.add_task(
         handle_zalo_query,
         query=query,
@@ -1268,13 +1322,22 @@ def _handle_zalo_unsupported_file(chat_id: Any) -> None:
         target_workspace_id=platform_workspace_id,
     )
 
+    # Enter the 2-step collect flow at `awaiting_file`; the upload endpoint
+    # advances it to `awaiting_prompt` once the file lands.
+    try:
+        chat_platform_repo.set_workspace_pending_collect(
+            platform_workspace_id, build_collect_state("awaiting_file")
+        )
+    except Exception as exc:
+        logger.warning("Failed to set Zalo collect state: %s", exc)
+
     upload_url = f"{_zalo_upload_app_url()}/zalo-upload/{token}"
     try:
         zalo_service.send_message(
             chat_id,
-            "📎 I noticed an attachment. Zalo bots can't receive files directly,\n"
-            f"so please upload it here (expires in 30 min):\n\n{upload_url}\n\n"
-            "I'll attach it to your next message.",
+            "📎 Bot Zalo chưa nhận file trực tiếp được, nên bạn upload file tại đây "
+            f"(hết hạn sau 30 phút):\n\n{upload_url}\n\n"
+            "Upload xong mình sẽ hỏi câu hỏi bạn muốn phân tích.",
         )
     except Exception as exc:
         logger.warning("Failed to send Zalo upload URL: %s", exc)
@@ -1406,13 +1469,22 @@ async def zalo_upload_file(token: str, request: Request):
     # Token is single-use
     chat_platform_repo.delete_workspace(f"zalo_upload:{token}")
 
+    # If a 2-step collect flow is waiting on this file, advance it to the
+    # prompt step so the user's next message is treated as the question.
+    try:
+        chat_platform_repo.set_workspace_pending_collect(
+            target_id, build_collect_state("awaiting_prompt")
+        )
+    except Exception as exc:
+        logger.warning("Failed to advance Zalo collect state: %s", exc)
+
     # Reach the user back in chat
     chat_id = target_id.split(":", 1)[1] if ":" in target_id else target_id
     try:
         zalo_service.send_message(
             chat_id,
-            f"✅ Got '{filename}' ({len(file_bytes)/1024:.1f} KB).\n"
-            "Now ask me what you'd like to know about it.",
+            f"✅ Đã nhận '{filename}' ({len(file_bytes)/1024:.1f} KB).\n"
+            "Giờ gửi câu hỏi bạn muốn phân tích về dữ liệu này nhé.",
         )
     except Exception as exc:
         logger.warning("Failed to ack Zalo upload: %s", exc)

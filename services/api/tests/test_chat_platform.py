@@ -2581,3 +2581,93 @@ class TestChartRenderingBranches:
             assert is_chart_rendering_enabled() is False
         with patch.dict(os.environ, {"ENABLE_CHART_RENDERING": "true"}):
             assert is_chart_rendering_enabled() is True
+
+
+class TestZaloCollectFlow:
+    """Webhook dispatch for the Zalo 2-step collect flow (file → prompt)."""
+
+    def _run(self, coro):
+        import asyncio
+
+        return asyncio.run(coro)
+
+    def _req(self, message, event_name=None):
+        from unittest.mock import AsyncMock
+
+        body = {"message": message}
+        if event_name:
+            body["event_name"] = event_name
+        req = MagicMock()
+        req.json = AsyncMock(return_value=body)
+        req.headers = {}
+        return req
+
+    def _msg(self, text="", file_id=None):
+        m = {
+            "message_id": "m",
+            "chat": {"id": "100", "chat_type": "PRIVATE"},
+            "from": {"id": "42", "display_name": "Alice"},
+        }
+        if text:
+            m["text"] = text
+        if file_id:
+            m["file_id"] = file_id
+        return m
+
+    def _dispatch(self, req, active_collect=False):
+        from fastapi import BackgroundTasks
+        from app.api.route_modules import chat_platform
+
+        bg = MagicMock(spec=BackgroundTasks)
+        with patch.object(chat_platform, "_verify_zalo_webhook", return_value=True), patch.object(
+            chat_platform, "has_pending_clarification", return_value=False
+        ), patch.object(
+            chat_platform, "has_pending_collect", return_value=active_collect
+        ), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value={
+                "platform_workspace_id": "zalo:100",
+                "user_id": "u1",
+                "project_id": "p1",
+            },
+        ):
+            self._run(chat_platform.zalo_webhook(req, bg))
+        return bg
+
+    def test_image_first_enters_collect(self):
+        bg = self._dispatch(self._req(self._msg(file_id="F1")))
+        bg.add_task.assert_called_once()
+        assert bg.add_task.call_args.args[0].__name__ == "handle_zalo_collect_step"
+        assert bg.add_task.call_args.kwargs["start"] is True
+
+    def test_keyword_enters_collect(self):
+        bg = self._dispatch(self._req(self._msg(text="phân tích")))
+        assert bg.add_task.call_args.args[0].__name__ == "handle_zalo_collect_step"
+        assert bg.add_task.call_args.kwargs["start"] is True
+
+    def test_active_collect_routes_to_step(self):
+        bg = self._dispatch(self._req(self._msg(text="doanh thu?")), active_collect=True)
+        assert bg.add_task.call_args.args[0].__name__ == "handle_zalo_collect_step"
+        assert bg.add_task.call_args.kwargs["start"] is False
+
+    def test_plain_text_query_bypasses_collect(self):
+        bg = self._dispatch(self._req(self._msg(text="doanh thu hôm nay bao nhiêu?")))
+        assert bg.add_task.call_args.args[0].__name__ == "handle_zalo_query"
+
+    def test_image_with_caption_bypasses_collect(self):
+        bg = self._dispatch(self._req(self._msg(text="phân tích ảnh này", file_id="F3")))
+        assert bg.add_task.call_args.args[0].__name__ == "handle_zalo_query"
+
+    def test_unsupported_document_routes_to_upload(self):
+        from app.api.route_modules import chat_platform
+
+        req = self._req(self._msg(), event_name="message.unsupported.received")
+        from fastapi import BackgroundTasks
+
+        bg = MagicMock(spec=BackgroundTasks)
+        with patch.object(chat_platform, "_verify_zalo_webhook", return_value=True), patch(
+            "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
+            return_value={"platform_workspace_id": "zalo:100", "user_id": "u1", "project_id": "p1"},
+        ):
+            self._run(chat_platform.zalo_webhook(req, bg))
+        assert bg.add_task.call_args.args[0].__name__ == "_handle_zalo_unsupported_file"

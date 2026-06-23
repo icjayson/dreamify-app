@@ -363,6 +363,62 @@ def _clear_pending(platform_workspace_id: str, thread_key: str) -> None:
     )
 
 
+# ── Zalo 2-step collect flow (file → prompt) ──────────────────────────────────
+#
+# Zalo delivers files and text as separate messages, so we gather files into the
+# workspace's ``pending_assets`` across turns, guided by a thin state machine
+# (awaiting_file → awaiting_prompt) stored on the workspace row. When the prompt
+# arrives we delegate to the normal ``handle_zalo_query`` which drains the
+# pending assets and runs Morpheus.
+
+COLLECT_TTL_S = 30 * 60  # 30 minutes (matches the web-upload token TTL)
+
+_ZALO_CANCEL_WORDS = {
+    "huỷ", "hủy", "huy", "thoát", "thoat", "cancel", "/cancel", "stop",
+}
+_ZALO_COLLECT_TRIGGER_WORDS = {
+    "phân tích", "phan tich", "analyze", "analyse", "/analyze", "/analyse",
+}
+
+
+def build_collect_state(status: str) -> Dict[str, Any]:
+    """status ∈ {"awaiting_file", "awaiting_prompt"}."""
+    return {
+        "status": status,
+        "created_at": _now_iso(),
+        "expires_at": int(time.time()) + COLLECT_TTL_S,
+    }
+
+
+def _is_collect_active(state: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(state, dict):
+        return False
+    if state.get("status") not in {"awaiting_file", "awaiting_prompt"}:
+        return False
+    expires_at = int(state.get("expires_at") or 0)
+    return not expires_at or expires_at > int(time.time())
+
+
+def _get_active_collect(platform_workspace_id: str) -> Optional[Dict[str, Any]]:
+    workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+    state = (workspace or {}).get("pending_collect")
+    if state and not _is_collect_active(state):
+        chat_platform_repo.clear_workspace_pending_collect(platform_workspace_id)
+        return None
+    return state if _is_collect_active(state) else None
+
+
+def has_pending_collect(platform_workspace_id: str) -> bool:
+    return _get_active_collect(platform_workspace_id) is not None
+
+
+def is_zalo_collect_trigger(text: str) -> bool:
+    """True when ``text`` is exactly a collect-flow start keyword (e.g. just
+    "phân tích"). Exact-match only, so a real question like
+    "phân tích doanh thu tháng này" still goes straight to the query handler."""
+    return (text or "").strip().lower() in _ZALO_COLLECT_TRIGGER_WORDS
+
+
 def _encode_callback_value(payload: Dict[str, Any]) -> str:
     raw = json.dumps(payload, separators=(",", ":")).encode()
     encoded = base64.urlsafe_b64encode(raw).decode().rstrip("=")
@@ -2787,6 +2843,179 @@ def _download_and_attach_zalo_files(
     conversation["updated_at"] = _now_iso()
     save_conversation(bucket, keys["primary"], conversation)
     save_conversation(bucket, keys["backup"], conversation)
+
+
+def _ingest_zalo_files_to_pending(file_ids: list, workspace: Dict[str, Any]) -> int:
+    """Download Zalo file(s) via getFile and queue them onto the workspace's
+    ``pending_assets`` (so the next prompt drains them through handle_zalo_query).
+
+    Mirrors the download path of ``_download_and_attach_zalo_files`` but targets
+    pending_assets instead of a conversation — used by the 2-step collect flow.
+    Returns the number of files successfully ingested.
+    """
+    from app.services import zalo_service
+
+    user_id = workspace["user_id"]
+    project_id = workspace["project_id"]
+    platform_workspace_id = workspace["platform_workspace_id"]
+    bucket = config.aws.s3.USER_ASSETS_BUCKET
+    ingested = 0
+
+    for file_id in file_ids:
+        info = zalo_service.get_file(file_id)
+        if not info or not info.get("ok"):
+            logger.warning("Collect: failed to resolve Zalo file %s", file_id)
+            continue
+        result = info.get("result", {}) or {}
+        download_url = result.get("file_url") or result.get("file_path") or ""
+        if not download_url:
+            logger.warning("Collect: Zalo getFile returned no URL for %s", file_id)
+            continue
+        filename = (download_url.rsplit("/", 1)[-1] or f"{file_id}.bin").split("?")[0]
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+
+        try:
+            resp = requests.get(download_url, timeout=20)
+            if resp.status_code != 200:
+                logger.error("Collect: download %s HTTP %s", file_id, resp.status_code)
+                continue
+            file_bytes = resp.content
+        except Exception as exc:
+            logger.error("Collect: error downloading %s: %s", file_id, exc)
+            continue
+        if len(file_bytes) > ZALO_FILE_SIZE_LIMIT:
+            logger.warning("Collect: %s exceeds 5 MB, skipping", filename)
+            continue
+
+        asset_id = str(uuid.uuid4())
+        s3_key = (
+            f"users/{user_id}/projects/{project_id}/assets/{asset_id}/{asset_id}.{ext}"
+        )
+        try:
+            s3 = boto3.client(
+                "s3",
+                region_name=config.aws.access_key.AWS_DEFAULT_REGION,
+                aws_access_key_id=config.aws.access_key.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=config.aws.access_key.AWS_SECRET_ACCESS_KEY,
+            )
+            s3.put_object(Bucket=bucket, Key=s3_key, Body=file_bytes)
+        except Exception as exc:
+            logger.error("Collect: S3 put failed for %s: %s", filename, exc)
+            continue
+        try:
+            assets_repo.create_asset(
+                user_id=user_id,
+                project_id=project_id,
+                s3_bucket=bucket,
+                s3_key=s3_key,
+                asset_type="raw",
+                size_bytes=len(file_bytes),
+                checksum_sha256=None,
+                version="1",
+                content_type=None,
+                asset_id=asset_id,
+                file_id=asset_id,
+                original_filename=filename,
+                extension=ext,
+            )
+        except Exception as exc:
+            logger.error("Collect: asset record failed for %s: %s", filename, exc)
+            continue
+
+        chat_platform_repo.append_pending_asset(
+            platform_workspace_id,
+            {
+                "asset_id": asset_id,
+                "filename": filename,
+                "s3_bucket": bucket,
+                "s3_key": s3_key,
+                "extension": ext,
+                "queued_at": _now_iso(),
+            },
+        )
+        ingested += 1
+        logger.info("Collect: ingested Zalo file %s as asset %s", filename, asset_id)
+
+    return ingested
+
+
+async def handle_zalo_collect_step(
+    *,
+    platform_workspace_id: str,
+    chat_id: Any,
+    text: str = "",
+    zalo_file_ids: Optional[list] = None,
+    start: bool = False,
+) -> None:
+    """Drive the 2-step collect flow: gather file(s), then a prompt, then run.
+
+    Documents (which Zalo can't deliver inline) are handled by the web-upload
+    path in the route module, which sets ``awaiting_file`` and — on upload —
+    advances to ``awaiting_prompt``. This handler covers image files + the
+    prompt text + start/cancel/re-prompt transitions.
+    """
+    from app.services import zalo_service
+
+    zalo_file_ids = zalo_file_ids or []
+    text_clean = (text or "").strip()
+
+    workspace = chat_platform_repo.get_workspace(platform_workspace_id)
+    if not workspace:
+        return
+    if not _get_active_collect(platform_workspace_id) and not start:
+        return
+
+    # Cancel at any point.
+    if text_clean.lower() in _ZALO_CANCEL_WORDS:
+        chat_platform_repo.clear_workspace_pending_collect(platform_workspace_id)
+        chat_platform_repo.clear_pending_assets(platform_workspace_id)
+        zalo_service.send_message(
+            chat_id, "Đã huỷ. Gửi file hoặc câu hỏi mới bất cứ lúc nào nhé."
+        )
+        return
+
+    # Ingest any image file(s) arriving in this message.
+    if zalo_file_ids:
+        try:
+            _ingest_zalo_files_to_pending(zalo_file_ids, workspace)
+        except Exception as exc:
+            logger.warning("Zalo collect ingest failed: %s", exc)
+
+    refreshed = chat_platform_repo.get_workspace(platform_workspace_id) or {}
+    has_assets = bool(refreshed.get("pending_assets"))
+
+    # Have a real prompt AND at least one file → run the analysis now.
+    if text_clean and has_assets and not is_zalo_collect_trigger(text_clean):
+        chat_platform_repo.clear_workspace_pending_collect(platform_workspace_id)
+        await handle_zalo_query(
+            query=text_clean,
+            platform_workspace_id=platform_workspace_id,
+            chat_id=chat_id,
+            zalo_file_ids=[],
+        )
+        return
+
+    # File collected but no prompt yet → ask for the prompt.
+    if has_assets:
+        chat_platform_repo.set_workspace_pending_collect(
+            platform_workspace_id, build_collect_state("awaiting_prompt")
+        )
+        zalo_service.send_message(
+            chat_id,
+            "✅ Đã nhận file. Giờ gửi câu hỏi bạn muốn phân tích về dữ liệu này "
+            "(vd: 'Doanh thu theo tháng ra sao?'). Gõ 'huỷ' để thoát.",
+        )
+        return
+
+    # No file yet → ask for one.
+    chat_platform_repo.set_workspace_pending_collect(
+        platform_workspace_id, build_collect_state("awaiting_file")
+    )
+    zalo_service.send_message(
+        chat_id,
+        "📎 Gửi mình file dữ liệu (CSV/Excel/ảnh) bạn muốn phân tích nhé. "
+        "Gõ 'huỷ' để thoát.",
+    )
 
 
 def _post_zalo_result(

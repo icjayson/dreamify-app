@@ -264,6 +264,14 @@ def _detect_source_label(contents: List[Dict[str, Any]]) -> str:
         return "Mixpanel"
     if "posthog" in raw or "post hog" in raw:
         return "PostHog"
+    if "customer_io" in raw or "customer.io" in raw or "customer io" in raw:
+        return "Customer.io"
+    if (
+        "google_search_console" in raw
+        or "google search console" in raw
+        or "search console" in raw
+    ):
+        return "Google Search Console"
     if "amazon_seller" in raw or "amazon seller" in raw or "seller central" in raw:
         return "Amazon Seller"
     if "shopee_seller" in raw or "shopee seller" in raw or "shopee" in raw:

@@ -3,6 +3,7 @@ User-facing CRUD routes for data sync schedules.
 """
 
 import logging
+import base64
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,7 +23,7 @@ router = APIRouter(tags=["schedules"])
 
 
 class CreateScheduleRequest(BaseModel):
-    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | shopify | klaviyo | quickbooks | zendesk | mixpanel | posthog | amazon_seller | tiktok_shop_seller | shopee_seller | lazada_seller | supabase | warehouse
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | shopify | klaviyo | quickbooks | zendesk | mixpanel | posthog | customer_io | google_search_console | amazon_seller | tiktok_shop_seller | shopee_seller | lazada_seller | supabase | warehouse
     connector_config: Dict[str, Any]
     project_id: str
     account_name: str = ""
@@ -65,6 +66,8 @@ _VALID_PROVIDERS = {
     "zendesk",
     "mixpanel",
     "posthog",
+    "customer_io",
+    "google_search_console",
     "amazon_seller",
     "tiktok_shop_seller",
     "shopee_seller",
@@ -154,6 +157,33 @@ _VALID_POSTHOG_REPORT_TYPES = {
     "persons",
     "feature_flags",
 }
+_VALID_CUSTOMER_IO_REPORT_TYPES = {
+    "lifecycle_overview",
+    "campaigns",
+    "campaign_actions",
+    "newsletters",
+    "segments",
+    "people",
+    "events",
+    "message_metrics",
+}
+_VALID_GOOGLE_SEARCH_CONSOLE_REPORT_TYPES = {
+    "search_overview",
+    "queries",
+    "pages",
+    "countries",
+    "devices",
+    "dates",
+    "query_page",
+}
+_VALID_GOOGLE_SEARCH_CONSOLE_SEARCH_TYPES = {
+    "web",
+    "image",
+    "video",
+    "news",
+    "discover",
+    "googleNews",
+}
 _VALID_AMAZON_SELLER_REPORT_TYPES = {
     "sales_overview",
     "orders",
@@ -196,6 +226,33 @@ _VALID_SUPABASE_SYNC_MODES = {
     "app_profile",
 }
 _VALID_WAREHOUSE_CONNECTORS = {"postgres", "bigquery", "snowflake", "databricks"}
+
+
+def _gsc_site_key_for_url(site_url: str) -> str:
+    return (
+        base64.urlsafe_b64encode(str(site_url).encode("utf-8"))
+        .decode("ascii")
+        .rstrip("=")
+    )
+
+
+def _gsc_site_url_from_key(site_key: str) -> str:
+    raw = base64.urlsafe_b64decode(
+        str(site_key).encode("ascii") + b"=" * (-len(str(site_key)) % 4)
+    )
+    return raw.decode("utf-8")
+
+
+def _normalize_gsc_site_url(site_url: str) -> str:
+    value = str(site_url or "").strip()
+    if not value:
+        return ""
+    if value.startswith("sc-domain:") or value.startswith(("http://", "https://")):
+        return value
+    raise HTTPException(
+        400,
+        "connector_config.site_url must be a URL-prefix property or sc-domain property",
+    )
 
 
 def _validate_create(req: CreateScheduleRequest) -> None:
@@ -565,6 +622,109 @@ def _normalize_connector_config(
                 cfg.pop("max_bytes", None)
         cfg["entity_id"] = str(
             entity_id or f"posthog:{report_type}:{project_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "customer_io":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "lifecycle_overview"
+        workspace_id = str(cfg.get("workspace_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "customer_io":
+                report_type = raw_report_type or parts[1] or report_type
+                workspace_id = (
+                    workspace_id if workspace_id != "all" else parts[2] or "all"
+                )
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_CUSTOMER_IO_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be lifecycle_overview, campaigns, campaign_actions, newsletters, segments, people, events, or message_metrics",
+            )
+        region = str(cfg.get("region") or "US").strip().upper() or "US"
+        if region not in {"US", "EU"}:
+            raise HTTPException(400, "connector_config.region must be US or EU")
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["workspace_id"] = workspace_id
+        cfg["resource_id"] = resource_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"customer_io:{report_type}:{workspace_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "google_search_console":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "search_overview"
+        site_url = _normalize_gsc_site_url(str(cfg.get("site_url") or ""))
+        site_key = str(cfg.get("site_key") or "").strip()
+        raw_search_type = str(cfg.get("search_type") or "").strip()
+        search_type = raw_search_type or "web"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "google_search_console":
+                report_type = raw_report_type or parts[1] or report_type
+                site_key = site_key or parts[2]
+                search_type = raw_search_type or parts[3] or "web"
+        if not site_url and site_key and site_key != "all":
+            try:
+                site_url = _normalize_gsc_site_url(_gsc_site_url_from_key(site_key))
+            except Exception as exc:
+                raise HTTPException(
+                    400,
+                    "connector_config.site_key is not a valid Search Console site key",
+                ) from exc
+        if site_url and not site_key:
+            site_key = _gsc_site_key_for_url(site_url)
+        if not site_key:
+            raise HTTPException(
+                400,
+                "connector_config.site_key or connector_config.site_url is required for Google Search Console schedules",
+            )
+        if report_type not in _VALID_GOOGLE_SEARCH_CONSOLE_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be search_overview, queries, pages, countries, devices, dates, or query_page",
+            )
+        if search_type not in _VALID_GOOGLE_SEARCH_CONSOLE_SEARCH_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.search_type must be web, image, video, news, discover, or googleNews",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["site_key"] = site_key
+        cfg["site_url"] = site_url
+        cfg["search_type"] = search_type
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"google_search_console:{report_type}:{site_key}:{search_type}"
         )
         cfg["entity_name"] = str(
             cfg.get("entity_name") or report_type.replace("_", " ").title()

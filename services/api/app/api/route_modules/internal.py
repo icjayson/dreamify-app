@@ -555,6 +555,32 @@ async def _run_sync(
             date_range_preset=date_range_preset,
         )
 
+    elif provider == "customer_io":
+        from app.services.customer_io_service import customer_io_service
+
+        return await customer_io_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
+    elif provider == "google_search_console":
+        from app.services.google_search_console_service import (
+            google_search_console_service,
+        )
+
+        return await google_search_console_service.sync_scheduled_entity(
+            user_id=user_id,
+            project_id=project_id,
+            connector_config=connector_config,
+            start_date=start_date,
+            end_date=end_date,
+            date_range_preset=date_range_preset,
+        )
+
     elif provider == "amazon_seller":
         from app.services.amazon_seller_service import amazon_seller_service
 
@@ -640,6 +666,8 @@ _PROVIDER_LABELS: dict = {
     "zendesk": "Zendesk",
     "mixpanel": "Mixpanel",
     "posthog": "PostHog",
+    "customer_io": "Customer.io",
+    "google_search_console": "Google Search Console",
     "amazon_seller": "Amazon Seller",
     "tiktok_shop_seller": "TikTok Shop Seller",
     "shopee_seller": "Shopee Seller",

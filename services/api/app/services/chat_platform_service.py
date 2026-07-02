@@ -374,10 +374,22 @@ def _clear_pending(platform_workspace_id: str, thread_key: str) -> None:
 COLLECT_TTL_S = 30 * 60  # 30 minutes (matches the web-upload token TTL)
 
 _ZALO_CANCEL_WORDS = {
-    "huỷ", "hủy", "huy", "thoát", "thoat", "cancel", "/cancel", "stop",
+    "huỷ",
+    "hủy",
+    "huy",
+    "thoát",
+    "thoat",
+    "cancel",
+    "/cancel",
+    "stop",
 }
 _ZALO_COLLECT_TRIGGER_WORDS = {
-    "phân tích", "phan tich", "analyze", "analyse", "/analyze", "/analyse",
+    "phân tích",
+    "phan tich",
+    "analyze",
+    "analyse",
+    "/analyze",
+    "/analyse",
 }
 
 
@@ -1719,6 +1731,8 @@ _PROVIDER_LABELS_SLACK: Dict[str, str] = {
     "zendesk": "Zendesk",
     "mixpanel": "Mixpanel",
     "posthog": "PostHog",
+    "customer_io": "Customer.io",
+    "google_search_console": "Google Search Console",
     "amazon_seller": "Amazon Seller",
     "tiktok_shop_seller": "TikTok Shop Seller",
     "shopee_seller": "Shopee Seller",

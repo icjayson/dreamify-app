@@ -2943,6 +2943,8 @@ class IntegrationService:
             "zendesk": "zendesk",
             "mixpanel": "mixpanel",
             "posthog": "posthog",
+            "customer_io": "customer_io",
+            "google_search_console": "google_search_console",
             "amazon_seller": "amazon_seller",
             "tiktok_shop_seller": "tiktok_shop_seller",
             "shopee_seller": "shopee_seller",
@@ -2978,6 +2980,8 @@ class IntegrationService:
             "zendesk": "integration_zendesk",
             "mixpanel": "integration_mixpanel",
             "posthog": "integration_posthog",
+            "customer_io": "integration_customer_io",
+            "google_search_console": "integration_google_search_console",
             "amazon_seller": "integration_amazon_seller",
             "tiktok_shop_seller": "integration_tiktok_shop_seller",
             "shopee_seller": "integration_shopee_seller",
@@ -3075,6 +3079,22 @@ class IntegrationService:
             project_id = connector_config.get("project_id") or "all"
             resource_id = connector_config.get("resource_id") or "all"
             return f"posthog:{report_type}:{project_id}:{resource_id}"
+        if provider == "customer_io":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "lifecycle_overview"
+            workspace_id = connector_config.get("workspace_id") or "all"
+            resource_id = connector_config.get("resource_id") or "all"
+            return f"customer_io:{report_type}:{workspace_id}:{resource_id}"
+        if provider == "google_search_console":
+            entity_id = connector_config.get("entity_id")
+            if entity_id:
+                return str(entity_id)
+            report_type = connector_config.get("report_type") or "search_overview"
+            site_key = connector_config.get("site_key") or "all"
+            search_type = connector_config.get("search_type") or "web"
+            return f"google_search_console:{report_type}:{site_key}:{search_type}"
         if provider == "amazon_seller":
             entity_id = connector_config.get("entity_id")
             if entity_id:
@@ -3503,6 +3523,67 @@ class IntegrationService:
                     }
                 ]
 
+        if provider == "customer_io":
+            report_type = str(
+                connector_config.get("report_type") or "lifecycle_overview"
+            )
+            workspace_id = str(connector_config.get("workspace_id") or "all")
+            resource_id = str(connector_config.get("resource_id") or "all")
+            region = str(connector_config.get("region") or "US")
+            base_url = str(connector_config.get("base_url") or "")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "account_id": workspace_id,
+                        "workspace_id": workspace_id,
+                        "region": region,
+                        "base_url": base_url,
+                        "report_type": report_type,
+                        "resource_id": resource_id,
+                        "connector_key": "customer_io",
+                    }
+                ]
+
+        if provider == "google_search_console":
+            report_type = str(connector_config.get("report_type") or "search_overview")
+            site_url = str(connector_config.get("site_url") or "")
+            site_key = str(connector_config.get("site_key") or "all")
+            search_type = str(connector_config.get("search_type") or "web")
+            entity_id = self._extract_entity_id_from_schedule(
+                provider, connector_config
+            )
+            entity_name = (
+                connector_config.get("entity_name")
+                or account_name
+                or report_type.replace("_", " ").title()
+            )
+            if entity_id:
+                return [
+                    {
+                        "id": str(entity_id),
+                        "name": str(entity_name),
+                        "type": "report",
+                        "account_name": account_name,
+                        "site_url": site_url,
+                        "site_key": site_key,
+                        "search_type": search_type,
+                        "report_type": report_type,
+                        "connector_key": "google_search_console",
+                    }
+                ]
+
         if provider == "amazon_seller":
             report_type = str(connector_config.get("report_type") or "sales_overview")
             seller_id = str(connector_config.get("seller_id") or "all")
@@ -3715,6 +3796,8 @@ class IntegrationService:
             "zendesk": [],
             "mixpanel": [],
             "posthog": [],
+            "customer_io": [],
+            "google_search_console": [],
             "amazon_seller": [],
             "tiktok_shop_seller": [],
             "shopee_seller": [],
@@ -3777,6 +3860,20 @@ class IntegrationService:
 
         status_map["posthog"] = bool(
             (await posthog_service.get_connection_status(user_id)).get("connected")
+        )
+        from app.services.customer_io_service import customer_io_service
+
+        status_map["customer_io"] = bool(
+            (await customer_io_service.get_connection_status(user_id)).get("connected")
+        )
+        from app.services.google_search_console_service import (
+            google_search_console_service,
+        )
+
+        status_map["google_search_console"] = bool(
+            (await google_search_console_service.get_connection_status(user_id)).get(
+                "connected"
+            )
         )
         from app.services.amazon_seller_service import amazon_seller_service
 
@@ -3851,6 +3948,8 @@ class IntegrationService:
             "zendesk": "zendesk",
             "mixpanel": "mixpanel",
             "posthog": "posthog",
+            "customer_io": "customer_io",
+            "google_search_console": "google_search_console",
             "amazon_seller": "amazon_seller",
             "tiktok_shop_seller": "tiktok_shop_seller",
             "shopee_seller": "shopee_seller",
@@ -3897,6 +3996,8 @@ class IntegrationService:
             "zendesk": "zendesk",
             "mixpanel": "mixpanel",
             "posthog": "posthog",
+            "customer_io": "customer_io",
+            "google_search_console": "google_search_console",
             "amazon_seller": "amazon_seller",
             "tiktok_shop_seller": "tiktok_shop_seller",
             "shopee_seller": "shopee_seller",
@@ -3947,6 +4048,11 @@ class IntegrationService:
             {"connector_key": "zendesk", "display_name": "Zendesk"},
             {"connector_key": "mixpanel", "display_name": "Mixpanel"},
             {"connector_key": "posthog", "display_name": "PostHog"},
+            {"connector_key": "customer_io", "display_name": "Customer.io"},
+            {
+                "connector_key": "google_search_console",
+                "display_name": "Google Search Console",
+            },
             {"connector_key": "amazon_seller", "display_name": "Amazon Seller"},
             {
                 "connector_key": "tiktok_shop_seller",
@@ -4501,6 +4607,8 @@ class IntegrationService:
             "zendesk",
             "mixpanel",
             "posthog",
+            "customer_io",
+            "google_search_console",
             "amazon_seller",
             "tiktok_shop_seller",
             "shopee_seller",
@@ -4702,6 +4810,26 @@ class IntegrationService:
                     project_id=project_id,
                     overrides={**resolved_cfg, **overrides},
                 )
+            elif connector_key == "customer_io":
+                from app.services.customer_io_service import customer_io_service
+
+                result = await customer_io_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
+            elif connector_key == "google_search_console":
+                from app.services.google_search_console_service import (
+                    google_search_console_service,
+                )
+
+                result = await google_search_console_service.sync_entity(
+                    user_id=user_id,
+                    entity_id=str(entity_id),
+                    project_id=project_id,
+                    overrides={**resolved_cfg, **overrides},
+                )
             elif connector_key == "amazon_seller":
                 from app.services.amazon_seller_service import amazon_seller_service
 
@@ -4796,6 +4924,8 @@ class IntegrationService:
             "zendesk",
             "mixpanel",
             "posthog",
+            "customer_io",
+            "google_search_console",
             "amazon_seller",
             "tiktok_shop_seller",
             "shopee_seller",

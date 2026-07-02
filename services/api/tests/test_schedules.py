@@ -731,6 +731,98 @@ class TestTriggerEndpoint:
             date_range_preset="last_30d",
         )
 
+    def test_run_sync_dispatches_customer_io_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.customer_io_service.customer_io_service"
+        ) as mock_customer_io:
+            mock_customer_io.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 8,
+                    "column_count": 9,
+                    "asset": {"asset_id": "asset_customer_io"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="customer_io",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "lifecycle_overview",
+                        "workspace_id": "workspace_1",
+                        "resource_id": "all",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 8
+        mock_customer_io.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "lifecycle_overview",
+                "workspace_id": "workspace_1",
+                "resource_id": "all",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
+    def test_run_sync_dispatches_google_search_console_provider(self):
+        from app.api.route_modules.internal import _run_sync
+
+        with patch(
+            "app.services.google_search_console_service.google_search_console_service"
+        ) as mock_gsc:
+            mock_gsc.sync_scheduled_entity = AsyncMock(
+                return_value={
+                    "success": True,
+                    "row_count": 8,
+                    "column_count": 6,
+                    "asset": {"asset_id": "asset_gsc"},
+                }
+            )
+            result = asyncio.run(
+                _run_sync(
+                    provider="google_search_console",
+                    user_id="u1",
+                    project_id="p1",
+                    connector_config={
+                        "report_type": "queries",
+                        "site_key": "site_key",
+                        "search_type": "web",
+                        "row_limit": 5000,
+                    },
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    date_range_preset="last_30d",
+                )
+            )
+
+        assert result["row_count"] == 8
+        mock_gsc.sync_scheduled_entity.assert_awaited_once_with(
+            user_id="u1",
+            project_id="p1",
+            connector_config={
+                "report_type": "queries",
+                "site_key": "site_key",
+                "search_type": "web",
+                "row_limit": 5000,
+            },
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            date_range_preset="last_30d",
+        )
+
     def test_run_sync_dispatches_amazon_seller_provider(self):
         from app.api.route_modules.internal import _run_sync
 
@@ -1325,6 +1417,117 @@ class TestScheduleValidation:
 
         with pytest.raises(HTTPException):
             _normalize_connector_config("posthog", {"region": "APAC"})
+
+    def test_customer_io_config_normalizes_report_entity_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "customer_io",
+            {
+                "report_type": "message_metrics",
+                "workspace_id": "workspace_1",
+                "resource_id": "metric_1",
+                "region": "eu",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "message_metrics"
+        assert cfg["workspace_id"] == "workspace_1"
+        assert cfg["resource_id"] == "metric_1"
+        assert cfg["region"] == "EU"
+        assert cfg["entity_id"] == "customer_io:message_metrics:workspace_1:metric_1"
+        assert cfg["row_limit"] == 10000
+
+    def test_customer_io_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+
+        cfg = _normalize_connector_config(
+            "customer_io",
+            {"entity_id": "customer_io:campaigns:workspace_1:campaign_1"},
+        )
+
+        assert cfg["report_type"] == "campaigns"
+        assert cfg["workspace_id"] == "workspace_1"
+        assert cfg["resource_id"] == "campaign_1"
+
+    def test_customer_io_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("customer_io", {"report_type": "broadcasts"})
+
+    def test_customer_io_config_rejects_unknown_region(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException):
+            _normalize_connector_config("customer_io", {"region": "APAC"})
+
+    def test_google_search_console_config_normalizes_site_report_and_caps_rows(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from app.services.google_search_console_service import site_key_for_url
+
+        site_url = "https://example.com/"
+        cfg = _normalize_connector_config(
+            "google_search_console",
+            {
+                "report_type": "queries",
+                "site_url": site_url,
+                "search_type": "image",
+                "row_limit": 999999,
+            },
+        )
+
+        assert cfg["report_type"] == "queries"
+        assert cfg["site_url"] == site_url
+        assert cfg["site_key"] == site_key_for_url(site_url)
+        assert cfg["search_type"] == "image"
+        assert cfg["entity_id"] == (
+            f"google_search_console:queries:{site_key_for_url(site_url)}:image"
+        )
+        assert cfg["row_limit"] == 10000
+
+    def test_google_search_console_config_can_parse_entity_id_only(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from app.services.google_search_console_service import site_key_for_url
+
+        site_url = "sc-domain:example.com"
+        site_key = site_key_for_url(site_url)
+        cfg = _normalize_connector_config(
+            "google_search_console",
+            {"entity_id": f"google_search_console:query_page:{site_key}:web"},
+        )
+
+        assert cfg["report_type"] == "query_page"
+        assert cfg["site_key"] == site_key
+        assert cfg["site_url"] == site_url
+        assert cfg["search_type"] == "web"
+
+    def test_google_search_console_config_rejects_unknown_report_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from app.services.google_search_console_service import site_key_for_url
+        from fastapi import HTTPException
+
+        site_key = site_key_for_url("https://example.com/")
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "google_search_console",
+                {"report_type": "crawl_errors", "site_key": site_key},
+            )
+
+    def test_google_search_console_config_rejects_unknown_search_type(self):
+        from app.api.route_modules.schedules import _normalize_connector_config
+        from app.services.google_search_console_service import site_key_for_url
+        from fastapi import HTTPException
+
+        site_key = site_key_for_url("https://example.com/")
+        with pytest.raises(HTTPException):
+            _normalize_connector_config(
+                "google_search_console",
+                {"search_type": "shopping", "site_key": site_key},
+            )
 
     def test_amazon_seller_config_normalizes_report_entity_and_caps_rows(self):
         from app.api.route_modules.schedules import _normalize_connector_config

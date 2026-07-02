@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_user
 from app.services.amazon_seller_service import amazon_seller_service
+from app.services.customer_io_service import customer_io_service
+from app.services.google_search_console_service import google_search_console_service
 from app.services.integration_service import integration_service
 from app.services.klaviyo_service import klaviyo_service
 from app.services.lazada_seller_service import lazada_seller_service
@@ -105,11 +107,16 @@ class ConnectorSelectedEntity(BaseModel):
     metric_id: Optional[str] = None
     channel: Optional[str] = None
     project_id: Optional[str] = None
+    workspace_id: Optional[str] = None
     seller_id: Optional[str] = None
     marketplace_id: Optional[str] = None
     shop_id: Optional[str] = None
     region: Optional[str] = None
+    base_url: Optional[str] = None
     subdomain: Optional[str] = None
+    site_url: Optional[str] = None
+    site_key: Optional[str] = None
+    search_type: Optional[str] = None
 
 
 class ConnectorOverviewItem(BaseModel):
@@ -3059,6 +3066,390 @@ async def posthog_sync(
     except Exception as e:
         logger.error(f"PostHog sync error: {e}")
         return PostHogSyncResponse(success=False, error=str(e))
+
+
+# ── Google Search Console Organic Search ────────────────────────────────────
+
+_GOOGLE_SEARCH_CONSOLE_OAUTH_SUCCESS_HTML = _OAUTH_SUCCESS_HTML.replace(
+    "meta_oauth", "google_search_console_oauth"
+).replace("META_OAUTH_SUCCESS", "GOOGLE_SEARCH_CONSOLE_OAUTH_SUCCESS")
+
+_GOOGLE_SEARCH_CONSOLE_OAUTH_ERROR_HTML = _OAUTH_ERROR_HTML.replace(
+    "meta_oauth", "google_search_console_oauth"
+).replace("META_OAUTH_ERROR", "GOOGLE_SEARCH_CONSOLE_OAUTH_ERROR")
+
+
+class GoogleSearchConsoleSite(BaseModel):
+    site_url: str
+    site_key: str
+    permission_level: Optional[str] = None
+
+
+class GoogleSearchConsoleStatusResponse(BaseModel):
+    connected: bool = False
+    account_name: Optional[str] = None
+    scopes: List[str] = Field(default_factory=list)
+    site_count: int = 0
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class GoogleSearchConsoleReportResource(BaseModel):
+    report_type: str
+    label: str
+    dimensions: List[str] = Field(default_factory=list)
+    default: bool = False
+
+
+class GoogleSearchConsoleSearchType(BaseModel):
+    id: str
+    label: str
+
+
+class GoogleSearchConsoleResourcesResponse(BaseModel):
+    success: bool
+    reports: List[GoogleSearchConsoleReportResource] = Field(default_factory=list)
+    sites: List[GoogleSearchConsoleSite] = Field(default_factory=list)
+    search_types: List[GoogleSearchConsoleSearchType] = Field(default_factory=list)
+    account_name: Optional[str] = None
+    error: Optional[str] = None
+
+
+class GoogleSearchConsoleSyncRequest(BaseModel):
+    report_type: str = "search_overview"
+    project_id: Optional[str] = None
+    site_url: Optional[str] = None
+    site_key: Optional[str] = None
+    search_type: str = "web"
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    max_bytes: Optional[int] = None
+
+
+class GoogleSearchConsoleSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.get("/integration/google-search-console/oauth/start")
+async def google_search_console_oauth_start(
+    request: Request,
+    token: Optional[str] = Query(default=None),
+):
+    """Redirect the popup to the Google Search Console OAuth consent screen."""
+    bearer = request.headers.get("Authorization")
+    if not bearer and token:
+        bearer = f"Bearer {token}"
+    if not bearer:
+        return HTMLResponse(
+            _GOOGLE_SEARCH_CONSOLE_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — please sign in."
+            )
+        )
+    user_id = _verify_bearer(bearer)
+    if not user_id:
+        return HTMLResponse(
+            _GOOGLE_SEARCH_CONSOLE_OAUTH_ERROR_HTML.format(
+                error="Unauthorized — invalid token."
+            )
+        )
+    try:
+        return RedirectResponse(
+            url=google_search_console_service.get_oauth_url(user_id)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get(
+    "/integration/google-search-console/oauth/callback", response_class=HTMLResponse
+)
+async def google_search_console_oauth_callback(
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    """Public endpoint. Google redirects here after Search Console authorization."""
+    if error or not code or not state:
+        msg = error_description or error or "Access denied"
+        return HTMLResponse(_GOOGLE_SEARCH_CONSOLE_OAUTH_ERROR_HTML.format(error=msg))
+    try:
+        await google_search_console_service.handle_oauth_callback(
+            code=code, state=state
+        )
+        return HTMLResponse(_GOOGLE_SEARCH_CONSOLE_OAUTH_SUCCESS_HTML)
+    except Exception as e:
+        logger.error(f"Google Search Console OAuth callback error: {e}")
+        return HTMLResponse(
+            _GOOGLE_SEARCH_CONSOLE_OAUTH_ERROR_HTML.format(error=str(e))
+        )
+
+
+@router.get(
+    "/integration/google-search-console/status",
+    response_model=GoogleSearchConsoleStatusResponse,
+)
+async def google_search_console_status(user_id: str = Depends(require_user)):
+    try:
+        return await google_search_console_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Google Search Console status error: {e}")
+        return GoogleSearchConsoleStatusResponse(connected=False)
+
+
+@router.delete("/integration/google-search-console/disconnect")
+async def google_search_console_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await google_search_console_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Google Search Console disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/google-search-console/resources",
+    response_model=GoogleSearchConsoleResourcesResponse,
+)
+async def google_search_console_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await google_search_console_service.list_resources(user_id)
+        return GoogleSearchConsoleResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return GoogleSearchConsoleResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Google Search Console resources error: {e}")
+        return GoogleSearchConsoleResourcesResponse(success=False, error=str(e))
+
+
+@router.post(
+    "/integration/google-search-console/sync",
+    response_model=GoogleSearchConsoleSyncResponse,
+)
+async def google_search_console_sync(
+    request: GoogleSearchConsoleSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await google_search_console_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            site_url=request.site_url or "",
+            site_key=request.site_key or "",
+            search_type=request.search_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            max_bytes=request.max_bytes,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return GoogleSearchConsoleSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return GoogleSearchConsoleSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Google Search Console sync error: {e}")
+        return GoogleSearchConsoleSyncResponse(success=False, error=str(e))
+
+
+# ── Customer.io Lifecycle Marketing ─────────────────────────────────────────
+
+
+class CustomerIOWorkspace(BaseModel):
+    id: str
+    name: str
+    region: str = "US"
+    api_base_url: Optional[str] = None
+
+
+class CustomerIOStatusResponse(BaseModel):
+    connected: bool = False
+    workspace_id: Optional[str] = None
+    region: Optional[str] = "US"
+    api_base_url: Optional[str] = None
+    account_name: Optional[str] = None
+    selected_entities: List[ConnectorSelectedEntity] = Field(default_factory=list)
+    connected_at: Optional[str] = None
+
+
+class CustomerIOReportResource(BaseModel):
+    report_type: str
+    label: str
+    resource: str
+    default: bool = False
+
+
+class CustomerIONamedResource(BaseModel):
+    id: str
+    name: str
+    type: Optional[str] = None
+    status: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class CustomerIOConnectRequest(BaseModel):
+    app_api_key: str = ""
+    region: str = "US"
+    api_base_url: Optional[str] = None
+    account_name: Optional[str] = None
+    workspace_id: Optional[str] = None
+
+
+class CustomerIOResourcesResponse(BaseModel):
+    success: bool
+    reports: List[CustomerIOReportResource] = Field(default_factory=list)
+    workspaces: List[CustomerIOWorkspace] = Field(default_factory=list)
+    campaigns: List[CustomerIONamedResource] = Field(default_factory=list)
+    newsletters: List[CustomerIONamedResource] = Field(default_factory=list)
+    segments: List[CustomerIONamedResource] = Field(default_factory=list)
+    people: List[CustomerIONamedResource] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class CustomerIOSyncRequest(BaseModel):
+    report_type: str = "lifecycle_overview"
+    project_id: Optional[str] = None
+    date_preset: Optional[str] = "last_30d"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    resource_id: str = "all"
+    row_limit: int = Field(default=5000, ge=1, le=10000)
+    include_pii: bool = False
+    max_bytes: Optional[int] = None
+
+
+class CustomerIOSyncResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    asset: Optional[AssetResponse] = None
+    row_count: Optional[int] = None
+    column_count: Optional[int] = None
+    entity_id: Optional[str] = None
+    truncated: Optional[bool] = None
+    api_mode: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post(
+    "/integration/customer-io/connect", response_model=CustomerIOStatusResponse
+)
+async def customer_io_connect(
+    request: CustomerIOConnectRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        return await customer_io_service.connect(
+            user_id=user_id,
+            app_api_key=request.app_api_key,
+            region=request.region,
+            api_base_url=request.api_base_url,
+            account_name=request.account_name,
+            workspace_id=request.workspace_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Customer.io connect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/integration/customer-io/status", response_model=CustomerIOStatusResponse)
+async def customer_io_status(user_id: str = Depends(require_user)):
+    try:
+        return await customer_io_service.get_connection_status(user_id)
+    except Exception as e:
+        logger.error(f"Customer.io status error: {e}")
+        return CustomerIOStatusResponse(connected=False)
+
+
+@router.delete("/integration/customer-io/disconnect")
+async def customer_io_disconnect(user_id: str = Depends(require_user)):
+    try:
+        await customer_io_service.disconnect(user_id)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Customer.io disconnect error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/integration/customer-io/resources", response_model=CustomerIOResourcesResponse
+)
+async def customer_io_resources(user_id: str = Depends(require_user)):
+    try:
+        resources = await customer_io_service.list_resources(user_id)
+        return CustomerIOResourcesResponse(success=True, **resources)
+    except HTTPException as e:
+        return CustomerIOResourcesResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Customer.io resources error: {e}")
+        return CustomerIOResourcesResponse(success=False, error=str(e))
+
+
+@router.post("/integration/customer-io/sync", response_model=CustomerIOSyncResponse)
+async def customer_io_sync(
+    request: CustomerIOSyncRequest,
+    user_id: str = Depends(require_user),
+):
+    try:
+        project = _ensure_project(user_id, request.project_id)
+        result = await customer_io_service.sync(
+            user_id=user_id,
+            project_id=project["project_id"],
+            report_type=request.report_type,
+            date_preset=request.date_preset,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            row_limit=request.row_limit,
+            include_pii=request.include_pii,
+            max_bytes=request.max_bytes,
+            resource_id=request.resource_id,
+        )
+        mapped_asset = _map_asset(
+            result["asset"],
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+        )
+        return CustomerIOSyncResponse(
+            success=True,
+            message=result.get("message"),
+            asset=mapped_asset,
+            row_count=result["row_count"],
+            column_count=result["column_count"],
+            entity_id=result.get("entity_id"),
+            truncated=result.get("truncated"),
+            api_mode=result.get("api_mode"),
+        )
+    except HTTPException as e:
+        return CustomerIOSyncResponse(success=False, error=e.detail)
+    except Exception as e:
+        logger.error(f"Customer.io sync error: {e}")
+        return CustomerIOSyncResponse(success=False, error=str(e))
 
 
 # ── Amazon Seller Central ───────────────────────────────────────────────────

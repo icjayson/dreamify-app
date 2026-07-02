@@ -128,12 +128,6 @@ def send_feedback_thank_you_email(
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="color-scheme" content="light only" />
   <title>Thank you for your feedback</title>
-  <style>
-    :root {{ color-scheme: light only; }}
-    @media (prefers-color-scheme: dark) {{
-      body, table, td {{ background-color: #f1f5f9 !important; color: #334155 !important; }}
-    }}
-  </style>
 </head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:48px 16px;">
@@ -242,12 +236,6 @@ def send_dashboard_share_email(
   <meta name="color-scheme" content="light only" />
   <meta name="supported-color-schemes" content="light only" />
   <title>Dashboard shared with you</title>
-  <style>
-    :root {{ color-scheme: light only; }}
-    @media (prefers-color-scheme: dark) {{
-      body, table, td {{ background-color: #f1f5f9 !important; color: #334155 !important; }}
-    }}
-  </style>
 </head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:48px 16px;">

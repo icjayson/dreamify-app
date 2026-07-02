@@ -275,6 +275,7 @@ def notify_connector_connected(
                 email=email,
                 first_name=first_name,
                 payload={
+                    "first_name": first_name,
                     "is_first": is_first,
                     "provider": provider,
                     "provider_label": provider_label(provider),
@@ -313,6 +314,7 @@ def notify_workspace_integrated(
                 email=email,
                 first_name=first_name,
                 payload={
+                    "first_name": first_name,
                     "platform": platform,
                     "workspace_name": workspace_name or "",
                     "workspace_id": workspace_id,

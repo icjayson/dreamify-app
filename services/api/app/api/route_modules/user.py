@@ -322,6 +322,7 @@ def _emit_dashboard_created(user_id: str, project_id: str, name: Optional[str]) 
             email=email,
             first_name=first_name,
             payload={
+                "first_name": first_name,
                 "is_first": is_first,
                 "project_id": project_id,
                 "name": name or "",

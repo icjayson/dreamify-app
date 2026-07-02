@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { ZaloCodeResponse } from "@/api/chatIntegrationApi";
+import { resolveChatApiAssetUrl, type ZaloCodeResponse } from "@/api/chatIntegrationApi";
 import { toast } from "@/components/ui/use-toast";
 
 interface ZaloConnectModalProps {
@@ -27,12 +27,17 @@ export function ZaloConnectModal({
 }: ZaloConnectModalProps) {
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [qrFailed, setQrFailed] = useState(false);
 
   useEffect(() => {
     if (pendingCode?.expires_in) {
       setTimeLeft(pendingCode.expires_in);
     }
   }, [pendingCode]);
+
+  useEffect(() => {
+    setQrFailed(false);
+  }, [pendingCode?.qr_url]);
 
   useEffect(() => {
     if (timeLeft <= 0) return;
@@ -58,7 +63,10 @@ export function ZaloConnectModal({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const startCommand = pendingCode ? `start ${pendingCode.code}` : "";
+  if (!pendingCode) return null;
+
+  const startCommand = `start ${pendingCode.code}`;
+  const qrUrl = resolveChatApiAssetUrl(pendingCode.qr_url);
 
   const handleCopyCommand = async () => {
     if (!startCommand) return;
@@ -66,8 +74,6 @@ export function ZaloConnectModal({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  if (!pendingCode) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,12 +96,19 @@ export function ZaloConnectModal({
               Step 1: Open the Bot in Zalo
             </label>
             <div className="flex justify-center">
-              <div className="bg-white p-3 rounded-lg border border-border w-52 h-52">
-                <img
-                  src={`/api/v1/chat/zalo/qr/${pendingCode.code}`}
-                  alt="Zalo bot QR code"
-                  className="w-full h-full object-contain"
-                />
+              <div className="bg-white p-3 rounded-lg border border-border w-52 h-52 flex items-center justify-center">
+                {qrFailed ? (
+                  <p className="px-3 text-center text-xs leading-relaxed text-slate-600">
+                    QR code could not load. Search for the bot in Zalo, then send the start command below.
+                  </p>
+                ) : (
+                  <img
+                    src={qrUrl}
+                    alt="Zalo bot QR code"
+                    className="w-full h-full object-contain"
+                    onError={() => setQrFailed(true)}
+                  />
+                )}
               </div>
             </div>
             <p className="text-xs text-muted-foreground text-center">

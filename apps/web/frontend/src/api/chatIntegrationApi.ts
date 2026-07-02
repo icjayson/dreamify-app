@@ -52,6 +52,18 @@ export interface WhatsAppCodeResponse {
   expires_in: number;
 }
 
+export function resolveChatApiAssetUrl(path: string, baseUrl = api.getBaseUrl()): string {
+  if (!path || /^[a-z][a-z\d+\-.]*:/i.test(path) || path.startsWith("//")) {
+    return path;
+  }
+
+  if (!baseUrl) {
+    return path;
+  }
+
+  return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
 export const chatIntegrationApi = {
   async getSlackStatus(): Promise<SlackStatusResponse> {
     const res = await api.get<SlackStatusResponse>("/api/v1/chat/slack/me");

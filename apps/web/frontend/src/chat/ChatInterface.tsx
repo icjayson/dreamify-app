@@ -927,6 +927,8 @@ function getDashboardSourceLabel(dashboardCard: NonNullable<Message["dashboardCa
   if (source.includes("zendesk") || filename.includes("zendesk")) return "Zendesk Data";
   if (source.includes("mixpanel") || filename.includes("mixpanel")) return "Mixpanel Data";
   if (source.includes("posthog") || source.includes("post hog") || filename.includes("posthog")) return "PostHog Data";
+  if (source.includes("customer_io") || source.includes("customer.io") || source.includes("customer io") || filename.includes("customer_io")) return "Customer.io Data";
+  if (source.includes("google_search_console") || source.includes("google search console") || source.includes("search console") || filename.includes("google_search_console")) return "Google Search Console Data";
   if (source.includes("amazon_seller") || source.includes("amazon seller") || filename.includes("amazon_seller")) return "Amazon Seller Data";
   if (source.includes("shopee_seller") || source.includes("shopee seller") || filename.includes("shopee_seller")) return "Shopee Seller Data";
   if (source.includes("lazada_seller") || source.includes("lazada seller") || filename.includes("lazada_seller")) return "Lazada Seller Data";
@@ -1336,6 +1338,8 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     setZendeskModalOpen,
     setMixpanelModalOpen,
     setPostHogModalOpen,
+    setCustomerIOModalOpen,
+    setGoogleSearchConsoleModalOpen,
     setAmazonSellerModalOpen,
     setTikTokShopSellerModalOpen,
     setShopeeSellerModalOpen,
@@ -2222,6 +2226,16 @@ const ChatInterface = ({ projectId, onProcessedDataChange, onSwitchToDashboard, 
     if (connector.name === 'PostHog') {
       setDropdownOpen(false);
       setTimeout(() => setPostHogModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Customer.io') {
+      setDropdownOpen(false);
+      setTimeout(() => setCustomerIOModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Google Search Console') {
+      setDropdownOpen(false);
+      setTimeout(() => setGoogleSearchConsoleModalOpen(true), 0);
       return;
     }
     if (connector.name === 'Amazon Seller') {

@@ -66,6 +66,8 @@ import QuickBooksIntegrationModal from "./components/chat/QuickBooksIntegrationM
 import ZendeskIntegrationModal from "./components/chat/ZendeskIntegrationModal";
 import MixpanelIntegrationModal from "./components/chat/MixpanelIntegrationModal";
 import PostHogIntegrationModal from "./components/chat/PostHogIntegrationModal";
+import CustomerIOIntegrationModal from "./components/chat/CustomerIOIntegrationModal";
+import GoogleSearchConsoleIntegrationModal from "./components/chat/GoogleSearchConsoleIntegrationModal";
 import AmazonSellerIntegrationModal from "./components/chat/AmazonSellerIntegrationModal";
 import TikTokShopSellerIntegrationModal from "./components/chat/TikTokShopSellerIntegrationModal";
 import ShopeeSellerIntegrationModal from "./components/chat/ShopeeSellerIntegrationModal";
@@ -282,6 +284,8 @@ const AppContent = () => {
       <ZendeskIntegrationModal />
       <MixpanelIntegrationModal />
       <PostHogIntegrationModal />
+      <CustomerIOIntegrationModal />
+      <GoogleSearchConsoleIntegrationModal />
       <AmazonSellerIntegrationModal />
       <TikTokShopSellerIntegrationModal />
       <ShopeeSellerIntegrationModal />

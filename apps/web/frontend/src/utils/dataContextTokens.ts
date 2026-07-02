@@ -56,6 +56,8 @@ const CONNECTOR_ALIASES: Array<{
   { name: "Zendesk", shortName: "Zendesk", aliases: ["zendesk", "support", "support tickets", "customer success", "integration_zendesk"] },
   { name: "Mixpanel", shortName: "Mixpanel", aliases: ["mixpanel", "product analytics", "integration_mixpanel"] },
   { name: "PostHog", shortName: "PostHog", aliases: ["posthog", "post hog", "product analytics", "integration_posthog"] },
+  { name: "Customer.io", shortName: "Customer.io", aliases: ["customer_io", "customer.io", "customer io", "lifecycle marketing", "integration_customer_io"] },
+  { name: "Google Search Console", shortName: "GSC", aliases: ["google_search_console", "google search console", "search console", "gsc", "organic search", "integration_google_search_console"] },
   { name: "Amazon Seller", shortName: "Amazon", aliases: ["amazon_seller", "amazon seller", "seller central", "integration_amazon_seller"] },
   { name: "Shopee Seller", shortName: "Shopee", aliases: ["shopee_seller", "shopee seller", "shopee", "integration_shopee_seller"] },
   { name: "Lazada Seller", shortName: "Lazada", aliases: ["lazada_seller", "lazada seller", "lazada", "integration_lazada_seller"] },

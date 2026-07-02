@@ -30,6 +30,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   zendesk: 'Zendesk',
   mixpanel: 'Mixpanel',
   posthog: 'PostHog',
+  customer_io: 'Customer.io',
+  google_search_console: 'Google Search Console',
   amazon_seller: 'Amazon Seller',
   tiktok_shop_seller: 'TikTok Shop Seller',
   shopee_seller: 'Shopee Seller',

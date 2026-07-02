@@ -6,10 +6,12 @@ import {
   Plus,
   Home,
   Plug,
+  Clock3,
   LayoutDashboard,
   FolderOpen,
   CheckCircle2,
   Ellipsis,
+  Loader2,
   SquareArrowOutUpRight,
   Sparkles,
   User as UserIcon,
@@ -26,10 +28,10 @@ import { useLayoutStyle } from "@/hooks/useLayoutStyle";
 import { useTheme } from "@/hooks/useTheme";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import WorkspaceSidebar from "@/components/project-section/WorkspaceSidebar";
 import CsvPreviewPanel from "@/components/project-section/CsvPreviewPanel";
 import WorkspaceNewChat from "@/components/workspace/WorkspaceNewChat";
@@ -94,6 +96,8 @@ function inferSourceFromTitle(title: string): string {
   if (t.includes("zendesk")) return "Zendesk";
   if (t.includes("mixpanel")) return "Mixpanel";
   if (t.includes("posthog") || t.includes("post hog")) return "PostHog";
+  if (t.includes("customer_io") || t.includes("customer.io") || t.includes("customer io")) return "Customer.io";
+  if (t.includes("google_search_console") || t.includes("google search console") || t.includes("search console") || t.includes("organic search")) return "Google Search Console";
   if (t.includes("amazon_seller") || t.includes("amazon seller") || t.includes("seller central")) return "Amazon Seller";
   if (t.includes("shopee_seller") || t.includes("shopee seller") || t.includes("shopee")) return "Shopee Seller";
   if (t.includes("lazada_seller") || t.includes("lazada seller") || t.includes("lazada")) return "Lazada Seller";
@@ -507,6 +511,8 @@ export default function WorkspacePage() {
     setZendeskModalOpen,
     setMixpanelModalOpen,
     setPostHogModalOpen,
+    setCustomerIOModalOpen,
+    setGoogleSearchConsoleModalOpen,
     setAmazonSellerModalOpen,
     setTikTokShopSellerModalOpen,
     setShopeeSellerModalOpen,
@@ -555,6 +561,10 @@ export default function WorkspacePage() {
       setMixpanelModalOpen(true);
     } else if (connectorName === 'PostHog') {
       setPostHogModalOpen(true);
+    } else if (connectorName === 'Customer.io') {
+      setCustomerIOModalOpen(true);
+    } else if (connectorName === 'Google Search Console') {
+      setGoogleSearchConsoleModalOpen(true);
     } else if (connectorName === 'Amazon Seller') {
       setAmazonSellerModalOpen(true);
     } else if (connectorName === 'TikTok Shop Seller') {
@@ -583,7 +593,30 @@ export default function WorkspacePage() {
     try {
       const results: Record<string, ConnectorStatus> = {};
 
-      const metaStatus = await integrationService.getMetaConnectionStatus();
+      const metaStatusPromise = integrationService.getMetaConnectionStatus();
+      const tiktokStatusPromise = integrationService.getTikTokConnectionStatus();
+      const googleTokenPromise = integrationService.getGoogleOAuthToken();
+      const appsflyerStatusPromise = integrationService.getAppsFlyerStatus();
+      const stripeStatusPromise = integrationService.getStripeStatus();
+      const hubspotStatusPromise = integrationService.getHubSpotStatus();
+      const salesforceStatusPromise = integrationService.getSalesforceStatus();
+      const pipedriveStatusPromise = integrationService.getPipedriveStatus();
+      const supabaseStatusPromise = integrationService.getSupabaseStatus();
+      const shopifyStatusPromise = integrationService.getShopifyStatus();
+      const klaviyoStatusPromise = integrationService.getKlaviyoStatus();
+      const quickBooksStatusPromise = integrationService.getQuickBooksStatus();
+      const zendeskStatusPromise = integrationService.getZendeskStatus();
+      const mixpanelStatusPromise = integrationService.getMixpanelStatus();
+      const postHogStatusPromise = integrationService.getPostHogStatus();
+      const customerIOStatusPromise = integrationService.getCustomerIOStatus();
+      const googleSearchConsoleStatusPromise = integrationService.getGoogleSearchConsoleStatus();
+      const amazonSellerStatusPromise = integrationService.getAmazonSellerStatus();
+      const tiktokShopStatusPromise = integrationService.getTikTokShopSellerStatus();
+      const shopeeSellerStatusPromise = integrationService.getShopeeSellerStatus();
+      const lazadaSellerStatusPromise = integrationService.getLazadaSellerStatus();
+      const overviewPromise = integrationService.fetchConnectorsOverview();
+
+      const metaStatus = await metaStatusPromise;
       if (metaStatus.connected) {
         try {
           const metaAccounts = await integrationService.fetchMetaAdAccounts();
@@ -599,7 +632,7 @@ export default function WorkspacePage() {
         results["Meta Ads"] = { connected: false };
       }
 
-      const tiktokStatus = await integrationService.getTikTokConnectionStatus();
+      const tiktokStatus = await tiktokStatusPromise;
       if (tiktokStatus.connected) {
         try {
           const ttAccounts = await integrationService.fetchTikTokAdAccounts();
@@ -615,7 +648,7 @@ export default function WorkspacePage() {
         results["TikTok Ads"] = { connected: false };
       }
 
-      const googleToken = await integrationService.getGoogleOAuthToken();
+      const googleToken = await googleTokenPromise;
       if (googleToken.success && googleToken.token) {
         // Use clerk's user external accounts to get the connected Google account email
         const googleEmail = user?.externalAccounts?.find((a) => (a.provider as string).includes("google"))?.emailAddress;
@@ -645,87 +678,97 @@ export default function WorkspacePage() {
         results["Firebase"] = { connected: false };
       }
 
-      const appsflyerStatus = await integrationService.getAppsFlyerStatus();
+      const appsflyerStatus = await appsflyerStatusPromise;
       results["AppsFlyer"] = appsflyerStatus.connected
         ? { connected: true, info: "Account: AppsFlyer" }
         : { connected: false };
 
-      const stripeStatus = await integrationService.getStripeStatus();
+      const stripeStatus = await stripeStatusPromise;
       results["Stripe"] = stripeStatus.connected
         ? { connected: true, info: "Account: Stripe" }
         : { connected: false };
 
-      const hubspotStatus = await integrationService.getHubSpotStatus();
+      const hubspotStatus = await hubspotStatusPromise;
       results["HubSpot"] = hubspotStatus.connected
         ? { connected: true, info: `Account: ${hubspotStatus.portal_domain || hubspotStatus.account_name || "HubSpot"}` }
         : { connected: false };
 
-      const salesforceStatus = await integrationService.getSalesforceStatus();
+      const salesforceStatus = await salesforceStatusPromise;
       results["Salesforce"] = salesforceStatus.connected
         ? { connected: true, info: `Account: ${salesforceStatus.account_name || salesforceStatus.instance_domain || "Salesforce"}` }
         : { connected: false };
 
-      const pipedriveStatus = await integrationService.getPipedriveStatus();
+      const pipedriveStatus = await pipedriveStatusPromise;
       results["Pipedrive"] = pipedriveStatus.connected
         ? { connected: true, info: `Account: ${pipedriveStatus.account_name || pipedriveStatus.company_domain || "Pipedrive"}` }
         : { connected: false };
 
-      const supabaseStatus = await integrationService.getSupabaseStatus();
+      const supabaseStatus = await supabaseStatusPromise;
       results["Supabase"] = supabaseStatus.connected
         ? { connected: true, info: `${supabaseStatus.connection_count || 0} connection${supabaseStatus.connection_count === 1 ? "" : "s"}` }
         : { connected: false };
 
-      const shopifyStatus = await integrationService.getShopifyStatus();
+      const shopifyStatus = await shopifyStatusPromise;
       results["Shopify"] = shopifyStatus.connected
         ? { connected: true, info: `Account: ${shopifyStatus.shop_domain || shopifyStatus.shop_name || "Shopify"}` }
         : { connected: false };
 
-      const klaviyoStatus = await integrationService.getKlaviyoStatus();
+      const klaviyoStatus = await klaviyoStatusPromise;
       results["Klaviyo"] = klaviyoStatus.connected
         ? { connected: true, info: `Account: ${klaviyoStatus.account_name || klaviyoStatus.account_id || "Klaviyo"}` }
         : { connected: false };
 
-      const quickBooksStatus = await integrationService.getQuickBooksStatus();
+      const quickBooksStatus = await quickBooksStatusPromise;
       results["QuickBooks"] = quickBooksStatus.connected
         ? { connected: true, info: `Account: ${quickBooksStatus.company_name || quickBooksStatus.realm_id || "QuickBooks"}` }
         : { connected: false };
 
-      const zendeskStatus = await integrationService.getZendeskStatus();
+      const zendeskStatus = await zendeskStatusPromise;
       results["Zendesk"] = zendeskStatus.connected
         ? { connected: true, info: `Account: ${zendeskStatus.account_name || zendeskStatus.subdomain || "Zendesk"}` }
         : { connected: false };
 
-      const mixpanelStatus = await integrationService.getMixpanelStatus();
+      const mixpanelStatus = await mixpanelStatusPromise;
       results["Mixpanel"] = mixpanelStatus.connected
         ? { connected: true, info: `Project: ${mixpanelStatus.account_name || mixpanelStatus.project_id || "Mixpanel"}` }
         : { connected: false };
 
-      const postHogStatus = await integrationService.getPostHogStatus();
+      const postHogStatus = await postHogStatusPromise;
       results["PostHog"] = postHogStatus.connected
         ? { connected: true, info: `Project: ${postHogStatus.account_name || postHogStatus.project_id || "PostHog"}` }
         : { connected: false };
 
-      const amazonSellerStatus = await integrationService.getAmazonSellerStatus();
+      const customerIOStatus = await customerIOStatusPromise;
+      results["Customer.io"] = customerIOStatus.connected
+        ? { connected: true, info: `Workspace: ${customerIOStatus.account_name || customerIOStatus.workspace_id || "Customer.io"}` }
+        : { connected: false };
+
+      const googleSearchConsoleStatus = await googleSearchConsoleStatusPromise;
+      results["Google Search Console"] = googleSearchConsoleStatus.connected
+        ? { connected: true, info: googleSearchConsoleStatus.account_name || `${googleSearchConsoleStatus.site_count || 0} propert${googleSearchConsoleStatus.site_count === 1 ? "y" : "ies"}` }
+        : { connected: false };
+
+      const amazonSellerStatus = await amazonSellerStatusPromise;
       results["Amazon Seller"] = amazonSellerStatus.connected
         ? { connected: true, info: `Account: ${amazonSellerStatus.seller_name || amazonSellerStatus.seller_id || "Amazon Seller"}` }
         : { connected: false };
 
-      const tiktokShopStatus = await integrationService.getTikTokShopSellerStatus();
+      const tiktokShopStatus = await tiktokShopStatusPromise;
       results["TikTok Shop Seller"] = tiktokShopStatus.connected
         ? { connected: true, info: `Account: ${tiktokShopStatus.account_name || tiktokShopStatus.account_id || "TikTok Shop Seller"}` }
         : { connected: false };
 
-      const shopeeSellerStatus = await integrationService.getShopeeSellerStatus();
+      const shopeeSellerStatus = await shopeeSellerStatusPromise;
       results["Shopee Seller"] = shopeeSellerStatus.connected
         ? { connected: true, info: `Account: ${shopeeSellerStatus.account_name || shopeeSellerStatus.account_id || "Shopee Seller"}` }
         : { connected: false };
 
-      const lazadaSellerStatus = await integrationService.getLazadaSellerStatus();
+      const lazadaSellerStatus = await lazadaSellerStatusPromise;
       results["Lazada Seller"] = lazadaSellerStatus.connected
         ? { connected: true, info: `Account: ${lazadaSellerStatus.account_name || lazadaSellerStatus.account_id || "Lazada Seller"}` }
         : { connected: false };
 
-      const overview = await integrationService.fetchConnectorsOverview();
+      const overview = await overviewPromise;
       if (overview.success) {
         setConnectorOverview(overview.connectors);
         const postgres = overview.connectors.find((connector) => connector.connector_key === "postgres");
@@ -742,6 +785,8 @@ export default function WorkspacePage() {
         const zendesk = overview.connectors.find((connector) => connector.connector_key === "zendesk");
         const mixpanel = overview.connectors.find((connector) => connector.connector_key === "mixpanel");
         const posthog = overview.connectors.find((connector) => connector.connector_key === "posthog");
+        const customerIO = overview.connectors.find((connector) => connector.connector_key === "customer_io");
+        const googleSearchConsole = overview.connectors.find((connector) => connector.connector_key === "google_search_console");
         const amazonSeller = overview.connectors.find((connector) => connector.connector_key === "amazon_seller");
         const tiktokShopSeller = overview.connectors.find((connector) => connector.connector_key === "tiktok_shop_seller");
         const shopeeSeller = overview.connectors.find((connector) => connector.connector_key === "shopee_seller");
@@ -850,6 +895,20 @@ export default function WorkspacePage() {
           results["PostHog"] = {
             connected: true,
             info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["PostHog"]?.info || "Project: PostHog",
+          };
+        }
+        if (customerIO?.connected) {
+          const reportCount = customerIO.selected_entities?.length || 0;
+          results["Customer.io"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Customer.io"]?.info || "Workspace: Customer.io",
+          };
+        }
+        if (googleSearchConsole?.connected) {
+          const reportCount = googleSearchConsole.selected_entities?.length || 0;
+          results["Google Search Console"] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"}` : results["Google Search Console"]?.info || "Google Search Console",
           };
         }
         if (amazonSeller?.connected) {
@@ -1284,6 +1343,8 @@ export default function WorkspacePage() {
       'zendesk': setZendeskModalOpen,
       'mixpanel': setMixpanelModalOpen,
       'posthog': setPostHogModalOpen,
+      'customer-io': setCustomerIOModalOpen,
+      'google-search-console': setGoogleSearchConsoleModalOpen,
       'amazon-seller': setAmazonSellerModalOpen,
       'tiktok-shop-seller': setTikTokShopSellerModalOpen,
       'shopee-seller': setShopeeSellerModalOpen,
@@ -1305,7 +1366,7 @@ export default function WorkspacePage() {
     const remaining = newParams.toString();
     const newUrl = `${window.location.pathname}${remaining ? '?' + remaining : ''}`;
     window.history.replaceState({}, '', newUrl);
-  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setHubSpotModalOpen, setSalesforceModalOpen, setPipedriveModalOpen, setSupabaseModalOpen, setShopifyModalOpen, setKlaviyoModalOpen, setQuickBooksModalOpen, setZendeskModalOpen, setMixpanelModalOpen, setPostHogModalOpen, setAmazonSellerModalOpen, setTikTokShopSellerModalOpen, setShopeeSellerModalOpen, setLazadaSellerModalOpen, setWarehouseModalOpen]);
+  }, [searchParams, setGA4ModalOpen, setGoogleSheetsModalOpen, setGoogleAdsModalOpen, setFirebaseModalOpen, setHubSpotModalOpen, setSalesforceModalOpen, setPipedriveModalOpen, setSupabaseModalOpen, setShopifyModalOpen, setKlaviyoModalOpen, setQuickBooksModalOpen, setZendeskModalOpen, setMixpanelModalOpen, setPostHogModalOpen, setCustomerIOModalOpen, setGoogleSearchConsoleModalOpen, setAmazonSellerModalOpen, setTikTokShopSellerModalOpen, setShopeeSellerModalOpen, setLazadaSellerModalOpen, setWarehouseModalOpen]);
 
   const isAesthetic = layoutStyle === "aesthetic" && activeTab === "new-chat";
   const showWorkspaceHeaderActions = activeTab === "new-chat";
@@ -1679,13 +1740,18 @@ export default function WorkspacePage() {
                   </div>
                 </div>
 
-                {connectorsLoading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Array.from({ length: CONNECTORS.length }).map((_, i) => (
-                      <Card key={i} className="animate-pulse p-4 h-[80px]" />
-                    ))}
+                {connectorsLoading && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="mb-4 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/80 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm"
+                  >
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    <span>Checking connector status...</span>
                   </div>
-                ) : (
+                )}
+
+                <TooltipProvider delayDuration={150}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {marketplaceConnectors.map((connector) => {
                       const status = connectorStatus[connector.name];
@@ -1694,6 +1760,7 @@ export default function WorkspacePage() {
                       );
                       const isConnected = Boolean(status?.connected || overviewMatch?.connected);
                       const isSoon = !connector.isActive;
+                      const isStatusPending = connectorsLoading && connector.isActive && !status && !overviewMatch;
                       const connectorDescription =
                         CONNECTOR_CARD_DESCRIPTIONS[connector.name] || "Connect this data source to build dashboards faster.";
 
@@ -1703,8 +1770,8 @@ export default function WorkspacePage() {
                           onClick={() => !isSoon && handleIntegrationClick(connector.name)}
                           className={`p-4 h-[92px] transition-all ${isSoon ? "opacity-55" : "hover:border-primary/40 cursor-pointer"}`}
                         >
-                          <div className="flex items-center justify-between h-full">
-                            <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex items-center justify-between gap-3 h-full">
+                            <div className="flex min-w-0 flex-1 items-center gap-3">
                               <div className={`w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${connector.iconBg ?? 'bg-muted dark:bg-white/5'} ${isSoon ? "grayscale" : ""}`}>
                                 <img
                                   src={connector.icon}
@@ -1713,20 +1780,63 @@ export default function WorkspacePage() {
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                                 />
                               </div>
-                              <div className="min-w-0">
-                                <h3 className="font-medium text-sm text-foreground">{connector.name}</h3>
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-medium text-sm text-foreground truncate">{connector.name}</h3>
                                 <span className="text-xs text-muted-foreground block truncate">{connectorDescription}</span>
                               </div>
                             </div>
                             {isSoon ? (
-                              <Badge variant="secondary" className="text-xs font-normal">Coming soon</Badge>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span
+                                    aria-label="Coming soon"
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border/60"
+                                    role="img"
+                                    tabIndex={0}
+                                  >
+                                    <Clock3 className="h-4 w-4" aria-hidden="true" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>Coming soon</TooltipContent>
+                              </Tooltip>
                             ) : (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleIntegrationClick(connector.name); }}
-                                className="w-fit px-4 py-1.5 button-outline text-xs rounded-md inline-flex items-center justify-center mt-1"
-                              >
-                                Connect
-                              </button>
+                              <div className="flex shrink-0 items-center gap-2">
+                                {isStatusPending ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span
+                                        aria-label="Checking status"
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"
+                                        role="status"
+                                        tabIndex={0}
+                                      >
+                                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Checking status</TooltipContent>
+                                  </Tooltip>
+                                ) : isConnected ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span
+                                        aria-label="Connected"
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500"
+                                        role="img"
+                                        tabIndex={0}
+                                      >
+                                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{status?.info || "Connected"}</TooltipContent>
+                                  </Tooltip>
+                                ) : null}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleIntegrationClick(connector.name); }}
+                                  className="w-fit shrink-0 px-4 py-1.5 button-outline text-xs rounded-md inline-flex items-center justify-center"
+                                >
+                                  Connect
+                                </button>
+                              </div>
                             )}
                           </div>
                         </Card>
@@ -1743,14 +1853,14 @@ export default function WorkspacePage() {
                             <Plus className="w-5 h-5 text-primary" />
                           </div>
                           <div className="min-w-0">
-                            <h3 className="font-medium text-sm text-foreground">Request a Connector</h3>
+                            <h3 className="font-medium text-sm text-foreground truncate">Request a Connector</h3>
                             <span className="text-xs text-muted-foreground block truncate">Tell us what you need, we build it for you</span>
                           </div>
                         </div>
                       </div>
                     </Card>
                   </div>
-                )}
+                </TooltipProvider>
               </>
             )}
           </div>

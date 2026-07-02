@@ -396,6 +396,8 @@ export default function WorkspaceNewChat() {
     if (connector.name === "Zendesk") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setZendeskModalOpen(true), 0); return; }
     if (connector.name === "Mixpanel") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setMixpanelModalOpen(true), 0); return; }
     if (connector.name === "PostHog") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setPostHogModalOpen(true), 0); return; }
+    if (connector.name === "Customer.io") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setCustomerIOModalOpen(true), 0); return; }
+    if (connector.name === "Google Search Console") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setGoogleSearchConsoleModalOpen(true), 0); return; }
     if (connector.name === "Amazon Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setAmazonSellerModalOpen(true), 0); return; }
     if (connector.name === "TikTok Shop Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setTikTokShopSellerModalOpen(true), 0); return; }
     if (connector.name === "Shopee Seller") { setDropdownOpen(false); setTimeout(() => useChatStore.getState().setShopeeSellerModalOpen(true), 0); return; }

@@ -48,6 +48,8 @@ const PROVIDER_LABELS: Record<ProviderKey, string> = {
   zendesk: 'Zendesk',
   mixpanel: 'Mixpanel',
   posthog: 'PostHog',
+  customer_io: 'Customer.io',
+  google_search_console: 'Google Search Console',
   amazon_seller: 'Amazon Seller',
   tiktok_shop_seller: 'TikTok Shop Seller',
   shopee_seller: 'Shopee Seller',
@@ -103,6 +105,8 @@ const CONNECTOR_TO_PROVIDER: Record<string, ProviderKey> = {
   zendesk: 'zendesk',
   mixpanel: 'mixpanel',
   posthog: 'posthog',
+  customer_io: 'customer_io',
+  google_search_console: 'google_search_console',
   amazon_seller: 'amazon_seller',
   tiktok_shop_seller: 'tiktok_shop_seller',
   shopee_seller: 'shopee_seller',
@@ -129,6 +133,8 @@ const PROVIDER_TO_CONNECTOR: Record<ProviderKey, string> = {
   zendesk: 'zendesk',
   mixpanel: 'mixpanel',
   posthog: 'posthog',
+  customer_io: 'customer_io',
+  google_search_console: 'google_search_console',
   amazon_seller: 'amazon_seller',
   tiktok_shop_seller: 'tiktok_shop_seller',
   shopee_seller: 'shopee_seller',
@@ -251,6 +257,37 @@ function buildPostHogReportEntities(projectId: string, accountName = 'PostHog', 
   ];
 }
 
+function buildCustomerIOReportEntities(workspaceId: string, accountName = 'Customer.io', region = 'US', baseUrl = ''): ConnectorSelectedEntity[] {
+  const workspace = workspaceId.trim() || 'all';
+  const selectedRegion = region.trim().toUpperCase() || 'US';
+  return [
+    { id: `customer_io:lifecycle_overview:${workspace}:all`, name: 'Lifecycle Overview', type: 'report', report_type: 'lifecycle_overview', workspace_id: workspace, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `customer_io:campaigns:${workspace}:all`, name: 'Campaigns', type: 'report', report_type: 'campaigns', workspace_id: workspace, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `customer_io:campaign_actions:${workspace}:all`, name: 'Campaign Actions', type: 'report', report_type: 'campaign_actions', workspace_id: workspace, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `customer_io:newsletters:${workspace}:all`, name: 'Newsletters', type: 'report', report_type: 'newsletters', workspace_id: workspace, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `customer_io:segments:${workspace}:all`, name: 'Segments', type: 'report', report_type: 'segments', workspace_id: workspace, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `customer_io:people:${workspace}:all`, name: 'People', type: 'report', report_type: 'people', workspace_id: workspace, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `customer_io:events:${workspace}:all`, name: 'Events', type: 'report', report_type: 'events', workspace_id: workspace, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+    { id: `customer_io:message_metrics:${workspace}:all`, name: 'Message Metrics', type: 'report', report_type: 'message_metrics', workspace_id: workspace, resource_id: 'all', region: selectedRegion, base_url: baseUrl, account_name: accountName },
+  ];
+}
+
+function buildGoogleSearchConsoleReportEntities(siteKey: string, siteUrl: string, accountName = 'Google Search Console', searchType = 'web'): ConnectorSelectedEntity[] {
+  const key = siteKey.trim();
+  if (!key) return [];
+  const selectedSearchType = searchType.trim() || 'web';
+  const siteName = siteUrl.trim() || key;
+  return [
+    { id: `google_search_console:search_overview:${key}:${selectedSearchType}`, name: `${siteName} - Search Overview`, type: 'report', report_type: 'search_overview', site_key: key, site_url: siteUrl, search_type: selectedSearchType, account_name: accountName },
+    { id: `google_search_console:queries:${key}:${selectedSearchType}`, name: `${siteName} - Queries`, type: 'report', report_type: 'queries', site_key: key, site_url: siteUrl, search_type: selectedSearchType, account_name: accountName },
+    { id: `google_search_console:pages:${key}:${selectedSearchType}`, name: `${siteName} - Pages`, type: 'report', report_type: 'pages', site_key: key, site_url: siteUrl, search_type: selectedSearchType, account_name: accountName },
+    { id: `google_search_console:countries:${key}:${selectedSearchType}`, name: `${siteName} - Countries`, type: 'report', report_type: 'countries', site_key: key, site_url: siteUrl, search_type: selectedSearchType, account_name: accountName },
+    { id: `google_search_console:devices:${key}:${selectedSearchType}`, name: `${siteName} - Devices`, type: 'report', report_type: 'devices', site_key: key, site_url: siteUrl, search_type: selectedSearchType, account_name: accountName },
+    { id: `google_search_console:dates:${key}:${selectedSearchType}`, name: `${siteName} - Dates`, type: 'report', report_type: 'dates', site_key: key, site_url: siteUrl, search_type: selectedSearchType, account_name: accountName },
+    { id: `google_search_console:query_page:${key}:${selectedSearchType}`, name: `${siteName} - Query and Page`, type: 'report', report_type: 'query_page', site_key: key, site_url: siteUrl, search_type: selectedSearchType, account_name: accountName },
+  ];
+}
+
 function buildAmazonSellerReportEntities(sellerId: string, accountName = 'Amazon Seller', marketplaceId = 'all'): ConnectorSelectedEntity[] {
   const seller = sellerId.trim() || 'all';
   const marketplace = marketplaceId.trim() || 'all';
@@ -320,6 +357,8 @@ function getEntityIdFromConfig(provider: ProviderKey, config: Record<string, unk
   if (provider === 'zendesk') return String(config.entity_id || `zendesk:${config.report_type || 'support_overview'}:${config.subdomain || 'all'}:${config.resource_id || 'all'}`);
   if (provider === 'mixpanel') return String(config.entity_id || `mixpanel:${config.report_type || 'product_overview'}:${config.project_id || 'all'}:${config.resource_id || 'all'}`);
   if (provider === 'posthog') return String(config.entity_id || `posthog:${config.report_type || 'product_overview'}:${config.project_id || 'all'}:${config.resource_id || 'all'}`);
+  if (provider === 'customer_io') return String(config.entity_id || `customer_io:${config.report_type || 'lifecycle_overview'}:${config.workspace_id || 'all'}:${config.resource_id || 'all'}`);
+  if (provider === 'google_search_console') return String(config.entity_id || `google_search_console:${config.report_type || 'search_overview'}:${config.site_key || 'all'}:${config.search_type || 'web'}`);
   if (provider === 'amazon_seller') return String(config.entity_id || `amazon_seller:${config.report_type || 'sales_overview'}:${config.seller_id || 'all'}:${config.marketplace_id || 'all'}`);
   if (provider === 'tiktok_shop_seller') return String(config.entity_id || `tiktok_shop_seller:${config.report_type || 'sales_overview'}:${config.shop_id || 'all'}:${config.region || 'US'}`);
   if (provider === 'shopee_seller') return String(config.entity_id || `shopee_seller:${config.report_type || 'sales_overview'}:${config.shop_id || 'all'}:${config.region || 'VN'}`);
@@ -467,6 +506,32 @@ function buildConnectorConfig(provider: ProviderKey, entity: ConnectorSelectedEn
       entity_name: entity.name,
       row_limit: 5000,
       include_pii: false,
+    };
+  }
+  if (provider === 'customer_io') {
+    const [, reportType = 'lifecycle_overview', workspaceId = 'all', resourceId = 'all'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      workspace_id: entity.workspace_id || entity.account_id || workspaceId,
+      resource_id: entity.resource_id || resourceId,
+      region: entity.region || 'US',
+      base_url: entity.base_url || '',
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
+      include_pii: false,
+    };
+  }
+  if (provider === 'google_search_console') {
+    const [, reportType = 'search_overview', siteKey = 'all', searchType = 'web'] = entity.id.split(':');
+    return {
+      report_type: entity.report_type || reportType,
+      site_key: entity.site_key || siteKey,
+      site_url: entity.site_url || '',
+      search_type: entity.search_type || searchType,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      row_limit: 5000,
     };
   }
   if (provider === 'amazon_seller') {
@@ -704,6 +769,35 @@ async function fetchProviderEntities(provider: ProviderKey): Promise<ConnectorSe
     return buildPostHogReportEntities(status.project_id || 'all', status.account_name || 'PostHog', status.region || 'US', status.base_url || '');
   }
 
+  if (provider === 'customer_io') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Customer.io reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'customer_io');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const status = await integrationService.getCustomerIOStatus();
+    if (!status.connected) return [];
+    return buildCustomerIOReportEntities(status.workspace_id || 'all', status.account_name || 'Customer.io', status.region || 'US', status.api_base_url || '');
+  }
+
+  if (provider === 'google_search_console') {
+    const response = await integrationService.fetchConnectorsOverview();
+    if (!response.success) throw new Error(response.error || 'Failed to load Google Search Console reports.');
+    const connector = response.connectors.find((item) => item.connector_key === 'google_search_console');
+    const existingEntities = connector?.selected_entities || [];
+    if (existingEntities.length > 0) return existingEntities;
+    const resources = await integrationService.fetchGoogleSearchConsoleResources();
+    if (!resources.success) throw new Error(resources.error || 'Failed to load Google Search Console properties.');
+    return resources.sites.flatMap((site) =>
+      buildGoogleSearchConsoleReportEntities(
+        site.site_key,
+        site.site_url,
+        resources.account_name || 'Google Search Console',
+        'web',
+      )
+    );
+  }
+
   if (provider === 'amazon_seller') {
     const response = await integrationService.fetchConnectorsOverview();
     if (!response.success) throw new Error(response.error || 'Failed to load Amazon Seller reports.');
@@ -825,6 +919,12 @@ export function CreateScheduleModal({
       const postHogProjectId = connector.selected_entities?.[0]?.project_id || connector.selected_entities?.[0]?.account_id || 'all';
       const postHogRegion = connector.selected_entities?.[0]?.region || 'US';
       const postHogBaseUrl = connector.selected_entities?.[0]?.base_url || '';
+      const customerIOWorkspaceId = connector.selected_entities?.[0]?.workspace_id || connector.selected_entities?.[0]?.account_id || 'all';
+      const customerIORegion = connector.selected_entities?.[0]?.region || 'US';
+      const customerIOBaseUrl = connector.selected_entities?.[0]?.base_url || '';
+      const googleSearchConsoleSiteKey = connector.selected_entities?.[0]?.site_key || '';
+      const googleSearchConsoleSiteUrl = connector.selected_entities?.[0]?.site_url || '';
+      const googleSearchConsoleSearchType = connector.selected_entities?.[0]?.search_type || 'web';
       const amazonSellerId = connector.selected_entities?.[0]?.seller_id || 'all';
       const tiktokShopId = connector.selected_entities?.[0]?.shop_id || 'all';
       const tiktokShopRegion = connector.selected_entities?.[0]?.region || 'US';
@@ -852,15 +952,19 @@ export function CreateScheduleModal({
                         ? buildMixpanelReportEntities(String(mixpanelProjectId), connector.account_name || 'Mixpanel', String(mixpanelRegion))
                         : connector.connector_key === 'posthog' && connectorEntities.length === 0
                           ? buildPostHogReportEntities(String(postHogProjectId), connector.account_name || 'PostHog', String(postHogRegion), String(postHogBaseUrl))
-                          : connector.connector_key === 'amazon_seller' && connectorEntities.length === 0
-                            ? buildAmazonSellerReportEntities(String(amazonSellerId), connector.account_name || 'Amazon Seller')
-                            : connector.connector_key === 'tiktok_shop_seller' && connectorEntities.length === 0
-                              ? buildTikTokShopSellerReportEntities(String(tiktokShopId), connector.account_name || 'TikTok Shop Seller', String(tiktokShopRegion))
-                              : connector.connector_key === 'shopee_seller' && connectorEntities.length === 0
-                                ? buildShopeeSellerReportEntities(String(shopeeShopId), connector.account_name || 'Shopee Seller', String(shopeeRegion))
-                                : connector.connector_key === 'lazada_seller' && connectorEntities.length === 0
-                                  ? buildLazadaSellerReportEntities(String(lazadaSellerId), connector.account_name || 'Lazada Seller', String(lazadaRegion))
-                                  : connectorEntities;
+                          : connector.connector_key === 'customer_io' && connectorEntities.length === 0
+                            ? buildCustomerIOReportEntities(String(customerIOWorkspaceId), connector.account_name || 'Customer.io', String(customerIORegion), String(customerIOBaseUrl))
+                            : connector.connector_key === 'google_search_console' && connectorEntities.length === 0
+                              ? buildGoogleSearchConsoleReportEntities(String(googleSearchConsoleSiteKey), String(googleSearchConsoleSiteUrl), connector.account_name || 'Google Search Console', String(googleSearchConsoleSearchType))
+                              : connector.connector_key === 'amazon_seller' && connectorEntities.length === 0
+                                ? buildAmazonSellerReportEntities(String(amazonSellerId), connector.account_name || 'Amazon Seller')
+                                : connector.connector_key === 'tiktok_shop_seller' && connectorEntities.length === 0
+                                  ? buildTikTokShopSellerReportEntities(String(tiktokShopId), connector.account_name || 'TikTok Shop Seller', String(tiktokShopRegion))
+                                  : connector.connector_key === 'shopee_seller' && connectorEntities.length === 0
+                                    ? buildShopeeSellerReportEntities(String(shopeeShopId), connector.account_name || 'Shopee Seller', String(shopeeRegion))
+                                    : connector.connector_key === 'lazada_seller' && connectorEntities.length === 0
+                                      ? buildLazadaSellerReportEntities(String(lazadaSellerId), connector.account_name || 'Lazada Seller', String(lazadaRegion))
+                                      : connectorEntities;
 
       if (mappedProvider === 'warehouse') {
         const current = grouped.get('warehouse') || {

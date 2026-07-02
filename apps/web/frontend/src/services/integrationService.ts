@@ -62,6 +62,7 @@ export interface ConnectorSelectedEntity {
   metric_id?: string;
   channel?: string;
   project_id?: string;
+  workspace_id?: string;
   realm_id?: string;
   accounting_basis?: string;
   seller_id?: string;
@@ -70,6 +71,9 @@ export interface ConnectorSelectedEntity {
   region?: string;
   base_url?: string;
   subdomain?: string;
+  site_url?: string;
+  site_key?: string;
+  search_type?: string;
 }
 
 export interface ConnectorOverviewItem {
@@ -855,6 +859,142 @@ export interface PostHogSyncResponse {
   error?: string;
 }
 
+export interface CustomerIOWorkspace {
+  id: string;
+  name: string;
+  region?: string;
+  api_base_url?: string;
+}
+
+export interface CustomerIOConnectionStatusResponse {
+  connected: boolean;
+  workspace_id?: string;
+  region?: string;
+  api_base_url?: string;
+  account_name?: string;
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface CustomerIOReportResource {
+  report_type: string;
+  label: string;
+  resource: string;
+  default?: boolean;
+}
+
+export interface CustomerIONamedResource {
+  id: string;
+  name: string;
+  type?: string;
+  status?: string;
+  updated_at?: string;
+}
+
+export interface CustomerIOConnectRequest {
+  app_api_key: string;
+  region?: string;
+  api_base_url?: string;
+  account_name?: string;
+  workspace_id?: string;
+}
+
+export interface CustomerIOResourcesResponse {
+  success: boolean;
+  reports: CustomerIOReportResource[];
+  workspaces: CustomerIOWorkspace[];
+  campaigns: CustomerIONamedResource[];
+  newsletters: CustomerIONamedResource[];
+  segments: CustomerIONamedResource[];
+  people: CustomerIONamedResource[];
+  error?: string;
+}
+
+export interface CustomerIOSyncRequest {
+  report_type: string;
+  project_id?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  row_limit?: number;
+  include_pii?: boolean;
+  max_bytes?: number;
+  resource_id?: string;
+}
+
+export interface CustomerIOSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
+export interface GoogleSearchConsoleSite {
+  site_url: string;
+  site_key: string;
+  permission_level?: string;
+}
+
+export interface GoogleSearchConsoleConnectionStatusResponse {
+  connected: boolean;
+  account_name?: string;
+  scopes?: string[];
+  site_count?: number;
+  selected_entities?: ConnectorSelectedEntity[];
+  connected_at?: string;
+}
+
+export interface GoogleSearchConsoleReportResource {
+  report_type: string;
+  label: string;
+  dimensions: string[];
+  default?: boolean;
+}
+
+export interface GoogleSearchConsoleSearchType {
+  id: string;
+  label: string;
+}
+
+export interface GoogleSearchConsoleResourcesResponse {
+  success: boolean;
+  reports: GoogleSearchConsoleReportResource[];
+  sites: GoogleSearchConsoleSite[];
+  search_types: GoogleSearchConsoleSearchType[];
+  account_name?: string;
+  error?: string;
+}
+
+export interface GoogleSearchConsoleSyncRequest {
+  report_type: string;
+  project_id?: string;
+  site_url?: string;
+  site_key?: string;
+  search_type?: string;
+  date_preset?: string;
+  start_date?: string;
+  end_date?: string;
+  row_limit?: number;
+  max_bytes?: number;
+}
+
+export interface GoogleSearchConsoleSyncResponse {
+  success: boolean;
+  message?: string;
+  asset?: AssetRecord;
+  row_count?: number;
+  column_count?: number;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+  error?: string;
+}
+
 export interface TikTokShopSellerShop {
   id: string;
   name: string;
@@ -1360,6 +1500,10 @@ class IntegrationService {
 
   getZendeskOAuthStartUrl(subdomain: string): string {
     return `/api/v1/integration/zendesk/oauth/start?subdomain=${encodeURIComponent(subdomain)}`;
+  }
+
+  getGoogleSearchConsoleOAuthStartUrl(): string {
+    return '/api/v1/integration/google-search-console/oauth/start';
   }
 
   getAmazonSellerOAuthStartUrl(region: string): string {
@@ -2109,6 +2253,110 @@ class IntegrationService {
       const res = await api.post<PostHogSyncResponse>(`${this.baseUrl}/posthog/sync`, req);
       if (res.success && res.data) return res.data;
       return { success: false, error: res.error || 'Failed to sync PostHog data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async connectCustomerIO(req: CustomerIOConnectRequest): Promise<CustomerIOConnectionStatusResponse> {
+    const res = await api.post<CustomerIOConnectionStatusResponse>(`${this.baseUrl}/customer-io/connect`, req);
+    if (res.success && res.data) return res.data;
+    throw new Error(res.error || 'Failed to connect Customer.io');
+  }
+
+  async getCustomerIOStatus(): Promise<CustomerIOConnectionStatusResponse> {
+    try {
+      const res = await api.get<CustomerIOConnectionStatusResponse>(`${this.baseUrl}/customer-io/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectCustomerIO(): Promise<void> {
+    await api.delete(`${this.baseUrl}/customer-io/disconnect`);
+  }
+
+  async fetchCustomerIOResources(): Promise<CustomerIOResourcesResponse> {
+    try {
+      const res = await api.get<CustomerIOResourcesResponse>(`${this.baseUrl}/customer-io/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        workspaces: [],
+        campaigns: [],
+        newsletters: [],
+        segments: [],
+        people: [],
+        error: res.error || 'Failed to load Customer.io resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        workspaces: [],
+        campaigns: [],
+        newsletters: [],
+        segments: [],
+        people: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncCustomerIO(req: CustomerIOSyncRequest): Promise<CustomerIOSyncResponse> {
+    try {
+      const res = await api.post<CustomerIOSyncResponse>(`${this.baseUrl}/customer-io/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Customer.io data' };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getGoogleSearchConsoleStatus(): Promise<GoogleSearchConsoleConnectionStatusResponse> {
+    try {
+      const res = await api.get<GoogleSearchConsoleConnectionStatusResponse>(`${this.baseUrl}/google-search-console/status`);
+      if (res.success && res.data) return res.data;
+      return { connected: false };
+    } catch {
+      return { connected: false };
+    }
+  }
+
+  async disconnectGoogleSearchConsole(): Promise<void> {
+    await api.delete(`${this.baseUrl}/google-search-console/disconnect`);
+  }
+
+  async fetchGoogleSearchConsoleResources(): Promise<GoogleSearchConsoleResourcesResponse> {
+    try {
+      const res = await api.get<GoogleSearchConsoleResourcesResponse>(`${this.baseUrl}/google-search-console/resources`);
+      if (res.success && res.data) return res.data;
+      return {
+        success: false,
+        reports: [],
+        sites: [],
+        search_types: [],
+        error: res.error || 'Failed to load Google Search Console resources',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        reports: [],
+        sites: [],
+        search_types: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async syncGoogleSearchConsole(req: GoogleSearchConsoleSyncRequest): Promise<GoogleSearchConsoleSyncResponse> {
+    try {
+      const res = await api.post<GoogleSearchConsoleSyncResponse>(`${this.baseUrl}/google-search-console/sync`, req);
+      if (res.success && res.data) return res.data;
+      return { success: false, error: res.error || 'Failed to sync Google Search Console data' };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }

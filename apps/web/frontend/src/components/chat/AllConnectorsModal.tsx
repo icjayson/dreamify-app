@@ -34,6 +34,8 @@ export default function AllConnectorsModal() {
     setZendeskModalOpen,
     setMixpanelModalOpen,
     setPostHogModalOpen,
+    setCustomerIOModalOpen,
+    setGoogleSearchConsoleModalOpen,
     setAmazonSellerModalOpen,
     setTikTokShopSellerModalOpen,
     setShopeeSellerModalOpen,
@@ -153,6 +155,16 @@ export default function AllConnectorsModal() {
         ? { connected: true, info: postHogStatus.account_name || postHogStatus.project_id || 'PostHog' }
         : { connected: false };
 
+      const customerIOStatus = await integrationService.getCustomerIOStatus();
+      results['Customer.io'] = customerIOStatus.connected
+        ? { connected: true, info: customerIOStatus.account_name || customerIOStatus.workspace_id || 'Customer.io' }
+        : { connected: false };
+
+      const googleSearchConsoleStatus = await integrationService.getGoogleSearchConsoleStatus();
+      results['Google Search Console'] = googleSearchConsoleStatus.connected
+        ? { connected: true, info: googleSearchConsoleStatus.account_name || `${googleSearchConsoleStatus.site_count || 0} propert${googleSearchConsoleStatus.site_count === 1 ? 'y' : 'ies'}` }
+        : { connected: false };
+
       const amazonSellerStatus = await integrationService.getAmazonSellerStatus();
       results['Amazon Seller'] = amazonSellerStatus.connected
         ? { connected: true, info: amazonSellerStatus.seller_name || amazonSellerStatus.seller_id || 'Amazon Seller' }
@@ -186,6 +198,8 @@ export default function AllConnectorsModal() {
         const zendesk = overview.connectors.find((connector) => connector.connector_key === 'zendesk');
         const mixpanel = overview.connectors.find((connector) => connector.connector_key === 'mixpanel');
         const posthog = overview.connectors.find((connector) => connector.connector_key === 'posthog');
+        const customerIO = overview.connectors.find((connector) => connector.connector_key === 'customer_io');
+        const googleSearchConsole = overview.connectors.find((connector) => connector.connector_key === 'google_search_console');
         const amazonSeller = overview.connectors.find((connector) => connector.connector_key === 'amazon_seller');
         const tiktokShopSeller = overview.connectors.find((connector) => connector.connector_key === 'tiktok_shop_seller');
         const shopeeSeller = overview.connectors.find((connector) => connector.connector_key === 'shopee_seller');
@@ -275,6 +289,20 @@ export default function AllConnectorsModal() {
             info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['PostHog']?.info || 'PostHog',
           };
         }
+        if (customerIO?.connected) {
+          const reportCount = customerIO.selected_entities?.length || 0;
+          results['Customer.io'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Customer.io']?.info || 'Customer.io',
+          };
+        }
+        if (googleSearchConsole?.connected) {
+          const reportCount = googleSearchConsole.selected_entities?.length || 0;
+          results['Google Search Console'] = {
+            connected: true,
+            info: reportCount > 0 ? `${reportCount} report${reportCount === 1 ? '' : 's'}` : results['Google Search Console']?.info || 'Google Search Console',
+          };
+        }
         if (amazonSeller?.connected) {
           const reportCount = amazonSeller.selected_entities?.length || 0;
           results['Amazon Seller'] = {
@@ -336,6 +364,8 @@ export default function AllConnectorsModal() {
       else if (connectorName === 'Zendesk') setZendeskModalOpen(true);
       else if (connectorName === 'Mixpanel') setMixpanelModalOpen(true);
       else if (connectorName === 'PostHog') setPostHogModalOpen(true);
+      else if (connectorName === 'Customer.io') setCustomerIOModalOpen(true);
+      else if (connectorName === 'Google Search Console') setGoogleSearchConsoleModalOpen(true);
       else if (connectorName === 'Amazon Seller') setAmazonSellerModalOpen(true);
       else if (connectorName === 'TikTok Shop Seller') setTikTokShopSellerModalOpen(true);
       else if (connectorName === 'Shopee Seller') setShopeeSellerModalOpen(true);

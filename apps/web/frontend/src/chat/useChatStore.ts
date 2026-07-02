@@ -4,7 +4,7 @@ import { conversationNodesToMessages } from '@/chat/conversationToMessages';
 import { processingService, type ProcessingResponse } from '@/services/processingService';
 import { streamWorkflow } from '@/services/workflowStreamService';
 import type { ConversationChatRequest, DashboardDataResponse } from '@/services/conversationService';
-import type { AmazonSellerSyncRequest, KlaviyoSyncRequest, LazadaSellerSyncRequest, MixpanelSyncRequest, PostHogSyncRequest, QuickBooksSyncRequest, ShopifySyncRequest, ShopeeSellerSyncRequest, SupabaseSyncRequest, TikTokShopSellerSyncRequest, ZendeskSyncRequest } from '@/services/integrationService';
+import type { AmazonSellerSyncRequest, CustomerIOSyncRequest, GoogleSearchConsoleSyncRequest, KlaviyoSyncRequest, LazadaSellerSyncRequest, MixpanelSyncRequest, PostHogSyncRequest, QuickBooksSyncRequest, ShopifySyncRequest, ShopeeSellerSyncRequest, SupabaseSyncRequest, TikTokShopSellerSyncRequest, ZendeskSyncRequest } from '@/services/integrationService';
 import type { AnalysisStep, ChartChangeSummary, EditDataProvenance } from '@/types/chartEdit';
 import type { AssetRecord } from '@/services/fileService';
 import {
@@ -378,6 +378,8 @@ interface ChatState {
   isZendeskModalOpen: boolean;
   isMixpanelModalOpen: boolean;
   isPostHogModalOpen: boolean;
+  isCustomerIOModalOpen: boolean;
+  isGoogleSearchConsoleModalOpen: boolean;
   isAmazonSellerModalOpen: boolean;
   isTikTokShopSellerModalOpen: boolean;
   isShopeeSellerModalOpen: boolean;
@@ -463,6 +465,8 @@ interface ChatState {
   setZendeskModalOpen: (open: boolean) => void;
   setMixpanelModalOpen: (open: boolean) => void;
   setPostHogModalOpen: (open: boolean) => void;
+  setCustomerIOModalOpen: (open: boolean) => void;
+  setGoogleSearchConsoleModalOpen: (open: boolean) => void;
   setAmazonSellerModalOpen: (open: boolean) => void;
   setTikTokShopSellerModalOpen: (open: boolean) => void;
   setShopeeSellerModalOpen: (open: boolean) => void;
@@ -502,6 +506,8 @@ interface ChatState {
   syncZendesk: (request: ZendeskSyncRequest) => Promise<ZendeskSyncResult>;
   syncMixpanel: (request: MixpanelSyncRequest) => Promise<MixpanelSyncResult>;
   syncPostHog: (request: PostHogSyncRequest) => Promise<PostHogSyncResult>;
+  syncCustomerIO: (request: CustomerIOSyncRequest) => Promise<CustomerIOSyncResult>;
+  syncGoogleSearchConsole: (request: GoogleSearchConsoleSyncRequest) => Promise<GoogleSearchConsoleSyncResult>;
   syncAmazonSeller: (request: AmazonSellerSyncRequest) => Promise<AmazonSellerSyncResult>;
   syncTikTokShopSeller: (request: TikTokShopSellerSyncRequest) => Promise<TikTokShopSellerSyncResult>;
   syncShopeeSeller: (request: ShopeeSellerSyncRequest) => Promise<ShopeeSellerSyncResult>;
@@ -624,6 +630,30 @@ export interface MixpanelSyncResult {
 
 /** Result of PostHog sync API */
 export interface PostHogSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of Customer.io sync API */
+export interface CustomerIOSyncResult {
+  success: true;
+  row_count: number;
+  column_count: number;
+  asset: import('@/services/fileService').AssetRecord;
+  message?: string;
+  entity_id?: string;
+  truncated?: boolean;
+  api_mode?: string;
+}
+
+/** Result of Google Search Console sync API */
+export interface GoogleSearchConsoleSyncResult {
   success: true;
   row_count: number;
   column_count: number;
@@ -1170,6 +1200,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isZendeskModalOpen: false,
   isMixpanelModalOpen: false,
   isPostHogModalOpen: false,
+  isCustomerIOModalOpen: false,
+  isGoogleSearchConsoleModalOpen: false,
   isAmazonSellerModalOpen: false,
   isTikTokShopSellerModalOpen: false,
   isShopeeSellerModalOpen: false,
@@ -1315,6 +1347,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setZendeskModalOpen: (open) => set({ isZendeskModalOpen: open }),
   setMixpanelModalOpen: (open) => set({ isMixpanelModalOpen: open }),
   setPostHogModalOpen: (open) => set({ isPostHogModalOpen: open }),
+  setCustomerIOModalOpen: (open) => set({ isCustomerIOModalOpen: open }),
+  setGoogleSearchConsoleModalOpen: (open) => set({ isGoogleSearchConsoleModalOpen: open }),
   setAmazonSellerModalOpen: (open) => set({ isAmazonSellerModalOpen: open }),
   setTikTokShopSellerModalOpen: (open) => set({ isTikTokShopSellerModalOpen: open }),
   setShopeeSellerModalOpen: (open) => set({ isShopeeSellerModalOpen: open }),
@@ -1780,6 +1814,56 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error(response.error || 'Failed to sync PostHog data');
     } catch (err) {
       console.error('Sync PostHog error:', err);
+      throw err;
+    }
+  },
+
+  syncCustomerIO: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncCustomerIO(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Customer.io');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Customer.io data');
+    } catch (err) {
+      console.error('Sync Customer.io error:', err);
+      throw err;
+    }
+  },
+
+  syncGoogleSearchConsole: async (request) => {
+    try {
+      const { integrationService } = await import('@/services/integrationService');
+      const response = await integrationService.syncGoogleSearchConsole(request);
+
+      if (response.success && response.asset) {
+        emitConnectorSynced('Google Search Console');
+        return {
+          success: true as const,
+          row_count: response.row_count ?? 0,
+          column_count: response.column_count ?? 0,
+          asset: response.asset,
+          message: response.message,
+          entity_id: response.entity_id,
+          truncated: response.truncated,
+          api_mode: response.api_mode,
+        };
+      }
+      throw new Error(response.error || 'Failed to sync Google Search Console data');
+    } catch (err) {
+      console.error('Sync Google Search Console error:', err);
       throw err;
     }
   },

@@ -653,6 +653,16 @@ const HomePage = ({ onGetStarted, onProcessedDataChange }: HomePageProps) => {
       setTimeout(() => useChatStore.getState().setPostHogModalOpen(true), 0);
       return;
     }
+    if (connector.name === 'Customer.io') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setCustomerIOModalOpen(true), 0);
+      return;
+    }
+    if (connector.name === 'Google Search Console') {
+      setDropdownOpen(false);
+      setTimeout(() => useChatStore.getState().setGoogleSearchConsoleModalOpen(true), 0);
+      return;
+    }
     if (connector.name === 'Amazon Seller') {
       setDropdownOpen(false);
       setTimeout(() => useChatStore.getState().setAmazonSellerModalOpen(true), 0);

@@ -39,6 +39,8 @@ export type ConnectorModalTarget =
   | "zendesk"
   | "mixpanel"
   | "posthog"
+  | "customer_io"
+  | "google_search_console"
   | "amazon_seller"
   | "tiktok_shop_seller"
   | "shopee_seller"
@@ -187,10 +189,31 @@ export const CONNECTORS: ConnectorItem[] = [
   { name: "Segment", icon: "/logo-favicon.png", isActive: false, category: "Product Analytics", productDescription: "Bring customer event streams and profile traits into Dreamify analytics.", productCategory: "Product Analytics", showOnProductPage: true },
 
   // ── Marketing & Lifecycle ───────────────────────────────────────────────────
-  { name: "Customer.io", icon: "/logo-favicon.png", isActive: false, category: "Marketing & Lifecycle", productDescription: "Analyze lifecycle journeys, broadcasts, segments, conversions, and messaging performance.", productCategory: "Marketing", showOnProductPage: true },
+  {
+    name: "Customer.io",
+    icon: "/customer-io.svg",
+    isActive: false,
+    category: "Marketing & Lifecycle",
+    connectorKey: "customer_io",
+    productDescription: "Analyze lifecycle journeys, broadcasts, segments, conversions, and messaging performance.",
+    productCategory: "Marketing",
+    showOnProductPage: true,
+    modalTarget: "customer_io",
+    iconBg: "bg-white",
+  },
   { name: "Mailchimp", icon: "/logo-favicon.png", isActive: false, category: "Marketing & Lifecycle", productDescription: "Analyze email campaigns, audiences, list growth, engagement, and ecommerce impact.", productCategory: "Marketing", showOnProductPage: true },
   { name: "Braze", icon: "/logo-favicon.png", isActive: false, category: "Marketing & Lifecycle", productDescription: "Analyze cross-channel campaigns, canvases, cohorts, and customer lifecycle performance.", productCategory: "Marketing", showOnProductPage: true },
-  { name: "Google Search Console", icon: "/logo-favicon.png", isActive: false, category: "Marketing & Lifecycle", productDescription: "Analyze organic search queries, pages, clicks, impressions, CTR, and SEO growth.", productCategory: "Marketing", showOnProductPage: true },
+  {
+    name: "Google Search Console",
+    icon: "/logo-favicon.png",
+    isActive: false,
+    category: "Marketing & Lifecycle",
+    connectorKey: "google_search_console",
+    productDescription: "Analyze organic search queries, pages, clicks, impressions, CTR, and SEO growth.",
+    productCategory: "Marketing",
+    showOnProductPage: true,
+    modalTarget: "google_search_console",
+  },
 
   // ── Payment & Finance ─────────────────────────────────────────────────────────
   {

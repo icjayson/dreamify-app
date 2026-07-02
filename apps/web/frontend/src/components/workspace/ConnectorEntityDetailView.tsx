@@ -580,6 +580,46 @@ export default function ConnectorEntityDetailView(props: Props) {
         entityName,
       };
     }
+    if (connectorKey === "customer_io") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "lifecycle_overview", workspaceIdFromId = "all", resourceIdFromId = "all"] = entityId.split(":");
+      return {
+        provider: "customer_io" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          workspace_id: String(scheduleConfig.workspace_id || entity?.workspace_id || workspaceIdFromId),
+          resource_id: String(scheduleConfig.resource_id || entity?.resource_id || resourceIdFromId),
+          region: String(scheduleConfig.region || entity?.region || "US"),
+          base_url: String(scheduleConfig.base_url || entity?.base_url || ""),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+          include_pii: scheduleConfig.include_pii ?? false,
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
+    if (connectorKey === "google_search_console") {
+      const entity = connectorDetail?.entity;
+      const [, reportTypeFromId = "search_overview", siteKeyFromId = "all", searchTypeFromId = "web"] = entityId.split(":");
+      return {
+        provider: "google_search_console" as ProviderKey,
+        config: {
+          report_type: String(scheduleConfig.report_type || entity?.report_type || reportTypeFromId),
+          site_key: String(scheduleConfig.site_key || entity?.site_key || siteKeyFromId),
+          site_url: String(scheduleConfig.site_url || entity?.site_url || ""),
+          search_type: String(scheduleConfig.search_type || entity?.search_type || searchTypeFromId),
+          entity_id: String(scheduleConfig.entity_id || entityId),
+          entity_name: entityName,
+          row_limit: Number(scheduleConfig.row_limit || 5000),
+        },
+        projectId,
+        accountName,
+        entityName,
+      };
+    }
     if (connectorKey === "amazon_seller") {
       const entity = connectorDetail?.entity;
       const [, reportTypeFromId = "sales_overview", sellerIdFromId = "all", marketplaceIdFromId = "all"] = entityId.split(":");

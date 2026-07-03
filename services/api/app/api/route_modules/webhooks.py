@@ -15,7 +15,7 @@ import logging
 
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 
-from utils.config import config
+from utils.config import config, frontend_app_url
 from utils.resend_automation import emit, sync_contact, delete_contact
 
 logger = logging.getLogger(__name__)
@@ -24,11 +24,7 @@ router = APIRouter(tags=["webhooks"])
 
 
 def _app_url() -> str:
-    return (
-        config.chat_platform.dreamify_app_url
-        if config.chat_platform
-        else "https://app.dreamify.dev"
-    )
+    return frontend_app_url()
 
 
 def _primary_email(data: dict) -> str | None:

@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 from app.dependencies.auth import optional_user, require_user
 from app.core.analytics import CSVProcessor
 from app.utils.file_handler import FileHandler
-from utils.config import config
+from utils.config import config, frontend_app_url
 from utils.logger import logger
 from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import projects as projects_repo
@@ -46,7 +46,11 @@ from utils.s3.client import (
     get_s3_client,
 )
 from utils.s3.paths import build_asset_key
-from utils.email_service import send_dashboard_share_email, send_feedback_email, send_feedback_thank_you_email
+from utils.email_service import (
+    send_dashboard_share_email,
+    send_feedback_email,
+    send_feedback_thank_you_email,
+)
 from utils.resend_automation import emit as _emit_automation
 from utils.clerk_auth import get_user_email_name
 from clerk_backend_api import Clerk
@@ -312,11 +316,7 @@ def _emit_dashboard_created(user_id: str, project_id: str, name: Optional[str]) 
         email, first_name = get_user_email_name(user_id)
         if not email:
             return
-        app_url = (
-            config.chat_platform.dreamify_app_url
-            if config.chat_platform
-            else "https://app.dreamify.dev"
-        )
+        app_url = frontend_app_url()
         _emit_automation(
             event="dashboard.created",
             email=email,
@@ -330,7 +330,9 @@ def _emit_dashboard_created(user_id: str, project_id: str, name: Optional[str]) 
             },
         )
     except Exception as e:  # pragma: no cover - best effort
-        logger.warning("[automation] dashboard.created emit failed: %s: %s", type(e).__name__, e)
+        logger.warning(
+            "[automation] dashboard.created emit failed: %s: %s", type(e).__name__, e
+        )
 
 
 @router.post("/user/project/create", response_model=ProjectResponse)
@@ -409,7 +411,11 @@ async def update_project_endpoint(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Send invite emails to newly added allowed users
-    logger.info("[share] update_project allowed=%s resend_configured=%s", request.allowed is not None, bool(config.resend))
+    logger.info(
+        "[share] update_project allowed=%s resend_configured=%s",
+        request.allowed is not None,
+        bool(config.resend),
+    )
     if request.allowed is not None and config.resend:
         old_entries = existing.get("allowed") or []
         old_keys = {
@@ -417,14 +423,18 @@ async def update_project_endpoint(
             for u in old_entries
             if isinstance(u, dict)
         }
-        logger.info("[share] old_keys=%s incoming_count=%d", old_keys, len(request.allowed))
+        logger.info(
+            "[share] old_keys=%s incoming_count=%d", old_keys, len(request.allowed)
+        )
 
         def _is_new(u: AllowedUser) -> bool:
             key = u.user_id or u.email
             return key is not None and key not in old_keys
 
         newly_added = [u for u in request.allowed if _is_new(u)]
-        logger.info("[share] newly_added=%s", [(u.user_id, u.email) for u in newly_added])
+        logger.info(
+            "[share] newly_added=%s", [(u.user_id, u.email) for u in newly_added]
+        )
 
         if newly_added:
             try:
@@ -436,11 +446,7 @@ async def update_project_endpoint(
             except Exception:
                 sharer_name = "Someone"
 
-            app_url = (
-                config.chat_platform.dreamify_app_url
-                if config.chat_platform
-                else "https://app.dreamify.dev"
-            )
+            app_url = frontend_app_url()
             for invited in newly_added:
                 if invited.email:
                     logger.info("[share] Sending invite email to %s", invited.email)
@@ -455,7 +461,10 @@ async def update_project_endpoint(
                         api_key=config.resend.dashboard_share_api_key,
                     )
                 else:
-                    logger.warning("[share] Skipped invite — no email for user_id=%s", invited.user_id)
+                    logger.warning(
+                        "[share] Skipped invite — no email for user_id=%s",
+                        invited.user_id,
+                    )
 
     return _map_project(updated_project)
 
@@ -1173,6 +1182,7 @@ async def compatibility_preview_redirect(
 
 # ── Feedback ───────────────────────────────────────────────────────────────────
 
+
 class FeedbackRequest(BaseModel):
     category: str = Field(..., max_length=100)
     message: str = Field(..., min_length=1, max_length=5000)
@@ -1192,31 +1202,35 @@ class OverallFeedbackRequest(BaseModel):
     website: str = Field(default="", max_length=200)
 
 
-def _format_overall_feedback_message(body: OverallFeedbackRequest, user_id: Optional[str]) -> str:
+def _format_overall_feedback_message(
+    body: OverallFeedbackRequest, user_id: Optional[str]
+) -> str:
     def answer(value: str) -> str:
         return value.strip() or "No answer"
 
-    return "\n".join([
-        "SUBMITTED CONTACT",
-        f"- Full name: {body.full_name.strip()}",
-        f"- Email: {body.email.strip()}",
-        "",
-        "OVERALL RATINGS (1-5)",
-        f"- Overall Dreamify dashboard: {body.overall_rating}/5",
-        f"- Visual appeal: {body.visual_appeal_rating}/5",
-        f"- Metrics and insights coverage: {body.metrics_insights_rating}/5",
-        "",
-        "FEATURE RATINGS (1-5)",
-        f"- Layout editing: {body.layout_editing_rating}/5",
-        f"- Dashboard share link: {body.share_link_rating}/5",
-        "",
-        "OPEN FEEDBACK",
-        f"- Requested data connectors:\n{answer(body.requested_connectors)}",
-        f"- Dashboard features or improvements:\n{answer(body.dashboard_improvements)}",
-        f"- Share link or export improvements:\n{answer(body.export_improvements)}",
-        "",
-        f"Authenticated user ID: {user_id or 'Guest'}",
-    ])
+    return "\n".join(
+        [
+            "SUBMITTED CONTACT",
+            f"- Full name: {body.full_name.strip()}",
+            f"- Email: {body.email.strip()}",
+            "",
+            "OVERALL RATINGS (1-5)",
+            f"- Overall Dreamify dashboard: {body.overall_rating}/5",
+            f"- Visual appeal: {body.visual_appeal_rating}/5",
+            f"- Metrics and insights coverage: {body.metrics_insights_rating}/5",
+            "",
+            "FEATURE RATINGS (1-5)",
+            f"- Layout editing: {body.layout_editing_rating}/5",
+            f"- Dashboard share link: {body.share_link_rating}/5",
+            "",
+            "OPEN FEEDBACK",
+            f"- Requested data connectors:\n{answer(body.requested_connectors)}",
+            f"- Dashboard features or improvements:\n{answer(body.dashboard_improvements)}",
+            f"- Share link or export improvements:\n{answer(body.export_improvements)}",
+            "",
+            f"Authenticated user ID: {user_id or 'Guest'}",
+        ]
+    )
 
 
 async def _resolve_feedback_identity(
@@ -1252,7 +1266,9 @@ async def submit_feedback(
 
     user_name, user_email = await _resolve_feedback_identity(user_id)
 
-    feedback_key = config.resend.feedback_api_key or config.resend.dashboard_share_api_key
+    feedback_key = (
+        config.resend.feedback_api_key or config.resend.dashboard_share_api_key
+    )
     loop = asyncio.get_running_loop()
     sent = await loop.run_in_executor(
         None,
@@ -1301,8 +1317,12 @@ async def submit_overall_feedback(
         raise HTTPException(status_code=422, detail="Please enter your full name")
 
     submitted_email = body.email.strip()
-    if not submitted_email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
-        raise HTTPException(status_code=422, detail="Please enter a valid email address")
+    if not submitted_email or not re.fullmatch(
+        r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email
+    ):
+        raise HTTPException(
+            status_code=422, detail="Please enter a valid email address"
+        )
 
     required_answers = [
         body.requested_connectors,
@@ -1310,14 +1330,18 @@ async def submit_overall_feedback(
         body.export_improvements,
     ]
     if any(not answer.strip() for answer in required_answers):
-        raise HTTPException(status_code=422, detail="Please answer every feedback question")
+        raise HTTPException(
+            status_code=422, detail="Please answer every feedback question"
+        )
 
     user_name, user_email = await _resolve_feedback_identity(
         user_id,
         fallback_name=body.full_name.strip(),
         fallback_email=submitted_email,
     )
-    feedback_key = config.resend.feedback_api_key or config.resend.dashboard_share_api_key
+    feedback_key = (
+        config.resend.feedback_api_key or config.resend.dashboard_share_api_key
+    )
     loop = asyncio.get_running_loop()
     sent = await loop.run_in_executor(
         None,

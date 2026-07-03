@@ -42,7 +42,7 @@ from app.services.slack_service import (
     decrypt_token,
     step_label,
 )
-from utils.config import config
+from utils.config import config, normalize_frontend_app_url
 from utils.dynamodb.repos import assets as assets_repo
 from utils.dynamodb.repos import chat_platform_repo
 from utils.dynamodb.repos import conversations as conversations_repo
@@ -64,6 +64,11 @@ DREAMIFY_APP_URL = (
     if config.chat_platform
     else "https://app.dreamify.dev"
 )
+FRONTEND_APP_URL = (
+    config.chat_platform.frontend_app_url
+    if config.chat_platform
+    else "https://app.dreamify.dev"
+)
 
 # Chat queries always use the "pro" model alias (10 credits).
 CHAT_MODEL_ALIAS = "pro"
@@ -80,6 +85,14 @@ credit_service = CreditService()
 
 
 # ── Conversation helpers ──────────────────────────────────────────────────────
+
+
+def _normalize_frontend_app_url(raw_url: str) -> str:
+    return normalize_frontend_app_url(raw_url)
+
+
+def _frontend_app_url() -> str:
+    return _normalize_frontend_app_url(FRONTEND_APP_URL or DREAMIFY_APP_URL)
 
 
 def _now_iso() -> str:
@@ -140,7 +153,7 @@ def _build_dashboard_url(
     if not dashboards:
         return None
     # Use the public preview page so the link works without Clerk auth
-    return f"{DREAMIFY_APP_URL}/workspace/project/preview?projectId={project_id}"
+    return f"{_frontend_app_url()}/workspace/project/preview?projectId={project_id}"
 
 
 def _load_dashboard_json(s3_uri: str) -> Optional[Dict[str, Any]]:
@@ -169,7 +182,7 @@ def _extract_top_metrics(dashboard: Dict[str, Any], max_n: int = 4) -> list:
 
 
 def _build_workspace_project_url(project_id: str) -> str:
-    return f"{DREAMIFY_APP_URL}/workspace/project?projectId={project_id}"
+    return f"{_frontend_app_url()}/workspace/project?projectId={project_id}"
 
 
 def _analysis_incomplete_message(project_id: str) -> str:
@@ -487,6 +500,15 @@ def _selected_label(pending: Dict[str, Any], clarification: Dict[str, Any]) -> s
     return str((option or {}).get("label") or "Not selected")
 
 
+def _spoken_number_list(count: int) -> str:
+    values = [str(index) for index in range(1, count + 1)]
+    if len(values) <= 1:
+        return values[0] if values else "the option number"
+    if len(values) == 2:
+        return " or ".join(values)
+    return f"{', '.join(values[:-1])}, or {values[-1]}"
+
+
 def _slack_select_option(
     pending: Dict[str, Any],
     thread_key: str,
@@ -658,17 +680,31 @@ def build_zalo_clarification_message(pending: Dict[str, Any], project_id: str) -
     lines = ["📊 Dreamify", "", "I need your choice before I continue the analysis."]
     if pending.get("last_error"):
         lines.extend(["", f"⚠️ {pending['last_error']}"])
-    for ci, clarification in enumerate(pending.get("clarifications", []), start=1):
+    clarifications = list(pending.get("clarifications") or [])
+    multiple = len(clarifications) > 1
+    option_counts: List[int] = []
+    for ci, clarification in enumerate(clarifications, start=1):
+        options = _valid_options(clarification)
+        option_counts.append(len(options))
         lines.append("")
-        lines.append(f"{ci}. {clarification.get('question')}")
-        for oi, option in enumerate(_valid_options(clarification), start=1):
+        prefix = f"Question {ci}: " if multiple else ""
+        lines.append(f"{prefix}{clarification.get('question')}")
+        for oi, option in enumerate(options, start=1):
             suffix = " (recommended)" if option.get("recommended") else ""
             lines.append(f"{oi}. {option.get('label')}{suffix}")
             if option.get("description"):
                 lines.append(f"   {option.get('description')}")
     lines.append("")
-    lines.append("Reply with the option number, exact label, or cancel.")
-    lines.append(f"Open in Dreamify: {_build_workspace_project_url(project_id)}")
+    if multiple:
+        lines.append(
+            "Reply with one option number per question, separated by commas or "
+            "new lines (for example: 1, 2), or cancel."
+        )
+    else:
+        lines.append(
+            f"Reply with {_spoken_number_list(option_counts[0] if option_counts else 0)}. "
+            "You can also type the option label, or cancel."
+        )
     return "\n".join(lines)
 
 

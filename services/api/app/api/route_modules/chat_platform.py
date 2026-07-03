@@ -47,7 +47,7 @@ from app.services.chat_platform_service import (
     is_zalo_collect_trigger,
 )
 from app.services.slack_service import decrypt_token, encrypt_token
-from utils.config import config
+from utils.config import config, normalize_frontend_app_url
 from utils.dynamodb.repos import chat_platform_repo
 from utils.dynamodb.repos import projects as projects_repo
 
@@ -76,7 +76,17 @@ def _dreamify_app_url() -> str:
         config.chat_platform.dreamify_app_url
         if config.chat_platform
         else "http://localhost:8080"
-    )
+    ).rstrip("/")
+
+
+def _normalize_frontend_app_url(raw_url: str) -> str:
+    return normalize_frontend_app_url(raw_url)
+
+
+def _frontend_app_url() -> str:
+    if config.chat_platform:
+        return _normalize_frontend_app_url(config.chat_platform.frontend_app_url)
+    return "http://localhost:8080"
 
 
 def _telegram_bot_token() -> str:
@@ -101,6 +111,11 @@ def _zalo_bot_username() -> str:
 
 def _zalo_bot_id() -> str:
     return config.zalo.bot_id if config.zalo else ""
+
+
+def _zalo_bot_url() -> str:
+    bot_id = _zalo_bot_id()
+    return f"https://zalo.me/{bot_id}" if bot_id else ""
 
 
 def _zalo_webhook_secret() -> str:
@@ -387,7 +402,7 @@ async def slack_oauth_callback(
     OAuth 2.0 callback from Slack. Exchanges code for token, stores workspace,
     then redirects to the frontend with success/error query params.
     """
-    frontend_base = f"{_dreamify_app_url()}/workspace?tab=connectors"
+    frontend_base = f"{_frontend_app_url()}/workspace?tab=connectors"
 
     if error:
         return RedirectResponse(
@@ -1179,8 +1194,15 @@ async def zalo_webhook(request: Request, background_tasks: BackgroundTasks):
                     {
                         k: message.get(k)
                         for k in (
-                            "file_id", "document", "file", "attachment",
-                            "doc", "photo", "image", "sticker", "type",
+                            "file_id",
+                            "document",
+                            "file",
+                            "attachment",
+                            "doc",
+                            "photo",
+                            "image",
+                            "sticker",
+                            "type",
                         )
                     },
                     default=str,
@@ -1285,10 +1307,10 @@ ZALO_UPLOAD_TTL = 1800  # 30 minutes
 def _zalo_upload_app_url() -> str:
     """Return the user-facing base URL where the upload page is served.
 
-    Defers to chat_platform.dreamify_app_url so it can be overridden per env
+    Defers to chat_platform.frontend_app_url so it can be overridden per env
     (ngrok in dev, app.dreamify.dev in prod).
     """
-    return _dreamify_app_url().rstrip("/")
+    return _frontend_app_url()
 
 
 def _generate_upload_token() -> str:
@@ -1583,7 +1605,7 @@ class ZaloCodeResponse(BaseModel):
     code: str
     bot_username: str
     bot_id: str
-    qr_url: str
+    bot_url: str
     expires_in: int
 
 
@@ -1616,47 +1638,12 @@ async def zalo_generate_code(user_id: str = Depends(require_user)):
         bot_token_encrypted="",
     )
 
-    # Return a relative path so the frontend always reaches the QR endpoint
-    # via the same origin (Vite proxy in dev, same-host serving in prod).
     return ZaloCodeResponse(
         code=code,
         bot_username=_zalo_bot_username(),
         bot_id=_zalo_bot_id(),
-        qr_url=f"/api/v1/chat/zalo/qr/{code}",
+        bot_url=_zalo_bot_url(),
         expires_in=ZALO_CODE_TTL,
-    )
-
-
-# ── Zalo QR code (anonymous) ──────────────────────────────────────────────────
-
-
-@router.get("/chat/zalo/qr/{code}")
-async def zalo_qr_code(code: str):
-    """Render an SVG QR that opens the Zalo bot profile when scanned.
-
-    Zalo Bot Platform does not support deeplink payloads (unlike Telegram's
-    `t.me/Bot?start=CODE`). The QR therefore encodes only the bot profile URL
-    `https://zalo.me/{bot_id}`; the user still types `start <CODE>` manually.
-
-    The path param ``code`` is unused for the encoded payload — it is kept in
-    the URL so that each pending session gets its own cache-bust key, and so
-    the frontend's `<img src>` invalidates whenever a new code is generated.
-    """
-    from fastapi.responses import Response
-    import io
-    import segno
-
-    bot_id = _zalo_bot_id()
-    if not bot_id:
-        raise HTTPException(status_code=503, detail="Zalo integration not configured")
-
-    target = f"https://zalo.me/{bot_id}"
-    buf = io.BytesIO()
-    segno.make(target, error="m").save(buf, kind="svg", scale=8, border=2)
-    return Response(
-        content=buf.getvalue(),
-        media_type="image/svg+xml",
-        headers={"Cache-Control": "public, max-age=900"},
     )
 
 
@@ -1728,7 +1715,7 @@ def _verify_whatsapp_signature(request: Request, body: bytes) -> bool:
     if not header.startswith("sha256="):
         return False
     expected = hmac.new(app_secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(header[len("sha256="):], expected)
+    return hmac.compare_digest(header[len("sha256=") :], expected)
 
 
 @router.get("/chat/whatsapp/webhook")
@@ -1965,7 +1952,9 @@ class WhatsAppCodeResponse(BaseModel):
 async def whatsapp_generate_code(user_id: str = Depends(require_user)):
     """Generate a short-lived registration code for WhatsApp DM linking."""
     if config.whatsapp is None or not config.whatsapp.phone_number_id:
-        raise HTTPException(status_code=503, detail="WhatsApp integration not configured")
+        raise HTTPException(
+            status_code=503, detail="WhatsApp integration not configured"
+        )
 
     try:
         pruned = chat_platform_repo.cleanup_expired_pending(
@@ -2011,7 +2000,9 @@ async def whatsapp_qr_code(code: str):
     import segno
 
     if not _whatsapp_display_number():
-        raise HTTPException(status_code=503, detail="WhatsApp integration not configured")
+        raise HTTPException(
+            status_code=503, detail="WhatsApp integration not configured"
+        )
 
     target = _whatsapp_deeplink(code)
     buf = io.BytesIO()

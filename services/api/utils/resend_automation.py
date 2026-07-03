@@ -23,7 +23,7 @@ from typing import Optional
 import httpx
 import resend as _resend
 
-from utils.config import config
+from utils.config import config, frontend_app_url
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +53,7 @@ def provider_label(provider: str) -> str:
 
 def app_url() -> str:
     """Base app URL for links in automation emails."""
-    return (
-        config.chat_platform.dreamify_app_url
-        if getattr(config, "chat_platform", None)
-        else "https://app.dreamify.dev"
-    )
+    return frontend_app_url()
 
 
 def _api_key() -> Optional[str]:
@@ -87,7 +83,9 @@ def upsert_contact(
     """
     key, aud = _api_key(), _audience_id()
     if not key or not aud:
-        logger.debug("[automation] upsert_contact skipped — key/audience not configured")
+        logger.debug(
+            "[automation] upsert_contact skipped — key/audience not configured"
+        )
         return None
     try:
         _resend.api_key = key
@@ -109,13 +107,18 @@ def upsert_contact(
         # 409/duplicate is expected and fine — contact already in the audience.
         logger.warning(
             "[automation] contact upsert non-fatal for %s: %s: %s",
-            email, type(e).__name__, e,
+            email,
+            type(e).__name__,
+            e,
         )
         return None
 
 
 def update_contact(
-    *, email: str, first_name: str = "", last_name: str = "",
+    *,
+    email: str,
+    first_name: str = "",
+    last_name: str = "",
     properties: Optional[dict] = None,
 ) -> bool:
     """Update an existing contact's fields (by email). Non-fatal."""
@@ -138,7 +141,9 @@ def update_contact(
     except Exception as e:
         logger.warning(
             "[automation] contact update non-fatal for %s: %s: %s",
-            email, type(e).__name__, e,
+            email,
+            type(e).__name__,
+            e,
         )
         return False
 
@@ -156,7 +161,9 @@ def remove_contact(*, email: str) -> bool:
     except Exception as e:
         logger.warning(
             "[automation] contact remove non-fatal for %s: %s: %s",
-            email, type(e).__name__, e,
+            email,
+            type(e).__name__,
+            e,
         )
         return False
 
@@ -194,7 +201,9 @@ def send_event(
     """
     key = _api_key()
     if not key:
-        logger.debug("[automation] send_event skipped — automation_api_key not configured")
+        logger.debug(
+            "[automation] send_event skipped — automation_api_key not configured"
+        )
         return False
     if not email and not contact_id:
         logger.error("[automation] send_event %s missing email/contact_id", event)
@@ -218,9 +227,7 @@ def send_event(
         logger.info("[automation] event %s -> %s", event, email or contact_id)
         return True
     except Exception as e:
-        logger.error(
-            "[automation] event %s failed: %s: %s", event, type(e).__name__, e
-        )
+        logger.error("[automation] event %s failed: %s: %s", event, type(e).__name__, e)
         return False
 
 
@@ -267,6 +274,7 @@ def notify_connector_connected(
     def _run() -> None:
         try:
             from utils.clerk_auth import get_user_email_name  # lazy: avoid import cycle
+
             email, first_name = get_user_email_name(user_id)
             if not email:
                 return
@@ -287,7 +295,8 @@ def notify_connector_connected(
         except Exception as e:  # pragma: no cover - best effort
             logger.warning(
                 "[automation] connector.connected notify failed: %s: %s",
-                type(e).__name__, e,
+                type(e).__name__,
+                e,
             )
 
     threading.Thread(target=_run, daemon=True).start()
@@ -306,6 +315,7 @@ def notify_workspace_integrated(
     def _run() -> None:
         try:
             from utils.clerk_auth import get_user_email_name  # lazy: avoid import cycle
+
             email, first_name = get_user_email_name(user_id)
             if not email:
                 return
@@ -324,13 +334,16 @@ def notify_workspace_integrated(
         except Exception as e:  # pragma: no cover - best effort
             logger.warning(
                 "[automation] workspace.integrated notify failed: %s: %s",
-                type(e).__name__, e,
+                type(e).__name__,
+                e,
             )
 
     threading.Thread(target=_run, daemon=True).start()
 
 
-def notify_workspace_activity(*, user_id: str, workspace_id: str, platform: str = "") -> None:
+def notify_workspace_activity(
+    *, user_id: str, workspace_id: str, platform: str = ""
+) -> None:
     """
     Fire the `workspace.activity` automation event (Flow 4) in a daemon thread.
     Signals the user is actually using a workspace, satisfying the Wait-for-Event.
@@ -341,6 +354,7 @@ def notify_workspace_activity(*, user_id: str, workspace_id: str, platform: str 
     def _run() -> None:
         try:
             from utils.clerk_auth import get_user_email_name  # lazy: avoid import cycle
+
             email, _ = get_user_email_name(user_id)
             if not email:
                 return
@@ -352,7 +366,8 @@ def notify_workspace_activity(*, user_id: str, workspace_id: str, platform: str 
         except Exception as e:  # pragma: no cover - best effort
             logger.warning(
                 "[automation] workspace.activity notify failed: %s: %s",
-                type(e).__name__, e,
+                type(e).__name__,
+                e,
             )
 
     threading.Thread(target=_run, daemon=True).start()

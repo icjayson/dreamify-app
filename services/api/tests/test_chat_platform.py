@@ -247,6 +247,18 @@ class TestChatPlatformServiceHelpers:
             "dashboards": [],
         }
 
+    def test_normalize_frontend_app_url_maps_api_host(self):
+        from utils.config import normalize_frontend_app_url
+
+        assert (
+            normalize_frontend_app_url("https://api.dreamify.dev/")
+            == "https://app.dreamify.dev"
+        )
+        assert (
+            normalize_frontend_app_url("app.dreamify.dev/")
+            == "https://app.dreamify.dev"
+        )
+
     def test_workspace_agent_default_model_is_pro(self, monkeypatch):
         from app.services import chat_platform_service as svc
 
@@ -332,6 +344,24 @@ class TestChatPlatformServiceHelpers:
         assert url is not None
         assert "proj-1" in url
         assert "preview" in url
+
+    def test_workspace_links_use_frontend_host_without_double_slash(self, monkeypatch):
+        from app.services import chat_platform_service as svc
+
+        monkeypatch.setattr(svc, "FRONTEND_APP_URL", "https://api.dreamify.dev/")
+        project_url = svc._build_workspace_project_url("proj-1")
+        dashboard_url = svc._build_dashboard_url(
+            "proj-1", {"dashboards": [{"dashboard_id": "dash-1"}]}
+        )
+
+        assert (
+            project_url == "https://app.dreamify.dev/workspace/project?projectId=proj-1"
+        )
+        assert dashboard_url == (
+            "https://app.dreamify.dev/workspace/project/preview?projectId=proj-1"
+        )
+        assert "//workspace" not in project_url
+        assert "//workspace" not in dashboard_url
 
     def test_build_dashboard_url_no_dashboard(self):
         from app.services.chat_platform_service import _build_dashboard_url
@@ -838,7 +868,9 @@ class TestChatPlatformServiceHandlers:
         )
         assert "Choose the data context" in zalo_text
         assert "1. Growth CSV" in zalo_text
-        assert "Open in Dreamify" in zalo_text
+        assert "Open in Dreamify" not in zalo_text
+        assert "1. Choose the data context" not in zalo_text
+        assert "Reply with 1 or 2." in zalo_text
 
     def test_zalo_awaiting_state_uses_generic_fallback(self):
         from app.services import chat_platform_service as svc
@@ -2090,7 +2122,18 @@ class TestZaloGenerateCode:
 
         return asyncio.run(coro)
 
-    def test_returns_qr_url_and_stores_pending(self):
+    def test_zalo_upload_app_url_uses_frontend_base(self, monkeypatch):
+        from app.api.route_modules import chat_platform
+
+        monkeypatch.setattr(
+            chat_platform.config.chat_platform,
+            "frontend_app_url",
+            "https://api.dreamify.dev/",
+        )
+
+        assert chat_platform._zalo_upload_app_url() == "https://app.dreamify.dev"
+
+    def test_returns_bot_url_and_stores_pending(self):
         from app.api.route_modules.chat_platform import zalo_generate_code
 
         with patch(
@@ -2107,8 +2150,7 @@ class TestZaloGenerateCode:
             result = self._run(zalo_generate_code(user_id="u1"))
         assert result.bot_username == "DreamifyBot"
         assert result.bot_id == "123"
-        # qr_url is a relative path so the frontend hits it through the same origin
-        assert result.qr_url == f"/api/v1/chat/zalo/qr/{result.code}"
+        assert result.bot_url == "https://zalo.me/123"
         assert len(result.code) == 8
         assert result.expires_in == 900
         mock_save.assert_called_once()
@@ -2619,7 +2661,9 @@ class TestZaloCollectFlow:
         from app.api.route_modules import chat_platform
 
         bg = MagicMock(spec=BackgroundTasks)
-        with patch.object(chat_platform, "_verify_zalo_webhook", return_value=True), patch.object(
+        with patch.object(
+            chat_platform, "_verify_zalo_webhook", return_value=True
+        ), patch.object(
             chat_platform, "has_pending_clarification", return_value=False
         ), patch.object(
             chat_platform, "has_pending_collect", return_value=active_collect
@@ -2646,7 +2690,9 @@ class TestZaloCollectFlow:
         assert bg.add_task.call_args.kwargs["start"] is True
 
     def test_active_collect_routes_to_step(self):
-        bg = self._dispatch(self._req(self._msg(text="doanh thu?")), active_collect=True)
+        bg = self._dispatch(
+            self._req(self._msg(text="doanh thu?")), active_collect=True
+        )
         assert bg.add_task.call_args.args[0].__name__ == "handle_zalo_collect_step"
         assert bg.add_task.call_args.kwargs["start"] is False
 
@@ -2655,7 +2701,9 @@ class TestZaloCollectFlow:
         assert bg.add_task.call_args.args[0].__name__ == "handle_zalo_query"
 
     def test_image_with_caption_bypasses_collect(self):
-        bg = self._dispatch(self._req(self._msg(text="phân tích ảnh này", file_id="F3")))
+        bg = self._dispatch(
+            self._req(self._msg(text="phân tích ảnh này", file_id="F3"))
+        )
         assert bg.add_task.call_args.args[0].__name__ == "handle_zalo_query"
 
     def test_unsupported_document_routes_to_upload(self):
@@ -2665,9 +2713,15 @@ class TestZaloCollectFlow:
         from fastapi import BackgroundTasks
 
         bg = MagicMock(spec=BackgroundTasks)
-        with patch.object(chat_platform, "_verify_zalo_webhook", return_value=True), patch(
+        with patch.object(
+            chat_platform, "_verify_zalo_webhook", return_value=True
+        ), patch(
             "app.api.route_modules.chat_platform.chat_platform_repo.get_workspace",
-            return_value={"platform_workspace_id": "zalo:100", "user_id": "u1", "project_id": "p1"},
+            return_value={
+                "platform_workspace_id": "zalo:100",
+                "user_id": "u1",
+                "project_id": "p1",
+            },
         ):
             self._run(chat_platform.zalo_webhook(req, bg))
         assert bg.add_task.call_args.args[0].__name__ == "_handle_zalo_unsupported_file"

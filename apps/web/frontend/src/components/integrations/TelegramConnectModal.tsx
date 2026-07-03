@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import type { TelegramCodeResponse } from "@/api/chatIntegrationApi";
 import { toast } from "@/components/ui/use-toast";
 
+const TELEGRAM_QR_IMAGE_PATH = "/integrations/telegram-dreamify-bot-qr.svg";
+const TELEGRAM_BOT_URL = "https://t.me/Dreamify_TelegramBot";
+
 interface TelegramConnectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -57,36 +60,62 @@ export function TelegramConnectModal({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  if (!pendingCode) return null;
+
+  const startCommand = `/start ${pendingCode.code}`;
+
   const handleCopy = async () => {
-    if (!pendingCode?.code) return;
-    await navigator.clipboard.writeText(pendingCode.code);
+    await navigator.clipboard.writeText(startCommand);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!pendingCode) return null;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send className="w-5 h-5 text-[#2AABEE]" />
             Connect Telegram
           </DialogTitle>
           <DialogDescription>
-            Follow the steps below to link your account.
+            Scan the QR code or open the bot, then send the start command.
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-6 space-y-6">
           <div className="space-y-3">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Step 1: Your Connection Code
+              Step 1: Scan the Bot QR
+            </label>
+            <div className="rounded-lg border border-border bg-white p-5 shadow-sm">
+              <img
+                src={TELEGRAM_QR_IMAGE_PATH}
+                alt="Dreamify Telegram bot QR code"
+                className="mx-auto h-56 w-56 object-contain"
+              />
+            </div>
+            <Button
+              className="w-full bg-[#2AABEE] hover:bg-[#2AABEE]/90 text-white"
+              asChild
+            >
+              <a href={TELEGRAM_BOT_URL} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="w-4 h-4" />
+                Open Telegram Bot
+              </a>
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              If scanning does not open the bot, search @{pendingCode.bot_username} in Telegram.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Step 2: Send this Message to the Bot
             </label>
             <div className="relative flex items-center">
-              <div className="w-full bg-muted/50 dark:bg-white/5 border border-border rounded-lg py-4 px-4 text-center font-mono text-2xl font-bold tracking-[0.2em] text-foreground">
-                {pendingCode.code}
+              <div className="w-full bg-muted/50 dark:bg-white/5 border border-border rounded-lg py-3 px-4 text-center font-mono text-base text-foreground">
+                {startCommand}
               </div>
               <Button
                 size="icon"
@@ -103,20 +132,9 @@ export function TelegramConnectModal({
                 )}
               </Button>
             </div>
-          </div>
-
-          <div className="space-y-3">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Step 2: Start the Bot
-            </label>
-            <p className="text-sm text-foreground/80">
-              Open the bot and send: <br />
-              <code className="bg-muted px-1.5 py-0.5 rounded text-primary">
-                /start {pendingCode.code}
-              </code>
-            </p>
             <Button
-              className="w-full bg-[#2AABEE] hover:bg-[#2AABEE]/90 text-white"
+              variant="outline"
+              className="w-full"
               asChild
             >
               <a
@@ -124,8 +142,8 @@ export function TelegramConnectModal({
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Open in Telegram
+                <ExternalLink className="w-4 h-4" />
+                Open with Start Code
               </a>
             </Button>
           </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, Loader2 } from "lucide-react";
+import { Copy, ExternalLink, Loader2 } from "lucide-react";
 import { ZaloLogo } from "./ChatPlatformLogos";
 import {
   Dialog,
@@ -9,8 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { resolveChatApiAssetUrl, type ZaloCodeResponse } from "@/api/chatIntegrationApi";
+import type { ZaloCodeResponse } from "@/api/chatIntegrationApi";
 import { toast } from "@/components/ui/use-toast";
+
+const ZALO_QR_IMAGE_PATH = "/integrations/zalo-dreamify-ai-qr.png";
+const ZALO_BOT_URL = "https://zalo.me/162227939575435263";
 
 interface ZaloConnectModalProps {
   open: boolean;
@@ -27,17 +30,12 @@ export function ZaloConnectModal({
 }: ZaloConnectModalProps) {
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(0);
-  const [qrFailed, setQrFailed] = useState(false);
 
   useEffect(() => {
     if (pendingCode?.expires_in) {
       setTimeLeft(pendingCode.expires_in);
     }
   }, [pendingCode]);
-
-  useEffect(() => {
-    setQrFailed(false);
-  }, [pendingCode?.qr_url]);
 
   useEffect(() => {
     if (timeLeft <= 0) return;
@@ -66,7 +64,6 @@ export function ZaloConnectModal({
   if (!pendingCode) return null;
 
   const startCommand = `start ${pendingCode.code}`;
-  const qrUrl = resolveChatApiAssetUrl(pendingCode.qr_url);
 
   const handleCopyCommand = async () => {
     if (!startCommand) return;
@@ -86,33 +83,33 @@ export function ZaloConnectModal({
             Connect Zalo
           </DialogTitle>
           <DialogDescription>
-            Scan the QR code with the Zalo app, then send the start command to the bot.
+            Scan the QR code with Zalo, then send the start command.
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-6 space-y-6">
           <div className="space-y-3">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Step 1: Open the Bot in Zalo
+              Step 1: Scan the Bot QR
             </label>
-            <div className="flex justify-center">
-              <div className="bg-white p-3 rounded-lg border border-border w-52 h-52 flex items-center justify-center">
-                {qrFailed ? (
-                  <p className="px-3 text-center text-xs leading-relaxed text-slate-600">
-                    QR code could not load. Search for the bot in Zalo, then send the start command below.
-                  </p>
-                ) : (
-                  <img
-                    src={qrUrl}
-                    alt="Zalo bot QR code"
-                    className="w-full h-full object-contain"
-                    onError={() => setQrFailed(true)}
-                  />
-                )}
-              </div>
+            <div className="rounded-lg border border-border bg-white p-3 shadow-sm">
+              <img
+                src={ZALO_QR_IMAGE_PATH}
+                alt="Bot Dreamify AI Zalo QR code"
+                className="mx-auto max-h-[380px] w-full object-contain"
+              />
             </div>
+            <Button
+              className="w-full bg-[#0068FF] text-white hover:bg-[#0068FF]/90"
+              asChild
+            >
+              <a href={ZALO_BOT_URL} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="w-4 h-4" />
+                Open Zalo Bot
+              </a>
+            </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Or search <code className="bg-muted px-1.5 py-0.5 rounded">@{pendingCode.bot_username}</code> in Zalo
+              If scanning does not open the bot, search {pendingCode.bot_username} in Zalo.
             </p>
           </div>
 

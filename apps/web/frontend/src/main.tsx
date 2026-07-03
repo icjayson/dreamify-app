@@ -10,6 +10,15 @@ import 'react-resizable/css/styles.css'
 import { apiClient } from '@/services/api'
 import ReactGA from 'react-ga4';
 
+const normalizedPathname = window.location.pathname.replace(/\/{2,}/g, "/");
+if (normalizedPathname !== window.location.pathname) {
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${normalizedPathname}${window.location.search}${window.location.hash}`,
+  );
+}
+
 // Apply theme class before React mounts to prevent flash
 try {
   const theme = localStorage.getItem('dreamify-theme') || 'light';

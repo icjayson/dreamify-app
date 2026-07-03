@@ -32,7 +32,7 @@ export interface ZaloCodeResponse {
   code: string;
   bot_username: string;
   bot_id: string;
-  qr_url: string;
+  bot_url: string;
   expires_in: number;
 }
 

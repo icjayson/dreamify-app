@@ -1,0 +1,14 @@
+pandas
+numpy
+fastapi==0.135.2
+uvicorn==0.24.0
+langchain==1.2.15
+langchain-openai==1.1.12
+langchain-google-genai==4.2.1
+langchain-experimental==0.4.1
+langchain-core==1.2.27
+seaborn==0.13.0
+pyyaml==6.0.1
+python-multipart==0.0.6
+boto3
+aiohttp

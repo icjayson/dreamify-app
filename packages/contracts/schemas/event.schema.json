@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dreamify.dev/schemas/event.schema.json",
+  "title": "Dreamify workflow event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "run_id",
+    "sequence",
+    "event_key",
+    "phase",
+    "status",
+    "title",
+    "summary",
+    "detail",
+    "started_at",
+    "completed_at",
+    "duration_ms",
+    "metadata"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "event_key": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "phase": {
+      "enum": ["queued", "context", "clarification", "capacity", "profiling", "routing", "analysis", "tool", "synthesis", "validation", "persist", "final", "error"]
+    },
+    "status": { "enum": ["active", "completed", "error"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "summary": { "type": ["string", "null"], "maxLength": 1000 },
+    "detail": { "type": ["string", "null"], "maxLength": 4000 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+    "metadata": { "type": "object" }
+  }
+}

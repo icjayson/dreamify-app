@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dreamify.dev/schemas/run.schema.json",
+  "title": "Dreamify workflow run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "conversation_id",
+    "project_id",
+    "owner_id",
+    "status",
+    "current_step",
+    "cancel_requested",
+    "version",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "run_id": { "$ref": "#/$defs/id" },
+    "conversation_id": { "$ref": "#/$defs/id" },
+    "project_id": { "$ref": "#/$defs/id" },
+    "owner_id": { "$ref": "#/$defs/id" },
+    "parent_run_id": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "workflow_run_id": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "status": {
+      "enum": ["queued", "running", "awaiting_user_input", "completed", "failed", "cancelling", "cancelled"]
+    },
+    "current_step": {
+      "enum": ["accepted", "context", "clarification", "capacity", "profiling", "routing", "analysis", "synthesis", "validation", "persist", "done"]
+    },
+    "response_type": {
+      "anyOf": [
+        { "enum": ["message", "answer_with_visual", "dashboard_config", "chart_modification", "clarification_request"] },
+        { "type": "null" }
+      ]
+    },
+    "cancel_requested": { "type": "boolean" },
+    "cancel_reason": { "type": ["string", "null"], "maxLength": 256 },
+    "version": { "type": "integer", "minimum": 0 },
+    "result": { "type": ["object", "null"] },
+    "error": { "type": ["object", "null"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 }
+  }
+}

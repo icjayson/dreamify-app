@@ -1,39 +1,26 @@
-# Use an official Python runtime as a parent image
 FROM python:3.13-slim
 
-# Set the working directory in the container
-WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=0 \
+    PYTHONPATH=/opt/dreamify
 
-# Install required system packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    libgl1-mesa-dev \
-    libglib2.0-0 \
-    poppler-utils \
-    zbar-tools \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/dreamify
 
-COPY prerequirements.txt /app/
+COPY requirements-runner.txt ./requirements-runner.txt
+RUN pip install --no-cache-dir --requirement requirements-runner.txt
 
-# First install torch (CPU-only)
-RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
-    -r prerequirements.txt
+# Deliberately copy only the isolated command runner. The legacy FastAPI server,
+# LangChain graph, and PythonREPLTool are retained in Git for migration reference
+# but cannot be imported from this deployable image.
+COPY runner ./runner
 
-# Copy the current directory contents into the container at /app
-COPY requirements.txt /app/
+RUN useradd --create-home --uid 10001 runner \
+    && mkdir -p /vercel/sandbox \
+    && chown -R runner:runner /vercel/sandbox /opt/dreamify
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+USER runner
+WORKDIR /vercel/sandbox
 
-# Copy the current directory contents into the container at /app
-COPY . /app
-
-# Create /model
-RUN mkdir -p /model
-
-# Make port 8000 available to the world outside this container
-EXPOSE 8000
-
-# Define environment variable
-ENV PORT 8000
+ENTRYPOINT ["python", "-m", "runner.main"]
+CMD ["--help"]

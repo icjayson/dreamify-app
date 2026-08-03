@@ -1,0 +1,235 @@
+/**
+ * Dashboard configuration types for dynamic dashboard generation.
+ */
+
+export enum ChartType {
+  LINE = "line",
+  BAR = "bar",
+  STACKED_BAR = "stacked_bar",
+  STACKED_COLUMN = "stacked_column",
+  PIE = "pie",
+  AREA = "area",
+  SCATTER = "scatter",
+  DONUT = "donut",
+  COMPOSED = "composed",
+  RADAR = "radar",
+  RADIAL_BAR = "radial_bar",
+  FUNNEL = "funnel",
+  TREEMAP = "treemap",
+  SANKEY = "sankey",
+  METRIC = "metric",
+  TABLE = "table",
+  GEOGRAPHIC = "geographic",
+  ACTIVITY_FEED = "activity_feed"
+}
+
+export enum LayoutType {
+  GRID = "grid",
+  FLEX = "flex",
+  CUSTOM = "custom"
+}
+
+export enum MetricTrend {
+  UP = "up",
+  DOWN = "down",
+  STABLE = "stable"
+}
+
+export interface ChartDataPoint {
+  label: string;
+  value: number | string;
+  metadata?: Record<string, any>;
+}
+
+export interface ChartDataset {
+  label: string;
+  data: ChartDataPoint[];
+  color?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ChartStyling {
+  presetTheme: string;
+  colorPalette: string[];
+  customStyling?: Record<string, any>;
+  animationEnabled: boolean;
+  gridVisible: boolean;
+  legendPosition: 'top' | 'bottom' | 'right' | 'none';
+  dashboardBackground?: string;
+  chartStyle?: 'rounded' | 'sharp' | 'minimal';
+}
+
+export interface ChartConfiguration {
+  id: string;
+  type: ChartType;
+  title: string;
+  description?: string;
+  // Datasets are optional when using axisConfig + data
+  datasets?: ChartDataset[];
+  // Axis-based configuration (Morpheus-style)
+  axisConfig?: {
+    x_axis: { column: string; label?: string; data_type?: string; cardinality?: number; granularity?: string };
+    y_axis: { column: string; label?: string; data_type?: string; aggregation?: string };
+    color?: { column?: string; label?: string; data_type?: string; cardinality?: number };
+    size?: { column?: string; label?: string };
+    filters?: Array<{ column: string; type: string; default?: any }>;
+  };
+  // Optional raw/aggregated records when provided by the agent
+  data?: any[];
+  config?: Record<string, any>;
+  layout?: Record<string, any>;
+  styling?: ChartStyling;
+  metadata?: Record<string, any>;
+}
+
+export interface MetricConfiguration {
+  id: string;
+  title: string;
+  value: string | number;
+  // Optional change and trend (can be computed from timeComparison)
+  change?: string | number;
+  trend?: MetricTrend | string;
+  // Optional link to related chart for sparkline data
+  related_chart_id?: string;
+  // Optional sparkline data (time-series data for visualization)
+  data?: Array<{label: string, value: number}>;
+  dataKey?: string; // Default 'value'
+  // Optional time comparison context from agent
+  timeComparison?: {
+    enabled?: boolean;
+    period?: 'mom' | 'yoy' | 'wow' | string;
+    current_value?: number | null;
+    previous_value?: number | null;
+    percentage_change?: number | null;
+    type?: string;
+    time_column?: string;
+    comparison_type?: string;
+    previous_value_legacy?: number;
+    label?: string;
+  };
+  metadata?: Record<string, any>;
+}
+
+export interface TableColumn {
+  key: string;
+  label: string;
+  type: "string" | "number" | "currency" | "percentage" | "date";
+  width?: string;
+  align?: "left" | "center" | "right";
+}
+
+export interface TableConfiguration {
+  id: string;
+  title: string;
+  description?: string;
+  // Accept either detailed column descriptors or simple string names
+  columns: TableColumn[] | string[];
+  data: Record<string, any>[];
+  pagination?: Record<string, any>;
+  metadata?: Record<string, any>;
+}
+
+export interface DashboardLayout {
+  type: LayoutType;
+  grid_columns?: number;
+  breakpoints?: Record<string, number>;
+  spacing?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface DashboardComponent {
+  id: string;
+  type: "chart" | "metric" | "table" | "custom";
+  position: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  component_config: ChartConfiguration | MetricConfiguration | TableConfiguration | Record<string, any>;
+  metadata?: Record<string, any>;
+}
+
+export interface DashboardConfiguration {
+  id: string;
+  title: string;
+  description?: string;
+  layout: DashboardLayout;
+  components: DashboardComponent[];
+  metadata?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DashboardGenerationRequest {
+  data_source: string;
+  requirements?: Record<string, any>;
+  layout_preference?: LayoutType;
+  chart_types?: ChartType[];
+  metadata?: Record<string, any>;
+}
+
+export interface DashboardGenerationResponse {
+  success: boolean;
+  dashboard_config?: DashboardConfiguration;
+  processing_time?: number;
+  error?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface DashboardRefreshRequest {
+  dashboard_id: string;
+  data_source?: string;
+  force_refresh?: boolean;
+}
+
+export interface DashboardRefreshResponse {
+  success: boolean;
+  dashboard_config?: DashboardConfiguration;
+  refresh_time?: string;
+  error?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ChartDataRequest {
+  chart_id: string;
+  filters?: Record<string, any>;
+  aggregation?: string;
+  time_range?: Record<string, any>;
+}
+
+export interface ChartDataResponse {
+  success: boolean;
+  data?: ChartDataPoint[];
+  error?: string;
+  metadata?: Record<string, any>;
+}
+
+// Dashboard state management types
+export interface DashboardState {
+  configuration: DashboardConfiguration | null;
+  loading: boolean;
+  error: string | null;
+  lastUpdated: string | null;
+}
+
+export interface DashboardHook {
+  dashboardState: DashboardState;
+  generateDashboard: (request: DashboardGenerationRequest) => Promise<void>;
+  refreshDashboard: (request: DashboardRefreshRequest) => Promise<void>;
+  updateComponent: (componentId: string, config: any) => void;
+  resetDashboard: () => void;
+}
+
+// Manual-edit delta types (Phase 1 of edit feature)
+export interface ComponentEditDelta {
+  componentId: string;
+  edits: Partial<ChartConfiguration> & Partial<MetricConfiguration> & Partial<TableConfiguration> & Record<string, any>;
+  editedAt: number;
+}
+
+export interface DashboardEdits {
+  dashboardId: string;
+  deltas: Record<string, ComponentEditDelta>;
+  version: number;
+}

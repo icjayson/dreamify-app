@@ -1,0 +1,47 @@
+"use client";
+
+import { useEffect } from "react";
+import { BrowserRouter } from "@/lib/navigation";
+import ReactGA from "react-ga4";
+
+import App from "@/App";
+import { DreamifyAuthProvider, useAuth } from "@/lib/clerk";
+import { apiClient } from "@/services/api";
+
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
+
+function TokenBridge() {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    apiClient.setAuthTokenProvider(async () => {
+      try {
+        return await getToken();
+      } catch {
+        return null;
+      }
+    });
+  }, [getToken]);
+  return null;
+}
+
+export default function LegacyEntry() {
+  useEffect(() => {
+    const normalizedPathname = window.location.pathname.replace(/\/{2,}/g, "/");
+    if (normalizedPathname !== window.location.pathname) {
+      window.history.replaceState(window.history.state, "", `${normalizedPathname}${window.location.search}${window.location.hash}`);
+    }
+
+    const measurementId = process.env.NEXT_PUBLIC_GA_ID;
+    if (measurementId) ReactGA.initialize(measurementId);
+  }, []);
+
+  return (
+    <BrowserRouter>
+      <DreamifyAuthProvider>
+        <TokenBridge />
+        <App />
+      </DreamifyAuthProvider>
+    </BrowserRouter>
+  );
+}

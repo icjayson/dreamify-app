@@ -1,0 +1,3 @@
+-r requirements-runner.txt
+pytest==9.0.3
+xlwt==1.3.0

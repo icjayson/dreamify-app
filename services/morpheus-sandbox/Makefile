@@ -1,17 +1,10 @@
-# Build the Docker image
+.PHONY: build-local runner-help test
+
 build-local:
-	docker compose build
+	docker build --tag dreamify-morpheus-sandbox:local .
 
-# Run the container and inject config.yaml
-run-local:
-	docker compose up -d
-	docker cp ./config/config.yaml ocr-merchant-self-onboard-backend:/app/config/config.yaml
-	docker cp ./model/. ocr-merchant-self-onboard-backend:/app/model/
-	docker compose logs -f
+runner-help:
+	python3 -m runner.main --help
 
-# Stop the container
-down:
-	docker compose down
-
-run-streamlit:
-	streamlit run streamlit/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+test:
+	python3 -m pytest -q tests

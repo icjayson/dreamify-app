@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, type JSX } from "react";
 
 const vertexShaderSource = `
   attribute vec4 a_position;
@@ -131,7 +131,7 @@ function WaveBackground({
     const observer = new MutationObserver(() => setThemeColors());
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
-    let startTime = Date.now();
+    const startTime = Date.now();
     let animFrameId: number;
 
     const render = () => {

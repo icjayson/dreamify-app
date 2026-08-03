@@ -1,0 +1,43 @@
+name: Governance
+
+on:
+  pull_request:
+    paths:
+      - "docs/test-migration-manifest.json"
+      - "docs/test-migration-ledger.md"
+      - "scripts/check-test-migration-ledger.mjs"
+      - "apps/web/**/*.test.*"
+      - "services/api/tests/**"
+      - "services/api/tests_platform/**"
+      - "services/morpheus-sandbox/test*.py"
+      - "services/morpheus-sandbox/tests/**"
+      - "packages/**/*.test.*"
+      - ".github/workflows/governance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/test-migration-manifest.json"
+      - "docs/test-migration-ledger.md"
+      - "scripts/check-test-migration-ledger.mjs"
+      - "apps/web/**/*.test.*"
+      - "services/api/tests/**"
+      - "services/api/tests_platform/**"
+      - "services/morpheus-sandbox/test*.py"
+      - "services/morpheus-sandbox/tests/**"
+      - "packages/**/*.test.*"
+      - ".github/workflows/governance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test-ledger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/check-test-migration-ledger.mjs

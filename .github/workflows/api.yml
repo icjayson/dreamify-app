@@ -1,0 +1,58 @@
+name: API
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "packages/contracts/**"
+      - ".python-version"
+      - ".github/workflows/api.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/api/**"
+      - "packages/contracts/**"
+      - ".python-version"
+      - ".github/workflows/api.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/api/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: pip check
+      - name: Check Python formatting
+        run: >-
+          python -m ruff format --check
+          app/platform tests_platform alembic api/index.py
+          scripts/seed_database.py scripts/generate_openapi.py
+      - run: >-
+          python -m ruff check --select E,F,I
+          app/platform tests_platform alembic api/index.py
+          scripts/seed_database.py scripts/generate_openapi.py
+      - name: Run deployable API tests
+        run: python -m pytest -q tests_platform
+      - run: python scripts/generate_openapi.py --check
+      - name: Verify database migration and seed
+        run: |
+          database_path="$(mktemp -d)/schema.sqlite"
+          export APP_ENV=test
+          export DATABASE_URL="sqlite:///$database_path"
+          export DIRECT_DATABASE_URL="$DATABASE_URL"
+          python -m alembic upgrade head
+          python -m alembic check
+          python scripts/seed_database.py
+          python scripts/seed_database.py
+      - run: python -m compileall app api

@@ -140,3 +140,7 @@ logs/
 *.sqlite
 
 file-storage/
+.vercel
+.env*
+!.env.example
+!.python-version

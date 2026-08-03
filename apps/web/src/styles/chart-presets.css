@@ -1,0 +1,563 @@
+/**
+ * Chart Theme Presets - CSS Custom Properties for Dynamic Chart Styling
+ * Color Component Prefix System with 16 curated neutral-first themes
+ *
+ * Theme names: default, carbon, slate, chalk, warm, ash, sage, ink,
+ * aurora, glacier, coral, orchid, mint, crimson, cobalt, sandstone
+ * Old names (ocean, forest, sunset, midnight, sakura, monochrome, light)
+ * are kept as aliases for backward compatibility with stored dashboards.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NEW THEMES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* DEFAULT - Classic monochrome, neutral gray accent, works with any data */
+.chart-theme-default {
+  --highlight-color: #1e3a5f;
+  --bg-dashboard-color: #f0f2f5;
+  --bg-card-color: #ffffff;
+  --border-card-color: #e2e8f0;
+  --title-color: #0f172a;
+  --description-color: #526174;
+  --element-color: #526174;
+
+  --highlight-color-rgb: 30, 58, 95;
+  --element-color-rgb: 82, 97, 116;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* CARBON - Very dark, blue accent, high-end dark dashboard */
+.chart-theme-carbon {
+  --highlight-color: #3b82f6;
+  --bg-dashboard-color: #0d0d0d;
+  --bg-card-color: #1a1a1a;
+  --border-card-color: #2d2d2d;
+  --title-color: #e5e5e5;
+  --description-color: #a0a0a0;
+  --element-color: #6b7280;
+
+  --highlight-color-rgb: 59, 130, 246;
+  --element-color-rgb: 107, 114, 128;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* SLATE - Dark blue-gray, cool blue accent, technical/engineering */
+.chart-theme-slate {
+  --highlight-color: #60a5fa;
+  --bg-dashboard-color: #0f1923;
+  --bg-card-color: #1e2d3d;
+  --border-card-color: #2d4157;
+  --title-color: #e2e8f0;
+  --description-color: #94a3b8;
+  --element-color: #72869d;
+
+  --highlight-color-rgb: 96, 165, 250;
+  --element-color-rgb: 114, 134, 157;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* CHALK - Pure white/light, dark ink text, report-style */
+.chart-theme-chalk {
+  --highlight-color: #1e40af;
+  --bg-dashboard-color: #ffffff;
+  --bg-card-color: #f8f9fa;
+  --border-card-color: #e2e8f0;
+  --title-color: #1a1a2e;
+  --description-color: #475569;
+  --element-color: #64748b;
+
+  --highlight-color-rgb: 30, 64, 175;
+  --element-color-rgb: 100, 116, 139;
+
+  /* Table header — subtle slate on white */
+  --table-header-bg: #f1f5f9;
+  --table-header-text: #0f172a;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* WARM - Warm off-white, rust accent, editorial */
+.chart-theme-warm {
+  --highlight-color: #b45309;
+  --bg-dashboard-color: #fafaf8;
+  --bg-card-color: #f5f0eb;
+  --border-card-color: #d4c5b0;
+  --title-color: #1c1005;
+  --description-color: #6b5344;
+  --element-color: #5c4033;
+
+  --highlight-color-rgb: 180, 83, 9;
+  --element-color-rgb: 92, 64, 51;
+
+  /* Table header — warm neutral */
+  --table-header-bg: #ede5da;
+  --table-header-text: #1c1005;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* ASH - Mid gray, neutral white accent, ultra-minimal */
+.chart-theme-ash {
+  --highlight-color: #f0f0f0;
+  --bg-dashboard-color: #2d2d2d;
+  --bg-card-color: #3d3d3d;
+  --border-card-color: #505050;
+  --title-color: #f0f0f0;
+  --description-color: #b3b3b3;
+  --element-color: #c0c0c0;
+
+  --highlight-color-rgb: 240, 240, 240;
+  --element-color-rgb: 192, 192, 192;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* SAGE - Desaturated dark green, muted sage accent, calm/financial */
+.chart-theme-sage {
+  --highlight-color: #6ee7b7;
+  --bg-dashboard-color: #0d1a14;
+  --bg-card-color: #1a2e22;
+  --border-card-color: #243d2e;
+  --title-color: #d1fae5;
+  --description-color: #6ee7b7;
+  --element-color: #4ade80;
+
+  --highlight-color-rgb: 110, 231, 183;
+  --element-color-rgb: 74, 222, 128;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* INK - Near-black warm tint, amber/gold accent, premium */
+.chart-theme-ink {
+  --highlight-color: #f59e0b;
+  --bg-dashboard-color: #12100e;
+  --bg-card-color: #1c1915;
+  --border-card-color: #2e2a26;
+  --title-color: #fdf4e7;
+  --description-color: #d6b896;
+  --element-color: #8b7355;
+
+  --highlight-color-rgb: 245, 158, 11;
+  --element-color-rgb: 139, 115, 85;
+
+  --chart-animation-duration: 1s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.03;
+}
+
+/* AURORA - Deep indigo, violet/cyan accent, executive dark dashboard */
+.chart-theme-aurora {
+  --highlight-color: #a78bfa;
+  --bg-dashboard-color: #100f24;
+  --bg-card-color: #1a1833;
+  --border-card-color: #2b2850;
+  --title-color: #f1efff;
+  --description-color: #b8b2e6;
+  --element-color: #7c74b8;
+
+  --highlight-color-rgb: 167, 139, 250;
+  --element-color-rgb: 124, 116, 184;
+  --table-header-bg: #242143;
+  --table-header-text: #f1efff;
+
+  --chart-animation-duration: 0.9s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* GLACIER - Icy light, cyan-blue accent, crisp report dashboard */
+.chart-theme-glacier {
+  --highlight-color: #0284c7;
+  --bg-dashboard-color: #f3fbff;
+  --bg-card-color: #ffffff;
+  --border-card-color: #cfe8f7;
+  --title-color: #0f2537;
+  --description-color: #4b6b7d;
+  --element-color: #6b8795;
+
+  --highlight-color-rgb: 2, 132, 199;
+  --element-color-rgb: 107, 135, 149;
+  --table-header-bg: #e7f5fc;
+  --table-header-text: #0f2537;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* CORAL - Graphite dark, coral accent, high-contrast operating dashboard */
+.chart-theme-coral {
+  --highlight-color: #fb7185;
+  --bg-dashboard-color: #181a1f;
+  --bg-card-color: #23262d;
+  --border-card-color: #383d46;
+  --title-color: #f7f2ef;
+  --description-color: #b8ada8;
+  --element-color: #7d8794;
+
+  --highlight-color-rgb: 251, 113, 133;
+  --element-color-rgb: 125, 135, 148;
+  --table-header-bg: #30333b;
+  --table-header-text: #f7f2ef;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* ORCHID - Dark plum, orchid pink accent, expressive product dashboard */
+.chart-theme-orchid {
+  --highlight-color: #e879f9;
+  --bg-dashboard-color: #1a0f1f;
+  --bg-card-color: #281532;
+  --border-card-color: #422052;
+  --title-color: #fae8ff;
+  --description-color: #d8b4fe;
+  --element-color: #a855f7;
+
+  --highlight-color-rgb: 232, 121, 249;
+  --element-color-rgb: 168, 85, 247;
+  --table-header-bg: #351c42;
+  --table-header-text: #fae8ff;
+
+  --chart-animation-duration: 0.9s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* MINT - Soft mint light, emerald accent, fresh analytical report */
+.chart-theme-mint {
+  --highlight-color: #059669;
+  --bg-dashboard-color: #f1fbf6;
+  --bg-card-color: #ffffff;
+  --border-card-color: #cdeede;
+  --title-color: #10251d;
+  --description-color: #4b6358;
+  --element-color: #6b8f80;
+
+  --highlight-color-rgb: 5, 150, 105;
+  --element-color-rgb: 107, 143, 128;
+  --table-header-bg: #e4f6ed;
+  --table-header-text: #10251d;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* CRIMSON - Dark slate, crimson accent, urgent signal dashboard */
+.chart-theme-crimson {
+  --highlight-color: #ef4444;
+  --bg-dashboard-color: #111827;
+  --bg-card-color: #1f2937;
+  --border-card-color: #374151;
+  --title-color: #f9fafb;
+  --description-color: #d1d5db;
+  --element-color: #9ca3af;
+
+  --highlight-color-rgb: 239, 68, 68;
+  --element-color-rgb: 156, 163, 175;
+  --table-header-bg: #2a3444;
+  --table-header-text: #f9fafb;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* COBALT - Deep cobalt, electric lime accent, energetic technical dashboard */
+.chart-theme-cobalt {
+  --highlight-color: #a3e635;
+  --bg-dashboard-color: #0b1738;
+  --bg-card-color: #11245a;
+  --border-card-color: #1d3a7a;
+  --title-color: #eff6ff;
+  --description-color: #bfd7ff;
+  --element-color: #5da2ff;
+
+  --highlight-color-rgb: 163, 230, 53;
+  --element-color-rgb: 93, 162, 255;
+  --table-header-bg: #18306d;
+  --table-header-text: #eff6ff;
+
+  --chart-animation-duration: 0.9s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* SANDSTONE - Warm sand, terracotta accent, editorial business dashboard */
+.chart-theme-sandstone {
+  --highlight-color: #c2410c;
+  --bg-dashboard-color: #fbf4ea;
+  --bg-card-color: #fffaf3;
+  --border-card-color: #e5c8a8;
+  --title-color: #2a1609;
+  --description-color: #7c5b43;
+  --element-color: #9a7a5d;
+
+  --highlight-color-rgb: 194, 65, 12;
+  --element-color-rgb: 154, 122, 93;
+  --table-header-bg: #f1dfc8;
+  --table-header-text: #2a1609;
+
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BACKWARD COMPATIBILITY ALIASES
+   Old theme names map to new equivalents so dashboards stored in S3
+   with old theme names continue to render correctly.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ocean → slate */
+.chart-theme-ocean {
+  --highlight-color: #60a5fa;
+  --bg-dashboard-color: #0f1923;
+  --bg-card-color: #1e2d3d;
+  --border-card-color: #2d4157;
+  --title-color: #e2e8f0;
+  --description-color: #94a3b8;
+  --element-color: #72869d;
+  --highlight-color-rgb: 96, 165, 250;
+  --element-color-rgb: 114, 134, 157;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* forest → sage */
+.chart-theme-forest {
+  --highlight-color: #6ee7b7;
+  --bg-dashboard-color: #0d1a14;
+  --bg-card-color: #1a2e22;
+  --border-card-color: #243d2e;
+  --title-color: #d1fae5;
+  --description-color: #6ee7b7;
+  --element-color: #4ade80;
+  --highlight-color-rgb: 110, 231, 183;
+  --element-color-rgb: 74, 222, 128;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* sunset → ink */
+.chart-theme-sunset {
+  --highlight-color: #f59e0b;
+  --bg-dashboard-color: #12100e;
+  --bg-card-color: #1c1915;
+  --border-card-color: #2e2a26;
+  --title-color: #fdf4e7;
+  --description-color: #d6b896;
+  --element-color: #8b7355;
+  --highlight-color-rgb: 245, 158, 11;
+  --element-color-rgb: 139, 115, 85;
+  --chart-animation-duration: 1s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.03;
+}
+
+/* midnight → carbon */
+.chart-theme-midnight {
+  --highlight-color: #3b82f6;
+  --bg-dashboard-color: #0d0d0d;
+  --bg-card-color: #1a1a1a;
+  --border-card-color: #2d2d2d;
+  --title-color: #e5e5e5;
+  --description-color: #a0a0a0;
+  --element-color: #6b7280;
+  --highlight-color-rgb: 59, 130, 246;
+  --element-color-rgb: 107, 114, 128;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* sakura → warm */
+.chart-theme-sakura {
+  --highlight-color: #b45309;
+  --bg-dashboard-color: #fafaf8;
+  --bg-card-color: #f5f0eb;
+  --border-card-color: #d4c5b0;
+  --title-color: #1c1005;
+  --description-color: #6b5344;
+  --element-color: #5c4033;
+  --highlight-color-rgb: 180, 83, 9;
+  --element-color-rgb: 92, 64, 51;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* monochrome → default */
+.chart-theme-monochrome {
+  --highlight-color: #1e3a5f;
+  --bg-dashboard-color: #f0f2f5;
+  --bg-card-color: #ffffff;
+  --border-card-color: #e2e8f0;
+  --title-color: #0f172a;
+  --description-color: #526174;
+  --element-color: #526174;
+  --highlight-color-rgb: 30, 58, 95;
+  --element-color-rgb: 82, 97, 116;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* light → chalk */
+.chart-theme-light {
+  --highlight-color: #1e40af;
+  --bg-dashboard-color: #ffffff;
+  --bg-card-color: #f8f9fa;
+  --border-card-color: #e2e8f0;
+  --title-color: #1a1a2e;
+  --description-color: #475569;
+  --element-color: #64748b;
+  --highlight-color-rgb: 30, 64, 175;
+  --element-color-rgb: 100, 116, 139;
+  --table-header-bg: #f1f5f9;
+  --table-header-text: #0f172a;
+  --chart-animation-duration: 0.8s;
+  --chart-animation-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --chart-hover-scale: 1.02;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COMPONENT CLASSES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* This file is imported before Tailwind's directives, so keep these as plain
+   component classes instead of a standalone @layer block. */
+  /* Chart Animation Classes */
+  .chart-animate-fade-in {
+    animation: chartFadeIn var(--chart-animation-duration, 0.8s) var(--chart-animation-easing, cubic-bezier(0.4, 0, 0.2, 1)) forwards;
+  }
+
+  .chart-animate-scale-in {
+    animation: chartScaleIn var(--chart-animation-duration, 0.8s) var(--chart-animation-easing, cubic-bezier(0.4, 0, 0.2, 1)) forwards;
+  }
+
+  .chart-animate-slide-up {
+    animation: chartSlideUp var(--chart-animation-duration, 0.8s) var(--chart-animation-easing, cubic-bezier(0.4, 0, 0.2, 1)) forwards;
+  }
+
+  .chart-hover-effect {
+    transition: transform 0.2s ease-out;
+  }
+
+  .chart-hover-effect:hover {
+    transform: scale(var(--chart-hover-scale, 1.02));
+  }
+
+  /* Chart Grid Styling */
+  .chart-grid {
+    stroke: rgba(var(--element-color-rgb), 0.75);
+    stroke-width: 1;
+  }
+
+  /* Chart Tooltip Styling */
+  .chart-tooltip {
+    background-color: var(--bg-card-color);
+    border: 1px solid var(--border-card-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--description-color);
+  }
+
+  /* Chart Legend Styling */
+  .chart-legend {
+    color: var(--description-color);
+    font-size: 12px;
+  }
+
+  /* Chart Axis Styling */
+  .chart-axis {
+    color: var(--element-color);
+    font-size: 11px;
+  }
+
+  /* Chart Container Styling */
+  .chart-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .chart-container.recharts-wrapper {
+    font-family: inherit;
+  }
+
+  /* Responsive Chart Styling */
+  @media (max-width: 768px) {
+    .chart-tooltip {
+      font-size: 10px;
+      padding: 6px 8px;
+    }
+
+    .chart-legend {
+      font-size: 10px;
+    }
+
+    .chart-axis {
+      font-size: 9px;
+    }
+  }
+
+  /* Animation Keyframes */
+  @keyframes chartFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes chartScaleIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes chartSlideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Accessibility: Respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    .chart-animate-fade-in,
+    .chart-animate-scale-in,
+    .chart-animate-slide-up {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+
+    .chart-hover-effect {
+      transition: none;
+    }
+
+    .chart-hover-effect:hover {
+      transform: none;
+    }
+  }

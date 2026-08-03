@@ -1,0 +1,121 @@
+import { api } from './api';
+
+export interface AllowedUser {
+  user_id?: string;  // undefined for email-only (pending) invites
+  email?: string;
+  name?: string;
+  image_url?: string;
+}
+
+export interface ProjectRecord {
+  id: string;
+  name: string;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
+  latest_conversation_id?: string | null;
+  latest_dashboard_id?: string | null;
+  dashboard_title?: string | null;
+  name_source?: string | null;
+  dashboard_preview_key?: string | null;
+  is_preview_public?: boolean;
+  allowed?: AllowedUser[];
+  source_type?: string | null;
+}
+
+export interface ProjectResponse {
+  success: boolean;
+  project?: ProjectRecord;
+  error?: string;
+}
+
+export interface ProjectListResponse {
+  success: boolean;
+  projects: ProjectRecord[];
+  error?: string;
+}
+
+class ProjectService {
+  private baseUrl = '/api/v1/user/project';
+
+  async createProject(name: string, description?: string): Promise<ProjectResponse> {
+    const res = await api.post<ProjectRecord>(`${this.baseUrl}/create`, {
+      name,
+      description,
+    });
+    if (res.success && res.data) {
+      return { success: true, project: res.data };
+    }
+    return { success: false, error: res.error || 'Failed to create project' };
+  }
+
+  async listProjects(): Promise<ProjectListResponse> {
+    const res = await api.get<{ projects: ProjectRecord[] }>(`${this.baseUrl}/list`);
+    if (res.success && res.data) {
+      return { success: true, projects: res.data.projects || [] };
+    }
+    return { success: false, projects: [], error: res.error || 'Failed to list projects' };
+  }
+
+  async listRecentProjects(limit = 10): Promise<ProjectListResponse> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    const res = await api.get<{ projects: ProjectRecord[] }>(`${this.baseUrl}/recent?${params.toString()}`);
+    if (res.success && res.data) {
+      return { success: true, projects: res.data.projects || [] };
+    }
+    return { success: false, projects: [], error: res.error || 'Failed to list recent projects' };
+  }
+
+  async getProject(projectId: string): Promise<ProjectResponse> {
+    const res = await api.get<ProjectRecord>(`${this.baseUrl}/detail/${projectId}`);
+    if (res.success && res.data) {
+      return { success: true, project: res.data };
+    }
+    return { success: false, error: res.error || 'Failed to load project' };
+  }
+
+  async updateProject(projectId: string, name?: string, description?: string, is_preview_public?: boolean, allowed?: AllowedUser[]): Promise<ProjectResponse> {
+    const res = await api.put<ProjectRecord>(`${this.baseUrl}/${projectId}`, {
+      name,
+      description,
+      is_preview_public,
+      allowed,
+    });
+    if (res.success && res.data) {
+      return { success: true, project: res.data };
+    }
+    return { success: false, error: res.error || 'Failed to update project' };
+  }
+
+  async deleteProject(projectId: string): Promise<{ success: boolean; error?: string }> {
+    const res = await api.delete<{ success: boolean }>(`${this.baseUrl}/${projectId}`);
+    if (res.success && res.data) {
+      return { success: true };
+    }
+    return { success: false, error: res.error || 'Failed to delete project' };
+  }
+
+  /**
+   * Legacy dashboard-card thumbnails are intentionally not persisted in the
+   * Hobby release. Share links render the latest saved dashboard JSON instead.
+   */
+  async uploadDashboardPreview(
+    _projectId: string,
+    _dashboardId: string,
+    _previewBlob: Blob,
+  ): Promise<{ success: boolean; error?: string }> {
+    return {
+      success: false,
+      error: 'Dashboard image thumbnails are not stored in the Hobby demo',
+    };
+  }
+
+  async getDashboardPreviewUrl(
+    _projectId: string,
+  ): Promise<{ url?: string; error?: string }> {
+    return { error: 'Dashboard image thumbnails are not stored in the Hobby demo' };
+  }
+
+}
+
+export const projectService = new ProjectService();

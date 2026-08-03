@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "fluid": true,
+  "regions": ["sin1"],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{tests/**,tests_platform/**,alembic/**,scripts/**,app/api/**,app/auth/**,app/config/**,app/dependencies/**,app/models/**,app/services/**,app/utils/**,utils/**,create_table.py,README_STRIPE.md}"
+    }
+  }
+}

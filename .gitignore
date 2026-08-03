@@ -1,0 +1,38 @@
+.DS_Store
+.idea/
+.vscode/
+
+# JavaScript
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+.coverage
+htmlcov/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Runtime and local data
+.env
+.env.*
+!.env.example
+*.log
+logs/
+.local-storage/
+*.db
+*.sqlite
+*.sqlite3
+.vercel/
+
+# Generated reports
+playwright-report/
+test-results/
+artifacts/

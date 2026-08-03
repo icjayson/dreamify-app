@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dreamify.dev/schemas/dashboard.schema.json",
+  "title": "Dreamify dashboard configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "theme_id", "layout", "components"],
+  "properties": {
+    "id": { "$ref": "#/$defs/id" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "description": { "type": "string", "maxLength": 2000 },
+    "theme_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "grid_columns"],
+      "properties": {
+        "type": { "enum": ["grid", "flex", "custom"] },
+        "grid_columns": { "type": "integer", "minimum": 1, "maximum": 24 }
+      }
+    },
+    "components": {
+      "type": "array",
+      "maxItems": 18,
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "metadata": { "type": "object" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0, "maximum": 23 },
+        "y": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 24 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "position", "component_config"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["chart", "metric", "table"] },
+        "position": { "$ref": "#/$defs/position" },
+        "component_config": { "type": "object" },
+        "metadata": { "type": "object" }
+      }
+    }
+  }
+}

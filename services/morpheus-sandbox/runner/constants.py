@@ -1,0 +1,47 @@
+"""Hard resource ceilings mirrored by ``@dreamify/contracts``."""
+
+SCHEMA_VERSION = "1"
+
+MAX_ASSETS = 3
+MAX_FILE_BYTES = 10 * 1024 * 1024
+MAX_AGGREGATE_FILE_BYTES = 25 * 1024 * 1024
+MAX_ROWS_PER_FILE = 100_000
+MAX_COLUMNS_PER_FILE = 200
+MAX_COLUMN_NAME_CHARS = 128
+MAX_PROFILE_BYTES = 256 * 1024
+MAX_ANALYSIS_CODE_CHARS = 12 * 1024
+MAX_ANALYSIS_RESULT_BYTES = 512 * 1024
+MAX_DASHBOARD_BYTES = 1024 * 1024
+MAX_STDIO_BYTES = 64 * 1024
+MAX_AST_NODES = 500
+MAX_JSON_DEPTH = 8
+MAX_JSON_ITEMS = 50_000
+MAX_CELL_TEXT_CHARS = 4_000
+MAX_DATAFRAME_MEMORY_BYTES = 512 * 1024 * 1024
+MAX_EXCEL_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+MAX_EXCEL_COMPRESSION_RATIO = 100
+MAX_EXCEL_ARCHIVE_ENTRIES = 5_000
+MAX_EXCEL_SHEETS = 50
+MAX_CHARTS = 8
+MAX_METRICS = 8
+MAX_TABLES = 2
+MAX_SERIES_PER_CHART = 6
+MAX_POINTS_PER_SERIES = 500
+MAX_TABLE_ROWS = 100
+
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
+DEFAULT_CPU_SECONDS = 90
+DEFAULT_MEMORY_BYTES = 1536 * 1024 * 1024
+MAX_OUTPUT_FILE_BYTES = 1024 * 1024
+MAX_OPEN_FILES = 64
+MAX_CHILD_PROCESSES = 32
+
+SUPPORTED_FORMATS = frozenset({"csv", "xlsx", "xls", "json"})
+MEDIA_TYPES = {
+    "csv": frozenset({"text/csv", "application/csv", "text/plain"}),
+    "json": frozenset({"application/json", "text/json"}),
+    "xlsx": frozenset(
+        {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+    ),
+    "xls": frozenset({"application/vnd.ms-excel"}),
+}

@@ -1,4 +1,42 @@
-# Morpheus - LLM-Powered CSV Analysis API
+# Dreamify isolated Morpheus runner
+
+The deployable part of this directory is now the command-only `runner` package.
+It is intended to be installed into a versioned Vercel Sandbox snapshot and
+invoked by bounded Vercel Workflow steps. It has no HTTP server and it never
+imports the legacy LangChain graph or `PythonREPLTool`.
+
+The older FastAPI/LangChain files remain below for migration reference only.
+The deployable Dockerfile copies only `runner/` and installs only
+`requirements-runner.txt`, so trusted-process Python REPL execution cannot be
+reintroduced accidentally through an import.
+
+Commands accept workspace-relative request/output files:
+
+```bash
+python -m runner.main profile \
+  --workspace /vercel/sandbox \
+  --request requests/profile.json \
+  --output results/profile.json
+
+python -m runner.main execute \
+  --workspace /vercel/sandbox \
+  --request requests/analysis.json \
+  --output results/analysis.json
+```
+
+The Workflow must stage files through short-lived private Blob URLs before
+turning Sandbox network access off. No provider, database, Clerk, or Vercel
+credential belongs in the Sandbox environment. Inputs are limited to three
+files, 10 MiB each and 25 MiB combined; each analysis child process is bounded
+by time, memory, file, process, descriptor, stdout/stderr, and JSON-output caps.
+
+Run the deployable-runner tests with:
+
+```bash
+pytest -q tests
+```
+
+## Legacy service documentation
 
 Morpheus is a FastAPI-based service that uses LLM agents to analyze CSV files and recommend appropriate chart types for data visualization. The service provides intelligent data analysis without actually creating visualizations - it focuses on understanding your data and suggesting the best ways to visualize it.
 

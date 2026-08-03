@@ -1,0 +1,25 @@
+# Dreamify
+> Private, invitation-only AI analytics demo for personal, non-commercial evaluation on Vercel Hobby. Upload CSV, XLSX, XLS, or flat JSON files to create editable dashboards. Billing, checkout, credit debits, public dashboard links, scheduling, and external connectors are disabled by default.
+
+## Current deployment
+- Profile: `hobby_demo`
+- Guaranteed data source: direct file upload
+- AI mode: deterministic demo provider by default; OpenAI or Gemini only after a user configures an encrypted BYOK connection
+- Billing: disabled; there are no paid plans on this deployment
+- External connectors: catalog previews only unless the capabilities API reports a provider as enabled after credential setup and smoke testing
+- Workspace agents: unavailable by default
+- Scheduling: unavailable by default
+- Hosting: Vercel Hobby for a non-commercial demo; no production SLA
+
+## Core
+- [Homepage](https://dreamify-web.vercel.app/): Upload-first demo and product overview
+- [About](https://dreamify-web.vercel.app/about): Product direction and preview scope
+- [Free Preview](https://dreamify-web.vercel.app/pricing): Technical limits and disabled billing
+- [Docs](https://dreamify-web.vercel.app/docs): Current Hobby demo behavior and limits
+- [Security](https://dreamify-web.vercel.app/security): Preview security boundaries
+
+## Capability catalogs
+- [Data Connectors](https://dreamify-web.vercel.app/product/data-connectors): File upload plus capability-gated connector cards
+- [Workspace Agents](https://dreamify-web.vercel.app/product/workspace-agents): Capability-gated chat-platform concepts; unavailable by default
+
+Individual connector and workspace-agent pages describe catalog concepts. They do not mean a connector is active. Runtime availability always comes from `GET /api/v1/capabilities`.

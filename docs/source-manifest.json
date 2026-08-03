@@ -1,0 +1,38 @@
+{
+  "migrationDate": "2026-08-03",
+  "historyRewriteTool": "git-filter-repo 2.47.0",
+  "secretScanner": "gitleaks 8.30.1",
+  "sources": {
+    "frontend": {
+      "originalCommit": "d3f484ca0632f03c860936b2c1e51cec19cd39b5",
+      "sanitizedCommit": "75bcac0771939854513ae35034734523a12ca2e7",
+      "tag": "source/frontend/dev-2026-08-03",
+      "branch": "dev",
+      "target": "apps/web"
+    },
+    "api": {
+      "originalCommit": "1f0e8d0e1cbfeeaa4d896367f9cd2fa29e925d41",
+      "sanitizedCommit": "10fbd5d145334d8d08283b155aa203a9a980616f",
+      "tag": "source/api/dev-2026-08-03",
+      "branch": "dev",
+      "target": "services/api"
+    },
+    "morpheus": {
+      "originalCommit": "2ec92c73cd80ec3d55bd7196defb6ed33995525a",
+      "sanitizedCommit": "fd1f4bc46fea3cbeafac8ac78cbab3f90e5d6f59",
+      "tag": "source/morpheus/dev-2026-08-03",
+      "branch": "dev",
+      "target": "services/morpheus-sandbox"
+    }
+  },
+  "excluded": [
+    "all .env variants",
+    "historical config/config.yaml",
+    "historical credential-bearing examples",
+    "node_modules",
+    "raw mov/mp4/webm media",
+    "dreamify-backend/scripts/churn_cohorts.py"
+  ],
+  "configRepositoryImported": false,
+  "legacyDataImported": false
+}

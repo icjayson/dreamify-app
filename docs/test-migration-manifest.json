@@ -1,0 +1,166 @@
+{
+  "schema_version": 2,
+  "baseline": {
+    "total_cases": 817,
+    "case_semantics": "Every case in a baseline file inherits its entry classification unless the entry has explicit, exhaustive case_dispositions.",
+    "sources": {
+      "web": {
+        "commit": "d3f484ca0632f03c860936b2c1e51cec19cd39b5",
+        "cases": 190,
+        "runtime_collected": 190,
+        "static_inventory": 0,
+        "collector": "Vitest 4.1.10 with a minimal secret-free audit config"
+      },
+      "api": {
+        "commit": "1f0e8d0e1cbfeeaa4d896367f9cd2fa29e925d41",
+        "cases": 497,
+        "runtime_collected": 439,
+        "static_inventory": 58,
+        "collector": "pytest 8.4.2 on Python 3.9.6"
+      },
+      "morpheus": {
+        "commit": "2ec92c73cd80ec3d55bd7196defb6ed33995525a",
+        "cases": 130,
+        "runtime_collected": 43,
+        "static_inventory": 87,
+        "collector": "pytest 8.4.2 on Python 3.9.6"
+      }
+    }
+  },
+  "classification_totals": {
+    "migrated_unchanged": 168,
+    "equivalent_replaced": 239,
+    "intentionally_excluded": 410
+  },
+  "latest_local_validation": {
+    "observed_at": "2026-08-03T21:25:46+07:00",
+    "suites": {
+      "web": {
+        "service": "web",
+        "covers_source_services": ["web"],
+        "status": "passed",
+        "observed_at": "2026-08-03T21:25:46+07:00",
+        "command": "npm run test --workspace @dreamify/web",
+        "test_files": 40,
+        "passed": 298,
+        "failed": 0
+      },
+      "api": {
+        "service": "api",
+        "covers_source_services": ["api", "morpheus"],
+        "status": "passed",
+        "observed_at": "2026-08-03T21:25:46+07:00",
+        "command": "cd services/api && ../../.venv/bin/python -m pytest -q tests_platform",
+        "passed": 140,
+        "failed": 0
+      },
+      "workflow": {
+        "service": "workflow",
+        "covers_source_services": ["morpheus"],
+        "status": "passed",
+        "observed_at": "2026-08-03T20:54:50+07:00",
+        "command": "npm run test --workspace @dreamify/workflow",
+        "passed": 55,
+        "failed": 0
+      },
+      "sandbox_runner": {
+        "service": "sandbox",
+        "covers_source_services": ["morpheus"],
+        "status": "passed",
+        "observed_at": "2026-08-03T20:54:50+07:00",
+        "command": "cd services/morpheus-sandbox && .venv/bin/python -m pytest -q tests",
+        "passed": 32,
+        "failed": 0
+      }
+    },
+    "npm_audit": {
+      "command": "npm audit --audit-level=high --json",
+      "vulnerabilities": 0
+    },
+    "python_direct_dependency_audit": {
+      "command": "pip-audit --no-deps --disable-pip against API constraints and Sandbox requirements-dev",
+      "vulnerabilities": 0,
+      "limitation": "Local evidence covers explicitly pinned packages; CI resolves and audits full requirement graphs."
+    }
+  },
+  "verification_states": {
+    "target_locally_passed": "The unchanged target or explicit replacement targets are selected by CI and have service-aware local passing evidence.",
+    "retained_not_executed": "The source test is byte-for-byte retained, but the current CI test selector does not execute it.",
+    "exclusion_guard_ci_configured": "The legacy feature is excluded and a fail-closed capability/error guard is selected by CI."
+  },
+  "evidence_modes": {
+    "vitest_runtime_collection": "Collected from a secret-free git archive with Vitest: exact test count including generated cases.",
+    "pytest_runtime_collection": "Collected from a secret-free git archive with pytest: exact node count including parametrization.",
+    "static_function_inventory": "Collection was blocked by the source service's missing ignored config.yaml; count is the number of test functions, with no parametrization in that file."
+  },
+  "entries": [
+    {"service":"web","source":"dreamify-frontend/frontend/src/api/chatIntegrationApi.test.ts","target":"apps/web/src/api/chatIntegrationApi.test.ts","cases":3,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/chat/conversationToMessages.test.ts","target":"apps/web/src/chat/conversationToMessages.test.ts","cases":8,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/chat/useChatStore.agenticFlows.test.ts","replacement_targets":["apps/web/src/chat/useChatStore.agenticFlows.test.ts"],"validation_suites":["web"],"cases":9,"classification":"equivalent_replaced","evidence":"vitest_runtime_collection","verification":"target_locally_passed","reason":"Strict TypeScript annotations and a non-null assertion adapt the same nine behavioral cases to the Next.js build."},
+    {"service":"web","source":"dreamify-frontend/frontend/src/chat/useChatStore.themeIntent.test.ts","target":"apps/web/src/chat/useChatStore.themeIntent.test.ts","cases":9,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/chat/useChatStore.workflowScope.test.ts","target":"apps/web/src/chat/useChatStore.workflowScope.test.ts","cases":5,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/components/charts/ChartRenderer.memo.test.ts","target":"apps/web/src/components/charts/ChartRenderer.memo.test.ts","cases":5,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/components/charts/edit/PythonCodeBlock.test.tsx","target":"apps/web/src/components/charts/edit/PythonCodeBlock.test.tsx","cases":2,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/components/chat/ChartChangeSummaryCard.test.ts","target":"apps/web/src/components/chat/ChartChangeSummaryCard.test.ts","cases":2,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/components/chat/clarificationOverlayUtils.test.ts","target":"apps/web/src/components/chat/clarificationOverlayUtils.test.ts","cases":11,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/components/project-section/ActivityPanel.test.tsx","target":"apps/web/src/components/project-section/ActivityPanel.test.tsx","cases":4,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/components/project-section/dashboardLayout.test.ts","target":"apps/web/src/components/project-section/dashboardLayout.test.ts","cases":54,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/components/project-section/dashboardMetricData.test.ts","target":"apps/web/src/components/project-section/dashboardMetricData.test.ts","cases":5,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/components/workspace/workspaceNewsSelection.test.ts","target":"apps/web/src/components/workspace/workspaceNewsSelection.test.ts","cases":7,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/constants/builtinTemplates.test.ts","target":"apps/web/src/constants/builtinTemplates.test.ts","cases":9,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/services/conversationService.versions.test.ts","replacement_targets":["apps/web/src/services/conversationService.versions.test.ts"],"validation_suites":["web"],"cases":7,"classification":"equivalent_replaced","evidence":"vitest_runtime_collection","verification":"target_locally_passed","reason":"The seven baseline cases are retained with the conflict mock adapted to the typed API error contract; one additional 404 case is new and is not counted here."},
+    {"service":"web","source":"dreamify-frontend/frontend/src/services/dashboardEditsStorage.test.ts","target":"apps/web/src/services/dashboardEditsStorage.test.ts","cases":4,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/services/processingService.workflow.test.ts","target":"apps/web/src/services/processingService.workflow.test.ts","cases":5,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed","allow_additive_cases":true,"addition_reason":"The five baseline cases remain a byte-identical prefix; two migration-specific request-contract cases are appended and are not counted in the baseline."},
+    {"service":"web","source":"dreamify-frontend/frontend/src/services/workflowStreamService.test.ts","replacement_targets":["apps/web/src/services/workflowStreamService.test.ts"],"validation_suites":["web"],"cases":6,"classification":"equivalent_replaced","evidence":"vitest_runtime_collection","verification":"target_locally_passed","reason":"The SSE replacement keeps the six baseline stream behaviors while adding cursor resume, ordered deduplication, reconnect, and polling fallback coverage."},
+    {"service":"web","source":"dreamify-frontend/frontend/src/utils/analysisSteps.test.ts","target":"apps/web/src/utils/analysisSteps.test.ts","cases":8,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/utils/chartChangeDiff.test.ts","target":"apps/web/src/utils/chartChangeDiff.test.ts","cases":6,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/utils/componentKey.test.ts","target":"apps/web/src/utils/componentKey.test.ts","cases":3,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/utils/dataContextTokens.test.ts","target":"apps/web/src/utils/dataContextTokens.test.ts","cases":7,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/utils/timestamp.test.ts","target":"apps/web/src/utils/timestamp.test.ts","cases":11,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+
+    {"service":"api","source":"dreamify-backend/tests/test_agentic_workflow_contract.py","replacement_targets":["services/api/tests_platform/test_legacy_api_equivalence.py","services/api/tests_platform/test_compatibility_contract.py","services/api/tests_platform/test_internal_workflow_contract.py"],"validation_suites":["api"],"cases":4,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"The durable FastAPI and Workflow contracts replace the legacy in-process agentic workflow while preserving request, status, event, and terminal-response boundaries."},
+    {"service":"api","source":"dreamify-backend/tests/test_amazon_seller_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Amazon Seller is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_api.py","replacement_targets":["services/api/tests_platform/test_legacy_api_equivalence.py","services/api/tests_platform/test_capabilities_and_schema.py"],"validation_suites":["api"],"cases":10,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Platform health, schema, core routes, and removed legacy route behavior are covered by the environment-only FastAPI replacement and typed capability guards."},
+    {"service":"api","source":"dreamify-backend/tests/test_appsflyer.py","cases":6,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"AppsFlyer is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_change_summary_passthrough.py","replacement_targets":["services/api/tests_platform/test_legacy_chat_contracts.py"],"validation_suites":["api"],"cases":10,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Bounded explainer, analysis-step, provenance, and chart-change summary fields are preserved through the durable chat contract with explicit payload-size limits."},
+    {"service":"api","source":"dreamify-backend/tests/test_chart_renderer.py","cases":24,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"The legacy server-side Python chart renderer is not deployed; chart contracts are validated in Workflow and rendered by the retained React chart surface.","guard_targets":["packages/contracts/test/contracts.test.ts","packages/workflow/test/workflow.test.ts","apps/web/src/components/charts/ChartRenderer.memo.test.ts"]},
+    {"service":"api","source":"dreamify-backend/tests/test_chat_platform.py","cases":122,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Slack, Telegram, WhatsApp, and Zalo bot integrations are uncertified optional connector packs in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_conversation_stream.py","replacement_targets":["services/api/tests_platform/test_legacy_api_equivalence.py","services/api/tests_platform/test_compatibility_contract.py","services/api/tests_platform/test_legacy_chat_contracts.py"],"validation_suites":["api"],"cases":10,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"Database-backed monotonic events, resumable SSE, clarification terminalization, and cross-tenant denial replace the legacy in-memory conversation stream."},
+    {"service":"api","source":"dreamify-backend/tests/test_credit_timing.py","cases":10,"classification":"intentionally_excluded","evidence":"static_function_inventory","verification":"exclusion_guard_ci_configured","reason":"Credits, debit accounting, checkout, and billing are removed from hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_customer_io_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Customer.io is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_dashboard_versions.py","replacement_targets":["services/api/tests_platform/test_compatibility_contract.py","services/api/tests_platform/test_legacy_api_equivalence.py"],"validation_suites":["api"],"cases":10,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Postgres-backed immutable dashboard versions preserve list, fetch, revert, conflict, not-found, and tenant-isolation behavior without DynamoDB."},
+    {"service":"api","source":"dreamify-backend/tests/test_google_search_console_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Google Search Console is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_hubspot.py","cases":5,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"HubSpot is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_klaviyo_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Klaviyo is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_lazada_seller_service.py","cases":6,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Lazada Seller is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_mixpanel_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Mixpanel is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_morpheus_client.py","replacement_targets":["services/api/tests_platform/test_compatibility_contract.py","services/api/tests_platform/test_dispatch_coordination.py"],"validation_suites":["api"],"cases":7,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Durable Workflow dispatch, retry coordination, and failure handling replace the legacy Morpheus HTTP client without an always-on Python service."},
+    {"service":"api","source":"dreamify-backend/tests/test_operator_brief.py","replacement_targets":["services/api/tests_platform/test_operator_briefs.py"],"validation_suites":["api"],"cases":9,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"The Postgres operator-brief API preserves validation, persistence, retrieval, authorization, and not-found behaviors without legacy storage dependencies."},
+    {"service":"api","source":"dreamify-backend/tests/test_overall_feedback.py","replacement_targets":["services/api/tests_platform/test_legacy_api_equivalence.py"],"validation_suites":["api"],"cases":3,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"The fresh Postgres feedback endpoint validates every required answer, normalizes email, persists submissions, and rejects incomplete payloads."},
+    {"service":"api","source":"dreamify-backend/tests/test_pipedrive.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Pipedrive is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_posthog_service.py","cases":8,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"PostHog is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_premium_thinking.py","replacement_targets":["services/api/tests_platform/test_legacy_api_equivalence.py"],"validation_suites":["api"],"cases":4,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"The hobby_demo model contract removes premium billing tiers while preserving accepted model aliases and rejecting unsupported model selection deterministically."},
+    {"service":"api","source":"dreamify-backend/tests/test_project_naming_flow.py","cases":3,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Automatic LLM-based project renaming is removed from hobby_demo; explicit user project names remain stable across chat submissions.","guard_targets":["services/api/tests_platform/test_legacy_api_equivalence.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_quickbooks_service.py","cases":8,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"QuickBooks is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_salesforce.py","cases":6,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Salesforce is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_schedules.py","cases":102,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Scheduling is disabled for the first hobby_demo release; minute-precision legacy scheduling is outside the Hobby contract.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_shopee_seller_service.py","cases":6,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Shopee Seller is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_shopify_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Shopify is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_supabase_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Supabase is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_theme_focus_flow.py","cases":13,"evidence":"pytest_runtime_collection","case_dispositions":[{"label":"explicit presentation and clarification contracts","case_ids":["test_chat_request_forwards_theme_and_analysis_focus_to_morpheus","test_chat_request_without_theme_does_not_forward_theme_to_morpheus","test_chat_request_maps_legacy_template_to_theme_and_focus","test_dashboard_theme_update_syncs_styling_recommendations","test_legacy_template_update_maps_theme_and_focus_fields","test_chat_request_rejects_asset_from_another_project","test_chat_request_rejects_invalid_clarification_option","test_chat_request_rejects_invalid_option_in_batched_clarifications","test_chat_request_accepts_non_asset_clarification_metadata","test_dismiss_clarification_rejects_unauthorized_conversation","test_dismiss_clarification_rejects_unknown_clarification_id","test_dismiss_clarification_persists_no_answer_and_stops_workflow"],"cases":12,"classification":"equivalent_replaced","verification":"target_locally_passed","reason":"The durable chat API preserves explicit theme and focus propagation, legacy template normalization, asset isolation, typed clarification validation, and durable dismissal behavior.","replacement_targets":["services/api/tests_platform/test_legacy_chat_contracts.py"],"validation_suites":["api"]},{"label":"implicit project-wide asset forwarding","case_ids":["test_text_only_chat_defaults_to_no_asset_selection_and_forwards_project_assets"],"cases":1,"classification":"intentionally_excluded","verification":"exclusion_guard_ci_configured","reason":"Implicit forwarding of every project asset is intentionally removed; hobby_demo analyzes only explicitly attached assets and pure text bypasses Sandbox.","guard_targets":["services/api/tests_platform/test_legacy_chat_contracts.py","packages/workflow/test/workflow.test.ts"]}]},
+    {"service":"api","source":"dreamify-backend/tests/test_tiktok_shop_seller_service.py","cases":6,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"TikTok Shop Seller is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_user_recent_projects.py","replacement_targets":["services/api/tests_platform/test_legacy_api_equivalence.py"],"validation_suites":["api"],"cases":4,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"The Postgres recent-project query preserves bounded newest-first ordering while applying the active membership tenant boundary."},
+    {"service":"api","source":"dreamify-backend/tests/test_warehouse_service.py","cases":34,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"The secret-bearing legacy test file was removed during history sanitation and warehouse/private-network connectors are uncertified on Hobby.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+    {"service":"api","source":"dreamify-backend/tests/test_workflow_nodes_size_guard.py","replacement_targets":["services/api/tests_platform/test_legacy_chat_contracts.py","services/api/tests_platform/test_legacy_api_equivalence.py"],"validation_suites":["api"],"cases":4,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Durable conversation nodes and explainers preserve useful metadata while enforcing explicit bounded JSON payloads before persistence."},
+    {"service":"api","source":"dreamify-backend/tests/test_zendesk_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Zendesk is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},
+
+    {"service":"morpheus","source":"dreamify-morpheus/test_agentic_ask_first.py","replacement_targets":["packages/workflow/test/workflow.test.ts","services/api/tests_platform/test_legacy_chat_contracts.py","services/api/tests_platform/test_edit_target_contract.py"],"validation_suites":["workflow","api"],"cases":25,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"Typed Workflow clarification reasons, bounded batching, explicit asset selection, edit targeting, and child-run continuation replace the legacy LangGraph ask-first nodes."},
+    {"service":"morpheus","source":"dreamify-morpheus/test_analysis_steps.py","replacement_targets":["packages/workflow/test/workflow.test.ts","services/morpheus-sandbox/tests/test_contract_parity.py","services/morpheus-sandbox/tests/test_dashboard.py"],"validation_suites":["workflow","sandbox_runner"],"cases":18,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Bounded structured analysis steps are emitted by Workflow and validated by the pinned runner contract, replacing temporary-path and model-explainer internals."},
+    {"service":"morpheus","source":"dreamify-morpheus/test_chart_modification_fixes.py","replacement_targets":["packages/workflow/test/workflow.test.ts","services/api/tests_platform/test_edit_target_contract.py","services/morpheus-sandbox/tests/test_dashboard.py","services/morpheus-sandbox/tests/test_contract_parity.py"],"validation_suites":["workflow","api","sandbox_runner"],"cases":39,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Schema-bounded synthesis, one repair, immutable component targeting, provenance, and dashboard validation replace the legacy chart-regex and LangGraph repair implementation."},
+    {"service":"morpheus","source":"dreamify-morpheus/test_premium_thinking.py","replacement_targets":["packages/workflow/test/workflow.test.ts"],"validation_suites":["workflow"],"cases":2,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"Durable monotonic Workflow events preserve sanitized progress traces and final run history without a premium billing or in-memory thinking tier."},
+    {"service":"morpheus","source":"dreamify-morpheus/test_rate_limit_state.py","replacement_targets":["packages/workflow/test/model-clients.test.ts","packages/workflow/test/durable-slices.test.ts"],"validation_suites":["workflow"],"cases":3,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"Durable provider-call reservations, bounded retries, typed 429 handling, and a five-call database budget replace serialized in-memory rate-limit counters."},
+    {"service":"morpheus","source":"dreamify-morpheus/test_server_agentic_workflow_contract.py","replacement_targets":["packages/workflow/test/workflow.test.ts","packages/workflow/test/durable-slices.test.ts","services/api/tests_platform/test_internal_workflow_contract.py","services/api/tests_platform/test_edit_target_contract.py"],"validation_suites":["workflow","api"],"cases":13,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"The TypeScript Workflow plus internal FastAPI contract preserves terminal messages, visual answers, dashboards, targeted edits, clarification, and replay-safe persistence."},
+    {"service":"morpheus","source":"dreamify-morpheus/test_theme_focus.py","replacement_targets":["packages/workflow/test/workflow.test.ts","services/api/tests_platform/test_legacy_chat_contracts.py","services/morpheus-sandbox/tests/test_dashboard.py"],"validation_suites":["workflow","api","sandbox_runner"],"cases":16,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Explicit theme and focus propagation, layout validation, asset selection, deduplication, and clarification are enforced across the API, Workflow, and runner boundaries."},
+    {"service":"morpheus","source":"dreamify-morpheus/test_workflow_routing_order.py","replacement_targets":["packages/workflow/test/workflow.test.ts","packages/workflow/test/durable-slices.test.ts"],"validation_suites":["workflow"],"cases":14,"classification":"equivalent_replaced","evidence":"static_function_inventory","verification":"target_locally_passed","reason":"Durable Workflow phases preserve deterministic routing order, pure-text bypass, bounded data execution, persistence ordering, retries, and cancellation across slices."}
+  ]
+}

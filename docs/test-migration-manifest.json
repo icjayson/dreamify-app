@@ -51,7 +51,7 @@
         "status": "passed",
         "observed_at": "2026-08-03T21:25:46+07:00",
         "command": "cd services/api && ../../.venv/bin/python -m pytest -q tests_platform",
-        "passed": 140,
+        "passed": 141,
         "failed": 0
       },
       "workflow": {

@@ -44,7 +44,7 @@ The API total includes 78 replacement cases and 28 exclusions from the formerly 
 This ledger closes the **817-case inventory and disposition** requirement; it does not by itself close hosted acceptance or a fresh CI run.
 
 - The final web suite passed **298** tests across 40 files, including stream reconnect, capability-gated connector redirects, local-versus-hosted upload transport, and empty pre-dispatch event handling.
-- The deployable API replacement suite passed **140** tests with zero failures.
+- The deployable API replacement suite passed **141** tests with zero failures.
 - The TypeScript Workflow replacement suite passed **55** tests with zero failures.
 - The bounded Sandbox runner passed **32** tests with zero failures.
 - Every replacement disposition names the exact test files that protect it. Test-suite pass counts are evidence that those targets ran; they are not arithmetically compared with baseline case counts because one replacement scenario can cover several legacy assertions and one legacy behavior can cross API, Workflow, and Sandbox boundaries.
@@ -55,7 +55,7 @@ This ledger closes the **817-case inventory and disposition** requirement; it do
 | Check | Result |
 |---|---|
 | Web Vitest | 40 files, **298 passed**, 0 failed. |
-| API platform pytest | **140 passed**, 0 failed. |
+| API platform pytest | **141 passed**, 0 failed. |
 | Workflow Vitest | **55 passed**, 0 failed. |
 | Sandbox runner pytest | **32 passed**, 0 failed. |
 | npm audit | 0 known vulnerabilities at all severities. |
@@ -81,7 +81,7 @@ When source collection stops on missing `config/config.yaml`, keep the failure a
 | Required gate | Workflow | Status |
 |---|---|---|
 | Web lint, strict typecheck, Vitest, Next production build | `web.yml` | Configured; local lint, typecheck, 298-test suite, and production build pass. |
-| API import/lint, format, platform pytest, OpenAPI drift, route uniqueness/access policy, migration + idempotent seed | `api.yml` | Configured; local deployable replacement suite is 140/140. |
+| API import/lint, format, platform pytest, OpenAPI drift, route uniqueness/access policy, migration + idempotent seed | `api.yml` | Configured; local deployable replacement suite is 141/141. |
 | Workflow typecheck/tests, contract drift, bounded Sandbox runner tests | `sandbox.yml` | Configured; Workflow is 55/55 and the local runner is 32/32. Hosted Vercel Sandbox smoke remains an external acceptance gate. |
 | Full-history secret scan | `security.yml` | Configured with full-depth gitleaks checkout. |
 | JavaScript and Python dependency audit | `security.yml` | Configured; npm and direct pinned Python package audits are locally clean. Full Python transitive audit still requires CI. |

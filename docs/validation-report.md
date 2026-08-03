@@ -37,7 +37,7 @@ require account-owner configuration.
 | Web | Vitest | 40 files / 298 tests pass |
 | Contracts | generation/drift and Vitest | 8 tests pass; canonical OpenAPI current |
 | Workflow | typecheck and Vitest | 5 files / 55 tests pass |
-| API | Ruff format/check, compileall, OpenAPI check, `pytest -q tests_platform` | 140 tests pass |
+| API | Ruff format/check, compileall, OpenAPI check, `pytest -q tests_platform` | 141 tests pass |
 | Sandbox | Ruff format/check and `pytest -q tests` | 32 tests pass |
 | Dependencies | `npm audit --audit-level=high`, Python `pip check`, local Python audit | no npm vulnerability and no broken/audited Python dependency finding |
 | Baseline ledger | `node scripts/check-test-migration-ledger.mjs` | all 817 cases classified: 157 unchanged, 250 equivalent, 410 intentionally excluded |

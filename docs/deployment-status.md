@@ -6,9 +6,9 @@ This file records infrastructure identifiers without credentials. Secrets and pr
 
 | Resource | Identifier | State |
 |---|---|---|
-| GitHub repository | `hungnq74/dreamify-platform` | private, awaiting first validated push |
-| Vercel web project | `prj_zYkU0PyqCDoyzsEXB6ZhJBWyYV0U` | Next.js, Node 22, root `apps/web` |
-| Vercel API project | `prj_y5lQ8H1NsowxGKCdy17VWxkftR30` | root `services/api` |
+| GitHub repository | `hungnq74/dreamify-platform` | private, `main` and all three sanitized source tags pushed |
+| Vercel web project | `prj_zYkU0PyqCDoyzsEXB6ZhJBWyYV0U` | Git-connected, Next.js, Node 22, root `apps/web` |
+| Vercel API project | `prj_y5lQ8H1NsowxGKCdy17VWxkftR30` | Git-connected, Node 22, root `services/api` |
 | Private upload Blob | `store_ohtLi3BOfwRKnEfn` | connected to web, Singapore |
 | Public media Blob | `store_kTDaCeDQ4Sv2bvvO` | connected to API, Singapore |
 | Sandbox runner snapshot | `snap_QbnEqqLf9qrVHkwsX1d05DnzEnKm` | pinned runner import/profile smoke passed with network denied |

@@ -18,8 +18,10 @@
   "scripts": {
     "prebuild": "npm run build --workspace @dreamify/contracts",
     "build": "tsc -p tsconfig.json",
+    "prelint": "npm run build --workspace @dreamify/contracts",
     "lint": "tsc -p tsconfig.json --noEmit",
     "pretest": "npm run build --workspace @dreamify/contracts",
+    "pretypecheck": "npm run build --workspace @dreamify/contracts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

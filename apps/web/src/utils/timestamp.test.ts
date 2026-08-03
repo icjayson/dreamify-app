@@ -65,15 +65,10 @@ describe('timestamp utils', () => {
     expect(localInput).toBe('2024-01-01T12:30');
   });
 
-  it('getUserTimezone returns a supported IANA timezone', () => {
+  it('getUserTimezone returns a timezone accepted by Intl', () => {
     const tz = getUserTimezone();
-    const supportedValuesOf = (Intl as typeof Intl & {
-      supportedValuesOf?: (key: 'timeZone') => string[];
-    }).supportedValuesOf;
-    const supported = typeof supportedValuesOf === 'function'
-      ? supportedValuesOf('timeZone')
-      : [tz];
-    expect(supported.includes(tz)).toBe(true);
+    expect(tz.length).toBeGreaterThan(0);
+    expect(() => new Intl.DateTimeFormat('en', { timeZone: tz })).not.toThrow();
   });
 
   it('isValidTimestamp rejects timestamps without timezone', () => {

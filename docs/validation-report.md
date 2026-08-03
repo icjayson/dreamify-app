@@ -1,7 +1,7 @@
 # Migration validation report
 
-Validated on 2026-08-03 against the complete working tree prepared for the first
-`dreamify-platform` commit. This report separates local implementation evidence
+Validated on 2026-08-03 against the complete working tree pushed to the private
+`dreamify-platform` repository. This report separates local implementation evidence
 from hosted acceptance. A local pass does not waive an unchecked hosted gate in
 [`acceptance.md`](./acceptance.md).
 
@@ -94,8 +94,9 @@ journey above.
 3. The private GitHub repository cannot enforce protected `main` on the current
    plan; GitHub returns an upgrade-required HTTP 403. The repository was not made
    public as a workaround.
-4. The Vercel projects and Blob stores exist, but no production deployment is
-   attempted while database/auth configuration is incomplete. Therefore hosted
+4. The Vercel projects and Blob stores exist and both projects are Git-connected,
+   but no production deployment is attempted while database/auth configuration
+   is incomplete. Therefore hosted
    login, upload, Workflow/Sandbox, BYOK, dashboard revert, and logout remain
    unverified.
 5. Real OpenAI/Gemini BYOK calls and connector certification are intentionally

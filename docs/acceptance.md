@@ -74,6 +74,6 @@ Counts alone are not acceptance evidence; the mapping must preserve the behavior
 
 The exhaustive accounting is in [`test-migration-ledger.md`](./test-migration-ledger.md) and
 [`test-migration-manifest.json`](./test-migration-manifest.json). All 817 baseline cases are now
-classified: 168 migrated unchanged, 239 covered by explicit equivalent replacements, and 410
+classified: 157 migrated unchanged, 250 covered by explicit equivalent replacements, and 410
 intentionally excluded behind fail-closed guards. The replacement suites are selected by CI and
 pass locally; hosted acceptance remains a separate gate.

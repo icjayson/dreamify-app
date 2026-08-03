@@ -40,7 +40,7 @@ require account-owner configuration.
 | API | Ruff format/check, compileall, OpenAPI check, `pytest -q tests_platform` | 140 tests pass |
 | Sandbox | Ruff format/check and `pytest -q tests` | 32 tests pass |
 | Dependencies | `npm audit --audit-level=high`, Python `pip check`, local Python audit | no npm vulnerability and no broken/audited Python dependency finding |
-| Baseline ledger | `node scripts/check-test-migration-ledger.mjs` | all 817 cases classified: 168 unchanged, 239 equivalent, 410 intentionally excluded |
+| Baseline ledger | `node scripts/check-test-migration-ledger.mjs` | all 817 cases classified: 157 unchanged, 250 equivalent, 410 intentionally excluded |
 | Git hygiene | staged/working-tree `git diff --check`, full-history Gitleaks, `git fsck` | pass |
 
 The excluded 410 baseline cases belong to the retired EC2/AWS persistence,

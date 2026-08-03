@@ -23,8 +23,8 @@ No `.env` or ignored YAML credential file was read to obtain these numbers. This
 
 | Classification | Cases | Meaning |
 |---|---:|---|
-| Migrated unchanged | 168 | Byte-identical web baseline cases, including one validated byte-identical prefix with migration-only tests appended. |
-| Equivalent/replaced | 239 | 22 web cases, 87 API cases, and all 130 Morpheus cases map to explicit CI-selected replacement tests. |
+| Migrated unchanged | 157 | Byte-identical web baseline cases, including one validated byte-identical prefix with migration-only tests appended. |
+| Equivalent/replaced | 250 | 33 web cases, 87 API cases, and all 130 Morpheus cases map to explicit CI-selected replacement tests. |
 | Intentionally excluded | 410 | 270 uncertified connector/chat-platform cases, 102 legacy schedule cases, 10 billing/credit cases, 24 retired Python chart-renderer cases, three automatic project-renaming cases, and one implicit project-wide asset-forwarding case. |
 | **Total** | **817** | Every baseline case is represented once in the manifest. |
 
@@ -32,10 +32,10 @@ Per source service, the disposition is:
 
 | Source | Migrated unchanged | Equivalent/replaced | Intentionally excluded | Total |
 |---|---:|---:|---:|---:|
-| Web | 168 | 22 | 0 | 190 |
+| Web | 157 | 33 | 0 | 190 |
 | API | 0 | 87 | 410 | 497 |
 | Morpheus | 0 | 130 | 0 | 130 |
-| **Total** | **168** | **239** | **410** | **817** |
+| **Total** | **157** | **250** | **410** | **817** |
 
 The API total includes 78 replacement cases and 28 exclusions from the formerly unresolved 106-case set, plus nine operator-brief replacements. The 13-case `test_theme_focus_flow.py` entry is split explicitly: 12 presentation/clarification cases map to the durable chat tests, while `test_text_only_chat_defaults_to_no_asset_selection_and_forwards_project_assets` is excluded because hobby_demo requires explicit asset attachment. The 34 warehouse cases remain part of the connector exclusion count; their secret-bearing source file was removed from sanitized history.
 
@@ -60,7 +60,7 @@ This ledger closes the **817-case inventory and disposition** requirement; it do
 | Sandbox runner pytest | **32 passed**, 0 failed. |
 | npm audit | 0 known vulnerabilities at all severities. |
 | Python direct pinned-package audit | 0 known vulnerabilities for API constraints and Sandbox dev requirements; full transitive resolution remains a CI check. |
-| Ledger validator | Passed: 817 cases across 66 source files; **168 unchanged / 239 replaced / 410 excluded**. |
+| Ledger validator | Passed: 817 cases across 66 source files; **157 unchanged / 250 replaced / 410 excluded**. |
 
 The local suite gate is complete. A fresh successful CI run on the pushed commit is still required before claiming hosted release acceptance. “Mapped and locally passed” is not the same as “passed on the pushed commit in CI.”
 

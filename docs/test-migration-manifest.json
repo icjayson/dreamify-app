@@ -28,8 +28,8 @@
     }
   },
   "classification_totals": {
-    "migrated_unchanged": 168,
-    "equivalent_replaced": 239,
+    "migrated_unchanged": 157,
+    "equivalent_replaced": 250,
     "intentionally_excluded": 410
   },
   "latest_local_validation": {
@@ -116,7 +116,7 @@
     {"service":"web","source":"dreamify-frontend/frontend/src/utils/chartChangeDiff.test.ts","target":"apps/web/src/utils/chartChangeDiff.test.ts","cases":6,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
     {"service":"web","source":"dreamify-frontend/frontend/src/utils/componentKey.test.ts","target":"apps/web/src/utils/componentKey.test.ts","cases":3,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
     {"service":"web","source":"dreamify-frontend/frontend/src/utils/dataContextTokens.test.ts","target":"apps/web/src/utils/dataContextTokens.test.ts","cases":7,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
-    {"service":"web","source":"dreamify-frontend/frontend/src/utils/timestamp.test.ts","target":"apps/web/src/utils/timestamp.test.ts","cases":11,"classification":"migrated_unchanged","evidence":"vitest_runtime_collection","verification":"target_locally_passed"},
+    {"service":"web","source":"dreamify-frontend/frontend/src/utils/timestamp.test.ts","replacement_targets":["apps/web/src/utils/timestamp.test.ts"],"validation_suites":["web"],"cases":11,"classification":"equivalent_replaced","evidence":"vitest_runtime_collection","verification":"target_locally_passed","reason":"The eleven timestamp behaviors remain covered, with the timezone assertion adapted to accept the valid UTC alias that Linux Intl exposes but supportedValuesOf does not enumerate."},
 
     {"service":"api","source":"dreamify-backend/tests/test_agentic_workflow_contract.py","replacement_targets":["services/api/tests_platform/test_legacy_api_equivalence.py","services/api/tests_platform/test_compatibility_contract.py","services/api/tests_platform/test_internal_workflow_contract.py"],"validation_suites":["api"],"cases":4,"classification":"equivalent_replaced","evidence":"pytest_runtime_collection","verification":"target_locally_passed","reason":"The durable FastAPI and Workflow contracts replace the legacy in-process agentic workflow while preserving request, status, event, and terminal-response boundaries."},
     {"service":"api","source":"dreamify-backend/tests/test_amazon_seller_service.py","cases":7,"classification":"intentionally_excluded","evidence":"pytest_runtime_collection","verification":"exclusion_guard_ci_configured","reason":"Amazon Seller is an uncertified optional connector in hobby_demo.","guard_targets":["services/api/tests_platform/test_capabilities_and_schema.py"]},

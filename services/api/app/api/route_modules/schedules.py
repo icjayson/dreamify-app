@@ -1,0 +1,1303 @@
+"""
+User-facing CRUD routes for data sync schedules.
+"""
+
+import logging
+import base64
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from app.dependencies.auth import require_user
+from app.services import scheduler_service
+from utils.dynamodb.repos import sync_schedules as schedules_repo
+from utils.dynamodb.repos import sync_runs as runs_repo
+from utils.dynamodb.repos import operator_briefs as briefs_repo
+
+logger = logging.getLogger(__name__)
+router = APIRouter(tags=["schedules"])
+
+
+# ── Request / Response models ──────────────────────────────────────────────────
+
+
+class CreateScheduleRequest(BaseModel):
+    provider: str  # ga4 | meta_ads | tiktok | appsflyer | stripe | hubspot | salesforce | pipedrive | shopify | klaviyo | quickbooks | zendesk | mixpanel | posthog | customer_io | google_search_console | amazon_seller | tiktok_shop_seller | shopee_seller | lazada_seller | supabase | warehouse
+    connector_config: Dict[str, Any]
+    project_id: str
+    account_name: str = ""
+    frequency: str  # daily | weekly | biweekly
+    hour_utc: int = Field(ge=0, le=23, default=9)
+    day_of_week: int = Field(ge=0, le=6, default=0)  # 0=Mon
+    date_range_preset: str = "last_30d"  # last_7d | last_14d | last_30d | last_90d
+    # Optional post-sync actions: [{"type": "slack", "channel_id": "C123"}]
+    on_complete_actions: Optional[List[Dict[str, Any]]] = None
+    # Optional auto-refresh: conversation_id to re-analyze after each sync
+    auto_refresh_conversation_id: Optional[str] = None
+    auto_refresh_prompt: Optional[str] = None
+
+
+class UpdateScheduleRequest(BaseModel):
+    frequency: Optional[str] = None
+    hour_utc: Optional[int] = Field(None, ge=0, le=23)
+    day_of_week: Optional[int] = Field(None, ge=0, le=6)
+    date_range_preset: Optional[str] = None
+    account_name: Optional[str] = None
+    project_id: Optional[str] = None
+    connector_config: Optional[Dict[str, Any]] = None
+    on_complete_actions: Optional[List[Dict[str, Any]]] = None
+    auto_refresh_conversation_id: Optional[str] = None
+    auto_refresh_prompt: Optional[str] = None
+
+
+_VALID_PROVIDERS = {
+    "ga4",
+    "meta_ads",
+    "tiktok",
+    "appsflyer",
+    "stripe",
+    "hubspot",
+    "salesforce",
+    "pipedrive",
+    "shopify",
+    "klaviyo",
+    "quickbooks",
+    "zendesk",
+    "mixpanel",
+    "posthog",
+    "customer_io",
+    "google_search_console",
+    "amazon_seller",
+    "tiktok_shop_seller",
+    "shopee_seller",
+    "lazada_seller",
+    "supabase",
+    "warehouse",
+}
+_VALID_FREQUENCIES = {"daily", "weekly", "biweekly"}
+_VALID_DATE_PRESETS = {"last_7d", "last_14d", "last_30d", "last_90d"}
+_VALID_STRIPE_REPORT_TYPES = {"charges", "subscriptions", "customers"}
+_VALID_HUBSPOT_REPORT_TYPES = {
+    "sales_pipeline",
+    "contacts",
+    "companies",
+    "activities",
+}
+_VALID_SALESFORCE_REPORT_TYPES = {
+    "sales_pipeline",
+    "leads",
+    "accounts_contacts",
+    "activities",
+    "campaigns",
+}
+_VALID_PIPEDRIVE_REPORT_TYPES = {
+    "sales_pipeline",
+    "leads",
+    "contacts_organizations",
+    "activities",
+    "products",
+}
+_VALID_SHOPIFY_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "products",
+    "customers",
+    "inventory",
+    "discounts",
+}
+_VALID_KLAVIYO_REPORT_TYPES = {
+    "lifecycle_overview",
+    "campaigns",
+    "flows",
+    "profiles",
+    "lists",
+    "events",
+    "metrics",
+}
+_VALID_QUICKBOOKS_REPORT_TYPES = {
+    "finance_overview",
+    "profit_and_loss",
+    "balance_sheet",
+    "cash_flow",
+    "invoices",
+    "bills",
+    "payments",
+    "customers",
+    "vendors",
+    "items",
+    "accounts",
+}
+_VALID_ZENDESK_REPORT_TYPES = {
+    "support_overview",
+    "tickets",
+    "ticket_events",
+    "users",
+    "organizations",
+    "groups",
+    "satisfaction_ratings",
+}
+_VALID_MIXPANEL_REPORT_TYPES = {
+    "product_overview",
+    "events",
+    "event_breakdown",
+    "funnels",
+    "retention",
+    "cohorts",
+    "users",
+}
+_VALID_POSTHOG_REPORT_TYPES = {
+    "product_overview",
+    "events",
+    "event_breakdown",
+    "insights",
+    "funnels",
+    "retention",
+    "cohorts",
+    "persons",
+    "feature_flags",
+}
+_VALID_CUSTOMER_IO_REPORT_TYPES = {
+    "lifecycle_overview",
+    "campaigns",
+    "campaign_actions",
+    "newsletters",
+    "segments",
+    "people",
+    "events",
+    "message_metrics",
+}
+_VALID_GOOGLE_SEARCH_CONSOLE_REPORT_TYPES = {
+    "search_overview",
+    "queries",
+    "pages",
+    "countries",
+    "devices",
+    "dates",
+    "query_page",
+}
+_VALID_GOOGLE_SEARCH_CONSOLE_SEARCH_TYPES = {
+    "web",
+    "image",
+    "video",
+    "news",
+    "discover",
+    "googleNews",
+}
+_VALID_AMAZON_SELLER_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "order_items",
+    "inventory",
+    "listings",
+    "returns",
+}
+_VALID_TIKTOK_SHOP_SELLER_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "order_items",
+    "products",
+    "inventory",
+    "returns",
+    "settlements",
+}
+_VALID_SHOPEE_SELLER_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "order_items",
+    "products",
+    "inventory",
+    "returns",
+    "income",
+}
+_VALID_LAZADA_SELLER_REPORT_TYPES = {
+    "sales_overview",
+    "orders",
+    "order_items",
+    "products",
+    "inventory",
+    "returns",
+    "finance",
+}
+_VALID_SUPABASE_SYNC_MODES = {
+    "profile_only",
+    "bounded_table_snapshot",
+    "aggregated_result",
+    "app_profile",
+}
+_VALID_WAREHOUSE_CONNECTORS = {"postgres", "bigquery", "snowflake", "databricks"}
+
+
+def _gsc_site_key_for_url(site_url: str) -> str:
+    return (
+        base64.urlsafe_b64encode(str(site_url).encode("utf-8"))
+        .decode("ascii")
+        .rstrip("=")
+    )
+
+
+def _gsc_site_url_from_key(site_key: str) -> str:
+    raw = base64.urlsafe_b64decode(
+        str(site_key).encode("ascii") + b"=" * (-len(str(site_key)) % 4)
+    )
+    return raw.decode("utf-8")
+
+
+def _normalize_gsc_site_url(site_url: str) -> str:
+    value = str(site_url or "").strip()
+    if not value:
+        return ""
+    if value.startswith("sc-domain:") or value.startswith(("http://", "https://")):
+        return value
+    raise HTTPException(
+        400,
+        "connector_config.site_url must be a URL-prefix property or sc-domain property",
+    )
+
+
+def _validate_create(req: CreateScheduleRequest) -> None:
+    if req.provider not in _VALID_PROVIDERS:
+        raise HTTPException(
+            400, f"Invalid provider. Must be one of: {', '.join(_VALID_PROVIDERS)}"
+        )
+    if req.frequency not in _VALID_FREQUENCIES:
+        raise HTTPException(
+            400, f"Invalid frequency. Must be one of: {', '.join(_VALID_FREQUENCIES)}"
+        )
+    if req.date_range_preset not in _VALID_DATE_PRESETS:
+        raise HTTPException(
+            400,
+            f"Invalid date_range_preset. Must be one of: {', '.join(_VALID_DATE_PRESETS)}",
+        )
+    if not req.project_id.strip():
+        raise HTTPException(400, "project_id is required")
+    _normalize_connector_config(req.provider, req.connector_config)
+
+
+def _normalize_connector_config(
+    provider: str, connector_config: Dict[str, Any]
+) -> Dict[str, Any]:
+    cfg = dict(connector_config or {})
+    if provider == "ga4" and not str(cfg.get("property_id") or "").strip():
+        raise HTTPException(
+            400, "connector_config.property_id is required for GA4 schedules"
+        )
+    if (
+        provider in {"meta_ads", "tiktok"}
+        and not str(cfg.get("ad_account_id") or "").strip()
+    ):
+        raise HTTPException(
+            400, "connector_config.ad_account_id is required for ad account schedules"
+        )
+    if provider == "appsflyer" and not str(cfg.get("app_id") or "").strip():
+        raise HTTPException(
+            400, "connector_config.app_id is required for AppsFlyer schedules"
+        )
+    if provider == "stripe":
+        report_type = str(cfg.get("report_type") or "charges").strip()
+        if report_type not in _VALID_STRIPE_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be charges, subscriptions, or customers",
+            )
+        cfg["report_type"] = report_type
+    if provider == "hubspot":
+        report_type = str(cfg.get("report_type") or "sales_pipeline").strip()
+        if report_type not in _VALID_HUBSPOT_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_pipeline, contacts, companies, or activities",
+            )
+        pipeline_id = str(cfg.get("pipeline_id") or "all").strip() or "all"
+        owner_id = str(cfg.get("owner_id") or "all").strip() or "all"
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        include_associations = cfg.get("include_associations", True)
+        cfg["report_type"] = report_type
+        cfg["pipeline_id"] = pipeline_id
+        cfg["owner_id"] = owner_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_associations"] = bool(include_associations)
+        cfg["entity_id"] = str(
+            cfg.get("entity_id") or f"hubspot:{report_type}:{pipeline_id}:{owner_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "salesforce":
+        report_type = str(cfg.get("report_type") or "sales_pipeline").strip()
+        if report_type not in _VALID_SALESFORCE_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_pipeline, leads, accounts_contacts, activities, or campaigns",
+            )
+        object_name = str(cfg.get("object_name") or "all").strip() or "all"
+        owner_id = str(cfg.get("owner_id") or "all").strip() or "all"
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["object_name"] = object_name
+        cfg["owner_id"] = owner_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["entity_id"] = str(
+            cfg.get("entity_id") or f"salesforce:{report_type}:{object_name}:{owner_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "pipedrive":
+        report_type = str(cfg.get("report_type") or "sales_pipeline").strip()
+        if report_type not in _VALID_PIPEDRIVE_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_pipeline, leads, contacts_organizations, activities, or products",
+            )
+        pipeline_id = str(cfg.get("pipeline_id") or "all").strip() or "all"
+        owner_id = str(cfg.get("owner_id") or "all").strip() or "all"
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["pipeline_id"] = pipeline_id
+        cfg["owner_id"] = owner_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["entity_id"] = str(
+            cfg.get("entity_id") or f"pipedrive:{report_type}:{pipeline_id}:{owner_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "shopify":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        shop_domain = str(cfg.get("shop_domain") or "").strip()
+        raw_resource = str(cfg.get("resource") or "").strip()
+        resource = str(cfg.get("resource") or "all").strip() or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "shopify":
+                report_type = raw_report_type or parts[1] or report_type
+                shop_domain = shop_domain or parts[2]
+                resource = raw_resource or parts[3] or "all"
+        if report_type not in _VALID_SHOPIFY_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, products, customers, inventory, or discounts",
+            )
+        if not shop_domain:
+            raise HTTPException(
+                400,
+                "connector_config.shop_domain is required for Shopify schedules",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["shop_domain"] = shop_domain
+        cfg["resource"] = resource
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"shopify:{report_type}:{shop_domain}:{resource}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "klaviyo":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "lifecycle_overview"
+        account_id = str(cfg.get("account_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "klaviyo":
+                report_type = raw_report_type or parts[1] or report_type
+                account_id = account_id if account_id != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_KLAVIYO_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be lifecycle_overview, campaigns, flows, profiles, lists, events, or metrics",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        channel = str(cfg.get("channel") or "all").strip().lower() or "all"
+        if channel not in {"all", "email", "sms"}:
+            raise HTTPException(
+                400, "connector_config.channel must be all, email, or sms"
+            )
+        cfg["report_type"] = report_type
+        cfg["account_id"] = account_id
+        cfg["resource_id"] = resource_id
+        cfg["metric_id"] = str(cfg.get("metric_id") or "").strip()
+        cfg["channel"] = channel
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"klaviyo:{report_type}:{account_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "quickbooks":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "finance_overview"
+        realm_id = str(cfg.get("realm_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "quickbooks":
+                report_type = raw_report_type or parts[1] or report_type
+                realm_id = realm_id if realm_id != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_QUICKBOOKS_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be finance_overview, profit_and_loss, balance_sheet, cash_flow, invoices, bills, payments, customers, vendors, items, or accounts",
+            )
+        accounting_basis = str(cfg.get("accounting_basis") or "Accrual").strip().title()
+        if accounting_basis not in {"Accrual", "Cash"}:
+            raise HTTPException(
+                400, "connector_config.accounting_basis must be Accrual or Cash"
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["realm_id"] = realm_id
+        cfg["resource_id"] = resource_id
+        cfg["accounting_basis"] = accounting_basis
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"quickbooks:{report_type}:{realm_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "zendesk":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "support_overview"
+        subdomain = str(cfg.get("subdomain") or "all").strip().lower() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "zendesk":
+                report_type = raw_report_type or parts[1] or report_type
+                subdomain = subdomain if subdomain != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_ZENDESK_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be support_overview, tickets, ticket_events, users, organizations, groups, or satisfaction_ratings",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["subdomain"] = subdomain
+        cfg["resource_id"] = resource_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"zendesk:{report_type}:{subdomain}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "mixpanel":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "product_overview"
+        project_id = str(cfg.get("project_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "mixpanel":
+                report_type = raw_report_type or parts[1] or report_type
+                project_id = project_id if project_id != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_MIXPANEL_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be product_overview, events, event_breakdown, funnels, retention, cohorts, or users",
+            )
+        region = str(cfg.get("region") or "US").strip().upper() or "US"
+        if region not in {"US", "EU"}:
+            raise HTTPException(400, "connector_config.region must be US or EU")
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["project_id"] = project_id
+        cfg["resource_id"] = resource_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"mixpanel:{report_type}:{project_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "posthog":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "product_overview"
+        project_id = str(cfg.get("project_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "posthog":
+                report_type = raw_report_type or parts[1] or report_type
+                project_id = project_id if project_id != "all" else parts[2] or "all"
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_POSTHOG_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be product_overview, events, event_breakdown, insights, funnels, retention, cohorts, persons, or feature_flags",
+            )
+        region = str(cfg.get("region") or "US").strip().upper() or "US"
+        if region not in {"US", "EU"}:
+            raise HTTPException(400, "connector_config.region must be US or EU")
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["project_id"] = project_id
+        cfg["resource_id"] = resource_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"posthog:{report_type}:{project_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "customer_io":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "lifecycle_overview"
+        workspace_id = str(cfg.get("workspace_id") or "all").strip() or "all"
+        raw_resource_id = str(cfg.get("resource_id") or "").strip()
+        resource_id = raw_resource_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "customer_io":
+                report_type = raw_report_type or parts[1] or report_type
+                workspace_id = (
+                    workspace_id if workspace_id != "all" else parts[2] or "all"
+                )
+                resource_id = raw_resource_id or parts[3] or "all"
+        if report_type not in _VALID_CUSTOMER_IO_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be lifecycle_overview, campaigns, campaign_actions, newsletters, segments, people, events, or message_metrics",
+            )
+        region = str(cfg.get("region") or "US").strip().upper() or "US"
+        if region not in {"US", "EU"}:
+            raise HTTPException(400, "connector_config.region must be US or EU")
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["workspace_id"] = workspace_id
+        cfg["resource_id"] = resource_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"customer_io:{report_type}:{workspace_id}:{resource_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "google_search_console":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "search_overview"
+        site_url = _normalize_gsc_site_url(str(cfg.get("site_url") or ""))
+        site_key = str(cfg.get("site_key") or "").strip()
+        raw_search_type = str(cfg.get("search_type") or "").strip()
+        search_type = raw_search_type or "web"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "google_search_console":
+                report_type = raw_report_type or parts[1] or report_type
+                site_key = site_key or parts[2]
+                search_type = raw_search_type or parts[3] or "web"
+        if not site_url and site_key and site_key != "all":
+            try:
+                site_url = _normalize_gsc_site_url(_gsc_site_url_from_key(site_key))
+            except Exception as exc:
+                raise HTTPException(
+                    400,
+                    "connector_config.site_key is not a valid Search Console site key",
+                ) from exc
+        if site_url and not site_key:
+            site_key = _gsc_site_key_for_url(site_url)
+        if not site_key:
+            raise HTTPException(
+                400,
+                "connector_config.site_key or connector_config.site_url is required for Google Search Console schedules",
+            )
+        if report_type not in _VALID_GOOGLE_SEARCH_CONSOLE_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be search_overview, queries, pages, countries, devices, dates, or query_page",
+            )
+        if search_type not in _VALID_GOOGLE_SEARCH_CONSOLE_SEARCH_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.search_type must be web, image, video, news, discover, or googleNews",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["site_key"] = site_key
+        cfg["site_url"] = site_url
+        cfg["search_type"] = search_type
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"google_search_console:{report_type}:{site_key}:{search_type}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "amazon_seller":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        seller_id = str(cfg.get("seller_id") or "all").strip() or "all"
+        raw_marketplace_id = str(cfg.get("marketplace_id") or "").strip()
+        marketplace_id = raw_marketplace_id or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "amazon_seller":
+                report_type = raw_report_type or parts[1] or report_type
+                seller_id = seller_id if seller_id != "all" else parts[2] or "all"
+                marketplace_id = raw_marketplace_id or parts[3] or "all"
+        if report_type not in _VALID_AMAZON_SELLER_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, order_items, inventory, listings, or returns",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["seller_id"] = seller_id
+        cfg["marketplace_id"] = marketplace_id
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"amazon_seller:{report_type}:{seller_id}:{marketplace_id}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "tiktok_shop_seller":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        shop_id = str(cfg.get("shop_id") or "all").strip() or "all"
+        region = str(cfg.get("region") or "US").strip().upper() or "US"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "tiktok_shop_seller":
+                report_type = raw_report_type or parts[1] or report_type
+                shop_id = shop_id if shop_id != "all" else parts[2] or "all"
+                region = parts[3].upper() or region
+        if report_type not in _VALID_TIKTOK_SHOP_SELLER_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, order_items, products, inventory, returns, or settlements",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["shop_id"] = shop_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"tiktok_shop_seller:{report_type}:{shop_id}:{region}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "shopee_seller":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        shop_id = str(cfg.get("shop_id") or "all").strip() or "all"
+        region = str(cfg.get("region") or "VN").strip().upper() or "VN"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "shopee_seller":
+                report_type = raw_report_type or parts[1] or report_type
+                shop_id = shop_id if shop_id != "all" else parts[2] or "all"
+                region = parts[3].upper() or region
+        if report_type not in _VALID_SHOPEE_SELLER_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, order_items, products, inventory, returns, or income",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["shop_id"] = shop_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"shopee_seller:{report_type}:{shop_id}:{region}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "lazada_seller":
+        raw_report_type = str(cfg.get("report_type") or "").strip()
+        report_type = raw_report_type or "sales_overview"
+        seller_id = str(cfg.get("seller_id") or "all").strip() or "all"
+        region = str(cfg.get("region") or "VN").strip().upper() or "VN"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id:
+            parts = entity_id.split(":")
+            if len(parts) == 4 and parts[0] == "lazada_seller":
+                report_type = raw_report_type or parts[1] or report_type
+                seller_id = seller_id if seller_id != "all" else parts[2] or "all"
+                region = parts[3].upper() or region
+        if report_type not in _VALID_LAZADA_SELLER_REPORT_TYPES:
+            raise HTTPException(
+                400,
+                "connector_config.report_type must be sales_overview, orders, order_items, products, inventory, returns, or finance",
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["report_type"] = report_type
+        cfg["seller_id"] = seller_id
+        cfg["region"] = region
+        cfg["row_limit"] = max(1, min(row_limit, 10000))
+        cfg["include_pii"] = bool(cfg.get("include_pii", False))
+        if cfg.get("max_bytes") is not None:
+            try:
+                cfg["max_bytes"] = max(1, int(cfg.get("max_bytes")))
+            except (TypeError, ValueError):
+                cfg.pop("max_bytes", None)
+        cfg["entity_id"] = str(
+            entity_id or f"lazada_seller:{report_type}:{seller_id}:{region}"
+        )
+        cfg["entity_name"] = str(
+            cfg.get("entity_name") or report_type.replace("_", " ").title()
+        )
+    if provider == "supabase":
+        connection_id = str(cfg.get("connection_id") or "").strip()
+        sync_mode = str(cfg.get("sync_mode") or "bounded_table_snapshot").strip()
+        schema_name = str(cfg.get("schema") or cfg.get("schema_name") or "").strip()
+        table_name = str(cfg.get("table") or cfg.get("table_name") or "").strip()
+        bucket = str(cfg.get("bucket") or "all").strip() or "all"
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if entity_id and (not connection_id or not sync_mode):
+            parts = entity_id.split(":")
+            if len(parts) >= 3 and parts[0] == "supabase":
+                connection_id = connection_id or parts[1]
+                if parts[2] == "table" and len(parts) == 4:
+                    sync_mode = sync_mode or "bounded_table_snapshot"
+                    if not schema_name or not table_name:
+                        table_path = parts[3]
+                        if "." in table_path:
+                            schema_from_id, table_from_id = table_path.rsplit(".", 1)
+                            schema_name = schema_name or schema_from_id
+                            table_name = table_name or table_from_id
+                elif parts[2] in {"auth_users", "storage"}:
+                    sync_mode = "app_profile"
+                    if parts[2] == "storage" and len(parts) == 4:
+                        bucket = parts[3] or "all"
+                elif parts[2] == "profile":
+                    sync_mode = "profile_only"
+        if sync_mode not in _VALID_SUPABASE_SYNC_MODES:
+            raise HTTPException(
+                400,
+                "connector_config.sync_mode must be profile_only, bounded_table_snapshot, aggregated_result, or app_profile",
+            )
+        if not connection_id:
+            raise HTTPException(
+                400,
+                "connector_config.connection_id is required for Supabase schedules",
+            )
+        if sync_mode in {"bounded_table_snapshot", "aggregated_result"}:
+            if not schema_name:
+                raise HTTPException(
+                    400,
+                    "connector_config.schema is required for Supabase table schedules",
+                )
+            if not table_name:
+                raise HTTPException(
+                    400,
+                    "connector_config.table is required for Supabase table schedules",
+                )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["connection_id"] = connection_id
+        cfg["sync_mode"] = sync_mode
+        cfg["schema"] = schema_name
+        cfg["table"] = table_name
+        cfg["bucket"] = bucket
+        cfg["row_limit"] = max(1, min(row_limit, 50000))
+        if not entity_id:
+            if sync_mode == "app_profile":
+                entity_id = f"supabase:{connection_id}:storage:{bucket}"
+            elif sync_mode == "profile_only":
+                entity_id = f"supabase:{connection_id}:profile"
+            else:
+                entity_id = f"supabase:{connection_id}:table:{schema_name}.{table_name}"
+        cfg["entity_id"] = entity_id
+        cfg["entity_name"] = str(
+            cfg.get("entity_name")
+            or (
+                f"{schema_name}.{table_name}"
+                if schema_name and table_name
+                else (
+                    "Supabase App Profile"
+                    if sync_mode == "app_profile"
+                    else "Supabase Schema Profile"
+                )
+            )
+        )
+    if provider == "warehouse":
+        connection_id = str(cfg.get("connection_id") or "").strip()
+        schema_name = str(cfg.get("schema") or cfg.get("schema_name") or "").strip()
+        table_name = str(cfg.get("table") or cfg.get("table_name") or "").strip()
+        entity_id = str(cfg.get("entity_id") or "").strip()
+        if (not connection_id or not schema_name or not table_name) and entity_id:
+            try:
+                connection_id_from_id, table_path = entity_id.split(":", 1)
+                schema_from_id, table_from_id = table_path.rsplit(".", 1)
+                connection_id = connection_id or connection_id_from_id
+                schema_name = schema_name or schema_from_id
+                table_name = table_name or table_from_id
+            except ValueError:
+                pass
+        connector_key = str(cfg.get("connector_key") or "postgres").strip()
+        if connector_key not in _VALID_WAREHOUSE_CONNECTORS:
+            raise HTTPException(
+                400,
+                "connector_config.connector_key must be postgres, bigquery, snowflake, or databricks",
+            )
+        catalog = str(cfg.get("catalog") or cfg.get("catalog_name") or "").strip()
+        if connector_key == "databricks":
+            if catalog and schema_name and not schema_name.startswith(f"{catalog}."):
+                schema_name = f"{catalog}.{schema_name}"
+            elif not catalog and "." in schema_name:
+                catalog = schema_name.split(".", 1)[0]
+        if not connection_id:
+            raise HTTPException(
+                400,
+                "connector_config.connection_id is required for warehouse schedules",
+            )
+        if not schema_name:
+            raise HTTPException(
+                400, "connector_config.schema is required for warehouse schedules"
+            )
+        if not table_name:
+            raise HTTPException(
+                400, "connector_config.table is required for warehouse schedules"
+            )
+        try:
+            row_limit = int(cfg.get("row_limit") or 5000)
+        except (TypeError, ValueError):
+            row_limit = 5000
+        cfg["connector_key"] = connector_key
+        cfg["connection_id"] = connection_id
+        if connector_key == "databricks" and catalog:
+            cfg["catalog"] = catalog
+        cfg["schema"] = schema_name
+        cfg["table"] = table_name
+        cfg["entity_id"] = str(
+            entity_id or f"{connection_id}:{schema_name}.{table_name}"
+        )
+        cfg["row_limit"] = max(1, min(row_limit, 50000))
+    return cfg
+
+
+def _apply_scheduler_state(
+    record: Dict, status: str, error: str = "", rule_name: str = ""
+) -> Dict:
+    updates: Dict[str, Any] = {
+        "scheduler_status": status,
+        "scheduler_error": error,
+    }
+    if rule_name:
+        updates["eventbridge_rule_name"] = rule_name
+    schedules_repo.update_schedule(record["user_id"], record["schedule_id"], **updates)
+    record.update(updates)
+    return record
+
+
+def _configure_eventbridge_schedule(
+    record: Dict, frequency: str, hour_utc: int, day_of_week: int
+) -> Dict:
+    if not scheduler_service.is_scheduler_configured():
+        return _apply_scheduler_state(
+            record,
+            "not_configured",
+            "EventBridge Scheduler role or Lambda target is not configured.",
+        )
+
+    try:
+        rule_name = scheduler_service.create_schedule(
+            schedule_id=record["schedule_id"],
+            frequency=frequency,
+            hour_utc=hour_utc,
+            day_of_week=day_of_week,
+        )
+        return _apply_scheduler_state(record, "configured", "", rule_name)
+    except Exception as exc:
+        logger.warning("EventBridge schedule creation failed: %s", exc)
+        return _apply_scheduler_state(record, "error", str(exc))
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
+
+
+@router.post("/schedules")
+async def create_schedule(
+    req: CreateScheduleRequest,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Create a new data sync schedule."""
+    _validate_create(req)
+    connector_config = _normalize_connector_config(req.provider, req.connector_config)
+    record = schedules_repo.create_schedule(
+        user_id=user_id,
+        provider=req.provider,
+        connector_config=connector_config,
+        project_id=req.project_id,
+        account_name=req.account_name,
+        frequency=req.frequency,
+        hour_utc=req.hour_utc,
+        day_of_week=req.day_of_week,
+        date_range_preset=req.date_range_preset,
+    )
+    # Persist optional action/refresh fields if provided
+    optional_updates: Dict[str, Any] = {}
+    if req.on_complete_actions is not None:
+        optional_updates["on_complete_actions"] = req.on_complete_actions
+    if req.auto_refresh_conversation_id is not None:
+        optional_updates["auto_refresh_conversation_id"] = (
+            req.auto_refresh_conversation_id
+        )
+    if req.auto_refresh_prompt is not None:
+        optional_updates["auto_refresh_prompt"] = req.auto_refresh_prompt
+    if optional_updates:
+        schedules_repo.update_schedule(
+            user_id, record["schedule_id"], **optional_updates
+        )
+        record.update(optional_updates)
+    return _configure_eventbridge_schedule(
+        record, req.frequency, req.hour_utc, req.day_of_week
+    )
+
+
+@router.get("/schedules")
+async def list_schedules(
+    user_id: str = Depends(require_user),
+) -> List[Dict]:
+    """List all sync schedules for the current user."""
+    return schedules_repo.list_schedules(user_id)
+
+
+@router.get("/schedules/{schedule_id}")
+async def get_schedule(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Get a single schedule."""
+    record = schedules_repo.get_schedule(user_id, schedule_id)
+    if not record:
+        raise HTTPException(404, "Schedule not found")
+    return record
+
+
+@router.patch("/schedules/{schedule_id}")
+async def update_schedule(
+    schedule_id: str,
+    req: UpdateScheduleRequest,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Update schedule frequency, time, or date range."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    updates = req.model_dump(exclude_none=True)
+
+    # Validate fields when provided
+    if "frequency" in updates and updates["frequency"] not in _VALID_FREQUENCIES:
+        raise HTTPException(400, f"Invalid frequency")
+    if (
+        "date_range_preset" in updates
+        and updates["date_range_preset"] not in _VALID_DATE_PRESETS
+    ):
+        raise HTTPException(400, "Invalid date_range_preset")
+    if "project_id" in updates and not str(updates["project_id"]).strip():
+        raise HTTPException(400, "project_id is required")
+    if "connector_config" in updates:
+        updates["connector_config"] = _normalize_connector_config(
+            existing["provider"], updates["connector_config"]
+        )
+
+    # Update EventBridge if timing changed
+    timing_changed = any(k in updates for k in ("frequency", "hour_utc", "day_of_week"))
+    if timing_changed:
+        if scheduler_service.is_scheduler_configured():
+            try:
+                if existing.get("eventbridge_rule_name"):
+                    scheduler_service.update_schedule(
+                        rule_name=existing["eventbridge_rule_name"],
+                        schedule_id=schedule_id,
+                        frequency=updates.get("frequency", existing["frequency"]),
+                        hour_utc=updates.get("hour_utc", existing["hour_utc"]),
+                        day_of_week=updates.get("day_of_week", existing["day_of_week"]),
+                    )
+                    updates["scheduler_status"] = "configured"
+                    updates["scheduler_error"] = ""
+                else:
+                    rule_name = scheduler_service.create_schedule(
+                        schedule_id=schedule_id,
+                        frequency=updates.get("frequency", existing["frequency"]),
+                        hour_utc=updates.get("hour_utc", existing["hour_utc"]),
+                        day_of_week=updates.get("day_of_week", existing["day_of_week"]),
+                    )
+                    updates["eventbridge_rule_name"] = rule_name
+                    updates["scheduler_status"] = "configured"
+                    updates["scheduler_error"] = ""
+            except Exception as exc:
+                logger.warning("EventBridge update failed: %s", exc)
+                updates["scheduler_status"] = "error"
+                updates["scheduler_error"] = str(exc)
+        else:
+            updates["scheduler_status"] = "not_configured"
+            updates["scheduler_error"] = (
+                "EventBridge Scheduler role or Lambda target is not configured."
+            )
+
+    return schedules_repo.update_schedule(user_id, schedule_id, **updates)
+
+
+@router.delete("/schedules/{schedule_id}", status_code=204)
+async def delete_schedule(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> None:
+    """Delete a schedule and its EventBridge rule."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    if existing.get("eventbridge_rule_name"):
+        try:
+            scheduler_service.delete_schedule(existing["eventbridge_rule_name"])
+        except Exception as exc:
+            logger.warning("EventBridge delete failed (non-fatal): %s", exc)
+
+    schedules_repo.delete_schedule(user_id, schedule_id)
+
+
+@router.post("/schedules/{schedule_id}/pause", status_code=200)
+async def pause_schedule(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Pause a schedule (disables EventBridge rule)."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    if existing.get("eventbridge_rule_name"):
+        try:
+            scheduler_service.pause_schedule(existing["eventbridge_rule_name"])
+        except Exception as exc:
+            logger.warning("EventBridge pause failed (non-fatal): %s", exc)
+
+    return schedules_repo.update_schedule(user_id, schedule_id, status="paused")
+
+
+@router.post("/schedules/{schedule_id}/resume", status_code=200)
+async def resume_schedule(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Resume a paused schedule."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    if existing.get("eventbridge_rule_name"):
+        try:
+            scheduler_service.resume_schedule(existing["eventbridge_rule_name"])
+        except Exception as exc:
+            logger.warning("EventBridge resume failed (non-fatal): %s", exc)
+
+    return schedules_repo.update_schedule(user_id, schedule_id, status="active")
+
+
+@router.post("/schedules/{schedule_id}/run-now", status_code=200)
+async def run_schedule_now(
+    schedule_id: str,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Run a user's schedule immediately for validation/debugging."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+
+    from app.api.route_modules.internal import execute_schedule
+
+    return await execute_schedule(schedule_id)
+
+
+@router.get("/schedules/{schedule_id}/runs")
+async def get_schedule_runs(
+    schedule_id: str,
+    limit: int = 20,
+    user_id: str = Depends(require_user),
+) -> List[Dict]:
+    """Return recent run history for a specific schedule."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+    return runs_repo.list_runs_for_schedule(schedule_id, limit=min(limit, 100))
+
+
+@router.get("/schedules/{schedule_id}/briefs")
+async def get_schedule_briefs(
+    schedule_id: str,
+    limit: int = 20,
+    user_id: str = Depends(require_user),
+) -> List[Dict]:
+    """Return recent Operator Briefs for a specific schedule, newest first."""
+    existing = schedules_repo.get_schedule(user_id, schedule_id)
+    if not existing:
+        raise HTTPException(404, "Schedule not found")
+    return briefs_repo.list_briefs_for_schedule(
+        user_id, schedule_id, limit=min(limit, 100)
+    )
+
+
+@router.get("/operator-briefs")
+async def get_operator_briefs(
+    limit: int = 50,
+    user_id: str = Depends(require_user),
+) -> List[Dict]:
+    """Return recent Operator Briefs across all schedules for the current user."""
+    return briefs_repo.list_briefs_for_user(user_id, limit=min(limit, 100))
+
+
+@router.get("/sync-runs")
+async def get_all_sync_runs(
+    limit: int = 50,
+    last_key: Optional[str] = None,
+    user_id: str = Depends(require_user),
+) -> Dict:
+    """Return paginated sync run history across all schedules for the current user."""
+    import json
+
+    last_evaluated_key = json.loads(last_key) if last_key else None
+    items, next_key = runs_repo.list_runs_for_user(
+        user_id, limit=min(limit, 100), last_evaluated_key=last_evaluated_key
+    )
+    return {
+        "items": items,
+        "next_key": json.dumps(next_key) if next_key else None,
+    }

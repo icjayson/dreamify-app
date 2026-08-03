@@ -41,7 +41,7 @@ The API total includes 78 replacement cases and 28 exclusions from the formerly 
 
 ## Current acceptance state
 
-This ledger closes the **817-case inventory and disposition** requirement; it does not by itself close hosted acceptance or a fresh CI run.
+This ledger closes the **817-case inventory and disposition** requirement; it does not by itself close hosted acceptance.
 
 - The final web suite passed **298** tests across 40 files, including stream reconnect, capability-gated connector redirects, local-versus-hosted upload transport, and empty pre-dispatch event handling.
 - The deployable API replacement suite passed **141** tests with zero failures.
@@ -62,7 +62,9 @@ This ledger closes the **817-case inventory and disposition** requirement; it do
 | Python direct pinned-package audit | 0 known vulnerabilities for API constraints and Sandbox dev requirements; full transitive resolution remains a CI check. |
 | Ledger validator | Passed: 817 cases across 66 source files; **157 unchanged / 250 replaced / 410 excluded**. |
 
-The local suite gate is complete. A fresh successful CI run on the pushed commit is still required before claiming hosted release acceptance. “Mapped and locally passed” is not the same as “passed on the pushed commit in CI.”
+The local suite gate is complete. Web, Workflow/Sandbox, API, Governance, and
+Security also pass in GitHub Actions on the pushed code. Hosted acceptance
+remains separate from both mapping and CI success.
 
 ## Reproduce the inventory safely
 
@@ -80,11 +82,11 @@ When source collection stops on missing `config/config.yaml`, keep the failure a
 
 | Required gate | Workflow | Status |
 |---|---|---|
-| Web lint, strict typecheck, Vitest, Next production build | `web.yml` | Configured; local lint, typecheck, 298-test suite, and production build pass. |
-| API import/lint, format, platform pytest, OpenAPI drift, route uniqueness/access policy, migration + idempotent seed | `api.yml` | Configured; local deployable replacement suite is 141/141. |
-| Workflow typecheck/tests, contract drift, bounded Sandbox runner tests | `sandbox.yml` | Configured; Workflow is 55/55 and the local runner is 32/32. Hosted Vercel Sandbox smoke remains an external acceptance gate. |
-| Full-history secret scan | `security.yml` | Configured with full-depth gitleaks checkout. |
-| JavaScript and Python dependency audit | `security.yml` | Configured; npm and direct pinned Python package audits are locally clean. Full Python transitive audit still requires CI. |
-| Baseline ledger integrity | `governance.yml` | Configured. |
+| Web lint, strict typecheck, Vitest, Next production build | `web.yml` | GitHub Actions passed: 298 tests and production build. |
+| API import/lint, format, platform pytest, OpenAPI drift, route uniqueness/access policy, migration + idempotent seed | `api.yml` | GitHub Actions passed; local deployable replacement suite is 141/141. |
+| Workflow typecheck/tests, contract drift, bounded Sandbox runner tests | `sandbox.yml` | GitHub Actions passed; Workflow is 55/55 and the local runner is 32/32. Hosted Vercel Sandbox smoke remains an external acceptance gate. |
+| Full-history secret scan | `security.yml` | GitHub Actions passed with full-depth Gitleaks checkout. |
+| JavaScript and Python dependency audit | `security.yml` | GitHub Actions passed for npm and both Python requirement graphs. |
+| Baseline ledger integrity | `governance.yml` | GitHub Actions passed. |
 
-There are no `retained_not_executed` dispositions left. The original evidence limitation remains: 58 API and 87 Morpheus cases were statically inventoried because immutable source archives require ignored YAML configuration. The replacement mapping does not retroactively turn that original static inventory into runtime collection. Remaining acceptance gaps include fresh CI, hosted Clerk/Neon/Blob/Workflow/Sandbox smoke tests, hosted visual parity, and hosted browser deep-link/auth flows.
+There are no `retained_not_executed` dispositions left. The original evidence limitation remains: 58 API and 87 Morpheus cases were statically inventoried because immutable source archives require ignored YAML configuration. The replacement mapping does not retroactively turn that original static inventory into runtime collection. Remaining acceptance gaps include hosted Clerk/Neon/Blob/Workflow/Sandbox smoke tests, hosted visual parity, and hosted browser deep-link/auth flows.

@@ -42,6 +42,7 @@ require account-owner configuration.
 | Dependencies | `npm audit --audit-level=high`, Python `pip check`, local Python audit | no npm vulnerability and no broken/audited Python dependency finding |
 | Baseline ledger | `node scripts/check-test-migration-ledger.mjs` | all 817 cases classified: 157 unchanged, 250 equivalent, 410 intentionally excluded |
 | Git hygiene | staged/working-tree `git diff --check`, full-history Gitleaks, `git fsck` | pass |
+| GitHub CI | Web, Workflow/Sandbox, API, Governance, Security | all five required workflows pass on the pushed code |
 
 The excluded 410 baseline cases belong to the retired EC2/AWS persistence,
 billing/credits, and uncertified connector runtime. Their public surfaces either
@@ -94,11 +95,12 @@ journey above.
 3. The private GitHub repository cannot enforce protected `main` on the current
    plan; GitHub returns an upgrade-required HTTP 403. The repository was not made
    public as a workaround.
-4. The Vercel projects and Blob stores exist and both projects are Git-connected,
-   but no production deployment is attempted while database/auth configuration
-   is incomplete. Therefore hosted
-   login, upload, Workflow/Sandbox, BYOK, dashboard revert, and logout remain
-   unverified.
+4. Git-triggered builds ran after both Vercel projects were connected. The API
+   artifact is Ready at 33.27 MB and its catch-all routes reach the function, but
+   runtime preflight fails closed until Neon and Clerk variables exist. The web
+   build fails closed on the missing Clerk keys. Neither deployment is accepted
+   as live, so hosted login, upload, Workflow/Sandbox, BYOK, dashboard revert,
+   and logout remain unverified.
 5. Real OpenAI/Gemini BYOK calls and connector certification are intentionally
    outside the keyless core acceptance run. Their gates remain fail closed.
 

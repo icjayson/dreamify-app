@@ -4,8 +4,8 @@ from contextlib import contextmanager
 from typing import Generator
 
 from fastapi import Request
-from sqlalchemy import Engine, create_engine, event, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import Engine, create_engine, event, make_url, text
+from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -14,12 +14,28 @@ from app.platform.models import Base
 from app.platform.settings import Settings
 
 
+class DatabaseUrlConfigurationError(ValueError):
+    """Raised without echoing a malformed database credential."""
+
+
 def normalize_database_url(url: str) -> str:
-    if url.startswith("postgres://"):
-        return "postgresql+psycopg://" + url[len("postgres://") :]
-    if url.startswith("postgresql://") and "+" not in url.split("://", 1)[0]:
-        return "postgresql+psycopg://" + url[len("postgresql://") :]
-    return url
+    candidate = url.strip()
+    if candidate.startswith("postgres://"):
+        candidate = "postgresql+psycopg://" + candidate[len("postgres://") :]
+    elif candidate.startswith("postgresql://") and "+" not in candidate.split(
+        "://", 1
+    )[0]:
+        candidate = "postgresql+psycopg://" + candidate[len("postgresql://") :]
+
+    try:
+        make_url(candidate)
+    except ArgumentError as exc:
+        raise DatabaseUrlConfigurationError(
+            "DATABASE_URL_INVALID: The database URI is malformed. Percent-encode "
+            "special characters in the password (for example, @ as %40) and do "
+            "not include placeholder brackets."
+        ) from exc
+    return candidate
 
 
 class Database:

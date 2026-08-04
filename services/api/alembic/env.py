@@ -13,10 +13,15 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-settings = get_settings()
+database_url_override = config.attributes.get("database_url_override")
+database_url = (
+    str(database_url_override)
+    if database_url_override
+    else get_settings().migration_database_url
+)
 config.set_main_option(
     "sqlalchemy.url",
-    normalize_database_url(settings.migration_database_url).replace("%", "%%"),
+    normalize_database_url(database_url).replace("%", "%%"),
 )
 target_metadata = Base.metadata
 

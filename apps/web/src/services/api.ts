@@ -45,6 +45,14 @@ function parseApiErrorText(status: number, bodyText: string): ApiError {
   try {
     body = JSON.parse(bodyText);
   } catch {
+    const normalizedBody = bodyText.trimStart().toLowerCase();
+    if (normalizedBody.startsWith('<!doctype html') || normalizedBody.startsWith('<html')) {
+      return {
+        message: `API request returned HTML instead of JSON (status: ${status})`,
+        status,
+        code: 'INVALID_API_RESPONSE',
+      };
+    }
     return { message: bodyText, status };
   }
 

@@ -64,4 +64,25 @@ describe('ApiClient response handling', () => {
       status: 404,
     });
   });
+
+  it('does not expose an HTML error document as the API error message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('<!DOCTYPE html><html><body>Not Found</body></html>', {
+          status: 404,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      ),
+    );
+
+    const result = await api.get('/api/v1/user/project/list');
+
+    expect(result.error).toBe('API request returned HTML instead of JSON (status: 404)');
+    expect(result.errorInfo).toEqual({
+      code: 'INVALID_API_RESPONSE',
+      message: 'API request returned HTML instead of JSON (status: 404)',
+      status: 404,
+    });
+  });
 });

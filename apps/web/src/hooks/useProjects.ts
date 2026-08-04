@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { projectService, ProjectRecord } from "@/services/projectService";
 import { useChatStore } from "@/chat/useChatStore";
 import { useNavigate } from "@/lib/navigation";
+import { settleProjectRefresh } from "./projectRefresh";
 
 export interface Project {
     id: string;
@@ -121,14 +122,21 @@ export const useProjects = () => {
             setIsLoading(true);
         }
 
-        const request = projectService.listProjects().then((response) => {
-            if (!response.success) {
-                throw new Error(response.error || "Failed to fetch projects");
-            }
-            const mappedProjects = mapProjects(response.projects);
-            setProjectCache(userId, mappedProjects);
-            return mappedProjects;
-        });
+        const request = settleProjectRefresh(
+            projectService.listProjects().then((response) => {
+                if (!response.success) {
+                    throw new Error(response.error || "Failed to fetch projects");
+                }
+                const mappedProjects = mapProjects(response.projects);
+                setProjectCache(userId, mappedProjects);
+                return mappedProjects;
+            }),
+            () => projectsRef.current,
+            (error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                console.warn('Project refresh failed; using cached projects:', message);
+            },
+        );
 
         inFlightRefresh = request;
         inFlightUserId = userId;
@@ -137,9 +145,6 @@ export const useProjects = () => {
             const mappedProjects = await request;
             setProjects(mappedProjects);
             return mappedProjects;
-        } catch (error) {
-            console.error('Error refreshing projects:', error);
-            return projectsRef.current;
         } finally {
             if (inFlightRefresh === request) {
                 inFlightRefresh = null;

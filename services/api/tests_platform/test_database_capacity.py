@@ -2,7 +2,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.platform.database import ensure_database_write_capacity
+from app.platform.database import (
+    DatabaseUrlConfigurationError,
+    ensure_database_write_capacity,
+    normalize_database_url,
+)
 from app.platform.errors import ApiError
 
 
@@ -18,6 +22,23 @@ class CapacitySession:
     def scalar(self, statement):
         self.queries.append(str(statement))
         return self.used_bytes
+
+
+def test_database_url_normalizes_postgres_driver_without_exposing_credentials():
+    assert normalize_database_url(
+        " postgresql://app:encoded%40password@db.example.test:5432/dreamify "
+    ) == (
+        "postgresql+psycopg://app:encoded%40password@db.example.test:5432/dreamify"
+    )
+
+
+def test_database_url_rejects_malformed_value_with_actionable_error():
+    with pytest.raises(
+        DatabaseUrlConfigurationError, match="DATABASE_URL_INVALID"
+    ) as captured:
+        normalize_database_url("not-a-database-uri")
+
+    assert "not-a-database-uri" not in str(captured.value)
 
 
 def test_database_capacity_bypasses_sqlite_deterministically(runtime_settings):

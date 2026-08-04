@@ -1,5 +1,15 @@
-const getApiBaseUrl = () => {
-  return process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
+const LOCAL_API_BASE_URL = 'http://localhost:5000';
+
+export const getApiBaseUrl = (
+  configuredUrl = process.env.NEXT_PUBLIC_API_URL,
+  nodeEnv = process.env.NODE_ENV,
+) => {
+  const normalizedUrl = configuredUrl?.trim().replace(/\/+$/, '');
+  if (normalizedUrl) return normalizedUrl;
+
+  // The documented local bootstrap runs FastAPI on port 5000. Without this
+  // fallback, API calls hit the Next.js catch-all route and return an HTML 404.
+  return nodeEnv === 'development' ? LOCAL_API_BASE_URL : '';
 };
 
 // API Configuration

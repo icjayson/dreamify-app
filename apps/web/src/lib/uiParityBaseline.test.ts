@@ -48,4 +48,22 @@ describe("migration UI baseline", () => {
     expect(targets).toHaveLength(baseline.connector_modal_targets);
     expect(new Set(targets).size).toBe(baseline.connector_modal_targets);
   });
+
+  it("keeps dedicated blog routes on the migrated Vite UI shell", () => {
+    const blogIndex = readFileSync(resolve(process.cwd(), "app/blog/page.tsx"), "utf8");
+    const blogPost = readFileSync(resolve(process.cwd(), "app/blog/[slug]/page.tsx"), "utf8");
+
+    expect(blogIndex).toContain("<LegacyRoute />");
+    expect(blogPost).toContain("<LegacyRoute />");
+    expect(blogIndex).not.toContain("BlogShell");
+    expect(blogPost).not.toContain("BlogShell");
+  });
+
+  it("does not load Lightswind's global theme tokens over the legacy design system", () => {
+    const rootLayout = readFileSync(resolve(process.cwd(), "app/layout.tsx"), "utf8");
+
+    expect(rootLayout).not.toContain('import "@/ui/lightswind.css"');
+    expect(rootLayout).toContain("family=Outfit");
+    expect(rootLayout).toContain("family=Instrument+Serif");
+  });
 });

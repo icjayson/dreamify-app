@@ -51,7 +51,7 @@ export const TermsContent: React.FC = () => (
       <h2 className="text-2xl font-semibold mb-4 text-foreground">4. User Data and Content</h2>
       <ul className="list-disc pl-6 space-y-3 text-muted-foreground">
         <li><strong className="text-foreground font-medium">Ownership:</strong> You retain full ownership of all data, files, and information you upload or connect to the Service ("User Data"). Dreamify claims no ownership rights over your User Data.</li>
-        <li><strong className="text-foreground font-medium">License to Process:</strong> By using the Service, you grant Dreamify a temporary, limited license to process your User Data solely to generate the visualizations and insights you request. External AI transmission occurs only when you explicitly activate an OpenAI or Google Gemini BYOK connection.</li>
+        <li><strong className="text-foreground font-medium">License to Process:</strong> By using the Service, you grant Dreamify a temporary, limited license to process your User Data solely to generate the visualizations and insights you request. External AI transmission occurs only when you explicitly activate an OpenAI, Google Gemini, or DeepSeek BYOK connection.</li>
         <li><strong className="text-foreground font-medium">Responsibility:</strong> You are solely responsible for ensuring that you have the legal right and necessary permissions to upload or connect your User Data to Dreamify.</li>
       </ul>
     </section>
@@ -70,7 +70,7 @@ export const TermsContent: React.FC = () => (
     <section id="third-party-services">
       <h2 className="text-2xl font-semibold mb-4 text-foreground">6. Third-Party Services and APIs</h2>
       <p className="text-muted-foreground leading-relaxed">
-        File upload is the only guaranteed data source in this Hobby preview. Optional connectors and OpenAI or Google Gemini BYOK processing activate only when configured and are subject to those providers' terms. We are not responsible for the availability, accuracy, or reliability of third-party services.
+        File upload is the only guaranteed data source in this Hobby preview. Optional connectors and OpenAI, Google Gemini, or DeepSeek BYOK processing activate only when configured and are subject to those providers' terms. We are not responsible for the availability, accuracy, or reliability of third-party services.
       </p>
     </section>
 

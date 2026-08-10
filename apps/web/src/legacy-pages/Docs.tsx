@@ -494,7 +494,7 @@ const Docs = () => {
             <Callout type="info" title="Technical run quotas">
               Billing and credit debits are disabled. Data analysis uses a daily technical run
               allowance; pure text questions have a separate daily allowance. The deterministic
-              demo provider requires no LLM key, while OpenAI or Gemini requires encrypted BYOK.
+              demo provider requires no LLM key, while OpenAI, Gemini, or DeepSeek requires encrypted BYOK.
             </Callout>
           </section>
 
@@ -713,7 +713,7 @@ const Docs = () => {
                 },
                 {
                   q: 'Is my data used to train AI models?',
-                  a: 'The default deterministic demo provider sends no data to an external AI model. If you enable OpenAI or Gemini with BYOK, that provider processes the minimum workflow context under your own provider account and its current terms.',
+                  a: 'The default deterministic demo provider sends no data to an external AI model. If you enable OpenAI, Gemini, or DeepSeek with BYOK, that provider processes the minimum workflow context under your own provider account and its current terms.',
                 },
                 {
                   q: 'Can I share a dashboard publicly?',

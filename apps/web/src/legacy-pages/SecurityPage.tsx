@@ -43,8 +43,8 @@ const SecurityPage = () => (
 
       <h2>AI and BYOK</h2>
       <p>
-        Without a provider key, Dreamify uses deterministic local templates. Optional OpenAI or
-        Gemini keys are encrypted server-side with an application keyring. Raw keys are never
+        Without a provider key, Dreamify uses deterministic local templates. Optional OpenAI,
+        Gemini, and DeepSeek keys are encrypted server-side with an application keyring. Raw keys are never
         returned to the browser or placed in Workflow payloads, Blob objects, Sandboxes, or
         application logs. Adding a key sends prompts and selected data to that provider under
         the provider's own terms.

@@ -23,7 +23,7 @@ RunStatus = Literal[
     "cancelling",
     "cancelled",
 ]
-ProviderName = Literal["openai", "gemini"]
+ProviderName = Literal["openai", "gemini", "deepseek"]
 ProjectRole = Literal["owner", "editor", "viewer"]
 ProjectMemberStatus = Literal["active", "inactive"]
 
@@ -426,7 +426,7 @@ class ProviderConnectionsRead(BaseModel):
 
 class InternalProviderCredentialRead(BaseModel):
     mode: Literal["demo", "byok"]
-    provider: Literal["demo", "openai", "gemini"]
+    provider: Literal["demo", "openai", "gemini", "deepseek"]
     model: str = Field(min_length=1, max_length=128)
     api_key: Optional[str] = Field(
         default=None,
@@ -851,7 +851,7 @@ class BillingCapability(BaseModel):
 
 class ModelCapability(BaseModel):
     mode: Literal["demo", "byok"]
-    active_provider: Literal["demo", "openai", "gemini"]
+    active_provider: Literal["demo", "openai", "gemini", "deepseek"]
     providers: List[str]
 
 

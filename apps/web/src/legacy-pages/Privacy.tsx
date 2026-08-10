@@ -45,7 +45,7 @@ export const PrivacyContent: React.FC = () => (
 
     <section id="sharing-data">
       <h2 className="text-2xl font-semibold mb-4 text-foreground">3. Sharing Data with Third Parties (AI Processing)</h2>
-      <p className="mb-3 text-muted-foreground">The default deterministic demo provider does not send your prompt or uploaded data to an external AI model. If you explicitly configure and activate a bring-your-own-key provider, Dreamify sends the minimum required workflow context to the selected OpenAI or Google Gemini API.</p>
+      <p className="mb-3 text-muted-foreground">The default deterministic demo provider does not send your prompt or uploaded data to an external AI model. If you explicitly configure and activate a bring-your-own-key provider, Dreamify sends the minimum required workflow context to the selected OpenAI, Google Gemini, or DeepSeek API.</p>
       <ul className="list-disc pl-6 space-y-3 text-muted-foreground">
         <li><strong className="text-foreground font-medium">Sole Purpose:</strong> Provider requests are made only to generate the analysis, clarification, narrative, or dashboard requested in your workspace.</li>
         <li><strong className="text-foreground font-medium">Credential Protection:</strong> Provider keys are encrypted at rest, never returned to the browser after saving, and are not placed in workflow payloads, Blob objects, or Sandbox environments.</li>

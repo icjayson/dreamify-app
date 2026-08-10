@@ -14,7 +14,7 @@ export interface DreamifyCapabilities {
   billing: { enabled: boolean; label: string };
   model: {
     mode: "demo" | "byok" | string;
-    active_provider: "demo" | "openai" | "gemini" | string;
+    active_provider: "demo" | "openai" | "gemini" | "deepseek" | string;
     providers: string[];
   };
   connectors: Record<string, ConnectorCapability>;

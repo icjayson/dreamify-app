@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  DeepSeekModelClient,
   GeminiModelClient,
   OpenAIModelClient,
   createMorpheusProvider,
@@ -30,6 +31,40 @@ describe("server-only BYOK model clients", () => {
     const client = new OpenAIModelClient({
       apiKey: "local-provider-credential",
       model: "gpt-test",
+      fetch,
+    });
+
+    await expect(client.generateStructured({
+      purpose: "route",
+      input: { prompt: "summarize" },
+      idempotencyKey: "run:route",
+    })).resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("calls DeepSeek Chat Completions in bounded JSON mode", async () => {
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.deepseek.com/chat/completions");
+      expect((init?.headers as Record<string, string>).authorization).toBe(
+        "Bearer local-deepseek-credential",
+      );
+      const request = JSON.parse(String(init?.body)) as Record<string, any>;
+      expect(request).toMatchObject({
+        model: "deepseek-v4-flash",
+        response_format: { type: "json_object" },
+        thinking: { type: "disabled" },
+        stream: false,
+      });
+      return Response.json({
+        choices: [{
+          finish_reason: "stop",
+          message: { content: envelope({ ok: true }) },
+        }],
+      });
+    });
+    const client = new DeepSeekModelClient({
+      apiKey: "local-deepseek-credential",
+      model: "deepseek-v4-flash",
       fetch,
     });
 

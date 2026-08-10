@@ -24,7 +24,7 @@ Edit `.env` and add your Stripe keys:
 ```env
 # Stripe Configuration
 STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key_here
-STRIPE_SECRET_KEY=sk_test_your_secret_key_here
+STRIPE_SECRET_KEY=replace_with_your_stripe_secret_key
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
 ```
 
@@ -203,7 +203,7 @@ Replace test keys with live keys in production:
 
 ```env
 STRIPE_PUBLISHABLE_KEY=pk_live_your_live_publishable_key
-STRIPE_SECRET_KEY=sk_live_your_live_secret_key
+STRIPE_SECRET_KEY=replace_with_your_stripe_secret_key
 STRIPE_WEBHOOK_SECRET=whsec_your_live_webhook_secret
 ```
 

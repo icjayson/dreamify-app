@@ -1,10 +1,14 @@
 # Operations runbook
 
+For local Supabase plus real Clerk authentication, follow
+[`local-clerk-supabase.md`](./local-clerk-supabase.md).
+
 ## Deploy
 
-1. In Clerk Dashboard, set the application to invitation-only and configure the
-   exact required `email` session-token claim documented in
-   `services/api/README.md`. Name claims are optional.
+1. In Clerk Dashboard, set the application to invitation-only. The default
+   session token authenticates by `sub`; optionally configure the `email`
+   session-token claim documented in `services/api/README.md` for email-based
+   invitations and owner lookup. Name claims are optional.
    Leave `CLERK_AUDIENCE` empty unless the same session token has a matching
    custom `aud` claim.
 2. Confirm CI, secret scanning, contract drift, and Vercel builds are green.

@@ -206,6 +206,22 @@ function geminiOutputText(body: Record<string, unknown>): string {
   return text;
 }
 
+function deepSeekOutputText(body: Record<string, unknown>): string {
+  const choices = body.choices;
+  if (!Array.isArray(choices) || !choices.length) throw invalidProviderResponse();
+  const choice = choices[0];
+  if (!choice || typeof choice !== "object") throw invalidProviderResponse();
+  const value = choice as Record<string, unknown>;
+  if (value.finish_reason === "length") {
+    throw invalidProviderResponse("Model provider response was incomplete");
+  }
+  const message = value.message;
+  if (!message || typeof message !== "object") throw invalidProviderResponse();
+  const content = (message as Record<string, unknown>).content;
+  if (typeof content !== "string" || !content) throw invalidProviderResponse();
+  return content;
+}
+
 abstract class JsonModelClient implements StructuredModelClient {
   abstract readonly provider: string;
   readonly model: string;
@@ -343,6 +359,43 @@ export class GeminiModelClient extends JsonModelClient {
   }
 }
 
+export class DeepSeekModelClient extends JsonModelClient {
+  readonly provider = "deepseek";
+
+  async generateStructured(options: {
+    purpose: ModelPurpose;
+    input: unknown;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  }): Promise<unknown> {
+    const body = boundedRequestBody({
+      model: this.model,
+      messages: [
+        { role: "system", content: providerInstructions(options.purpose) },
+        { role: "user", content: JSON.stringify(options.input) },
+      ],
+      response_format: { type: "json_object" },
+      thinking: { type: "disabled" },
+      max_tokens: 16_384,
+      stream: false,
+    });
+    const response = await this.request(
+      "https://api.deepseek.com/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.apiKey}`,
+          "content-type": "application/json",
+        },
+        body,
+      },
+      options.signal,
+    );
+    const result = await this.responseJson(response);
+    return unwrapResult(deepSeekOutputText(result), options.purpose);
+  }
+}
+
 export function createMorpheusProvider(
   credential: ResolvedProviderCredential,
   fetchImplementation?: FetchImplementation,
@@ -355,7 +408,9 @@ export function createMorpheusProvider(
   };
   const client = credential.provider === "openai"
     ? new OpenAIModelClient(options)
-    : new GeminiModelClient(options);
+    : credential.provider === "gemini"
+      ? new GeminiModelClient(options)
+      : new DeepSeekModelClient(options);
   return new ByokProviderAdapter(client);
 }
 

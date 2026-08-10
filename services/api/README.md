@@ -39,7 +39,7 @@ bundle.
 | `WORKFLOW_DISPATCH_URL` | Next.js durable workflow dispatch endpoint |
 | `PROVIDER_ENCRYPTION_KEYS` | Optional one-line JSON keyring of version names to base64-encoded 32-byte AES keys; required only to enable BYOK |
 | `PROVIDER_CURRENT_KEY_VERSION` | Version used for new BYOK encryption and read-time rotation |
-| `PROVIDER_VALIDATION_TIMEOUT_SECONDS` | Bounded OpenAI/Gemini credential smoke-test timeout |
+| `PROVIDER_VALIDATION_TIMEOUT_SECONDS` | Bounded OpenAI/Gemini/DeepSeek credential smoke-test timeout |
 
 Production rejects demo auth, local storage, wildcard CORS, automatic schema
 creation, and missing database/auth/storage configuration at startup.
@@ -47,8 +47,10 @@ creation, and missing database/auth/storage configuration at startup.
 ### Clerk session-token contract
 
 Dreamify verifies Clerk's ordinary short-lived session token. It does not ask
-the browser for a separately named JWT template. In Clerk Dashboard, open
-**Sessions → Customize session token** and save these exact custom claims:
+the browser for a separately named JWT template. Clerk's default token is enough
+to authenticate because the API treats the signed `sub` as the stable identity.
+To persist a user's email for email-based project invitations and owner-admin
+lookup, optionally open **Sessions → Customize session token** and add:
 
 ```json
 {
@@ -56,12 +58,10 @@ the browser for a separately named JWT template. In Clerk Dashboard, open
 }
 ```
 
-Invitation signup must require an email address. The API requires `sub`, `exp`,
-`iss`, an allowed `azp`, and a valid `email`; a token without that custom claim
-fails closed with `AUTH_EMAIL_CLAIM_INVALID`. Optional `name` or `fullName`
-claims are accepted when they are non-empty strings of at most 160 characters;
-email-only invitees do not need either name claim. Clerk's default session
-claims do not include an `aud` value. Keep `CLERK_AUDIENCE` unset unless the
+The API requires `sub`, `exp`, `iss`, and an allowed `azp`. If `email`, `name`,
+or `fullName` custom claims are present, malformed values fail closed; omitted
+custom identity claims are accepted. Clerk's default session claims do not
+include an `aud` value. Keep `CLERK_AUDIENCE` unset unless the
 session-token claims editor also adds the exact matching static claim, for
 example `"aud": "dreamify-api"`. When configured, PyJWT verifies it on every
 request.
@@ -135,7 +135,7 @@ operation is missing from the policy manifest.
 ## Model-provider credentials
 
 Deterministic demo mode requires no LLM credential. To enable user-managed
-OpenAI or Gemini keys, set `PROVIDER_ENCRYPTION_KEYS` in the API project to a
+OpenAI, Gemini, or DeepSeek keys, set `PROVIDER_ENCRYPTION_KEYS` in the API project to a
 single-line JSON object such as `{"v1":"<base64-encoded-32-byte-key>"}` and set
 `PROVIDER_CURRENT_KEY_VERSION=v1`. The value is a server-only Vercel secret, not
 a `NEXT_PUBLIC_*` variable. Saving a provider performs a bounded model-access

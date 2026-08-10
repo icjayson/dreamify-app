@@ -186,8 +186,19 @@ export function resolveAuthMode(
   return "unconfigured";
 }
 
+export function resolveClerkRedirect(value: string | undefined): string {
+  const candidate = value?.trim();
+  if (candidate?.startsWith("/") && !candidate.startsWith("//")) {
+    return candidate;
+  }
+  return "/workspace";
+}
+
 export function DreamifyAuthProvider({ children }: { children: React.ReactNode }) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const afterSignInUrl = resolveClerkRedirect(
+    process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL,
+  );
   const mode = resolveAuthMode(
     publishableKey,
     process.env.NODE_ENV,
@@ -202,8 +213,8 @@ export function DreamifyAuthProvider({ children }: { children: React.ReactNode }
     <Clerk.ClerkProvider
       publishableKey={publishableKey}
       afterSignOutUrl="/"
-      signInFallbackRedirectUrl="/workspace"
-      signUpFallbackRedirectUrl="/workspace"
+      signInFallbackRedirectUrl={afterSignInUrl}
+      signUpFallbackRedirectUrl={afterSignInUrl}
     >
       <ClerkBridge>{children}</ClerkBridge>
     </Clerk.ClerkProvider>

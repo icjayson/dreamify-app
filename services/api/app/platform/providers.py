@@ -16,8 +16,10 @@ from app.platform.settings import Settings
 DEFAULT_PROVIDER_MODELS: Dict[str, str] = {
     "openai": "gpt-5.6",
     "gemini": "gemini-3.6-flash",
+    "deepseek": "deepseek-v4-flash",
 }
-AVAILABLE_PROVIDERS = ("openai", "gemini")
+AVAILABLE_PROVIDERS = ("openai", "gemini", "deepseek")
+DEEPSEEK_MODELS = {"deepseek-v4-flash", "deepseek-v4-pro"}
 
 
 def _secret_context(connection: ProviderConnection) -> ProviderSecretContext:
@@ -35,6 +37,12 @@ class ProviderCredentialVerifier:
         self.timeout = settings.provider_validation_timeout_seconds
 
     def verify(self, provider: ProviderName, api_key: str, model: str) -> None:
+        if provider == "deepseek" and model not in DEEPSEEK_MODELS:
+            raise ApiError(
+                422,
+                "PROVIDER_MODEL_UNAVAILABLE",
+                "The selected model is unavailable for this credential",
+            )
         url, headers = self._request(provider, api_key, model)
         try:
             with httpx.Client(
@@ -58,6 +66,11 @@ class ProviderCredentialVerifier:
         if provider == "openai":
             return (
                 f"https://api.openai.com/v1/models/{escaped_model}",
+                {"Authorization": f"Bearer {api_key}"},
+            )
+        if provider == "deepseek":
+            return (
+                "https://api.deepseek.com/models",
                 {"Authorization": f"Bearer {api_key}"},
             )
         return (

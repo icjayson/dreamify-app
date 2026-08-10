@@ -36,7 +36,7 @@ const FeaturesPage = () => (
       <p>
         Dreamify profiles the uploaded files, asks for clarification when intent is ambiguous,
         and produces structured insights. The default provider is deterministic and requires no
-        model key. A user can activate OpenAI or Gemini with an encrypted BYOK connection.
+        model key. A user can activate OpenAI, Gemini, or DeepSeek with an encrypted BYOK connection.
       </p>
 
       <h2>Visualize</h2>
@@ -59,7 +59,7 @@ const FeaturesPage = () => (
         <li>Natural-language follow-up Q&A on any dashboard</li>
         <li>Export to PNG and PDF</li>
         <li>Dashboard edit, version, and revert</li>
-        <li>Deterministic demo mode or encrypted OpenAI/Gemini BYOK</li>
+        <li>Deterministic demo mode or encrypted OpenAI/Gemini/DeepSeek BYOK</li>
         <li>Durable run status, reconnectable events, cancellation, and retry safety</li>
       </ul>
 

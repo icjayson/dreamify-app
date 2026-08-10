@@ -13,7 +13,7 @@ OUTPUT_PATH = API_ROOT / "sql" / "supabase_schema.sql"
 POSTGRES_DIALECT_URL = "postgresql://schema-export:unused@localhost/dreamify"
 
 HEADER = """-- Dreamify Platform schema for a fresh Supabase PostgreSQL database.
--- Generated from Alembic revisions 0001_initial_platform through 0009_operator_briefs.
+-- Generated from Alembic revisions 0001_initial_platform through 0010_enable_supabase_rls.
 -- Canonical source: services/api/alembic/versions/*.py
 -- Every created public table has RLS enabled without public policies so Supabase's
 -- Data API fails closed; Dreamify accesses these tables through FastAPI only.
@@ -32,10 +32,14 @@ def enable_row_level_security(sql: str) -> str:
     statements = [
         "-- Supabase Data API hardening: no anon/authenticated policies are created."
     ]
-    statements.extend(
+    missing_statements = [
         f'ALTER TABLE public."{table_name}" ENABLE ROW LEVEL SECURITY;'
         for table_name in table_names
-    )
+        if f'ALTER TABLE public."{table_name}" ENABLE ROW LEVEL SECURITY;' not in sql
+    ]
+    if not missing_statements:
+        return sql
+    statements.extend(missing_statements)
     commit_marker = "\nCOMMIT;\n"
     if sql.count(commit_marker) != 1:
         raise RuntimeError("Alembic export did not contain exactly one COMMIT marker")

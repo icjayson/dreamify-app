@@ -107,7 +107,7 @@ export type ResolvedProviderCredential =
     }
   | {
       mode: "byok";
-      provider: "openai" | "gemini";
+      provider: "openai" | "gemini" | "deepseek";
       model: string;
       api_key: string;
     };

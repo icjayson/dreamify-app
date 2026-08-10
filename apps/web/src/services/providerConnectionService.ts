@@ -1,6 +1,6 @@
 import { api } from "@/services/api";
 
-export type ModelProvider = "openai" | "gemini";
+export type ModelProvider = "openai" | "gemini" | "deepseek";
 
 export interface ProviderConnection {
   provider: ModelProvider;

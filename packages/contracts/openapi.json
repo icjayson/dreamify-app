@@ -2067,7 +2067,8 @@
             "enum": [
               "demo",
               "openai",
-              "gemini"
+              "gemini",
+              "deepseek"
             ],
             "title": "Provider",
             "type": "string"
@@ -2544,7 +2545,8 @@
             "enum": [
               "demo",
               "openai",
-              "gemini"
+              "gemini",
+              "deepseek"
             ],
             "title": "Active Provider",
             "type": "string"
@@ -3591,7 +3593,8 @@
           "provider": {
             "enum": [
               "openai",
-              "gemini"
+              "gemini",
+              "deepseek"
             ],
             "title": "Provider",
             "type": "string"
@@ -3666,7 +3669,8 @@
               {
                 "enum": [
                   "openai",
-                  "gemini"
+                  "gemini",
+                  "deepseek"
                 ],
                 "type": "string"
               },
@@ -3680,7 +3684,8 @@
             "items": {
               "enum": [
                 "openai",
-                "gemini"
+                "gemini",
+                "deepseek"
               ],
               "type": "string"
             },
@@ -10656,7 +10661,8 @@
             "schema": {
               "enum": [
                 "openai",
-                "gemini"
+                "gemini",
+                "deepseek"
               ],
               "title": "Provider",
               "type": "string"
@@ -10694,7 +10700,8 @@
             "schema": {
               "enum": [
                 "openai",
-                "gemini"
+                "gemini",
+                "deepseek"
               ],
               "title": "Provider",
               "type": "string"
@@ -10751,7 +10758,8 @@
             "schema": {
               "enum": [
                 "openai",
-                "gemini"
+                "gemini",
+                "deepseek"
               ],
               "title": "Provider",
               "type": "string"
@@ -10798,7 +10806,8 @@
             "schema": {
               "enum": [
                 "openai",
-                "gemini"
+                "gemini",
+                "deepseek"
               ],
               "title": "Provider",
               "type": "string"

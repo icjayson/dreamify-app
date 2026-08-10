@@ -169,7 +169,7 @@ async def test_only_one_provider_can_be_active_per_tenant(
 ):
     monkeypatch.setattr(ProviderCredentialVerifier, "verify", _accept_provider)
     headers = auth_headers("tenant-a")
-    for provider in ("openai", "gemini"):
+    for provider in ("openai", "gemini", "deepseek"):
         response = await client.put(
             f"/api/v1/provider-connections/{provider}",
             json={"api_key": f"{provider}-provider-credential", "activate": True},
@@ -182,7 +182,31 @@ async def test_only_one_provider_can_be_active_per_tenant(
     active = [
         item["provider"] for item in status.json()["connections"] if item["is_active"]
     ]
-    assert active == ["gemini"]
+    assert active == ["deepseek"]
+
+
+def test_deepseek_verification_uses_fixed_origin_and_current_models():
+    url, headers = ProviderCredentialVerifier._request(
+        "deepseek",
+        "local-deepseek-credential",
+        "deepseek-v4-flash",
+    )
+
+    assert url == "https://api.deepseek.com/models"
+    assert headers == {"Authorization": "Bearer local-deepseek-credential"}
+
+
+def test_deepseek_verification_rejects_retired_model_name(runtime_settings):
+    verifier = ProviderCredentialVerifier(runtime_settings)
+
+    with pytest.raises(ApiError) as failure:
+        verifier.verify(
+            "deepseek",
+            "local-deepseek-credential",
+            "deepseek-chat",
+        )
+
+    assert failure.value.code == "PROVIDER_MODEL_UNAVAILABLE"
 
 
 @pytest.mark.anyio

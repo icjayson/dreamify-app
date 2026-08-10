@@ -39,6 +39,7 @@ def test_database_url_rejects_malformed_value_with_actionable_error():
         normalize_database_url("not-a-database-uri")
 
     assert "not-a-database-uri" not in str(captured.value)
+    assert "run_local_supabase_api.py" in str(captured.value)
 
 
 def test_database_capacity_bypasses_sqlite_deterministically(runtime_settings):

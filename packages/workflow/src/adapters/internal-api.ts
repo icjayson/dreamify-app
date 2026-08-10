@@ -58,7 +58,7 @@ const ProviderCredentialSchema = z.discriminatedUnion("mode", [
   z
     .object({
       mode: z.literal("byok"),
-      provider: z.enum(["openai", "gemini"]),
+      provider: z.enum(["openai", "gemini", "deepseek"]),
       model: z.string().min(1).max(128),
       api_key: z.string().min(8).max(512),
     })

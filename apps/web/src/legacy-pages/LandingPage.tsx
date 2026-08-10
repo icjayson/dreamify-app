@@ -12,7 +12,7 @@ const LandingPage = () => {
     <>
       <Seo
         title="Dreamify — AI Data Visualization. Dashboards in Minutes, Not Days."
-        description="An invite-only AI data visualization demo for bounded file analysis, editable dashboards, and optional OpenAI or Gemini BYOK."
+        description="An invite-only AI data visualization demo for bounded file analysis, editable dashboards, and optional OpenAI, Gemini, or DeepSeek BYOK."
         canonical="https://dreamify-web.vercel.app/landingpage"
         jsonLd={[
           {
@@ -79,7 +79,7 @@ const LandingPage = () => {
           <p>
             Dreamify turns bounded CSV, Excel, and flat JSON uploads into decision-ready
             dashboards. It runs with deterministic templates by default, or with your encrypted
-            OpenAI or Gemini key.
+            OpenAI, Gemini, or DeepSeek key.
           </p>
           <p>
             <Link to="/signup" className="inline-block rounded-md bg-primary text-primary-foreground px-5 py-2 font-medium no-underline">

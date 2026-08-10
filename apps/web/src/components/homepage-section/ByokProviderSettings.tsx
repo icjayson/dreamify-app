@@ -15,7 +15,12 @@ const PROVIDERS: Array<{
 }> = [
   { id: "openai", label: "OpenAI", defaultModel: "gpt-5.6" },
   { id: "gemini", label: "Google Gemini", defaultModel: "gemini-3.6-flash" },
+  { id: "deepseek", label: "DeepSeek", defaultModel: "deepseek-v4-flash" },
 ];
+
+const PROVIDER_LABELS = Object.fromEntries(
+  PROVIDERS.map((provider) => [provider.id, provider.label]),
+) as Record<ModelProvider, string>;
 
 function messageFrom(error: unknown): string {
   return error instanceof Error ? error.message : "Provider settings could not be updated";
@@ -23,10 +28,15 @@ function messageFrom(error: unknown): string {
 
 export function ByokProviderSettings() {
   const [status, setStatus] = useState<ProviderConnectionStatus | null>(null);
-  const [apiKeys, setApiKeys] = useState<Record<ModelProvider, string>>({ openai: "", gemini: "" });
+  const [apiKeys, setApiKeys] = useState<Record<ModelProvider, string>>({
+    openai: "",
+    gemini: "",
+    deepseek: "",
+  });
   const [models, setModels] = useState<Record<ModelProvider, string>>({
     openai: PROVIDERS[0].defaultModel,
     gemini: PROVIDERS[1].defaultModel,
+    deepseek: PROVIDERS[2].defaultModel,
   });
   const [busyProvider, setBusyProvider] = useState<ModelProvider | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -61,7 +71,7 @@ export function ByokProviderSettings() {
     try {
       await providerConnectionService.configure(provider, apiKeys[provider], models[provider]);
       setApiKeys((current) => ({ ...current, [provider]: "" }));
-      setNotice(`${provider === "openai" ? "OpenAI" : "Gemini"} verified and activated.`);
+      setNotice(`${PROVIDER_LABELS[provider]} verified and activated.`);
       await refresh();
     } catch (failure) {
       setError(messageFrom(failure));
@@ -119,7 +129,7 @@ export function ByokProviderSettings() {
       {notice && <p className="text-xs text-emerald-600 dark:text-emerald-400">{notice}</p>}
       {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {PROVIDERS.map((provider) => {
           const connection = connections.get(provider.id);
           const busy = busyProvider === provider.id;

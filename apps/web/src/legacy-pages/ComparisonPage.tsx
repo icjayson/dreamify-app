@@ -44,7 +44,7 @@ const ComparisonPage = () => {
             {[
               ["Intended use", "Private, invitation-only, personal non-commercial evaluation"],
               ["Guaranteed data source", "CSV, XLSX, XLS, and flat JSON file upload"],
-              ["AI", "Deterministic demo provider by default; encrypted OpenAI or Gemini BYOK is optional"],
+              ["AI", "Deterministic demo provider by default; encrypted OpenAI, Gemini, or DeepSeek BYOK is optional"],
               ["External connectors", "Unavailable unless credentials and provider smoke tests pass"],
               ["Workspace delivery and schedules", "Disabled by default"],
               ["Billing", "Checkout, subscriptions, and credit debits disabled"],

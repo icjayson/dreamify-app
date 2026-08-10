@@ -115,6 +115,14 @@ async def test_clerk_default_session_contract_and_negative_paths(tmp_path: Path)
             assert valid.json()["email"] == "person@example.test"
             assert valid.json()["display_name"] is None
 
+            default_claims = await api.get(
+                "/api/v1/users/me",
+                headers=authorization_headers(private_key, email=MISSING),
+            )
+            assert default_claims.status_code == 200, default_claims.text
+            assert default_claims.json()["id"] == "user_clerk_123"
+            assert default_claims.json()["email"] == "person@example.test"
+
             named = await api.get(
                 "/api/v1/users/me",
                 headers=authorization_headers(private_key, name="Test Person"),
@@ -138,7 +146,6 @@ async def test_clerk_default_session_contract_and_negative_paths(tmp_path: Path)
             assert wrong_party.json()["error"]["code"] == "AUTH_INVALID"
 
             for overrides in (
-                {"email": MISSING},
                 {"email": ""},
                 {"email": "not-an-email"},
             ):

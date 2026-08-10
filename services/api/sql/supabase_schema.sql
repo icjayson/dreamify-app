@@ -1,5 +1,5 @@
 -- Dreamify Platform schema for a fresh Supabase PostgreSQL database.
--- Generated from Alembic revisions 0001_initial_platform through 0009_operator_briefs.
+-- Generated from Alembic revisions 0001_initial_platform through 0010_enable_supabase_rls.
 -- Canonical source: services/api/alembic/versions/*.py
 -- Every created public table has RLS enabled without public policies so Supabase's
 -- Data API fails closed; Dreamify accesses these tables through FastAPI only.
@@ -602,32 +602,59 @@ CREATE INDEX ix_operator_briefs_project_created_at ON operator_briefs (project_i
 
 UPDATE alembic_version SET version_num='0009_operator_briefs' WHERE alembic_version.version_num = '0008_workflow_provider_effects';
 
--- Supabase Data API hardening: no anon/authenticated policies are created.
+-- Running upgrade 0009_operator_briefs -> 0010_enable_supabase_rls
+
 ALTER TABLE public."alembic_version" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."app_users" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."projects" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."stored_objects" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."upload_reservations" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."assets" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."conversations" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."dashboards" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."dashboard_versions" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."workflow_runs" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."workflow_run_assets" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."workflow_step_journals" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."workflow_artifacts" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."workflow_events" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."workflow_slots" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."provider_connections" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."daily_run_usage" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."project_preview_grants" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."notifications" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."feedback_submissions" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."overall_feedback_submissions" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."blog_posts" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."project_members" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."workflow_provider_calls" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public."operator_briefs" ENABLE ROW LEVEL SECURITY;
+
+UPDATE alembic_version SET version_num='0010_enable_supabase_rls' WHERE alembic_version.version_num = '0009_operator_briefs';
 
 COMMIT;
 

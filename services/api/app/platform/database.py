@@ -1,7 +1,7 @@
 """Database lifecycle and request-scoped transactions."""
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from fastapi import Request
 from sqlalchemy import Engine, create_engine, event, make_url, text
@@ -33,7 +33,9 @@ def normalize_database_url(url: str) -> str:
         raise DatabaseUrlConfigurationError(
             "DATABASE_URL_INVALID: The database URI is malformed. Percent-encode "
             "special characters in the password (for example, @ as %40) and do "
-            "not include placeholder brackets."
+            "not include placeholder brackets. For local Supabase, use "
+            "scripts/run_local_supabase_api.py so the password is prompted and "
+            "encoded without entering the URI in shell history."
         ) from exc
     return candidate
 

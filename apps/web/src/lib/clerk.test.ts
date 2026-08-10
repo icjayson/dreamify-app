@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveAuthMode } from "./clerk";
+import { resolveAuthMode, resolveClerkRedirect } from "./clerk";
 
 describe("Dreamify auth mode", () => {
   it("uses Clerk when a publishable key is configured", () => {
@@ -16,5 +16,20 @@ describe("Dreamify auth mode", () => {
   it("fails closed when production Clerk configuration is missing", () => {
     expect(resolveAuthMode(undefined, "production", "true")).toBe("unconfigured");
     expect(resolveAuthMode("invalid", "production", undefined)).toBe("unconfigured");
+  });
+});
+
+describe("resolveClerkRedirect", () => {
+  it("accepts an application-relative redirect", () => {
+    expect(resolveClerkRedirect("/workspace")).toBe("/workspace");
+    expect(resolveClerkRedirect(" /workspace?tab=new-chat ")).toBe(
+      "/workspace?tab=new-chat",
+    );
+  });
+
+  it("rejects external and protocol-relative redirects", () => {
+    expect(resolveClerkRedirect("https://evil.example")).toBe("/workspace");
+    expect(resolveClerkRedirect("//evil.example")).toBe("/workspace");
+    expect(resolveClerkRedirect(undefined)).toBe("/workspace");
   });
 });

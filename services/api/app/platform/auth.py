@@ -88,6 +88,26 @@ def _optional_display_name(claims: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _optional_email(claims: Dict[str, Any]) -> Optional[str]:
+    """Accept Clerk's default token while validating a configured email claim."""
+
+    email = claims.get("email")
+    if email is None:
+        return None
+    if (
+        not isinstance(email, str)
+        or not email.strip()
+        or len(email.strip()) > MAX_CLERK_EMAIL_LENGTH
+        or not CLERK_EMAIL_PATTERN.fullmatch(email.strip())
+    ):
+        raise ApiError(
+            401,
+            "AUTH_EMAIL_CLAIM_INVALID",
+            "Optional Clerk email claim is invalid",
+        )
+    return email.strip().lower()
+
+
 def _principal_from_claims(claims: Dict[str, Any], settings: Settings) -> Principal:
     authorized_parties = settings.clerk_authorized_parties
     if authorized_parties and claims.get("azp") not in authorized_parties:
@@ -99,21 +119,9 @@ def _principal_from_claims(claims: Dict[str, Any], settings: Settings) -> Princi
         or len(user_id.strip()) > MAX_CLERK_SUBJECT_LENGTH
     ):
         raise ApiError(401, "AUTH_INVALID", "Token subject is missing")
-    email = claims.get("email")
-    if (
-        not isinstance(email, str)
-        or not email.strip()
-        or len(email.strip()) > MAX_CLERK_EMAIL_LENGTH
-        or not CLERK_EMAIL_PATTERN.fullmatch(email.strip())
-    ):
-        raise ApiError(
-            401,
-            "AUTH_EMAIL_CLAIM_INVALID",
-            "Clerk session token must include a valid email claim",
-        )
     return Principal(
         user_id=user_id.strip(),
-        email=email.strip().lower(),
+        email=_optional_email(claims),
         display_name=_optional_display_name(claims),
     )
 

@@ -242,6 +242,11 @@ def test_production_accepts_independently_generated_runtime_values():
     assert settings.app_env == "production"
 
 
+def test_settings_accepts_vercel_standard_blob_token_name():
+    settings = Settings(BLOB_READ_WRITE_TOKEN="vercel_blob_rw_realistic_nonpublic_value")
+    assert settings.vercel_blob_token == "vercel_blob_rw_realistic_nonpublic_value"
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

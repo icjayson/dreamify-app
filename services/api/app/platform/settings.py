@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 HOBBY_DEMO_MAXIMA = {
@@ -84,7 +84,14 @@ class Settings(BaseSettings):
 
     storage_backend: Literal["local", "vercel_blob"] = "local"
     local_storage_path: Path = Path("/tmp/dreamify-storage")
-    vercel_blob_token: Optional[str] = None
+    vercel_blob_token: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "VERCEL_BLOB_TOKEN",
+            "BLOB_READ_WRITE_TOKEN",
+            "vercel_blob_token",
+        ),
+    )
     vercel_blob_access: Literal["private", "public"] = "private"
     blob_upload_gateway_url: Optional[str] = None
     blob_signing_gateway_url: Optional[str] = None
